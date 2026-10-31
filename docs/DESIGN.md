@@ -77,7 +77,10 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   high byte of each 16-bit sample, in a 68000 loop in assembly. 22.05 kHz plays at 25033 Hz.
 - A separate 68000 build, `EPLAYST.PRG`, with the family's 68000 rules (`-fdisable-tree-bswap`,
   `-fno-store-merging`, `oddaccess.py`); `EPLAY.PRG` (68030) runs on the Falcon and TT, and
-  `cpucheck.c` stops it on an ST with an alert.
+  `cpucheck.c` stops it on a 68000 with an alert that names `EPLAYST.PRG`.
+- What the machine can play comes from the `_SND` cookie, not the CPU (a TT has a 68030 too):
+  bit 3 the DSP (MP3), bit 2 the Falcon's 16-bit DMA and matrix; bit 1 8-bit DMA alone (TT, STE).
+  Without the DSP, MP3 files show greyed in the playlist: "MP3 needs a Falcon's DSP."
 - To decide when this is built (the guidelines' Speed): what 44.1 kHz stereo costs an 8 MHz STE
   from its disk, and so which rates it plays from a file and which from memory.
 
