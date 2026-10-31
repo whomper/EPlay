@@ -21,10 +21,10 @@
  * The DMA starts when a quarter of a second is in the ring; after the
  * file's end, silence follows until the last sample has played.
  *
- * 0.1 plays at the file's own rate where the Falcon has it: through an
+ * Phase 1 plays at the file's own rate where the Falcon has it: through an
  * external clock (the FDI's 44.1 or 48 kHz), or the Falcon's own 49170,
  * 32780... Hz. Other rates play at the nearest of those (so faster or
- * slower) until 0.2's resampling.
+ * slower) until phase 2's resampling.
  */
 #include <string.h>
 #include <stdio.h>
@@ -45,7 +45,8 @@
 char play_name[64], play_info[80], play_out[80];
 
 static int state = PS_IDLE, kind, fh = -1, eof;
-static volatile int loading;	/* MP3: the DSP's program still going in (the tick's) */
+static volatile int loading;	/* MP3: the DSP's program still going in (the tick's);
+				   2 while GEM's steps reset the DSP, after Play's draw */
 static PCMFMT fmt;
 static long rate, out_rate, len_ms, file_size;
 static unsigned char *fbuf;	/* the file's first bytes, fpos..fend */
@@ -290,7 +291,10 @@ static void tick(void)
 {
 	snd_update();
 	if (loading) {			/* the DSP's program first, a piece a tick */
-		int r = dspmp3_tick_load();
+		int r;
+		if (loading == 2)
+			return;		/* (Play's draw first: its stretch, 75 ms to 50) */
+		r = dspmp3_tick_load();
 		if (r < 0)
 			t_failed = 1;
 		else if (r)
@@ -504,7 +508,7 @@ int play_open(const char *path, char *err, int n)
 	else if (out_rate == rate)
 		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
 	else
-		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's: 0.2 resamples)", kr);
+		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
 	elog("output: %ld Hz, %s; queue %ld bytes", out_rate, ext ? "the external clock" : "the Falcon's clock", q_size);
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
@@ -519,7 +523,7 @@ void play_start(void)
 {
 	if (fh >= 0 && state != PS_PLAYING) {
 		state = PS_PLAYING;
-		loading = !kind;	/* (the tick loads the DSP first: not waiting for GEM) */
+		loading = kind ? 0 : 2;	/* (the tick loads the DSP first: not waiting for GEM) */
 		feed_on(tick, kind ? 250 : 1000);	/* (WAV: 1024 frames a tick, 4 times what
 						   plays; MP3: the DSP's next packet at once) */
 	}
@@ -561,6 +565,8 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
+	if (loading == 2 && dspmp3_reset_step())
+		loading = 1;		/* (drawn, the DSP reset: the tick may load it) */
 	if (t_failed) {
 		int what, hisr;
 		long at, of;

@@ -35,6 +35,8 @@ static int locked, failed;
 static int f_what, f_hisr;	/* how it failed: 1 sending, 2 reading, 3 loading; the host status */
 static long f_at, f_of;		/* at which word of how many */
 static long put_i, put_n;	/* the word going, of how many (the tick's packets) */
+static int rst;			/* dspmp3_reset_step's: 3 done */
+static unsigned long rst_t;
 
 /* a word to the DSP; a second at most for its room */
 static void put(unsigned long w)
@@ -123,7 +125,6 @@ int dspmp3_tick_load(void)
 
 int dspmp3_open(void)
 {
-	unsigned long t0;
 	if (!(get_cookie(0x5F534E44L) & 8))	/* _SND bit 3: a DSP */
 		return DSPMP3_NONE;
 	if (Dsp_Lock() == -1)
@@ -132,17 +133,39 @@ int dspmp3_open(void)
 	failed = 0;
 	f_what = 0;
 	put_n = 0;
-	Ongibit(0x10);			/* the DSP held in reset (the sound chip's port A, bit 4) */
-	t0 = tos_ms();
-	while (tos_ms() - t0 < 5)	/* (a tick of the 200 Hz clock or two) */
-		;
-	Offgibit(~0x10);		/* and let go: its bootstrap waits for 512 words */
-	t0 = tos_ms();
-	while (tos_ms() - t0 < 5)
-		;
 	item = 0;
 	done_w = 0;
+	rst = 0;
 	return DSPMP3_OK;
+}
+
+/* the DSP held in reset (the sound chip's port A, bit 4) and let go, a
+   step at a time from GEM's steps: each wait a tick of the 200 Hz clock
+   or two, not in Play's stretch. 1 when its bootstrap waits for its
+   512 words */
+int dspmp3_reset_step(void)
+{
+	switch (rst) {
+	case 0:
+		Ongibit(0x10);
+		rst_t = tos_ms();
+		rst = 1;
+		return 0;
+	case 1:
+		if (tos_ms() - rst_t < 5)
+			return 0;
+		Offgibit(~0x10);
+		rst_t = tos_ms();
+		rst = 2;
+		return 0;
+	case 2:
+		if (tos_ms() - rst_t < 5)
+			return 0;
+		rst = 3;
+		/* fall through */
+	default:
+		return 1;
+	}
 }
 
 void dspmp3_close(void)

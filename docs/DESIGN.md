@@ -69,7 +69,7 @@ disk --32 KB reads--> MP3 data (TT RAM) --host interrupt, as the DSP asks--> DSP
   frame's packet (`mp3frame.c`) while the DSP decodes the one before, sends it as soon as the
   DSP's frame is read, and the DSP's program goes in a piece at a time from GEM's steps (21,500
   words). The cost: 98,000 host-port reads a second at 49.2 kHz, the 68030's largest share on a
-  stock Falcon. The SSI path above takes it away (0.2's proposal).
+  stock Falcon. The SSI path above takes it away (phase 2's proposal).
 
 ### The clocks: 44.1 kHz through the FDI, else resampled
 
@@ -313,7 +313,11 @@ and the frequency inversion moved into the filter's butterfly to make room.
 **So: a stock Falcon plays 128 to 192 kbit/s with 20 to 35 % to spare, 320 kbit/s at 86 %, and
 music with many short blocks at high bit rates only just or not.**
 
-## Phase 0.1: the sound core in a minimal window (31 Oct 2026)
+## Phase 1: the sound core in a minimal window (31 Oct 2026; releases 0.1 and 0.2)
+
+The phases are named by what they bring (the hub, 31 Oct 2026): 1 first sound; 2 every Falcon,
+with output and volume settings; 3 the player window; 4 playlists and folders; 5 the small player,
+keys and MiNT/MagiC; 6 the TT and STE; then 1.0. Release numbers count releases, not phases.
 
 `EPLAY.PRG` plays a WAV, an AIFF or an MP3 given on its command line (the desktop's way) or from
 File > Open…, in one small window (the file, its format, the output, the time; Open, Play, Stop).
@@ -347,15 +351,15 @@ The speed rig (`tests/hatari/speed.py`, EmuTOS; the longest stretch, ms):
 | About box closed | 75 | 55 | 25 | 25 | 300 |
 | Stop | 40 | 40 | 20 | 20 | 50 |
 | About box opened, stopped | 130 | 130 | 90 | 90 | 150 |
-| Play again (the DSP loaded) | 50 (75 since the tick loads the DSP) | 45 | 30 | 25 | 50 |
+| Play again (the DSP loaded) | 50 | 45 | 30 | 25 | 50 |
 
 MP3 at 320 kbit/s and WAV at 44.1 kHz, both played at 49170 Hz (no external clock): the most a
 stock Falcon is asked. Over: the About box on a stock Falcon while it plays, because the tick takes
-the 68030's time (the host-port reads for MP3, the conversion and ST RAM for WAV). The plan: 0.2
+the 68030's time (the host-port reads for MP3, the conversion and ST RAM for WAV). The plan: phase 2
 takes the samples off the 68030 (MP3 out of the DSP's SSI port, WAV through the DSP, which also
 resamples).
 
-### 0.1 on Erez's Falcon (31 Oct 2026), and what changed
+### 0.1 on Erez's Falcon (31 Oct 2026), and what 0.2 changed
 
 Erez's first try, an 8-minute MP3 with the FDI on:
 1. **The length said 22:10.** It came from the first frame's bit rate, and a VBR file's first
@@ -380,7 +384,10 @@ the clock as measured and as taken, each file's header, the output, how playing 
 written whole when a file ends or is stopped, when the DSP fails, and at the end.
 
 Also: the DSP's program goes in from the tick (32 words a tick, 0.7 s), not from GEM's steps,
-which the file selector held up on a stock Falcon (the rig's new timing showed it). The test files
+which the file selector held up on a stock Falcon (the rig's new timing showed it). It starts once
+Play's redraw is done and GEM's next steps have reset the DSP (a pulse of 5 ms and a wait of 5),
+so Play's stretch stays within its time (50 ms on `Falcon-4`; 75 when the load ran during the
+draw). The test files
 now include LAME's header frames (VBR and CBR) and CRC-protected frames, and the play rig a VBR
 file (its length checked).
 
@@ -393,7 +400,7 @@ file (its length checked).
    with Erez: the 68030 taking the Huffman part and dequantising where it is fast (the DFB1), a
    lighter decode of the top subbands when a stock Falcon falls behind, or both.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
-   clock found and timed; WAV and AIFF playing. Done in phase 0.1 (above), with MP3 through the DSP
+   clock found and timed; WAV and AIFF playing. Done in phase 1 (above), with MP3 through the DSP
    and a minimal window, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.
 4. **MP3 on the DSP**, whole, tested as above.

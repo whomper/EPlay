@@ -9,11 +9,13 @@
 
 enum { DSPMP3_OK, DSPMP3_BUSY, DSPMP3_NONE, DSPMP3_FAILED };
 
-/* the DSP locked (Dsp_Lock: refused, DSPMP3_BUSY: another program has it)
-   and reset; then the decoder and its tables loaded by dspmp3_tick_load,
+/* the DSP locked (Dsp_Lock: refused, DSPMP3_BUSY: another program has it);
+   then reset by dspmp3_reset_step from GEM's steps (1 when done), and
+   the decoder and its tables loaded by dspmp3_tick_load,
    32 words a tick (about 21,500 in all): 1 when it is loaded, 0 while
    more is to come, -1 if the DSP stopped answering */
 int dspmp3_open(void);
+int dspmp3_reset_step(void);
 int dspmp3_tick_load(void);
 void dspmp3_close(void);	/* unlocked: another program may have it */
 void dspmp3_reset(void);	/* its overlap and filter state cleared (a new file) */
