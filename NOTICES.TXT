@@ -1,0 +1,11 @@
+EPlay includes or uses, under their own licences (compatible with the GPL):
+
+- data/mp3huff.txt and data/mp3window.txt: the Huffman codes and the
+  synthesis window of MPEG audio layer III (ISO/IEC 11172-3, Annex B), as
+  FFmpeg transcribes them (libavcodec/mpegaudiodec_common.c and
+  mpegaudiodsp_data.c, GNU LGPL 2.1 or later), extracted by tools/mkhuff.py
+  and tools/mkwin.py.
+
+- tests/mp3/third_party/minimp3.h: minimp3 by Lion (lieff), CC0 1.0
+  (tests/mp3/third_party/LICENSE.minimp3). The tests' reference decoder
+  only: it is not part of EPLAY.PRG.

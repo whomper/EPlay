@@ -16,6 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Gateway dependencies
         run: if [ -f gateway/requirements.txt ]; then pip install -r gateway/requirements.txt; fi
+      - name: Tools for the test files
+        run: sudo apt-get update && sudo apt-get install -y sox lame
       - name: make test
         run: make test
 
