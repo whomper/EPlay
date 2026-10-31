@@ -203,14 +203,49 @@ stock Falcon's DSP: too close. The headroom planned above is now needed:
   sign bits and gives x and y signed (about 2 to 3 times faster for small values), with the
   present code for long codes and linbits; and the calls inlined.
 
-Together they bring 320 kbit/s to roughly 45 to 50 %.
+Together they were to bring 320 kbit/s to roughly 45 to 50 %. What they gave is below.
+
+## The speed-ups (31 Oct 2026)
+
+Each is checked bit for bit against the model on all 20 test files (`make dsptest`), and counted
+on Hatari's DSP core.
+
+- **The Huffman part, 26 % to 16 % at 320 kbit/s** (12 % to 8.8 % at 128). A pair table's root
+  now looks at 8 bits: where they hold the whole code and its sign bits, one lookup gives x and y
+  already signed (a 961-word signed pair table), and the pair is done in one step, inline in the
+  region's loop. Long codes, linbits and codes whose signs don't fit go the old way. The main data
+  now comes 23 bits to a word (each word positive, as the bit reader's multiply-accumulate needs),
+  so a refill adds 23 bits, not 16. The rest of the time is spread thin (refills 12 %, the slower
+  path for linbits about a third at 320 kbit/s).
+- **The synthesis filter, written for real: 29.7 % at 44.1 kHz stereo (32.3 % at 48).** The
+  32-point DCT is one butterfly and two 16 x 16 matrices (512 multiply-accumulates a slot, not
+  1,024; the model changed with it, and its accuracy didn't: 0.07 to 0.18 of the limit). V is kept
+  as the standard's 64-word rows in a 1,024-word ring a channel, the halves of odd slots swapped,
+  so every window tap is 64 words back; outputs j and 32 - j share their window values, which sit
+  in internal Y and are read once for both. The multiply-accumulates are 61 % of its time. (The
+  bench's plain figure, 31 %, left out the real window's access pattern and V's writes; written
+  for real, the plain form would be some 45 %.)
+- **The transform: the fast algorithm was tried and dropped.** Szu-Wei Lee's 18-point DCT-IV (as
+  libmad has it: 43 multiplies) ends in a chain of differences that adds up every rounding before
+  it. With 24-bit words, quartering its inputs for headroom put the decoder over ISO's limit (1.37
+  of it); halving them kept it under (0.82) but the sweep overflowed. On the DSP a matrix costs
+  one instruction a multiply-accumulate, loads included, so the fast form would gain well under
+  2x anyway. The transform stays a matrix, and skips subbands that are all zeros (exact): that
+  comes with its kernel.
+
+**Where 320 kbit/s at 44.1 kHz stands:** Huffman 16 %, synthesis 30 %, the transform about 17 %
+(the bench's; its kernel comes next), dequantising, stereo and alias reduction about 10 %
+(estimated): some 73 % of a stock Falcon's DSP, with the FDI's clock. Resampling to 49,170 Hz
+without it adds about 5 %. 128 kbit/s: about 65 %. Further room, if the rest measures worse: a
+second butterfly in the synthesis DCT (about 2 %), and the transform's zero subbands.
 
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
    measured on Hatari's DSP core, the rest estimated. The C model of the whole decoder is done
-   (above), MPEG-2 and 2.5 with it, and the Huffman part in `.a56`, bit for bit and counted
-   (above). Next: the faster forms above, then the rest of `dsp/mp3.a56`.
+   (above), MPEG-2 and 2.5 with it, and the Huffman part and the synthesis filter in `.a56`, bit
+   for bit and counted, with the speed-ups (above). Next: the transform's kernel, then the rest of
+   `dsp/mp3.a56`, and the whole decode counted.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
    clock found and timed; WAV and AIFF playing. A test program first, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.

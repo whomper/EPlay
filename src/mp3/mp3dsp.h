@@ -16,7 +16,7 @@
 
 typedef struct {
 	dw ov[2][576];		/* the transform's overlap, a granule's */
-	dw v[2][16][32];	/* the synthesis filter's last 16 slots */
+	dw v[2][16][64];	/* the synthesis filter's V, its last 16 slots */
 	int vpos[2];
 	unsigned char scf[2][22];	/* granule 0's long scalefactors */
 	long sat;		/* values limited on the way (none, in a good file) */
@@ -33,6 +33,12 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
  * the main data, where its codes start and end, and the values they gave */
 void mp3dsp_huff_hook(const unsigned long *g, const unsigned long *w, long nw,
 		      long start, long end, const int *is);
+#endif
+
+#ifdef MP3DSP_SYNTH_HOOK
+/* the tests' look at each granule's synthesis filter: its subband
+ * samples, and the 576 samples it gave */
+void mp3dsp_synth_hook(int ch, dw sub[32][18], const dw *pcm);
 #endif
 
 #endif

@@ -28,15 +28,20 @@ uint16_t dsp56k_disasm(int mode, FILE *f) { (void)mode; (void)f; return 0; }
 const char *dsp56k_getInstructionText(void) { return ""; }
 static void hint(int s) { (void)s; }
 
-static unsigned long long cycles;
-static int dead;
+static unsigned long long cycles, prof[512];
+static int dead, profiling;
 
 static int step(void)
 {
 	if (!dsp_core.running)
 		return 0;
-	dsp56k_execute_instruction();
-	cycles += dsp_core.instr_cycle;
+	{
+		unsigned pc = dsp_core.pc;
+		dsp56k_execute_instruction();
+		cycles += dsp_core.instr_cycle;
+		if (profiling && pc < 512)
+			prof[pc] += dsp_core.instr_cycle;
+	}
 	return 1;
 }
 
@@ -78,12 +83,7 @@ static void load(int cmd, unsigned addr, const unsigned long *w, long n)
 		put(w[i]);
 }
 
-/* the bits of the main data words (24 a word), from bit at */
-static unsigned bit(const unsigned long *w, long nw, long at)
-{
-	long wi = at / 24;
-	return wi < nw ? (unsigned)(w[wi] >> (23 - at % 24)) & 1 : 0;
-}
+
 
 static long gcs, bad;
 static unsigned long long huff_cycles;
@@ -91,7 +91,7 @@ static unsigned long long huff_cycles;
 void mp3dsp_huff_hook(const unsigned long *g, const unsigned long *w, long nw,
 		      long start, long end, const int *is)
 {
-	long skip = start % 16, from = start - skip, n = (end - from + 15) / 16 + 3, i;
+	long skip = start % 23, from = start / 23, n = (end - from * 23 + 22) / 23 + 3, i;
 	unsigned long long t;
 	int k, wrong = 0;
 
@@ -106,12 +106,8 @@ void mp3dsp_huff_hook(const unsigned long *g, const unsigned long *w, long nw,
 	put((g[5] >> 10) & 31);
 	put((g[4] >> 5) & 1);
 	put((unsigned long)n);
-	for (i = 0; i < n; i++) {
-		unsigned long c = 0;
-		for (k = 0; k < 16; k++)
-			c = c << 1 | bit(w, nw, from + i * 16 + k);
-		put(c << 7);
-	}
+	for (i = 0; i < n; i++)
+		put(from + i < nw ? w[from + i] : 0);
 	if (get() != 1)
 		dead = 1;
 	if (getenv("SIMTRACE") && !gcs) {
@@ -125,8 +121,10 @@ void mp3dsp_huff_hook(const unsigned long *g, const unsigned long *w, long nw,
 		}
 	}
 	t = cycles;
+	profiling = getenv("SIMPROF") != NULL;
 	if (get() != 2)
 		dead = 1;
+	profiling = 0;
 	huff_cycles += cycles - t;
 	{
 		long got[576], left;
@@ -164,6 +162,8 @@ int main(int argc, char **argv)
 		put(dsp_huff_prog[i]);
 	load(1, 0x1000, t_dhx, T_DHX_N);
 	load(4, 0x1000, t_dhy, T_DHY_N);
+	load(1, 0x0a00, t_dsx, T_DSX_N);
+	load(4, 0x0a00, t_dsy, T_DSY_N);
 	load(1, 0x0e00, t_dpx, T_DPX_N);
 	load(4, 0x0e00, t_dpy, T_DPY_N);
 	load(1, 0x0f00, t_dselx, T_DSELX_N);
@@ -214,6 +214,13 @@ int main(int argc, char **argv)
 		       (double)(huff_cycles - c0) / (gcs - g0 ? gcs - g0 : 1),
 		       100.0 * (huff_cycles - c0) / secs / 32e6);
 		fail |= bad != b0;
+	}
+	if (getenv("SIMPROF")) {
+		FILE *pf = fopen(getenv("SIMPROF"), "w");
+		for (i = 0; i < 512; i++)
+			if (prof[i])
+				fprintf(pf, "%04X %llu\n", i, prof[i]);
+		fclose(pf);
 	}
 	if (dead) {
 		fprintf(stderr, "the DSP stopped answering at P:%04x, r0 %04x r1 %04x r3 %04x r4 %04x x0 %06x lc %04x\n",

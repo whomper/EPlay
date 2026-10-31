@@ -18,7 +18,7 @@ static inline dw sx(unsigned long w)
 	return (dw)((long)(w ^ 0x800000UL) - 0x800000L);
 }
 
-/* ---- the main data, MSB first, from 24-bit words */
+/* ---- the main data, MSB first, 23 bits a word (mp3frame.h) */
 typedef struct {
 	const unsigned long *w;
 	long n, pos;
@@ -28,9 +28,9 @@ static unsigned long bits(BR *b, int n)
 {
 	unsigned long v = 0;
 	while (n-- > 0) {
-		long wi = b->pos / 24;
+		long wi = b->pos / 23;
 		unsigned long word = wi < b->n ? b->w[wi] : 0;
-		v = v << 1 | ((word >> (23 - b->pos % 24)) & 1);
+		v = v << 1 | ((word >> (22 - b->pos % 23)) & 1);
 		b->pos++;
 	}
 	return v;
@@ -422,43 +422,44 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
 	}
 }
 
-/* ---- the synthesis filter: 18 slots of 32 subband samples, 576 out */
+/* ---- the synthesis filter: 18 slots of 32 subband samples, 576 out.
+ * Each slot's V[0..63] (ISO/IEC 11172-3's) comes from the 32-point DCT of
+ * its samples, X[n] = sum x[k] cos(pi (2k+1) n / 64): V[i] = X[16 + i]
+ * for i < 16, 0 for i = 16, then -X[48 - i] up to 32 and -X[i - 48] from
+ * 48, -X[48 - (i - 48)]... as below. The DCT is one butterfly, then two
+ * 16 x 16 matrices. Then each sample is the window's 16 taps over the
+ * last 16 slots, as the standard has them */
 static void synth(MP3DSP *d, int ch, dw sub[32][18], dw *pcm)
 {
-	int t, r, k, j, i;
+	int t, n, k, j, i;
 	for (t = 0; t < 18; t++) {
-		dw *a;
-		d->vpos[ch] = (d->vpos[ch] + 1) & 15;
-		a = d->v[ch][d->vpos[ch]];
-		for (r = 0; r < 32; r++) {
-			da acc = 0;
-			for (k = 0; k < 32; k++)
-				acc += d_mpy(sub[k][t], sx(t_synth[r * 32 + k]));
-			a[r] = d_rw(acc);
+		dw e[16], o[16], *v;
+		for (k = 0; k < 16; k++) {
+			da a = d_w2a(sub[k][t]), b = d_w2a(sub[31 - k][t]);
+			e[k] = d_a2w(a + b);
+			o[k] = d_a2w(a - b);
 		}
+		d->vpos[ch] = (d->vpos[ch] + 1) & 15;
+		v = d->v[ch][d->vpos[ch]];
+		for (n = 0; n < 32; n++) {
+			const dw *in = (n & 1) ? o : e;
+			da acc = 0, r;
+			for (k = 0; k < 16; k++)
+				acc += d_mpy(in[k], sx(t_synth[n * 16 + k]));
+			r = d_rnd(acc);
+			if (n < 16) {		/* X[n]: V[48 + n] and V[48 - n], minus */
+				v[48 + n] = v[48 - n] = d_a2w(-r);
+			} else {		/* V[n - 16], and minus at V[48 - n] */
+				v[n - 16] = d_a2w(r);
+				v[48 - n] = d_a2w(-r);
+			}
+		}
+		v[16] = 0;
 		for (j = 0; j < 32; j++) {
 			da acc = 0;
-			for (i = 0; i < 16; i++) {
-				const dw *s = d->v[ch][(d->vpos[ch] - i) & 15];
-				dw dh = sx(t_dwin[j + 32 * i]), val;
-				int neg = 0;
-				if (!(i & 1)) {	/* row j of an even slot */
-					if (j < 16)
-						val = s[j];
-					else if (j == 16)
-						continue;
-					else
-						val = s[32 - j], neg = 1;
-				} else {	/* row 32 + j of an odd one */
-					if (j == 0)
-						val = s[0], neg = 1;
-					else if (j <= 16)
-						val = s[16 + j - 1];
-					else
-						val = s[16 + 31 - j];
-				}
-				acc += d_mpy(val, neg ? -dh : dh);
-			}
+			for (i = 0; i < 16; i++)
+				acc += d_mpy(d->v[ch][(d->vpos[ch] - i) & 15][j + 32 * (i & 1)],
+					     sx(t_dwin[j + 32 * i]));
 			pcm[32 * t + j] = d_a2w_out(d_rnd(d_asl(acc, MP3_XS + 1)));
 		}
 	}
@@ -515,7 +516,16 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 			reorder(&gc[ch], rate);
 			alias(&gc[ch]);
 			imdct(&gc[ch], d->ov[ch], sub);
+#ifdef MP3DSP_SYNTH_HOOK
+			{
+				static dw in[32][18];
+				memcpy(in, sub, sizeof(in));
+				synth(d, ch, sub, &pcm[ch][576 * gr]);
+				mp3dsp_synth_hook(ch, in, &pcm[ch][576 * gr]);
+			}
+#else
 			synth(d, ch, sub, &pcm[ch][576 * gr]);
+#endif
 		}
 	}
 	return nch;

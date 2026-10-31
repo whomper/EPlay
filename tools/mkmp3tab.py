@@ -64,9 +64,11 @@ add("t_alias", [q23(1 / math.sqrt(1 + x * x)) for x in c] + [q23(x / math.sqrt(1
     "alias reduction: cs[0..7], then ca[0..7]")
 
 # ---- the synthesis filter
-rs = list(range(0, 16)) + list(range(33, 49))
-add("t_synth", [q23(math.cos((16 + i) * (2 * k + 1) * math.pi / 64)) for i in rs for k in range(32)],
-    "synthesis matrix, rows 0-15 and 33-48 of cos((16+i)(2k+1)pi/64), 32 x 32")
+# the 32-point DCT X[n] = sum x[k] cos(pi (2k+1) n / 64), after one
+# butterfly (e[k] = x[k] + x[31-k], o[k] = x[k] - x[31-k]): X[2m] from e,
+# X[2m+1] from o, 16 x 16 each, the rows in the order of n
+add("t_synth", [q23(math.cos(math.pi * (2 * k + 1) * n / 64)) for n in range(32) for k in range(16)],
+    "the synthesis filter's DCT: for n = 0..31, 16 cos(pi (2k+1) n / 64) (k < 16)")
 d = []
 for line in open(os.path.join(datadir, "mp3window.txt")):
     if not line.startswith("#"):
@@ -206,12 +208,19 @@ add("t_hsel", sel, "tables 0-31 then A, B: linbits (20-23), the root's n (16-19)
 
 # ---- the same codes laid out for dsp/mp3.a56, at fixed DSP addresses: a
 # node is a word in X and one in Y at the same address, read together.
-# Every root looks at 6 bits, a node below it at up to 4. In X: a leaf's
-# length (the bits used at this node), or minus the bits a node looks at;
-# in Y: a leaf's place in the pair table (pairs) or its v w x y (count1),
-# or the node's address.
-DSP_HUFF = 0x1000   # X and Y external: the nodes
+#
+# A pair table's root looks at 8 bits. Where they hold a whole code and its
+# sign bits (and no escape to linbits), X is the bits they take (1-8) and Y
+# the place of x and y, signed, in the signed pair table: the fast way.
+# Otherwise X has bit 23 set: with bit 22, a node (Y its address), from
+# which the code goes on (below); without, a code of X's low bits with its
+# unsigned x and y at Y in the pair table, for the signs and linbits after.
+# Below a root, and in the count1 tables (a 6-bit root), X is a leaf's bits
+# at this node, or minus the bits a node looks at; Y the leaf's place in the
+# pair table (pairs) or its v w x y (count1), or the node's address.
+DSP_SPAIR = 0x0a00  # X and Y: x and y signed, -15..15 each (961)
 DSP_PAIR = 0x0e00   # X and Y: x and y of each pair value (256)
+DSP_HUFF = 0x1000   # X and Y external: the nodes
 dx, dy = [], []
 
 
@@ -228,12 +237,10 @@ def dbuild(clist, n, quad):
             dx[at + i] = len(b)
             dy[at + i] = v if quad else DSP_PAIR + v
         else:
-            rest = [(b[n:], v) for b, v in clist if len(b) > n and b.startswith(pre)]
-            dx[at + i] = 0
-            dy[at + i] = rest  # filled below
             subs.append(i)
     for i in subs:
-        rest = dy[at + i]
+        pre = format(i, "0%db" % n)
+        rest = [(b[n:], v) for b, v in clist if len(b) > n and b.startswith(pre)]
         if rest:
             m = min(4, max(len(b) for b, _ in rest))
             dx[at + i] = -m
@@ -243,14 +250,60 @@ def dbuild(clist, n, quad):
     return at
 
 
+def droot8(clist, lin):
+    """a pair table's 8-bit root"""
+    at = len(dx)
+    dx.extend([None] * 256)
+    dy.extend([None] * 256)
+    subs = []
+    for i in range(256):
+        pre = format(i, "08b")
+        leaf = [(b, v) for b, v in clist if pre.startswith(b)]
+        if not leaf:
+            subs.append(i)
+            continue
+        b, v = leaf[0]
+        x, y = v >> 4, v & 15
+        n = len(b) + (x != 0) + (y != 0)
+        if (lin and (x == 15 or y == 15)) or n > 8:
+            dx[at + i] = 0x800000 | len(b)
+            dy[at + i] = DSP_PAIR + v
+            continue
+        k = len(b)
+        if x:
+            if pre[k] == "1":
+                x = -x
+            k += 1
+        if y and pre[k] == "1":
+            y = -y
+        dx[at + i] = n
+        dy[at + i] = DSP_SPAIR + (x + 15) * 31 + (y + 15)
+    for i in subs:
+        pre = format(i, "08b")
+        rest = [(b[8:], v) for b, v in clist if len(b) > 8 and b.startswith(pre)]
+        if rest:
+            m = min(4, max(len(b) for b, _ in rest))
+            dx[at + i] = 0xc00000 | m
+            dy[at + i] = DSP_HUFF + dbuild(rest, m, False)
+        else:
+            dx[at + i], dy[at + i] = 0x800001, DSP_PAIR
+    return at
+
+
 droot = {}
 for t in order:
-    droot[t] = DSP_HUFF + dbuild(codes[t], 6, t in ("A", "B"))
-assert DSP_HUFF + len(dx) <= 0x2000
-add("t_dhx", dx, "dsp/mp3.a56's Huffman nodes in X at $%04x: lengths, 0 for a node" % DSP_HUFF)
-add("t_dhy", dy, "and in Y: pair-table places, count1 values, or nodes")
+    if t in ("A", "B"):
+        droot[t] = DSP_HUFF + dbuild(codes[t], 6, True)
+    else:
+        droot[t] = DSP_HUFF + droot8(codes[t], t in (16, 24))
+assert DSP_HUFF + len(dx) <= 0x3000, len(dx)
+add("t_dhx", dx, "dsp/mp3.a56's Huffman nodes in X at $%04x" % DSP_HUFF)
+add("t_dhy", dy, "and in Y")
 add("t_dpx", [v >> 4 for v in range(256)], "the pair table at X:$%04x: x of each value" % DSP_PAIR)
 add("t_dpy", [v & 15 for v in range(256)], "and Y: y")
+add("t_dsx", [x for x in range(-15, 16) for y in range(-15, 16)],
+    "the signed pair table at X:$%04x: x" % DSP_SPAIR)
+add("t_dsy", [y for x in range(-15, 16) for y in range(-15, 16)], "and Y: y")
 dsel_x, dsel_y = [], []
 for t in range(32):
     base = t if t < 16 else 16 if t < 24 else 24

@@ -9,19 +9,22 @@
 ;
 ; The host's words: 1 LOADX ADDR N then N words into X; 4 LOADY the same
 ; into Y; 2 DECODE SKIP NBITS BV R1 R2 T0 T1 T2 C1 N then N data words,
-; each 16 bits of the stream shifted left 7. DECODE answers 1 (ready),
+; each 23 bits of the stream (mp3frame.h's main data). DECODE answers 1 (ready),
 ; decodes, answers 2 (done), then sends the 576 values and the bits left
 ; over (0 when it ended where NBITS says).
 ;
 ; The bits: A1:A0 holds them from the top; r4 counts them, less 25
-; (negative: fewer than 25, time to refill). A refill adds 16 by a
-; multiply-accumulate: the word * 2^(24 - count) lands just under the
-; bits there. Bits are used by shifting A left.
+; (negative: fewer than 25, time to refill). A refill adds a word's 23 by
+; a multiply-accumulate: the word * 2^(24 - count) lands just under the
+; bits there (a word is positive: bit 23 clear). Bits are used by shifting
+; A left.
 ;
-; A code: the next 6 bits (a1 * 2^5, the low 6 bits of b1) index the
-; table's root; X there is the bits the code takes (a leaf) or minus the
-; bits a node below looks at, Y the leaf's place in the pair table (x in
-; X, y in Y) or its count1 value, or the node's address.
+; A pair: the next 8 bits (a1 * 2^7, the low 8 bits of b1) index the
+; table's root (tools/mkmp3tab.py has its layout). Mostly they hold the
+; whole code and its signs: X there is the bits they take and Y the place
+; of x and y, signed, in the signed pair table; the pair is done. Else X has
+; bit 23 set, and the code goes on the slower way: below a node, then the
+; signs and linbits one at a time. A count1 code: 6 bits at its root.
 
 HSR	equ	$ffe9
 HRX	equ	$ffeb
@@ -48,8 +51,8 @@ P2	equ	$40
 LT	equ	$60
 
 SEL	equ	$0f00		; X: roots of tables 0-31, A, B; Y: their linbits
-OUT	equ	$2000		; X: the 576 values
-DATA	equ	$2000		; Y: the bits
+OUT	equ	$3000		; X: the 576 values
+DATA	equ	$3000		; Y: the bits
 
 	org	p:$0
 	jmp	start
@@ -129,11 +132,11 @@ so
 huff	move	#>DATA,r1
 	move	#>OUT,r0
 	move	#>4,n0
-	; the first 16 bits, then refill to 25 or more
+	; the first 23 bits, then refill to 25 or more
 	move	y:(r1)+,x0
 	move	x0,a
 	asl	a
-	move	#>$fff7,r4		; 16 there, less 25 (a long immediate: a short one is unsigned)
+	move	#>$fffe,r4		; 23 there, less 25 (a long immediate: a short one is unsigned)
 	jsr	refill
 	; the scalefactors' bits, skipped
 	move	x:V_SKIP,b
@@ -146,8 +149,8 @@ huff	move	#>DATA,r1
 	nop
 	move	(r4)-n4
 hs1	jsr	refill
-	move	#>63,x1			; the root's 6 bits: mask, multiplier
-	move	#>$20,y1
+	move	#>255,x1		; a pair root's 8 bits: mask, multiplier
+	move	#>$80,y1
 	; big values: three regions, each with its table
 	move	x:V_R1,x0
 	move	x:V_T0,y0
@@ -193,7 +196,28 @@ region	move	x0,b
 	asr	b
 	move	b1,x0			; the pairs
 	do	x0,rgp
-	jsr	pair
+	jsset	#15,r4,refill
+	move	a1,x0
+	mpy	x0,y1,b		x:V_ROOT,y0
+	and	x1,b			; the next 8 bits
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b
+	jclr	#23,x0,pfast
+	jsr	pslow
+	jmp	pnext
+pfast	rep	x0			; the code and its signs
+	asl	a
+	move	x0,n4
+	move	b1,r2			; the signed pair table
+	move	b1,r5
+	move	(r4)-n4
+	move	x:(r2),x0	y:(r5),b
+	move	x0,x:(r0)+
+	move	b,x:(r0)+
+pnext	nop
 rgp
 rgx	rts
 rgz	move	x:V_TMP,x0		; table 0: zeros, no bits
@@ -202,30 +226,37 @@ rgz	move	x:V_TMP,x0		; table 0: zeros, no bits
 	move	b,x:(r0)+
 	rts
 
-; ---- a pair: its code, then x and y with their linbits and signs
-pair	jsset	#15,r4,refill
-	move	a1,x0
-	mpy	x0,y1,b		x:V_ROOT,y0
-	and	x1,b			; the next 6 bits
-	add	y0,b
+; ---- a pair the slower way: x0 = $800000 + the code's bits, b1 its x
+; and y in the pair table; or $c00000 + n, a node looking at n bits, at b1
+pslow	jset	#22,x0,psnode
 	move	b1,r2
 	move	b1,r5
-	nop
-	move	x:(r2),x0	y:(r5),b	; the bits it takes, or a node
-	jset	#23,x0,pnode
-pleaf	rep	x0
+	move	x0,b
+	and	x1,b			; the code's bits
+	move	b1,x0
+psleaf	rep	x0
 	asl	a
 	move	x0,n4
-	move	b1,r2			; the pair table: x in X, y in Y
-	move	b1,r5
+	nop
 	move	(r4)-n4
 	move	x:(r2),b
 	jsr	val
 	move	y:(r5),b
 	jsr	val
 	rts
-pnode	jsr	node
-	jmp	pleaf
+psnode	move	x0,b
+	move	#>15,x0
+	and	x0,b
+	neg	b
+	move	b1,x0			; minus n
+	move	y:(r5),b		; the node's address
+	move	#>8,y0			; the root's 8 bits, used at the node
+	jsr	nd0
+	move	#>255,x1
+	move	#>$80,y1
+	move	b1,r2
+	move	b1,r5
+	jmp	psleaf
 
 ; b = a value (0..15): its linbits if 15, its sign if not 0, out to r0
 val	tst	b
@@ -261,16 +292,15 @@ vlin	move	x:V_LIN,b
 	move	#>15,x0
 	add	x0,b
 	move	(r4)-n4
-	move	#>63,x1
-	move	#>$20,y1
+	move	#>255,x1
+	move	#>$80,y1
 	jmp	vs
 vl0	move	#>15,b
 	jmp	vs
 
-; ---- a code longer than the root's 6 bits: x0 = minus the bits the node
-; below looks at, b1 its address. Gives the leaf as the root does: x0 its
-; bits there, b1 its place
-node	move	#>6,y0
+; ---- a code longer than its root: x0 = minus the bits the node below
+; looks at, b1 its address, y0 the bits the last node looked at. Gives the
+; leaf: x0 its bits at its node, b1 its place. Leaves x1 and y1 changed
 nd0	rep	y0			; the bits the last node looked at, used
 	asl	a
 	move	y0,n4
@@ -295,8 +325,6 @@ nd0	rep	y0			; the bits the last node looked at, used
 	move	x:(r2),x0	y:(r5),b
 	move	x:V_W,y0
 	jset	#23,x0,nd0
-	move	#>63,x1
-	move	#>$20,y1
 	rts
 
 ; ---- count1: quadruples of 0 and +-1 while there are bits and lines; one
@@ -304,8 +332,11 @@ nd0	rep	y0			; the bits the last node looked at, used
 count1	move	r1,b
 	move	#>DATA,x0
 	sub	x0,b
-	rep	#4
-	asl	b			; the bits read in: 16 a word
+	move	b1,x0
+	move	#>23,y0
+	mpy	x0,y0,b
+	asr	b
+	move	b0,b			; the bits read in: 23 a word
 	move	r4,x0
 	sub	x0,b
 	move	#>25,x0
@@ -316,6 +347,8 @@ count1	move	r1,b
 	move	x:V_SKIP,x0
 	add	x0,b
 	move	b1,r3
+	move	#>63,x1			; a count1 root's 6 bits
+	move	#>$20,y1
 	move	x:V_C1,n2
 	move	#>SEL+32,r2
 	nop
@@ -392,7 +425,7 @@ refill	jclr	#15,r4,rf1
 	move	y:(r1)+,x0
 	move	y:(r7+n7),y0
 	mac	x0,y0,a
-	move	#>16,n4
+	move	#>23,n4
 	nop
 	move	(r4)+n4
 	jmp	refill

@@ -37,6 +37,7 @@ clean:
 dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspbench
 	$(MAKE) -C tests/dsphuff
+	$(MAKE) -C tests/dspsynth
 
 .PHONY: all test dsptest clean icons
 

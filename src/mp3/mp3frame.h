@@ -26,8 +26,10 @@
  *     6  region 1's first line
  *     7  region 2's first line
  *     8  subblock_gain[0] | [1] << 3 | [2] << 6
- *   then the N words of main data, three bytes each, the first in the
- *   high byte: from main_data_begin bytes back, the bits of every granule.
+ *   then the N words of main data, 23 bits each in bits 22-0 (so that every
+ *   word is positive, as the DSP's bit reader needs: dsp/huff.a56), the
+ *   first bit highest: from main_data_begin bytes back, the bits of every
+ *   granule.
  * A PK_MUTE packet (no reservoir yet, after a seek) has no granules: the
  * DSP plays its 1152 samples as silence.
  */
@@ -42,7 +44,7 @@
 #define PK_RATE(f)	(((f) >> 4) & 15)	/* 0-2: 44.1, 48, 32 kHz; 3-5: 22.05,
 						 * 24, 16; 6-8: 11.025, 12, 8 */
 #define PK_GC		9
-#define PK_MAXDATA	700	/* main data words: 511 + 1441 bytes at most */
+#define PK_MAXDATA	700	/* main data words: 511 + 1441 bytes at most, 23 bits a word */
 #define PK_MAX		(2 + 4 * PK_GC + PK_MAXDATA)
 
 typedef struct {

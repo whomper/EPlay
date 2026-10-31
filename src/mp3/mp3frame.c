@@ -240,20 +240,26 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 	nbytes = (bits + 7) >> 3;
 	if (nbytes > begin + main_n)
 		return -1;
-	nw = (int)((nbytes + 2) / 3);
+	nw = (int)((nbytes * 8 + 22) / 23);
 	if (nw > PK_MAXDATA)
 		return -1;
 	pk[1] = (unsigned long)nw;
 	g = pk + 2 + ngr * nch * PK_GC;
 	d = (unsigned char *)src;
-	for (i = 0; i < nw; i++) {
-		unsigned long w = 0;
-		int k;
-		for (k = 0; k < 3; k++) {
-			long at = (long)i * 3 + k;
-			w = w << 8 | (at < nbytes ? d[at] : 0);
+	{
+		/* 23 bits a word: bytes in at the bottom of acc, words out from its top */
+		unsigned long acc = 0;
+		int have = 0;
+		long at = 0;
+		for (i = 0; i < nw; i++) {
+			while (have < 23) {
+				acc = (acc << 8 | (at < nbytes ? d[at] : 0)) & 0x7fffffffUL;
+				at++;
+				have += 8;
+			}
+			g[i] = (acc >> (have - 23)) & 0x7fffffUL;
+			have -= 23;
 		}
-		g[i] = w;
 	}
 	return 2 + ngr * nch * PK_GC + nw;
 }
