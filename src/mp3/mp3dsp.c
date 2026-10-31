@@ -443,14 +443,16 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
  * Each slot's V[0..63] (ISO/IEC 11172-3's) comes from the 32-point DCT of
  * its samples, X[n] = sum x[k] cos(pi (2k+1) n / 64): V[i] = X[16 + i]
  * for i < 16, 0 for i = 16, then -X[48 - i] up to 32 and -X[i - 48] from
- * 48, -X[48 - (i - 48)]... as below. The DCT is one butterfly, then two
- * 16 x 16 matrices. Then each sample is the window's 16 taps over the
+ * 48, -X[48 - (i - 48)]... as below. The DCT is a butterfly (e, o), a
+ * second on e (e2, o2), then a 16 x 16 matrix (odd n, from o) and two 8 x 8
+ * ones (n = 4m from e2, 4m + 2 from o2). Then each sample is the window's 16 taps over the
  * last 16 slots, as the standard has them */
 static void synth(MP3DSP *d, int ch, dw sub[32][18], dw *pcm)
 {
 	int t, n, k, j, i;
 	for (t = 0; t < 18; t++) {
-		dw e[16], o[16], *v;
+		dw e[16], o[16], e2[8], o2[8], *v;
+		const unsigned long *c;
 		for (k = 0; k < 16; k++) {
 			da a = d_w2a(sub[k][t]), b = d_w2a(sub[31 - k][t]);
 			e[k] = d_a2w(a + b);
@@ -458,11 +460,19 @@ static void synth(MP3DSP *d, int ch, dw sub[32][18], dw *pcm)
 		}
 		d->vpos[ch] = (d->vpos[ch] + 1) & 15;
 		v = d->v[ch][d->vpos[ch]];
+		for (k = 0; k < 8; k++) {	/* e's own butterfly */
+			da a = d_w2a(e[k]), b = d_w2a(e[15 - k]);
+			e2[k] = d_a2w(a + b);
+			o2[k] = d_a2w(a - b);
+		}
+		c = t_synth;
 		for (n = 0; n < 32; n++) {
-			const dw *in = (n & 1) ? o : e;
+			const dw *in = (n & 1) ? o : (n & 2) ? o2 : e2;
+			int len = (n & 1) ? 16 : 8;
 			da acc = 0, r;
-			for (k = 0; k < 16; k++)
-				acc += d_mpy(in[k], sx(t_synth[n * 16 + k]));
+			for (k = 0; k < len; k++)
+				acc += d_mpy(in[k], sx(c[k]));
+			c += len;
 			r = d_rnd(acc);
 			if (n < 16) {		/* X[n]: V[48 + n] and V[48 - n], minus */
 				v[48 + n] = v[48 - n] = d_a2w(-r);

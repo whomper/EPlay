@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 		put(dsp_mp3_prog_ext[i]);
 	for (i = 0; i < (int)(sizeof(mp3dsp_load) / sizeof(mp3dsp_load[0])); i++)
 		load(mp3dsp_load[i].space, mp3dsp_load[i].addr, mp3dsp_load[i].w, mp3dsp_load[i].n);
-	load(4, 0x0000, t_dpair, T_DPAIR_N);	/* internal Y */
+	load(4, 0x0010, t_dpair, T_DPAIR_N);	/* internal Y */
 
 	for (a = 1; a < argc && !dead; a++) {
 		static MP3PARSE ps;

@@ -2,8 +2,8 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 # EPlay. make: the Atari objects so far (the program comes with the sound
 # core); make test: the MP3 decoder's model against minimp3 on files made
-# with sox and lame; make dsptest: the DSP's programs against the model,
-# bit for bit, on Hatari's DSP core, with their cycles (needs a56).
+# with sox and lame; make dsptest: dsp/mp3.a56 against the model, bit for
+# bit, on Hatari's DSP core, with its cycles (needs a56).
 CROSS   := m68k-linux-gnu-
 ACC     := $(CROSS)gcc
 ACFLAGS := -m68030 -Os -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-store-merging \
@@ -35,9 +35,6 @@ $(B) $(B)/atari:
 clean:
 	rm -rf $(B) binary dist
 dsptest: $(B)/mp3files/.made
-	$(MAKE) -C tests/dspbench
-	$(MAKE) -C tests/dsphuff
-	$(MAKE) -C tests/dspsynth
 	$(MAKE) -C tests/dspmp3
 
 .PHONY: all test dsptest clean icons

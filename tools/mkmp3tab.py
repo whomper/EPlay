@@ -69,8 +69,12 @@ add("t_alias", [q23(1 / math.sqrt(1 + x * x)) for x in c] + [q23(x / math.sqrt(1
 # the 32-point DCT X[n] = sum x[k] cos(pi (2k+1) n / 64), after one
 # butterfly (e[k] = x[k] + x[31-k], o[k] = x[k] - x[31-k]): X[2m] from e,
 # X[2m+1] from o, 16 x 16 each, the rows in the order of n
-add("t_synth", [q23(math.cos(math.pi * (2 * k + 1) * n / 64)) for n in range(32) for k in range(16)],
-    "the synthesis filter's DCT: for n = 0..31, 16 cos(pi (2k+1) n / 64) (k < 16)")
+# and a second butterfly on e (e2[k] = e[k] + e[15-k], o2 the difference,
+# k < 8): X[4m] from e2, X[4m+2] from o2, 8 x 8 each; the rows in the order
+# of n: 8 for even n, 16 for odd
+add("t_synth", [q23(math.cos(math.pi * (2 * k + 1) * n / 64)) for n in range(32)
+                for k in range(16 if n & 1 else 8)],
+    "the synthesis filter's DCT: for n = 0..31, cos(pi (2k+1) n / 64), k < 8 (even n) or 16 (odd)")
 d = []
 for line in open(os.path.join(datadir, "mp3window.txt")):
     if not line.startswith("#"):
@@ -364,7 +368,7 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "SELY", 0x0f00, 34, "t_dsely"),
     ("Y", "HUFFY", DSP_HUFF, len(dy), "t_dhy"),
     ("Y", "PSH", 0x2480, 128, "t_psh"),
-    ("Y", "DCT", 0x2500, 512, "t_synth"),
+    ("Y", "DCT", 0x2500, 384, "t_synth"),
     ("Y", "D016", 0x2700, 34, "t_d016"),
     ("Y", "SFBL", 0x2730, 207, "t_sfbl"),
     ("Y", "SFBS", 0x2800, 126, "t_sfbs"),
