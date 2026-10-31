@@ -1,6 +1,7 @@
-# Notes for working on EName
+# Notes for working on EPlay
 
-EName is one of the AERA Atari apps (ECal, EContact, EMail, EFTP, EHypView, ClaudeST). They are meant to
+EPlay is one of the AERA Atari apps (ECal, EContact, EMail, EFTP, EHypView, ClaudeST, EWeb, EUpdate,
+EPDF). They are meant to
 look and behave as one family.
 
 ## For every AERA app
@@ -68,7 +69,23 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 - **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
   servers, Building, Source, Tests, Licence, family footer). Use British English.
 
-## EName
+## EPlay
 
-What is particular to this repo: its exact test commands, its gateway, its memory limits, the code it
-shares with a sibling app.
+EPlay plays MP3 (on the Falcon's DSP), WAV and AIFF (Falcon, TT, STE). It is a program only, no
+accessory (Erez, 31 Oct 2026). The design, and the order of the work, are in `docs/DESIGN.md`:
+read it first, and change it with the code when a decision changes.
+
+- **The sound hardware reads ST RAM only.** The ring the DMA plays is taken with `Mxalloc` mode 0
+  and checked; code and the rest of the data are in TT RAM (`PRGFLAGS=7`).
+- **Every host-port word waits for its flag** (`HISR` TXDE/RXDF). Never time a transfer by the
+  68030's speed: Erez's DFB1 runs it at 50 MHz.
+- **The sound is fed by interrupts from memory**; GEM only refills the buffers, in bgwork steps.
+  Nothing the music needs waits on the AES, the disk or another program.
+- **The DSP rule:** lock it only while an MP3 plays, unlock on pause and stop; if `Dsp_Lock` is
+  refused, say so ("The DSP is in use by another program.") and don't retry by yourself.
+- **The DSP decoder** is tested as common's DSP programs are: a C model of its arithmetic against a
+  reference decoder (ISO 11172-4 full accuracy), then the `.a56` against the model, bit for bit, on
+  Hatari's DSP core. Third-party code: name its licence first; it goes into `NOTICES.TXT`.
+- **Erez's set-up**: Falcon with the DFB1 (50 MHz 68030, 68882, 14 MB ST RAM, 128 MB TT RAM),
+  TOS 4.04, BlueSCSI with an SD card, VGA, a SoundPool FDI (S/PDIF, 44.1 and 48 kHz clocks on the
+  DSP port) set up at boot by its FDI program. Speed is still measured on `Falcon-4`.

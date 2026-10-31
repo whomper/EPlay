@@ -1,6 +1,6 @@
-# EName
+# EPlay
 
-<img src="docs/icon16.png" width="96" align="right" alt="EName icon: an Atari SM124-style monitor showing WHAT-IT-SHOWS">
+<img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: an Atari SM124-style monitor showing WHAT-IT-SHOWS">
 
 ONE SENTENCE: what it is, for which Ataris. *(e.g. "A calendar for the Atari ST, STE, TT and Falcon,
 written in C for GEM.")*
@@ -14,22 +14,22 @@ written in C for GEM.")*
   only).
 - **Hebrew**, in the Atari character set (when supported).
 
-![EName on a Falcon: WHAT THE SCREENSHOT SHOWS](docs/screenshot.png)
+![EPlay on a Falcon: WHAT THE SCREENSHOT SHOWS](docs/screenshot.png)
 
 ## Getting started
 
-Download the latest `ENAME-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It contains:
+Download the latest `EPLAY-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It contains:
 
 | File | What it is |
 |---|---|
-| `ENAME.PRG` / `ENAME.ACC` | the program, for every ST, STE, TT and Falcon |
+| `EPLAY.PRG` / `EPLAY.ACC` | the program, for every ST, STE, TT and Falcon |
 | `TLS.OVL` | the Direct connection (TLS on a TT or Falcon, RSA on the DSP), loaded only when used; an ST leaves it on the disk |
-| `ENAME.HYP`, `ENAME.REF` | the help, for EHypView or ST-Guide |
+| `EPLAY.HYP`, `EPLAY.REF` | the help, for EHypView or ST-Guide |
 | `CACERT.PEM`, `ROOTS.DAT` | root certificates for a Direct connection |
 
-1. Copy `ENAME.ACC` to the root of your boot drive (or start `ENAME.PRG` from anywhere).
+1. Copy `EPLAY.ACC` to the root of your boot drive (or start `EPLAY.PRG` from anywhere).
 2. ...
-3. Press **Help** in EName for the guide.
+3. Press **Help** in EPlay for the guide.
 
 **Needs:** TOS 1.04 or newer, MagiC, N.AES or XaAES; 640×200 or larger; RAM; network: STinG or MiNTnet.
 
@@ -48,8 +48,8 @@ took EFTP's downloads from 40 to 75 KB/s. On a NetUSBee, keep STinG's TCP receiv
 *(Networked apps only.)* Which machine connects how, with the same diagram style as ECal:
 
 ```
-ST, STE:     Atari (ENAME) --plain, home LAN--> Raspberry Pi (gateway) --TLS--> the server
-Falcon, TT:  Atari (ENAME + TLS.OVL: TLS 1.2, RSA on the DSP) ------------TLS--> the server
+ST, STE:     Atari (EPLAY) --plain, home LAN--> Raspberry Pi (gateway) --TLS--> the server
+Falcon, TT:  Atari (EPLAY + TLS.OVL: TLS 1.2, RSA on the DSP) ------------TLS--> the server
              (a Direct connection; or through the Pi, as an ST)
 ```
 
@@ -59,11 +59,11 @@ The gateway's own README: [`gateway/`](gateway/).
 
 ```sh
 sudo apt install gcc-m68k-linux-gnu python3   # Debian/Ubuntu; no MiNTLib needed
-make            # binary/ENAME.PRG, ENAME.ACC, TLS.OVL (common's, as it is)
+make            # binary/EPLAY.PRG, EPLAY.ACC, TLS.OVL (common's, as it is)
 make test       # unit tests on this computer, plus the gateway's tests
 make itest      # against a local server (SERVER-NAME)
-make dist       # dist/ENAME-x.y.zip, as on the Releases page
-make help HCP=/path/to/hcp   # ENAME.HYP from docs/GUIDE.md (hcp: github.com/th-otto/hypview)
+make dist       # dist/EPLAY-x.y.zip, as on the Releases page
+make help HCP=/path/to/hcp   # EPLAY.HYP from docs/GUIDE.md (hcp: github.com/th-otto/hypview)
 ```
 
 `binary/` and `dist/` are what make builds; they are never committed, and a build changes no tracked
@@ -80,7 +80,7 @@ atari/      the Atari runtime (from the shared AERA library)
 gateway/    the Raspberry Pi gateway (networked apps)
 tests/      host unit tests (tests/host) and Hatari rigs (tests/hatari)
 tools/      build helpers: TOS header, icons, help file, version bump
-docs/       the user guide (GUIDE.md, the source of ENAME.HYP) and pictures
+docs/       the user guide (GUIDE.md, the source of EPLAY.HYP) and pictures
 ```
 
 ## Tests
@@ -89,7 +89,7 @@ What `make test` covers. How to run the Hatari rigs, and which emulated machines
 
 ## Licence
 
-EName is free software: you can redistribute it and/or modify it under
+EPlay is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free
 Software Foundation, either version 2 of the License, or (at your option)
 any later version. It is distributed in the hope that it will be useful,
