@@ -177,11 +177,40 @@ words, are made by `tools/mkmp3tab.py` from the standard's (`data/`).
   files from older encoders, are wanted). Where the two disagree (region 1's start in MPEG-2's
   mixed blocks), EPlay follows FFmpeg.
 
+## Measured: the Huffman part on the DSP (31 Oct 2026)
+
+`dsp/huff.a56` decodes a granule's big values and count1 quadruples on the DSP: the bits held at
+the top of accumulator A and refilled 16 at a time by a multiply-accumulate (as common's
+`jpeg.a56`), a 6-bit lookup at each table's root and up to 4 bits at each node below, the pair
+table giving x and y. `make dsptest` (`tests/dsphuff`) runs every granule of the 20 test files
+through the model and then through `huff.a56` on Hatari's DSP core: all 13,000-odd granules give
+the same 576 values, and it counts the cycles.
+
+| File | Bit rate | Share of a 32 MHz DSP |
+|---|---|---|
+| 8 to 24 kHz (MPEG-2, 2.5) | 16 to 68 kbit/s | 1.6 to 6.4 % |
+| 44.1 kHz | 128 kbit/s | 11 to 12 % |
+| 44.1 and 48 kHz | 176 to 192 kbit/s | 16 to 18 % |
+| 44.1 kHz | 320 kbit/s | 26 % |
+
+The Huffman part grows with the bit rate (about 26 cycles a bit, mostly the two values' tests,
+signs and calls), so with the plain synthesis filter (31 %) and transform (17 %), and an estimated
+10 % for dequantising, stereo and alias reduction, a 320 kbit/s file would take about 85 % of a
+stock Falcon's DSP: too close. The headroom planned above is now needed:
+- the synthesis filter's 32-point transform done fast (about 31 % to 15 %);
+- the 18-point transform done fast, and skipped for all-zero subbands (17 % to under 10 %);
+- the Huffman part's common case in one step: an 8-bit lookup that takes a short code with its
+  sign bits and gives x and y signed (about 2 to 3 times faster for small values), with the
+  present code for long codes and linbits; and the calls inlined.
+
+Together they bring 320 kbit/s to roughly 45 to 50 %.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
    measured on Hatari's DSP core, the rest estimated. The C model of the whole decoder is done
-   (above), MPEG-2 and 2.5 with it; next, the Huffman part in `.a56`, counted.
+   (above), MPEG-2 and 2.5 with it, and the Huffman part in `.a56`, bit for bit and counted
+   (above). Next: the faster forms above, then the rest of `dsp/mp3.a56`.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
    clock found and timed; WAV and AIFF playing. A test program first, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.

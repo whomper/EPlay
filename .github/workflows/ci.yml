@@ -21,6 +21,16 @@ jobs:
       - name: make test
         run: make test
 
+  dsp:
+    name: The DSP's programs on Hatari's DSP core
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y sox lame a56
+      - name: make dsptest
+        run: make dsptest
+
   atari:
     name: Atari build
     runs-on: ubuntu-24.04

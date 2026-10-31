@@ -2,7 +2,8 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 # EPlay. make: the Atari objects so far (the program comes with the sound
 # core); make test: the MP3 decoder's model against minimp3 on files made
-# with sox and lame; make -C tests/dspbench: the DSP's cycles.
+# with sox and lame; make dsptest: the DSP's programs against the model,
+# bit for bit, on Hatari's DSP core, with their cycles (needs a56).
 CROSS   := m68k-linux-gnu-
 ACC     := $(CROSS)gcc
 ACFLAGS := -m68030 -Os -Wall -Wextra -Werror -ffreestanding -fno-builtin -fno-store-merging \
@@ -33,7 +34,11 @@ $(B) $(B)/atari:
 	mkdir -p $@
 clean:
 	rm -rf $(B) binary dist
-.PHONY: all test clean icons
+dsptest: $(B)/mp3files/.made
+	$(MAKE) -C tests/dspbench
+	$(MAKE) -C tests/dsphuff
+
+.PHONY: all test dsptest clean icons
 
 # the desktop icon and its headers, from common/icons/EPLAY.txt (committed)
 icons:

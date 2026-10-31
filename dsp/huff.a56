@@ -1,0 +1,407 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; huff.a56 - the Huffman part of the MP3 decode on the Falcon's DSP56001:
+; one granule of one channel's big values and count1 quadruples from its
+; bits into 576 integers, as src/mp3/mp3dsp.c's huffman() does. On its own
+; here, behind a test protocol, to be checked bit for bit against the
+; model and counted (tests/dsphuff); it goes into dsp/mp3.a56 as it is.
+;
+; The host's words: 1 LOADX ADDR N then N words into X; 4 LOADY the same
+; into Y; 2 DECODE SKIP NBITS BV R1 R2 T0 T1 T2 C1 N then N data words,
+; each 16 bits of the stream shifted left 7. DECODE answers 1 (ready),
+; decodes, answers 2 (done), then sends the 576 values and the bits left
+; over (0 when it ended where NBITS says).
+;
+; The bits: A1:A0 holds them from the top; r4 counts them, less 25
+; (negative: fewer than 25, time to refill). A refill adds 16 by a
+; multiply-accumulate: the word * 2^(24 - count) lands just under the
+; bits there. Bits are used by shifting A left.
+;
+; A code: the next 6 bits (a1 * 2^5, the low 6 bits of b1) index the
+; table's root; X there is the bits the code takes (a leaf) or minus the
+; bits a node below looks at, Y the leaf's place in the pair table (x in
+; X, y in Y) or its count1 value, or the node's address.
+
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+
+; internal X: variables
+V_ROOT	equ	$10		; this region's root
+V_LIN	equ	$11		; its linbits
+V_SKIP	equ	$12
+V_NBITS	equ	$13
+V_BV	equ	$14
+V_R1	equ	$15
+V_R2	equ	$16
+V_T0	equ	$17
+V_T1	equ	$18
+V_T2	equ	$19
+V_C1	equ	$1a
+V_N	equ	$1b
+V_TMP	equ	$1c
+V_W	equ	$1d		; the bits the node being read looks at
+
+; internal Y: 2^(24 - c) for c = 0..24 bits there
+P2	equ	$40
+; internal X and Y: for n = 0..13, the mask 2^n - 1 (X) and 2^(n - 1) (Y)
+LT	equ	$60
+
+SEL	equ	$0f00		; X: roots of tables 0-31, A, B; Y: their linbits
+OUT	equ	$2000		; X: the 576 values
+DATA	equ	$2000		; Y: the bits
+
+	org	p:$0
+	jmp	start
+
+	org	p:$2			; (no interrupts: the vectors are free)
+start
+	movep	#1,x:$ffe0		; port B is the host port
+	movep	#0,x:$fffe		; no wait states
+	ori	#3,mr			; no interrupts
+	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits, $ff)
+	movec	m0,m1
+	movec	m0,m2
+	movec	m0,m3
+	movec	m0,m4
+	movec	m0,m5
+	movec	m0,m6
+	movec	m0,m7
+
+cmd	jsr	rd
+	move	x0,a
+	move	#>1,x1
+	cmp	x1,a
+	jeq	loadx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	loady
+	move	#>2,x1
+	cmp	x1,a
+	jeq	decode
+	jmp	cmd
+
+loadx	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lx
+	jsr	rd
+	move	x0,x:(r0)+
+lx
+	jmp	cmd
+
+loady	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ly
+	jsr	rd
+	move	x0,y:(r0)+
+ly
+	jmp	cmd
+
+decode	move	#>V_SKIP,r0
+	do	#10,dp
+	jsr	rd
+	move	x0,x:(r0)+
+dp
+	move	#>DATA,r0
+	move	x:V_N,x0
+	do	x0,dd
+	jsr	rd
+	move	x0,y:(r0)+
+dd
+	move	#>1,x1
+	jsr	wr			; ready
+	jsr	huff
+	move	#>2,x1
+	jsr	wr			; done
+	move	#>OUT,r0
+	do	#576,so
+	move	x:(r0)+,x1
+	jsr	wr
+so
+	move	r3,x1
+	jsr	wr
+	jmp	cmd
+
+; ---- one granule of one channel: the parameters at V_SKIP.., the bits at
+; DATA; the values to OUT, r3 = the bits left over
+huff	move	#>DATA,r1
+	move	#>OUT,r0
+	move	#>4,n0
+	; the first 16 bits, then refill to 25 or more
+	move	y:(r1)+,x0
+	move	x0,a
+	asl	a
+	move	#>$fff7,r4		; 16 there, less 25 (a long immediate: a short one is unsigned)
+	jsr	refill
+	; the scalefactors' bits, skipped
+	move	x:V_SKIP,b
+	tst	b
+	jeq	hs1
+	move	b1,x0
+	rep	x0
+	asl	a
+	move	x0,n4
+	nop
+	move	(r4)-n4
+hs1	jsr	refill
+	move	#>63,x1			; the root's 6 bits: mask, multiplier
+	move	#>$20,y1
+	; big values: three regions, each with its table
+	move	x:V_R1,x0
+	move	x:V_T0,y0
+	jsr	region
+	move	x:V_R2,x0
+	move	x:V_T1,y0
+	jsr	region
+	move	x:V_BV,x0
+	move	x:V_T2,y0
+	jsr	region
+	jsr	count1
+	; the rest are zeros
+	move	#>OUT+576,b
+	move	r0,x0
+	sub	x0,b
+	jle	hz
+	move	b1,x0
+	clr	b
+	rep	x0
+	move	b,x:(r0)+
+hz	rts
+
+; a region: the lines from where r0 is up to line x0, with table y0
+region	move	x0,b
+	move	#>OUT,x0
+	add	x0,b
+	move	r0,x0
+	sub	x0,b			; the lines
+	jle	rgx
+	move	b1,x:V_TMP
+	move	y0,n2
+	move	#>SEL,r2
+	move	y0,n5
+	move	#>SEL,r5
+	nop
+	move	x:(r2+n2),b		; the root
+	move	y:(r5+n5),y0		; the linbits
+	move	y0,x:V_LIN
+	move	b1,x:V_ROOT
+	tst	b
+	jeq	rgz
+	move	x:V_TMP,b
+	asr	b
+	move	b1,x0			; the pairs
+	do	x0,rgp
+	jsr	pair
+rgp
+rgx	rts
+rgz	move	x:V_TMP,x0		; table 0: zeros, no bits
+	clr	b
+	rep	x0
+	move	b,x:(r0)+
+	rts
+
+; ---- a pair: its code, then x and y with their linbits and signs
+pair	jsset	#15,r4,refill
+	move	a1,x0
+	mpy	x0,y1,b		x:V_ROOT,y0
+	and	x1,b			; the next 6 bits
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b	; the bits it takes, or a node
+	jset	#23,x0,pnode
+pleaf	rep	x0
+	asl	a
+	move	x0,n4
+	move	b1,r2			; the pair table: x in X, y in Y
+	move	b1,r5
+	move	(r4)-n4
+	move	x:(r2),b
+	jsr	val
+	move	y:(r5),b
+	jsr	val
+	rts
+pnode	jsr	node
+	jmp	pleaf
+
+; b = a value (0..15): its linbits if 15, its sign if not 0, out to r0
+val	tst	b
+	jeq	vz
+	move	#>15,x0
+	cmp	x0,b
+	jeq	vlin
+vs	jclr	#23,a1,vp		; the sign: the top bit (not asl's carry: that is bit 55)
+	neg	b
+vp	asl	a
+	move	(r4)-
+vz	move	b,x:(r0)+
+	rts
+vlin	move	x:V_LIN,b
+	tst	b
+	jeq	vl0
+	jsr	refill
+	move	x:V_LIN,n3
+	move	#>LT,r3
+	move	x:V_LIN,n7
+	move	#>LT,r7
+	nop
+	move	x:(r3+n3),x1		; 2^n - 1
+	move	y:(r7+n7),y1		; 2^(n - 1)
+	move	a1,x0
+	mpy	x0,y1,b
+	and	x1,b			; the next n bits
+	move	b1,b
+	move	x:V_LIN,x0
+	rep	x0
+	asl	a
+	move	x0,n4
+	move	#>15,x0
+	add	x0,b
+	move	(r4)-n4
+	move	#>63,x1
+	move	#>$20,y1
+	jmp	vs
+vl0	move	#>15,b
+	jmp	vs
+
+; ---- a code longer than the root's 6 bits: x0 = minus the bits the node
+; below looks at, b1 its address. Gives the leaf as the root does: x0 its
+; bits there, b1 its place
+node	move	#>6,y0
+nd0	rep	y0			; the bits the last node looked at, used
+	asl	a
+	move	y0,n4
+	move	b1,x:V_TMP
+	move	(r4)-n4
+	move	x0,b
+	neg	b			; n
+	move	b1,n2
+	move	#>LT,r2
+	move	b1,n5
+	move	#>LT,r5
+	move	b1,x:V_W
+	move	x:(r2+n2),x1		; 2^n - 1
+	move	y:(r5+n5),y1		; 2^(n - 1)
+	move	a1,x0
+	mpy	x0,y1,b		x:V_TMP,y0
+	and	x1,b
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b
+	move	x:V_W,y0
+	jset	#23,x0,nd0
+	move	#>63,x1
+	move	#>$20,y1
+	rts
+
+; ---- count1: quadruples of 0 and +-1 while there are bits and lines; one
+; that runs past the granule's bits isn't there. r3 = the bits left
+count1	move	r1,b
+	move	#>DATA,x0
+	sub	x0,b
+	rep	#4
+	asl	b			; the bits read in: 16 a word
+	move	r4,x0
+	sub	x0,b
+	move	#>25,x0
+	sub	x0,b			; those used
+	neg	b
+	move	x:V_NBITS,x0
+	add	x0,b
+	move	x:V_SKIP,x0
+	add	x0,b
+	move	b1,r3
+	move	x:V_C1,n2
+	move	#>SEL+32,r2
+	nop
+	move	x:(r2+n2),x0
+	move	x0,x:V_ROOT
+c1l	move	r0,b
+	move	#>OUT+573,x0
+	cmp	x0,b
+	jge	c1x			; fewer than 4 lines left
+	jset	#15,r3,c1x
+	move	r3,b
+	tst	b
+	jeq	c1x			; no bits left
+	jsr	refill
+	move	a1,x0
+	mpy	x0,y1,b		x:V_ROOT,y0
+	and	x1,b
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b	; (count1 codes are 6 bits at most)
+	rep	x0
+	asl	a
+	move	x0,n4
+	move	x0,n3
+	move	(r4)-n4
+	move	(r3)-n3
+	move	b1,y0			; v w x y
+	clr	b
+	jclr	#3,y0,q3z
+	move	#>1,b
+	jclr	#23,a1,q3p
+	neg	b
+q3p	asl	a
+	move	(r4)-
+	move	(r3)-
+q3z	move	b,x:(r0)+
+	clr	b
+	jclr	#2,y0,q2z
+	move	#>1,b
+	jclr	#23,a1,q2p
+	neg	b
+q2p	asl	a
+	move	(r4)-
+	move	(r3)-
+q2z	move	b,x:(r0)+
+	clr	b
+	jclr	#1,y0,q1z
+	move	#>1,b
+	jclr	#23,a1,q1p
+	neg	b
+q1p	asl	a
+	move	(r4)-
+	move	(r3)-
+q1z	move	b,x:(r0)+
+	clr	b
+	jclr	#0,y0,q0z
+	move	#>1,b
+	jclr	#23,a1,q0p
+	neg	b
+q0p	asl	a
+	move	(r4)-
+	move	(r3)-
+q0z	move	b,x:(r0)+
+	jclr	#15,r3,c1l
+	move	(r0)-n0			; it ran over: it isn't there
+c1x	rts
+
+; ---- the bits: refill while fewer than 25
+refill	jclr	#15,r4,rf1
+	move	r4,n7
+	move	#>P2+25,r7
+	move	y:(r1)+,x0
+	move	y:(r7+n7),y0
+	mac	x0,y0,a
+	move	#>16,n4
+	nop
+	move	(r4)+n4
+	jmp	refill
+rf1	rts
+
+; host port
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+wr	jclr	#1,x:HSR,wr
+	movep	x1,x:HRX
+	rts

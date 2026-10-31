@@ -28,4 +28,11 @@ void mp3dsp_reset(MP3DSP *d);
  * MPEG-2 and 2.5); gives the channels */
 int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
 
+#ifdef MP3DSP_HUFF_HOOK
+/* the tests' look at each granule's Huffman part: its side information,
+ * the main data, where its codes start and end, and the values they gave */
+void mp3dsp_huff_hook(const unsigned long *g, const unsigned long *w, long nw,
+		      long start, long end, const int *is);
+#endif
+
 #endif

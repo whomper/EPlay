@@ -498,7 +498,15 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 			c->nl = lsf ? 6 : 8;
 			end = b.pos + (long)c->g[0];
 			scalefactors(d, &b, c, gr, ch, lsf);
+#ifdef MP3DSP_HUFF_HOOK
+			{
+				long at = b.pos;
+				huffman(&b, c, end);
+				mp3dsp_huff_hook(c->g, b.w, b.n, at, end, c->is);
+			}
+#else
 			huffman(&b, c, end);
+#endif
 			requantise(c, rate, &d->sat);
 		}
 		if (nch == 2)

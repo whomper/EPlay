@@ -38,7 +38,7 @@ start
 	movep	#1,x:$ffe0		; port B is the host port
 	movep	#0,x:$fffe		; no wait states
 	ori	#3,mr			; no interrupts
-	movec	#-1,m0
+	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits, $ff)
 	movec	m0,m1
 	movec	m0,m2
 	movec	m0,m3
@@ -83,7 +83,7 @@ syn1
 w2
 	nop
 syn2
-	movec	#-1,m5
+	movec	#$ffff,m5
 	jsr	mark
 
 ; ---- 3. the inverse transform, window and overlap: 32 subbands
@@ -101,7 +101,7 @@ syn2
 	macr	x0,y0,a
 	move	a,x:(r2)+
 irow
-	movec	#-1,m0
+	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits, $ff)
 	move	#U,r2
 	move	#IWIN,r5
 	; first 18: the overlap kept from the last granule plus this one's
@@ -135,7 +135,7 @@ matrix
 	macr	x0,y0,a
 	move	a,x:(r1)+
 mrow
-	movec	#-1,m0
+	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits, $ff)
 	rts
 
 ; tell the host we got here
