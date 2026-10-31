@@ -182,7 +182,7 @@ words, are made by `tools/mkmp3tab.py` from the standard's (`data/`).
 The Huffman part (first written alone as `dsp/huff.a56`, now in `dsp/mp3.a56`) decodes a granule's big values and count1 quadruples on the DSP: the bits held at
 the top of accumulator A and refilled 16 at a time by a multiply-accumulate (as common's
 `jpeg.a56`), a 6-bit lookup at each table's root and up to 4 bits at each node below, the pair
-table giving x and y. its test then ran every granule of the 20 test files
+table giving x and y. Its test then ran every granule of the 20 test files
 through the model and then through `huff.a56` on Hatari's DSP core: all 13,000-odd granules give
 the same 576 values, and it counts the cycles.
 
