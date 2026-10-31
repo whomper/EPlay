@@ -36,10 +36,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: The m68k cross compiler
+      - name: The m68k cross compiler, and a56 for the DSP's program
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu
+          sudo apt-get install -y gcc-m68k-linux-gnu a56
       - name: Build the programs
         run: make
       - name: The build changed no tracked file
@@ -48,10 +48,14 @@ jobs:
           test -z "$(git status --porcelain)"
       # no artifact: only formal releases leave the build machine
 
-  # Hatari rigs: enable once the repo's rigs run headless (see EHypView's ci.yml)
-  # hatari:
-  #   runs-on: ubuntu-24.04
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - run: sudo apt-get update && sudo apt-get install -y gcc-m68k-linux-gnu hatari xvfb
-  #     - run: make hatari-test
+  hatari:
+    name: Playing in Hatari (WAV, AIFF, MP3 on the DSP; the file selector held open)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y gcc-m68k-linux-gnu a56 hatari sox lame
+      - name: Build
+        run: make && make -C tests/hatari
+      - name: The play rig (Falcon and Falcon-4, EmuTOS)
+        run: python3 tests/hatari/play_test.py "$RUNNER_TEMP/play"

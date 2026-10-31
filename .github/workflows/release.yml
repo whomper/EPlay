@@ -50,7 +50,7 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu zip autoconf automake libtool gettext autopoint pkg-config
+          sudo apt-get install -y gcc-m68k-linux-gnu a56 sox lame zip autoconf automake libtool gettext autopoint pkg-config
       - name: hcp, for the help file
         run: common/tools/build-hcp.sh "$RUNNER_TEMP/hcp"
       - name: Test

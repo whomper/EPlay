@@ -13,7 +13,10 @@
 ; 5 RESET: the overlap, the rings and the kept scalefactors to zero;
 ; 7 FRAME N then the packet's N words: answers 1 (ready), decodes,
 ; answers 2 (done), then sends channel 0's samples, then channel 1's (576
-; a granule); 8 DUMP SPACE ADDR N: N words from X (1) or Y (4).
+; a granule); 8 DUMP SPACE ADDR N: N words from X (1) or Y (4); 11 PLAY N
+; then the packet: decodes, and sends the frame as the sound DMA plays it,
+; left and right in turn (a mono frame's twice), each sample's top 16 bits
+; in the word's low 16 (the 68030 reads them a word at a time at $FFA206).
 ;
 ; Memory: external X and Y are mp3map.inc's (tools/mkmp3tab.py), internal
 ; X and Y below. What runs most is in internal P (the bootstrap's 512
@@ -701,6 +704,9 @@ sl0	move	a1,x:V_SW
 cmdx	move	#>1,x1			; the commands (x0), but LOADP
 	cmp	x1,a
 	jeq	loadx
+	move	#>11,x1
+	cmp	x1,a
+	jeq	play
 	move	#>4,x1
 	cmp	x1,a
 	jeq	loady
@@ -749,6 +755,34 @@ fr1
 	move	#>PCM+1152,r0
 	jsr	sendch
 fr2	jmp	cmd
+; ---- PLAY: a frame decoded, and sent as the DMA plays it
+play	jsr	rd
+	move	#>PKT,r0
+	do	x0,pl1
+	jsr	rd
+	move	x0,y:(r0)+
+pl1
+	jsr	decode
+	move	#>PCM,r0		; left
+	move	#>PCM+1152,r1		; right (mono: left again)
+	jset	#0,x:V_FLAGS,pl2
+	move	#>PCM,r1
+pl2	move	#>576,x0
+	jset	#8,x:V_FLAGS,pl3
+	move	#>1152,x0
+pl3	move	#>$008000,y0		; >> 8: the top 16 bits, down to the low 16
+	do	x0,pl4
+	move	y:(r0)+,x1
+	mpy	x1,y0,a
+pl5	jclr	#1,x:HSR,pl5
+	movep	a1,x:HRX
+	move	y:(r1)+,x1
+	mpy	x1,y0,a
+pl6	jclr	#1,x:HSR,pl6
+	movep	a1,x:HRX
+pl4
+	jmp	cmd
+
 sendch	move	#>576,x0
 	jset	#8,x:V_FLAGS,sc1
 	move	#>1152,x0

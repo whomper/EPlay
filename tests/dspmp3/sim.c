@@ -170,6 +170,26 @@ int main(int argc, char **argv)
 				save_state();
 			}
 			nch = mp3dsp_frame(&d, pk, pcm, &ns);
+			if (getenv("SIMPLAY")) {	/* the player's command: 16-bit, interleaved */
+				unsigned long long t0 = cycles;
+				put(11);
+				put((unsigned long)np);
+				for (k = 0; k < np; k++)
+					put(pk[k]);
+				for (k = 0; k < ns && !dead; k++)
+					for (ch = 0; ch < 2; ch++) {
+						long v = get() & 0xffff;
+						long m = ((long)pcm[nch == 2 ? ch : 0][k] >> 8) & 0xffff;
+						if (v != m && !wrong++)
+							fprintf(stderr, "%s: frame %ld sample %d channel %d: PLAY %04lx, the model %04lx\n",
+								argv[a], frames, k, ch, v, m);
+					}
+				c += cycles - t0;
+				bad += wrong != 0;
+				frames++;
+				samples += ns;
+				continue;
+			}
 			put(7);
 			put((unsigned long)np);
 			for (k = 0; k < np; k++)

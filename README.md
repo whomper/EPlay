@@ -2,68 +2,63 @@
 
 <img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
-ONE SENTENCE: what it is, for which Ataris. *(e.g. "A calendar for the Atari ST, STE, TT and Falcon,
-written in C for GEM.")*
+An audio player for the Atari Falcon: MP3 decoded on the Falcon's DSP, WAV and AIFF, in a GEM
+window. Written in C and DSP56001 assembly for GEM.
 
 **Highlights**
 
-- **THE MAIN THING:** one line on what it does best.
-- **Modern but Atari:** desk accessory and program, right-click menus, drag and drop, iconify, help in
-  EHypView/ST-Guide (keep what is true).
-- **Secure:** TLS 1.2 on the Falcon and TT; ST and STE through a Raspberry Pi gateway (networked apps
-  only).
-- **Hebrew**, in the Atari character set (when supported).
+- **Steady sound:** the music is fed by an interrupt from a queue of seconds to minutes held in
+  memory, so menus, dialogs, the file selector and other programs don't break it up. Every word to
+  and from the DSP waits for the host port's flag, so an accelerated Falcon (a DFB1 at 50 MHz)
+  plays exactly as a stock one.
+- **MP3 on the DSP:** the whole decoder (MPEG-1, 2 and 2.5 layer III) runs on the Falcon's
+  DSP56001, checked bit for bit against a model that meets ISO 11172-4's full accuracy.
+- **Through an external clock:** with a clock on the DSP port (a SoundPool FDI: 44.1 or 48 kHz to
+  S/PDIF), files at that rate play at their own rate, bit for bit.
+- **Shares the DSP:** EPlay holds the DSP only while an MP3 plays.
 
-![EPlay on a Falcon: WHAT THE SCREENSHOT SHOWS](docs/screenshot.png)
+*Version 0.1 is the first try on a real Falcon: the sound core and a minimal window. The playlist,
+the small player, the guide and resampling (files at 44.1 kHz with no external clock) come in the
+next phases.*
 
 ## Getting started
 
-Download the latest `EPLAY-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It contains:
+Download the latest `EPLAY-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It
+contains:
 
 | File | What it is |
 |---|---|
-| `EPLAY.PRG` / `EPLAY.ACC` | the program, for every ST, STE, TT and Falcon |
-| `TLS.OVL` | the Direct connection (TLS on a TT or Falcon, RSA on the DSP), loaded only when used; an ST leaves it on the disk |
-| `EPLAY.HYP`, `EPLAY.REF` | the help, for EHypView or ST-Guide |
-| `CACERT.PEM`, `ROOTS.DAT` | root certificates for a Direct connection |
+| `EPLAY.PRG` | the program, for the Falcon |
+| `icons/` | its desktop icon (`EPLAY.RSC`, or `EPLAY.ICN` and `EPLAYMK.ICN` for desktops that take them) |
+| `NOTICES.TXT` | what EPlay includes under other licences |
 
-1. Copy `EPLAY.ACC` to the root of your boot drive (or start `EPLAY.PRG` from anywhere).
-2. ...
-3. Press **Help** in EPlay for the guide.
+1. Copy `EPLAY.PRG` anywhere, and start it; or drop a `.MP3`, `.WAV` or `.AIF` file on it.
+2. **File > Open…** (Control+O) plays another file; **Play** and **Stop** are in the window and in
+   the Play menu.
 
-**Needs:** TOS 1.04 or newer, MagiC, N.AES or XaAES; 640×200 or larger; RAM; network: STinG or MiNTnet.
+**Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS
+(MagiC and MiNT not tried yet), 640×400 or larger.
 
-**Under TOS, put Atari's `FOLDR100.PRG` first in `AUTO`**, renamed for more room (`FOLDR400.PRG`).
-TOS keeps an entry in a small internal pool for every folder a program or accessory has looked
-into, and halts with "OUT OF INTERNAL MEMORY" when it runs out; FOLDRxxx makes the pool bigger.
-
-*(Networked apps.)* **With STinG, set the Delay in `STING.CPX` to suit the machine:** 10 on a
-Falcon or TT, 25 to 50 on an ST, as STinG's manual says. STinG looks at the network card that
-often, so it sets the speed of every STinG program: on Erez's Falcon with a NetUSBee, Delay 10
-took EFTP's downloads from 40 to 75 KB/s. On a NetUSBee, keep STinG's TCP receive window at 5840
-(MSS 1460): the card holds about four full packets.
+**What 0.1 plays:**
+- WAV (PCM, 8 to 32 bits, mono or stereo) and AIFF/AIFC (uncompressed);
+- MP3: MPEG-1, 2 and 2.5 layer III, every bit rate, constant or variable;
+- at the file's own rate where the Falcon has it: 44.1 or 48 kHz through an external clock, or
+  the Falcon's own 49170, 32780, 24585 Hz and lower. A file at another rate plays at the nearest
+  of those, so a little fast or slow, until 0.2 resamples it.
 
 ## How it reaches the servers
 
-*(Networked apps only.)* Which machine connects how, with the same diagram style as ECal:
-
-```
-ST, STE:     Atari (EPLAY) --plain, home LAN--> Raspberry Pi (gateway) --TLS--> the server
-Falcon, TT:  Atari (EPLAY + TLS.OVL: TLS 1.2, RSA on the DSP) ------------TLS--> the server
-             (a Direct connection; or through the Pi, as an ST)
-```
-
-The gateway's own README: [`gateway/`](gateway/).
+It doesn't: EPlay plays files, and needs no network.
 
 ## Building
 
 ```sh
-sudo apt install gcc-m68k-linux-gnu python3   # Debian/Ubuntu; no MiNTLib needed
-make            # binary/EPLAY.PRG, EPLAY.ACC, TLS.OVL (common's, as it is)
-make test       # unit tests on this computer, plus the gateway's tests
-make itest      # against a local server (SERVER-NAME)
+sudo apt install gcc-m68k-linux-gnu a56 python3 sox lame   # Debian/Ubuntu; no MiNTLib needed
+make            # binary/EPLAY.PRG, with the DSP's program (a56) built in
+make test       # the MP3 model against minimp3, WAV and AIFF against sox
+make dsptest    # the DSP's program against the model, bit for bit, on Hatari's DSP core
 make dist       # dist/EPLAY-x.y.zip, as on the Releases page
-make help HCP=/path/to/hcp   # EPLAY.HYP from docs/GUIDE.md (hcp: github.com/th-otto/hypview)
+make rig        # the Hatari rigs (below)
 ```
 
 `binary/` and `dist/` are what make builds; they are never committed, and a build changes no tracked
@@ -74,18 +69,30 @@ files and the zip on the Releases page. Builds in between are never handed out: 
 ## Source
 
 ```
-src/        the program's core, also built for this computer in the tests
-ui/         GEM: windows, dialogs, menus
-atari/      the Atari runtime (from the shared AERA library)
-gateway/    the Raspberry Pi gateway (networked apps)
-tests/      host unit tests (tests/host) and Hatari rigs (tests/hatari)
-tools/      build helpers: TOS header, icons, help file, version bump
-docs/       the user guide (GUIDE.md, the source of EPLAY.HYP) and pictures
+src/        WAV and AIFF (pcm.c); the MP3 frame parser and the decoder's C model (src/mp3)
+dsp/        the MP3 decoder for the DSP56001 (mp3.a56)
+atari/      the Falcon's sound: the ring and the matrix (snd.c), the tick (feed.c), the DSP (dspmp3.c)
+ui/         GEM: the window, the menus, the player (play.c)
+common/     the AERA library (from AERA-Atari, by git subtree)
+data/       the standard's tables (Huffman codes, the synthesis window)
+tools/      the table generators, the version bump
+tests/      the model's and the parsers' tests, the DSP's, and the Hatari rigs (tests/hatari)
+docs/       the design (DESIGN.md) and the icons
 ```
 
 ## Tests
 
-What `make test` covers. How to run the Hatari rigs, and which emulated machines they use.
+- `make test`: the decoder's C model against minimp3 on 20 files made with sox and lame (MPEG-1,
+  2 and 2.5; tones, sweeps, noise, clicks, short blocks, joint stereo), within ISO 11172-4's
+  limits for full accuracy; WAV and AIFF converted against sox, sample for sample.
+- `make dsptest`: `dsp/mp3.a56` on Hatari's DSP core against the model, bit for bit, with the
+  DSP's share of each file.
+- `tests/hatari/play_test.py`: EPlay in Hatari on `Falcon` (as Erez's, with the DFB1) and
+  `Falcon-4` (a stock Falcon), with Hatari's sound recorded and checked: the tone at the right
+  pitch in both channels, no gap, the length, silence after the end. A WAV, an AIFF, two MP3s,
+  and the file selector held open while an MP3 plays.
+- `tests/hatari/speed.py`: the family's speed rig, the longest stretch between event calls of
+  each action, on a stock Falcon (`make prof` first). The figures are in `docs/DESIGN.md`.
 
 ## Licence
 
@@ -98,12 +105,11 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [COPYING](COPYING).
 
 Copyright (C) 2026 AERA | Erez Yaary.
 
-It includes, under their own licences (compatible with the GPL):
+It includes, under their own licences (compatible with the GPL; see `NOTICES.TXT`):
 
-- [BearSSL](third_party/bearssl) by Thomas Pornin: MIT licence
-  ([LICENSE.txt](third_party/bearssl/LICENSE.txt))
-- `CACERT.PEM`, the root certificates for a Direct connection, from Mozilla's CA
-  list (Mozilla Public License 2.0)
+- the MP3 standard's Huffman codes and synthesis window as FFmpeg transcribes them
+  (`data/`, GNU LGPL 2.1 or later);
+- for the tests only, not in `EPLAY.PRG`: minimp3 by Lion (lieff), CC0 1.0.
 
 ---
 

@@ -35,10 +35,15 @@ disk --32 KB reads--> file buffer (TT RAM) --convert, in GEM steps--> ring (ST R
 ```
 
 - The ring is about 2 s of 16-bit stereo (at 49170 Hz: 384 KB), taken once at start from ST RAM.
-- The DMA plays the ring in a loop (`Setbuffer`, `Buffoper` with repeat). Its end-of-frame
-  interrupt (Timer A, `Setinterrupt`) only counts the halves played; the program refills the half
-  just played in its next steps (bgwork slices). The audio never waits for GEM: it waits only if
-  GEM stalls longer than the ring (2 s).
+- The DMA plays the ring in a loop (`Setbuffer`, `Buffoper` with repeat).
+- **As built in 0.1:** GEM's steps only read the file, in 32 KB pieces, into a queue in TT RAM
+  where there is some (a third of the largest free block, 8 MB at most: on Erez's Falcon minutes
+  of music, on a stock Falcon about 7 s of CD sound). A tick from the MFP's Timer A
+  (`atari/feed.c`, 250 a second for WAV and AIFF) converts from the queue into the ring, up to
+  1024 frames a tick. So nothing the music needs waits for GEM: a menu held down, the file
+  selector, a dialog or another program stop only the reading, and the queue lasts. The tick
+  reads where the DMA is from its counter (`$FF8909`), two reads that agree, since a read as it
+  moves on can be torn (Hatari counted a whole ring twice).
 - Conversion: 8-bit to 16-bit, mono to stereo, AIFF is big-endian as the 68030 is, WAV is
   little-endian (bytes swapped), 24-bit is cut to 16 with dither. Done in the 68030's steps.
 - The WAV and AIFF path never needs the DSP, so it never takes it from another program.
@@ -58,6 +63,13 @@ disk --32 KB reads--> MP3 data (TT RAM) --host interrupt, as the DSP asks--> DSP
 - The 68030 feeds the compressed bytes from memory by the DSP's host interrupt: at 320 kbit/s
   that is 40 KB/s, about 14,000 host-port words a second.
 - Pause and stop unlock the DSP (the DSP rule).
+- **As built in 0.1 (the team's choice, for one sound path):** the samples come back to the 68030
+  through the host port (`PLAY`, command 11: each sample's top 16 bits) and go into the same ring
+  as WAV's. The queue holds the MP3's bytes as they are; the tick (1000 a second here) makes a
+  frame's packet (`mp3frame.c`) while the DSP decodes the one before, sends it as soon as the
+  DSP's frame is read, and the DSP's program goes in a piece at a time from GEM's steps (21,500
+  words). The cost: 98,000 host-port reads a second at 49.2 kHz, the 68030's largest share on a
+  stock Falcon. The SSI path above takes it away (0.2's proposal).
 
 ### The clocks: 44.1 kHz through the FDI, else resampled
 
@@ -301,6 +313,48 @@ and the frequency inversion moved into the filter's butterfly to make room.
 **So: a stock Falcon plays 128 to 192 kbit/s with 20 to 35 % to spare, 320 kbit/s at 86 %, and
 music with many short blocks at high bit rates only just or not.**
 
+## Phase 0.1: the sound core in a minimal window (31 Oct 2026)
+
+`EPLAY.PRG` plays a WAV, an AIFF or an MP3 given on its command line (the desktop's way) or from
+File > Open…, in one small window (the file, its format, the output, the time; Open, Play, Stop).
+Checked in Hatari (`tests/hatari/play_test.py`, `Falcon` and `Falcon-4`, EmuTOS): Hatari's sound
+recorded and analysed: the tone the file holds at the pitch the output rate gives, both
+channels, no gap, the length, silence after the end, and no underrun counted by the tick. Ten
+cases: a WAV, an AIFF, a short and a long MP3 (320 kbit/s, ten seconds: the ring and the queue
+round several times), and the file selector held open 5 s while an MP3 plays. All pass.
+
+What the rig found and 0.1 fixes:
+- a frame that ended across the ring's end left the DSP holding its last 104 samples ("The DSP
+  stopped answering"), the second part read with the first part's count;
+- the DMA's position, read a byte at a time, torn as it moved on (a ring counted twice: an AIFF
+  stopped at 1.7 s of 3);
+- Hatari's external clock runs at 50 kHz: only rates near 44.1 and 48 kHz are taken as a clock;
+- `Super(0)` around the host port crashed on Stop on a stock Falcon (Line F at $480): the host port
+  is now reached through `Supexec`;
+- the clock measurement played the ring's old contents: it plays 64 KB cleared.
+
+Hatari 2.4.1 (Ubuntu's) swaps left and right after a DMA stop, keeping the stereo parity of the
+words played before (fixed in later Hatari: "1st frame is left"). The rig allows it there and says
+so; the Falcon starts each frame on the left.
+
+The speed rig (`tests/hatari/speed.py`, EmuTOS; the longest stretch, ms):
+
+| Action | `Falcon-4` MP3 | `Falcon-4` WAV | `Falcon` MP3 | `Falcon` WAV | Time |
+|---|---|---|---|---|---|
+| started, playing | 420 | 390 | 330 | 325 | 2000 |
+| 5 s playing | 30 | <20 | <20 | <20 | 50 |
+| About box opened, playing | **265** | **175** | 125 | 110 | 150 |
+| About box closed | 75 | 55 | 25 | 25 | 300 |
+| Stop | 40 | 40 | 20 | 20 | 50 |
+| About box opened, stopped | 130 | 130 | 90 | 90 | 150 |
+| Play again (the DSP loaded) | 50 | 45 | 30 | 25 | 50 |
+
+MP3 at 320 kbit/s and WAV at 44.1 kHz, both played at 49170 Hz (no external clock): the most a
+stock Falcon is asked. Over: the About box on a stock Falcon while it plays, because the tick takes
+the 68030's time (the host-port reads for MP3, the conversion and ST RAM for WAV). The plan: 0.2
+takes the samples off the 68030 (MP3 out of the DSP's SSI port, WAV through the DSP, which also
+resamples).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
@@ -310,7 +364,8 @@ music with many short blocks at high bit rates only just or not.**
    with Erez: the 68030 taking the Huffman part and dequantising where it is fast (the DFB1), a
    lighter decode of the top subbands when a stock Falcon falls behind, or both.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
-   clock found and timed; WAV and AIFF playing. A test program first, for Erez's Falcon.
+   clock found and timed; WAV and AIFF playing. Done in phase 0.1 (above), with MP3 through the DSP
+   and a minimal window, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.
 4. **MP3 on the DSP**, whole, tested as above.
 5. **TT and STE**, 8-bit WAV and AIFF.

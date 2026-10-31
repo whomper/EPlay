@@ -220,11 +220,14 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 			bits += p23;
 		}
 
-	/* the reservoir: this frame's main data goes after what is kept */
-	if (ps->nres + main_n > (int)sizeof(ps->res)) {
-		int drop = ps->nres + main_n - (int)sizeof(ps->res);
-		memmove(ps->res, ps->res + drop, (size_t)(ps->nres - drop));
-		ps->nres -= drop;
+	/* the reservoir: this frame's main data goes after what is kept. A
+	   frame reaches back 511 bytes at most (main_data_begin's 9 bits), so
+	   when it is full only the last 511 are kept: moved every few frames,
+	   not each one */
+	if (ps->nres + main_n > (int)sizeof(ps->res) - 4) {
+		int keep = ps->nres < 511 ? ps->nres : 511;
+		memmove(ps->res, ps->res + ps->nres - keep, (size_t)keep);
+		ps->nres = keep;
 	}
 	if (begin > ps->nres) {
 		/* the data starts in a frame we haven't seen: play silence */
@@ -247,19 +250,19 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 	g = pk + 2 + ngr * nch * PK_GC;
 	d = (unsigned char *)src;
 	{
-		/* 23 bits a word: bytes in at the bottom of acc, words out from its top */
-		unsigned long acc = 0;
-		int have = 0;
-		long at = 0;
-		for (i = 0; i < nw; i++) {
-			while (have < 23) {
-				acc = (acc << 8 | (at < nbytes ? d[at] : 0)) & 0x7fffffffUL;
-				at++;
-				have += 8;
-			}
-			g[i] = (acc >> (have - 23)) & 0x7fffffUL;
-			have -= 23;
+		/* 23 bits a word, each from the 4 bytes it starts in (the
+		   reservoir has 4 bytes to spare past its end); the last word's
+		   bits past the data made 0 */
+		long bit = 0;
+		int extra = (int)((long)nw * 23 - nbytes * 8);
+		for (i = 0; i < nw; i++, bit += 23) {
+			const unsigned char *p = d + (bit >> 3);
+			unsigned long v = (unsigned long)p[0] << 24 | (unsigned long)p[1] << 16 |
+					  (unsigned long)p[2] << 8 | p[3];
+			g[i] = (v << (bit & 7)) >> 9 & 0x7fffffUL;
 		}
+		if (nw)
+			g[nw - 1] &= ~((1UL << extra) - 1);
 	}
 	return 2 + ngr * nch * PK_GC + nw;
 }

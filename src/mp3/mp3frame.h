@@ -63,7 +63,7 @@ typedef struct {
 } MP3HDR;
 
 typedef struct {
-	unsigned char res[2048];	/* main data of the last frames */
+	unsigned char res[4096 + 4];	/* main data of the last frames (+4: the packing's reads) */
 	int nres;
 } MP3PARSE;
 
