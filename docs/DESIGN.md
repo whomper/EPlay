@@ -127,12 +127,37 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   has it.
 - **Erez's Falcon** is the referee: the DFB1, the BlueSCSI's SD card, the FDI.
 
+## Measured: the DSP's budget for MP3 (31 Oct 2026)
+
+`tests/dspbench` (`make -C tests/dspbench`) runs the two heaviest parts of the decode on Hatari's
+DSP56001 core, laid out in the Falcon's DSP memory as the decoder will be, and counts the cycles
+(Hatari adds the cycles of the Falcon's external memory). 44.1 kHz stereo is 4 granule-channels
+of 576 samples, 38.3 times a second; the DSP has 16 million instructions a second.
+
+| Part, in its plain form (straight matrices) | Instructions a sample | Share of a 32 MHz DSP |
+|---|---|---|
+| synthesis filter, window taps in external Y | 72.7 | 40.1 % |
+| synthesis filter, window taps in internal Y | 56.7 | 31.3 % |
+| inverse transform, window, overlap | 30.4 | 16.7 % |
+
+- The two together, as they would run: **48 %** of the DSP.
+- The rest of the decode (bitstream and Huffman codes, dequantising, stereo, alias reduction, the
+  output) is estimated, not yet measured, at 25 to 35 instructions a sample: **15 to 20 %**.
+- So a plain decoder takes about **65 to 70 %** of a stock Falcon's DSP at 44.1 kHz stereo, at
+  any bit rate (the bit rate changes only the Huffman part). Resampling to 49170 Hz, without an
+  external clock, adds about 5 %.
+- Headroom, if needed: a fast 32-point transform in the synthesis (about 10 instructions a sample
+  in place of the matrix's 36), a fast 18-point transform, and no transform for subbands that are
+  all zeros (most files above 16 kHz). Together they would bring the decode near 45 %.
+- Memory: the decoder's data, about 16K words, fits the Falcon's 16K external X and 16K external
+  Y with the program; its loops stay in internal P (512 words), since code in external P costs a
+  cycle more an instruction.
+
 ## The order of the work
 
-1. **Is MP3 possible on a stock Falcon's DSP?** The model, then the two heaviest parts in `.a56`
-   (the synthesis filter and the transform) counted on Hatari's DSP core, against the budget:
-   16 million instructions a second for 88,200 samples a second, about 180 an output sample.
-   The answer, and the bit rates EPlay can promise, go to Erez before more is built.
+1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
+   measured on Hatari's DSP core, the rest estimated. The C model of the whole decoder comes next,
+   with the Huffman part counted when it is written in `.a56`.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
    clock found and timed; WAV and AIFF playing. A test program first, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.
