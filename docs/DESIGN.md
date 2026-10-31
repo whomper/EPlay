@@ -162,24 +162,26 @@ The DSP's half of the decode is written first in C, in the DSP's arithmetic (`sr
 the bit reservoir, and sends each frame as a packet (its layout in `mp3frame.h`). The tables, 7,875
 words, are made by `tools/mkmp3tab.py` from the standard's (`data/`).
 
-- **Accuracy:** `make test` decodes 13 files made with sox and lame (tones, sweeps, pink noise,
-  clicks, square waves at −0.1 dBFS; 44.1, 48 and 32 kHz; 96 to 320 kbit/s and VBR; mono, stereo
-  and joint stereo) and compares every sample with minimp3. All are within ISO/IEC 11172-4's limits
-  for full accuracy, at 0.07 to 0.18 of the RMS limit and 0.05 to 0.15 of the largest error
-  allowed.
+- **Accuracy:** `make test` decodes 20 files made with sox and lame (tones, sweeps, pink noise,
+  clicks, square waves at −0.1 dBFS; MPEG-1 at 44.1, 48 and 32 kHz, MPEG-2 at 22.05, 24 and 16,
+  MPEG-2.5 at 11.025, 12 and 8; 16 to 320 kbit/s and VBR; mono, stereo and joint stereo) and
+  compares every sample with minimp3. All are within ISO/IEC 11172-4's limits for full accuracy,
+  at 0.07 to 0.18 of the RMS limit and 0.05 to 0.28 of the largest error allowed.
 - **Headroom:** the dequantised lines and subband samples are held halved (`MP3_XS` 1). Each step
   of headroom doubles the error (3 gave 0.7 of the limit); with 1, nothing is limited inside the
   decoder even for full-scale square waves.
 - **Covered:** mid/side stereo, short blocks, start and stop windows, big values with linbits.
-  **Not yet covered:** intensity stereo and mixed blocks (written, after minimp3's reading of the
-  standard, but lame never makes them: ISO's compliance streams are wanted), and MPEG-2 and 2.5
-  (16, 22.05, 24 kHz and lower: the low bit rates), not written yet.
+  MPEG-2 and 2.5 (one granule a frame, their own scalefactor partitions, ISO/IEC 13818-3) since
+  31 Oct 2026. **Not yet covered:** intensity stereo and mixed blocks (written, after minimp3's
+  and FFmpeg's reading of the standard, but lame never makes them: ISO's compliance streams, or
+  files from older encoders, are wanted). Where the two disagree (region 1's start in MPEG-2's
+  mixed blocks), EPlay follows FFmpeg.
 
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
    measured on Hatari's DSP core, the rest estimated. The C model of the whole decoder is done
-   (above); next, MPEG-2 and 2.5, and the Huffman part in `.a56`, counted.
+   (above), MPEG-2 and 2.5 with it; next, the Huffman part in `.a56`, counted.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
    clock found and timed; WAV and AIFF playing. A test program first, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.

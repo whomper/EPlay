@@ -8,41 +8,50 @@
 #include <string.h>
 #include "mp3frame.h"
 
-static const short br_tab[16] = {
-	0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0
+static const short br_tab[2][16] = {
+	{ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 },
+	{ 0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0 }
 };
-static const long rate_tab[3] = { 44100, 48000, 32000 };
+static const long rate_tab[9] = { 44100, 48000, 32000, 22050, 24000, 16000, 11025, 12000, 8000 };
 
 /* where each long scalefactor band starts, for regions 1 and 2 */
-static const short sfb_long[3][23] = {
+static const short sfb_long[9][23] = {
 	{ 0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 52, 62, 74, 90, 110, 134, 162, 196, 238, 288, 342, 418, 576 },
 	{ 0, 4, 8, 12, 16, 20, 24, 30, 36, 42, 50, 60, 72, 88, 106, 128, 156, 190, 230, 276, 330, 384, 576 },
-	{ 0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 54, 66, 82, 102, 126, 156, 194, 240, 296, 364, 448, 550, 576 }
+	{ 0, 4, 8, 12, 16, 20, 24, 30, 36, 44, 54, 66, 82, 102, 126, 156, 194, 240, 296, 364, 448, 550, 576 },
+	{ 0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 },
+	{ 0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 114, 136, 162, 194, 232, 278, 332, 394, 464, 540, 576 },
+	{ 0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 },
+	{ 0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 },
+	{ 0, 6, 12, 18, 24, 30, 36, 44, 54, 66, 80, 96, 116, 140, 168, 200, 238, 284, 336, 396, 464, 522, 576 },
+	{ 0, 12, 24, 36, 48, 60, 72, 88, 108, 132, 160, 192, 232, 280, 336, 400, 476, 566, 568, 570, 572, 574, 576 }
 };
 
 int mp3_header(const unsigned char *p, MP3HDR *h)
 {
-	int bi, ri;
+	int bi, ri, v;
 
 	if (p[0] != 0xff || (p[1] & 0xe0) != 0xe0)
 		return 0;
-	if (((p[1] >> 3) & 3) != 3 || ((p[1] >> 1) & 3) != 1)
-		return 0;	/* MPEG-1, layer III only */
+	v = (p[1] >> 3) & 3;		/* 3: MPEG-1, 2: MPEG-2, 0: MPEG-2.5 */
+	if (v == 1 || ((p[1] >> 1) & 3) != 1)
+		return 0;		/* layer III only */
 	bi = p[2] >> 4;
 	ri = (p[2] >> 2) & 3;
 	if (bi == 0 || bi == 15 || ri == 3)
 		return 0;
-	h->version = 1;
+	h->version = v == 3 ? 1 : v == 2 ? 2 : 25;
 	h->layer = 3;
 	h->crc = !(p[1] & 1);
-	h->bitrate = br_tab[bi];
-	h->rate_index = ri;
-	h->rate = (int)rate_tab[ri];
+	h->bitrate = br_tab[v != 3][bi];
+	h->rate_index = ri + (v == 3 ? 0 : v == 2 ? 3 : 6);
+	h->rate = (int)rate_tab[h->rate_index];
 	h->padding = (p[2] >> 1) & 1;
 	h->mode = p[3] >> 6;
 	h->mode_ext = (p[3] >> 4) & 3;
 	h->channels = h->mode == 3 ? 1 : 2;
-	h->length = (int)(144000L * h->bitrate / rate_tab[ri]) + h->padding;
+	h->samples = v == 3 ? 1152 : 576;
+	h->length = (int)((v == 3 ? 144000L : 72000L) * h->bitrate / h->rate) + h->padding;
 	return 1;
 }
 
@@ -67,6 +76,57 @@ static unsigned get(BITS *b, int n)
 	return v;
 }
 
+/* MPEG-2's scalefac_compress: the four slen and the row of nr_of_sfb
+ * (ISO/IEC 13818-3, 2.4.3.2); the right channel of intensity stereo has its
+ * own rows (3-5) and an intensity scale; rows 2 set preflag */
+static unsigned long lsf_slen(unsigned sfc, int ist, unsigned long *g4)
+{
+	unsigned s[4] = { 0, 0, 0, 0 }, row;
+
+	if (!ist) {
+		if (sfc < 400) {
+			s[0] = (sfc >> 4) / 5;
+			s[1] = (sfc >> 4) % 5;
+			s[2] = (sfc & 15) >> 2;
+			s[3] = sfc & 3;
+			row = 0;
+		} else if (sfc < 500) {
+			sfc -= 400;
+			s[0] = (sfc >> 2) / 5;
+			s[1] = (sfc >> 2) % 5;
+			s[2] = sfc & 3;
+			row = 1;
+		} else {
+			sfc -= 500;
+			s[0] = sfc / 3;
+			s[1] = sfc % 3;
+			row = 2;
+			*g4 |= 1 << 4;		/* preflag */
+		}
+	} else {
+		unsigned isc = sfc >> 1;
+		*g4 |= (sfc & 1) << 6;		/* intensity_scale */
+		if (isc < 180) {
+			s[0] = isc / 36;
+			s[1] = (isc % 36) / 6;
+			s[2] = (isc % 36) % 6;
+			row = 3;
+		} else if (isc < 244) {
+			isc -= 180;
+			s[0] = (isc & 63) >> 4;
+			s[1] = (isc & 15) >> 2;
+			s[2] = isc & 3;
+			row = 4;
+		} else {
+			isc -= 244;
+			s[0] = isc / 3;
+			s[1] = isc % 3;
+			row = 5;
+		}
+	}
+	return s[0] | s[1] << 4 | s[2] << 8 | s[3] << 12 | (unsigned long)row << 16;
+}
+
 int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned long *pk)
 {
 	static const unsigned char slen[16][2] = {
@@ -74,9 +134,11 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 		{2,1},{2,2},{2,3},{3,1},{3,2},{3,3},{4,2},{4,3}
 	};
 	BITS b;
-	int nch = h->channels, side = nch == 2 ? 32 : 17;
+	int nch = h->channels, lsf = h->version != 1, ngr = lsf ? 1 : 2;
+	int side = lsf ? (nch == 2 ? 17 : 9) : (nch == 2 ? 32 : 17);
 	int hdr = 4 + (h->crc ? 2 : 0), main_n = h->length - hdr - side;
-	int begin, scfsi[2], gr, ch, i, nw;
+	int begin, scfsi[2] = { 0, 0 }, gr, ch, i, nw;
+	int ist = h->mode == 1 && (h->mode_ext & 1);
 	long bits = 0, nbytes;
 	unsigned long *g = pk + 2;
 	const unsigned char *src;
@@ -86,21 +148,26 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 		return -1;
 	b.p = f + hdr;
 	b.bit = 0;
-	begin = (int)get(&b, 9);
-	get(&b, nch == 2 ? 3 : 5);
-	for (ch = 0; ch < nch; ch++)
-		scfsi[ch] = (int)get(&b, 4);
-	pk[0] = (nch == 2 ? PK_STEREO : 0) | (unsigned long)h->rate_index << 4;
+	if (lsf) {
+		begin = (int)get(&b, 8);
+		get(&b, nch == 2 ? 2 : 1);
+	} else {
+		begin = (int)get(&b, 9);
+		get(&b, nch == 2 ? 3 : 5);
+		for (ch = 0; ch < nch; ch++)
+			scfsi[ch] = (int)get(&b, 4);
+	}
+	pk[0] = (nch == 2 ? PK_STEREO : 0) | (unsigned long)h->rate_index << 4 | (lsf ? PK_LSF : 0);
 	if (h->mode == 1) {
 		if (h->mode_ext & 2)
 			pk[0] |= PK_MS;
 		if (h->mode_ext & 1)
 			pk[0] |= PK_IS;
 	}
-	for (gr = 0; gr < 2; gr++)
+	for (gr = 0; gr < ngr; gr++)
 		for (ch = 0; ch < nch; ch++, g += PK_GC) {
 			unsigned p23 = get(&b, 12), bv = get(&b, 9), gg = get(&b, 8);
-			unsigned sc = get(&b, 4), bt = 0, mixed = 0, ts[3] = { 0, 0, 0 };
+			unsigned sc = get(&b, lsf ? 9 : 4), bt = 0, mixed = 0, ts[3] = { 0, 0, 0 };
 			unsigned sbg[3] = { 0, 0, 0 }, r1, r2;
 			if (bv > 288)
 				return -1;
@@ -113,7 +180,11 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 					sbg[i] = get(&b, 3);
 				if (bt == 0)
 					return -1;	/* reserved */
-				r1 = 36;
+				/* as FFmpeg has it (minimp3 differs for MPEG-2's mixed blocks) */
+				if (bt == 2)
+					r1 = h->rate_index == 8 ? 72 : 36;
+				else
+					r1 = (unsigned)sfb_long[h->rate_index][8];
 				r2 = 576;
 			} else {
 				unsigned c0, c1;
@@ -131,9 +202,13 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 			g[0] = p23;
 			g[1] = bv * 2;
 			g[2] = gg;
-			g[3] = slen[sc][0] | slen[sc][1] << 4;
 			g[4] = bt | mixed << 2;
-			g[4] |= get(&b, 1) << 4;	/* preflag */
+			if (lsf) {
+				g[3] = lsf_slen(sc, ist && ch == 1, &g[4]);
+			} else {
+				g[3] = slen[sc][0] | slen[sc][1] << 4;
+				g[4] |= get(&b, 1) << 4;	/* preflag */
+			}
 			g[4] |= get(&b, 1) << 3;	/* scalefac_scale */
 			g[4] |= get(&b, 1) << 5;	/* count1table_select */
 			if (gr == 1)
@@ -169,7 +244,7 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 	if (nw > PK_MAXDATA)
 		return -1;
 	pk[1] = (unsigned long)nw;
-	g = pk + 2 + 2 * nch * PK_GC;
+	g = pk + 2 + ngr * nch * PK_GC;
 	d = (unsigned char *)src;
 	for (i = 0; i < nw; i++) {
 		unsigned long w = 0;
@@ -180,5 +255,5 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 		}
 		g[i] = w;
 	}
-	return 2 + 2 * nch * PK_GC + nw;
+	return 2 + ngr * nch * PK_GC + nw;
 }

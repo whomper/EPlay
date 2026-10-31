@@ -100,20 +100,43 @@ for p in range(7):
     kr.append(q23(0.0 if t is None else 1 / (1 + t)))
 add("t_istereo", kl + kr, "intensity stereo, is_pos 0..6: left factors, then right")
 
-# ---- scalefactor bands (MPEG-1: 44.1, 48, 32 kHz), as boundaries in lines
+# ---- scalefactor bands, as boundaries in lines: MPEG-1 (44.1, 48, 32 kHz),
+# MPEG-2 (22.05, 24, 16) and MPEG-2.5 (11.025, 12, 8)
 long_w = [[4, 4, 4, 4, 4, 4, 6, 6, 8, 8, 10, 12, 16, 20, 24, 28, 34, 42, 50, 54, 76, 158],
           [4, 4, 4, 4, 4, 4, 6, 6, 6, 8, 10, 12, 16, 18, 22, 28, 34, 40, 46, 54, 54, 192],
-          [4, 4, 4, 4, 4, 4, 6, 6, 8, 10, 12, 16, 20, 24, 30, 38, 46, 56, 68, 84, 102, 26]]
+          [4, 4, 4, 4, 4, 4, 6, 6, 8, 10, 12, 16, 20, 24, 30, 38, 46, 56, 68, 84, 102, 26],
+          [6, 6, 6, 6, 6, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 38, 46, 52, 60, 68, 58, 54],
+          [6, 6, 6, 6, 6, 6, 8, 10, 12, 14, 16, 18, 22, 26, 32, 38, 46, 54, 62, 70, 76, 36],
+          [6, 6, 6, 6, 6, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 38, 46, 52, 60, 68, 58, 54],
+          [6, 6, 6, 6, 6, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 38, 46, 52, 60, 68, 58, 54],
+          [6, 6, 6, 6, 6, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 38, 46, 52, 60, 68, 58, 54],
+          [12, 12, 12, 12, 12, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64, 76, 90, 2, 2, 2, 2, 2]]
 short_w = [[4, 4, 4, 4, 6, 8, 10, 12, 14, 18, 22, 30, 56],
            [4, 4, 4, 4, 6, 6, 10, 12, 14, 16, 20, 26, 66],
-           [4, 4, 4, 4, 6, 8, 12, 16, 20, 26, 34, 42, 12]]
+           [4, 4, 4, 4, 6, 8, 12, 16, 20, 26, 34, 42, 12],
+           [4, 4, 4, 6, 6, 8, 10, 14, 18, 26, 32, 42, 18],
+           [4, 4, 4, 6, 8, 10, 12, 14, 18, 24, 32, 44, 12],
+           [4, 4, 4, 6, 8, 10, 12, 14, 18, 24, 30, 40, 18],
+           [4, 4, 4, 6, 8, 10, 12, 14, 18, 24, 30, 40, 18],
+           [4, 4, 4, 6, 8, 10, 12, 14, 18, 24, 30, 40, 18],
+           [8, 8, 8, 12, 16, 20, 24, 28, 36, 2, 2, 2, 26]]
 sl, ss = [], []
 for lw, sw in zip(long_w, short_w):
     assert sum(lw) == 576 and sum(sw) == 192
     sl += [sum(lw[:i]) for i in range(23)]
     ss += [sum(sw[:i]) for i in range(14)]
-add("t_sfbl", sl, "long scalefactor band starts, 23 a rate (44.1, 48, 32 kHz)")
+add("t_sfbl", sl, "long scalefactor band starts, 23 a rate (PK_RATE's order)")
 add("t_sfbs", ss, "short scalefactor band starts (in a window's lines), 14 a rate")
+# MPEG-2's nr_of_sfb (ISO/IEC 13818-3, table B.1): row, then long, short, mixed
+nsf = [[[6, 5, 5, 5], [9, 9, 9, 9], [6, 9, 9, 9]],
+       [[6, 5, 7, 3], [9, 9, 12, 6], [6, 9, 12, 6]],
+       [[11, 10, 0, 0], [18, 18, 0, 0], [15, 18, 0, 0]],
+       [[7, 7, 7, 0], [12, 12, 12, 0], [6, 15, 12, 0]],
+       [[6, 6, 6, 3], [12, 9, 9, 6], [6, 12, 9, 6]],
+       [[8, 8, 5, 0], [15, 12, 9, 0], [6, 18, 9, 0]]]
+add("t_nsf", [n for row in nsf for blk in row for n in blk],
+    "MPEG-2's scalefactors in each of the four parts: row (0-5), block (long, short, mixed)")
+add("t_lsfis", [q23(2 ** (-q / 4)) for q in range(32)], "MPEG-2's intensity stereo: 2^(-q/4)")
 add("t_pretab", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 3, 2, 0], "pretab")
 
 # ---- the Huffman codes as lookup tables: a node looks at n bits; a word

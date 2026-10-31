@@ -24,7 +24,8 @@ typedef struct {
 
 void mp3dsp_reset(MP3DSP *d);
 
-/* a packet's samples, Q23, into pcm[channel][0..1151]; gives the channels */
-int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152]);
+/* a packet's samples, Q23, into pcm[channel][0..ns - 1] (1152, or 576 for
+ * MPEG-2 and 2.5); gives the channels */
+int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
 
 #endif

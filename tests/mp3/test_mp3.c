@@ -50,7 +50,7 @@ static int one(const char *name, int quiet)
 	mp3dsp_reset(&d);
 	while (off + 4 <= n) {
 		MP3HDR h;
-		int np, nch, ns, ch, i;
+		int np, nch, ns, nm, ch, i;
 		if (!mp3_header(buf + off, &h) || off + h.length > n) {
 			off++;
 			continue;
@@ -72,7 +72,7 @@ static int one(const char *name, int quiet)
 			int g;
 			ms += (pk[0] & PK_MS) != 0;
 			is += (pk[0] & PK_IS) != 0;
-			for (g = 0; g < 2 * h.channels; g++) {
+			for (g = 0; g < (h.version == 1 ? 2 : 1) * h.channels; g++) {
 				const unsigned long *gw = pk + 2 + g * PK_GC;
 				int bt = (int)(gw[4] & 3), t;
 				gshort += bt == 2 && !(gw[4] & 4);
@@ -85,7 +85,11 @@ static int one(const char *name, int quiet)
 					}
 			}
 		}
-		nch = mp3dsp_frame(&d, pk, pcm);
+		nch = mp3dsp_frame(&d, pk, pcm, &nm);
+		if (ns && nm != ns) {
+			fprintf(stderr, "%s: frame %ld: minimp3 gave %d samples, we %d\n", name, frames - 1, ns, nm);
+			return 1;
+		}
 		if (!ns || (pk[0] & PK_MUTE))
 			continue;
 		compared++;

@@ -9,15 +9,19 @@
  * main_data_begin points.
  *
  * A packet:
- *   word 0      flags: PK_STEREO, PK_MS, PK_IS, PK_MUTE, the rate (PK_RATE)
+ *   word 0      flags: PK_STEREO, PK_MS, PK_IS, PK_MUTE, PK_LSF (MPEG-2 or
+ *               2.5: one granule), the rate (PK_RATE)
  *   word 1      N, the main data words at the end
- *   then for each granule, each channel, PK_GC words:
+ *   then for each granule (two, or one with PK_LSF), each channel, PK_GC
+ *   words:
  *     0  part2_3_length (bits)
  *     1  big_values * 2 (lines)
  *     2  global_gain
- *     3  slen1 | slen2 << 4
+ *     3  MPEG-1: slen1 | slen2 << 4; MPEG-2: slen[0..3] in 4 bits each,
+ *        and the row of nr_of_sfb (0..5) << 16
  *     4  block_type | mixed << 2 | scalefac_scale << 3 | preflag << 4
- *        | count1table_select << 5 | scfsi << 8 (granule 1 only)
+ *        | count1table_select << 5 | intensity_scale << 6 (MPEG-2, the
+ *        right channel) | scfsi << 8 (MPEG-1, granule 1)
  *     5  table_select[0] | [1] << 5 | [2] << 10
  *     6  region 1's first line
  *     7  region 2's first line
@@ -34,23 +38,26 @@
 #define PK_MS		0x02
 #define PK_IS		0x04
 #define PK_MUTE		0x08
-#define PK_RATE(f)	(((f) >> 4) & 3)	/* 0: 44.1, 1: 48, 2: 32 kHz */
+#define PK_LSF		0x100
+#define PK_RATE(f)	(((f) >> 4) & 15)	/* 0-2: 44.1, 48, 32 kHz; 3-5: 22.05,
+						 * 24, 16; 6-8: 11.025, 12, 8 */
 #define PK_GC		9
 #define PK_MAXDATA	700	/* main data words: 511 + 1441 bytes at most */
 #define PK_MAX		(2 + 4 * PK_GC + PK_MAXDATA)
 
 typedef struct {
-	int version;		/* 1: MPEG-1 (the only one played today) */
+	int version;		/* 1: MPEG-1, 2: MPEG-2, 25: MPEG-2.5 */
 	int layer;		/* 3 */
 	int crc;		/* 1: a CRC follows the header */
 	int bitrate;		/* kbit/s */
 	int rate;		/* Hz */
-	int rate_index;		/* 0..2 */
+	int rate_index;		/* 0..8, as PK_RATE */
 	int padding;
 	int mode;		/* 0 stereo, 1 joint, 2 dual, 3 mono */
 	int mode_ext;
 	int channels;
 	int length;		/* the frame's bytes */
+	int samples;		/* a channel's samples: 1152, or 576 for MPEG-2 */
 } MP3HDR;
 
 typedef struct {
@@ -59,7 +66,7 @@ typedef struct {
 } MP3PARSE;
 
 /* the header at p (4 bytes): 1 and h filled, or 0 if it isn't one EPlay
- * plays (MPEG-1 layer III, not free format) */
+ * plays (MPEG-1, 2 or 2.5 layer III, not free format) */
 int mp3_header(const unsigned char *p, MP3HDR *h);
 
 void mp3_reset(MP3PARSE *ps);
