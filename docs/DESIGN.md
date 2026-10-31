@@ -347,13 +347,42 @@ The speed rig (`tests/hatari/speed.py`, EmuTOS; the longest stretch, ms):
 | About box closed | 75 | 55 | 25 | 25 | 300 |
 | Stop | 40 | 40 | 20 | 20 | 50 |
 | About box opened, stopped | 130 | 130 | 90 | 90 | 150 |
-| Play again (the DSP loaded) | 50 | 45 | 30 | 25 | 50 |
+| Play again (the DSP loaded) | 50 (75 since the tick loads the DSP) | 45 | 30 | 25 | 50 |
 
 MP3 at 320 kbit/s and WAV at 44.1 kHz, both played at 49170 Hz (no external clock): the most a
 stock Falcon is asked. Over: the About box on a stock Falcon while it plays, because the tick takes
 the 68030's time (the host-port reads for MP3, the conversion and ST RAM for WAV). The plan: 0.2
 takes the samples off the 68030 (MP3 out of the DSP's SSI port, WAV through the DSP, which also
 resamples).
+
+### 0.1 on Erez's Falcon (31 Oct 2026), and what changed
+
+Erez's first try, an 8-minute MP3 with the FDI on:
+1. **The length said 22:10.** It came from the first frame's bit rate, and a VBR file's first
+   frame is LAME's header frame (Xing), at a low rate. Now the Xing, Info or VBRI frame gives the
+   frames (`mp3_info_frames`, checked by `tests/mp3/test_info.c`), the length, and the average bit
+   rate ("VBR 262 kbit/s"); the header frame isn't played. A WAV's length overflowed past 13
+   minutes (frames × 1000): fixed.
+2. **It played "almost double speed", and said "Falcon 49.1 kHz" with the FDI running.** The FDI's
+   clock wasn't found. 0.1 measured the DMA at prescale 1 and took only 44.1 or 48 kHz from it,
+   so it knew only a 22.5792 MHz clock. Now the clock's frequency is worked out from the measure,
+   the prescale that makes 44.1 or 48 kHz of it is chosen (11.2896 MHz: 0; 22.5792: 1; 45.1584:
+   3) and measured again to be sure. The FDI's driver is asked too (`Sndstatus($DD02)`, `$4711`,
+   from `FDI_INIT.PRG` V 1.02). With the Falcon's own clock going to the FDI, whose S/PDIF runs on
+   its own clock, the sound can't be right.
+3. **"The DSP stopped answering" after 3 seconds.** Not seen in Hatari, nor in the DSP's test on
+   the same kinds of file (VBR with a header frame, CRC, a big ID3v2 tag with a picture, mono,
+   MPEG-2). The log now says where it stopped: sending or reading, which word of how many, the
+   host port's status, the frame.
+
+`EPLAY.LOG` (next to the program) says what EPlay measured and did: the machine, the FDI's driver,
+the clock as measured and as taken, each file's header, the output, how playing ended. It is
+written whole when a file ends or is stopped, when the DSP fails, and at the end.
+
+Also: the DSP's program goes in from the tick (32 words a tick, 0.7 s), not from GEM's steps,
+which the file selector held up on a stock Falcon (the rig's new timing showed it). The test files
+now include LAME's header frames (VBR and CBR) and CRC-protected frames, and the play rig a VBR
+file (its length checked).
 
 ## The order of the work
 

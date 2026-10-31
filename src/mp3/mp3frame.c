@@ -266,3 +266,31 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 	}
 	return 2 + ngr * nch * PK_GC + nw;
 }
+
+static unsigned long be32(const unsigned char *p)
+{
+	return (unsigned long)p[0] << 24 | (unsigned long)p[1] << 16 | (unsigned long)p[2] << 8 | p[3];
+}
+
+long mp3_info_frames(const unsigned char *f, const MP3HDR *h, int *vbr)
+{
+	int side = h->version == 1 ? (h->channels == 2 ? 32 : 17) : (h->channels == 2 ? 17 : 9);
+	int k;
+	*vbr = 0;
+	/* after the side information; LAME puts it there with a CRC too,
+	   where the CRC's 2 bytes would move it */
+	for (k = 0; k < 2; k++) {
+		const unsigned char *x = f + 4 + side + (k && h->crc ? 2 : 0);
+		if (k && !h->crc)
+			break;
+		if (h->length >= (x - f) + 12 && (!memcmp(x, "Xing", 4) || !memcmp(x, "Info", 4))) {
+			*vbr = x[0] == 'X';
+			return (be32(x + 4) & 1) ? (long)be32(x + 8) : 0;
+		}
+	}
+	if (h->length >= 36 + 18 && !memcmp(f + 36, "VBRI", 4)) {
+		*vbr = 1;
+		return (long)be32(f + 36 + 14);
+	}
+	return 0;
+}

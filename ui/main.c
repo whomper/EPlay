@@ -16,6 +16,7 @@
 #include "crash.h"
 #include "aboutbox.h"
 #include "play.h"
+#include "elog.h"
 #include "snd.h"
 
 extern const char app_version[];
@@ -238,7 +239,9 @@ static void command(int c)
 		break;
 	case C_STOP:
 		if (play_state() == PS_PLAYING) {
+			elog("stopped at %ld ms; %ld underruns", play_ms(), snd_underruns);
 			play_stop();
+			elog_save();
 			status("Stopped.");
 			redraw(0, 0, ROWS - 1);
 		}
@@ -370,9 +373,16 @@ int app_main(void)
 		snprintf(line, sizeof(line), "EPLAY external clock: %ld Hz\n", snd_ext_rate);
 		nf_debug(line);
 	}
+	elog("EPlay %s; _MCH $%08lX, _CPU %ld, _SND $%02lX; the FDI's driver %s", app_version,
+	     get_cookie(0x5F4D4348L), get_cookie(0x5F435055L), get_cookie(0x5F534E44L),
+	     snd_fdi ? "answers ($4711)" : "doesn't answer");
+	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz); taken as %ld Hz",
+	     snd_ext_raw, snd_ext_clock, snd_ext_rate);
 	if (snd_ext_rate)
 		status(snd_ext_rate == 44100 ? "An external clock at 44.1 kHz (the FDI)." :
 					       "An external clock at 48 kHz (the FDI).");
+	else if (snd_fdi)
+		status("The FDI's driver is there, but no clock came from it: see EPLAY.LOG.");
 	else
 		status("No external clock: the Falcon's own rates.");
 	crash_offer("EPlay", "in EPlay's folder");
@@ -421,6 +431,8 @@ int app_main(void)
 
 	play_stop();
 	snd_exit();
+	elog("quit");
+	elog_save();
 	menu_bar(mb.tree, 0);
 	if (wh > 0) {
 		wind_close(wh);

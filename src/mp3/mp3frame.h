@@ -73,6 +73,11 @@ int mp3_header(const unsigned char *p, MP3HDR *h);
 
 void mp3_reset(MP3PARSE *ps);
 
+/* the file's frames, from a header in its first frame f (h): LAME's and
+ * Xing's "Xing" (VBR) or "Info" (CBR), Fraunhofer's "VBRI"; 0 when it has
+ * none. *vbr 1 for Xing and VBRI. The frame itself holds no sound. */
+long mp3_info_frames(const unsigned char *f, const MP3HDR *h, int *vbr);
+
 /* the frame at f, of h->length bytes, as a packet: its words, or -1 if the
  * frame is bad (the reservoir is kept) */
 int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned long *pk);

@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, aiff, mp3, mp3long, fsel; all by default. The machines: Falcon (Erez's, with the
+The cases: wav, aiff, mp3, mp3long, vbr, fsel; all by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -47,6 +47,10 @@ CASES = {
                 (1000 * 49170 / 44100, 1500 * 49170 / 44100), 10),
     # the file selector (Control+O) held open 5 s while it plays: GEM
     # gives EPlay no event meanwhile, and the music must go on (the tick)
+    # VBR, as music is: LAME's header frame (Xing) gives the length (0.1 took
+    # the first frame's bit rate: an 8-minute file said 22:10)
+    "vbr": ("VBR.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["XING", "-V", "0"], 49170,
+            (1000 * 49170 / 44100, 1500 * 49170 / 44100), 10),
     "fsel": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
              (1000 * 49170 / 44100, 1500 * 49170 / 44100), 10),
 }
@@ -59,7 +63,9 @@ def make_file(hd, case):
     out = os.path.join(hd, f)
     if lame:
         subprocess.run(["sox", "-n"] + fmt + [src] + synth + ["gain", "-6"], check=True)
-        subprocess.run(["lame", "-t", "--quiet", "--noreplaygain"] + lame + [src, out], check=True)
+        tag = [] if "XING" in lame else ["-t"]          # (-t: no header frame)
+        subprocess.run(["lame"] + tag + ["--quiet", "--noreplaygain"] + [a for a in lame if a != "XING"] +
+                       [src, out], check=True)
     else:
         subprocess.run(["sox", "-n"] + fmt + [out] + synth + ["gain", "-6"], check=True)
     return f
@@ -207,6 +213,13 @@ def run(work, case, spec):
         ok, what = analyse(rec, case)
         under = wait_line(log, lambda l: l.startswith("EPLAY ended"), 5) or "EPLAY ended: ? underruns"
         ok = ok and " 0 underruns" in under
+        if "XING" in (CASES[case][2] or []):
+            # the length EPlay worked out from the header frame
+            got = wait_line(log, lambda l: l.startswith("LOG MP3 at") and "(VBR)" in l, 1) or ""
+            ms = int(got.split("; ")[-1].split()[0]) if got else 0
+            want = CASES[case][5] * 1000
+            ok = ok and abs(ms - want) < want / 100
+            under += "\n     the length from the Xing frame: %d ms (wanted %d)" % (ms, want)
         return ok, m.describe(), (played[len("EPLAY playing: "):] + "\n     " + end + "\n     " + what +
                                   "\n     " + under)
     finally:

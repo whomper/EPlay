@@ -35,6 +35,7 @@
 #include "dspmp3.h"
 #include "../src/pcm.h"
 #include "mp3frame.h"
+#include "elog.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -44,7 +45,7 @@
 char play_name[64], play_info[80], play_out[80];
 
 static int state = PS_IDLE, kind, fh = -1, eof;
-static int loading;		/* MP3: the DSP's program still going in */
+static volatile int loading;	/* MP3: the DSP's program still going in (the tick's) */
 static PCMFMT fmt;
 static long rate, out_rate, len_ms, file_size;
 static unsigned char *fbuf;	/* the file's first bytes, fpos..fend */
@@ -71,6 +72,7 @@ static volatile int src_done;	/* the whole file is in the queue */
 static volatile int t_end, t_dsp, t_failed;
 static volatile long t_ended_at;	/* the frames written when the file's end came; -1 before */
 static long t_samples;		/* the frame the DSP decodes: its samples */
+static volatile long t_frames;	/* MP3 frames sent to the DSP */
 
 static unsigned long ms_now(void)
 {
@@ -122,6 +124,8 @@ static void khz(char *out, int n, long hz)
 
 /* an MP3's first frame, where it is in the file: its header two frames
    running, after any ID3v2 tag */
+static long first_at;		/* find_mp3's frame, in fbuf */
+
 static long find_mp3(MP3HDR *h)
 {
 	long at = 0, base = 0;		/* (where fbuf starts in the file) */
@@ -138,8 +142,10 @@ static long find_mp3(MP3HDR *h)
 	for (; at + 4 <= fend; at++) {
 		MP3HDR h2;
 		if (mp3_header(fbuf + at, h) && at + h->length + 4 <= fend &&
-		    mp3_header(fbuf + at + h->length, &h2) && h2.rate == h->rate)
+		    mp3_header(fbuf + at + h->length, &h2) && h2.rate == h->rate) {
+			first_at = at;
 			return base + at;
+		}
 	}
 	return -1;
 }
@@ -274,6 +280,7 @@ static void tick_mp3(void)
 		return;
 	t_samples = pk_samples;
 	dspmp3_tick_send(pk, pk_n);
+	t_frames++;
 	pk_n = 0;
 	t_dsp = 1;
 	next_packet();
@@ -282,6 +289,14 @@ static void tick_mp3(void)
 static void tick(void)
 {
 	snd_update();
+	if (loading) {			/* the DSP's program first, a piece a tick */
+		int r = dspmp3_tick_load();
+		if (r < 0)
+			t_failed = 1;
+		else if (r)
+			loading = 0;
+		return;
+	}
 	if (!t_end && !t_failed) {
 		if (kind)
 			tick_pcm();
@@ -399,10 +414,11 @@ int play_open(const char *path, char *err, int n)
 	eof = 0;
 	refill();
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
+	elog("open %s (%ld bytes)", path, file_size);
 	if (pcm_probe(fbuf, fend, &fmt, &why)) {
 		kind = fmt.kind;
 		rate = fmt.rate;
-		len_ms = fmt.frames * 1000 / rate;
+		len_ms = fmt.frames / rate * 1000 + fmt.frames % rate * 1000 / rate;	/* (no overflow past 13 minutes) */
 		data_left = fmt.frames > 0 ? fmt.frames * fmt.bytes : file_size - fmt.data;
 		Fseek(fmt.data, fh, 0);		/* the samples read from here into the queue */
 		if (!take_queue(fmt.bytes)) {
@@ -413,6 +429,8 @@ int play_open(const char *path, char *err, int n)
 		khz(kr, sizeof(kr), rate);
 		snprintf(play_info, sizeof(play_info), "%s  %d bits  %s  %s", kind == PCM_WAV ? "WAV" : "AIFF",
 			 fmt.bits, kr, fmt.channels == 2 ? "stereo" : "mono");
+		elog("%s: %ld Hz, %d bits, %d ch, %ld frames from %ld; %ld ms", kind == PCM_WAV ? "WAV" : "AIFF",
+		     fmt.rate, fmt.bits, fmt.channels, fmt.frames, fmt.data, len_ms);
 	} else {
 		MP3HDR h;
 		long at = find_mp3(&h);
@@ -422,14 +440,35 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 		kind = 0;
-		data_left = file_size - at;
-		Fseek(at, fh, 0);		/* the frames read from here into the queue */
 		rate = h.rate;
 		bitrate = h.bitrate;
-		len_ms = h.bitrate ? (file_size - at) * 8 / h.bitrate : 0;
-		khz(kr, sizeof(kr), rate);
-		snprintf(play_info, sizeof(play_info), "MP3  %d kbit/s  %s  %s", h.bitrate, kr,
-			 h.channels == 2 ? "stereo" : "mono");
+		{
+			/* a Xing, Info or VBRI frame: the file's frames, so its
+			   length (a VBR file's first frame's bit rate is no
+			   guide); the frame holds no sound and isn't played */
+			int vbr;
+			long nf = first_at + h.length <= fend ? mp3_info_frames(fbuf + first_at, &h, &vbr) : 0;
+			long bytes = file_size - at;
+			if (nf > 0) {
+				long fs = nf * h.samples;
+				at += h.length;
+				bytes -= h.length;
+				len_ms = fs / rate * 1000 + fs % rate * 1000 / rate;
+				if (vbr && len_ms > 0)
+					bitrate = bytes / len_ms * 8 + (bytes % len_ms) * 8 / len_ms;
+			} else {
+				vbr = 0;
+				len_ms = h.bitrate ? bytes * 8 / h.bitrate : 0;
+			}
+			khz(kr, sizeof(kr), rate);
+			snprintf(play_info, sizeof(play_info), "MP3  %s%ld kbit/s  %s  %s", vbr ? "VBR " : "",
+				 bitrate, kr, h.channels == 2 ? "stereo" : "mono");
+			elog("MP3 at %ld: MPEG-%s, %d kbit/s first frame, %d Hz, %d ch, CRC %d; header frames %ld%s; %ld ms",
+			     at, h.version == 1 ? "1" : h.version == 2 ? "2" : "2.5", h.bitrate, h.rate, h.channels,
+			     h.crc, nf, vbr ? " (VBR)" : "", len_ms);
+		}
+		data_left = file_size - at;
+		Fseek(at, fh, 0);		/* the frames read from here into the queue */
 		if (!take_queue(1)) {
 			snprintf(err, n, "There isn't the memory to play.");
 			close_file();
@@ -466,7 +505,9 @@ int play_open(const char *path, char *err, int n)
 		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
 	else
 		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's: 0.2 resamples)", kr);
+	elog("output: %ld Hz, %s; queue %ld bytes", out_rate, ext ? "the external clock" : "the Falcon's clock", q_size);
 	t_end = t_dsp = t_failed = 0;
+	t_frames = 0;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
 	last_sec = -1;
@@ -478,9 +519,9 @@ void play_start(void)
 {
 	if (fh >= 0 && state != PS_PLAYING) {
 		state = PS_PLAYING;
-		loading = !kind;	/* (the tick starts when the DSP is loaded) */
-		if (!loading)
-			feed_on(tick, 250);	/* (1024 frames a tick: 4 times what plays) */
+		loading = !kind;	/* (the tick loads the DSP first: not waiting for GEM) */
+		feed_on(tick, kind ? 250 : 1000);	/* (WAV: 1024 frames a tick, 4 times what
+						   plays; MP3: the DSP's next packet at once) */
 	}
 }
 
@@ -520,17 +561,15 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
-	if (loading) {
-		int r = dspmp3_load(ms / 2);	/* (and the file read meanwhile) */
-		if (r < 0)
-			t_failed = 1;
-		else if (r) {
-			loading = 0;
-			feed_on(tick, 1000);	/* (the DSP's next packet without delay) */
-		}
-	}
 	if (t_failed) {
+		int what, hisr;
+		long at, of;
+		dspmp3_fail_info(&what, &at, &of, &hisr);
+		elog("the DSP stopped answering %s word %ld of %ld (host status $%02X), frame %ld; %ld ms played, "
+		     "%ld underruns", what == 1 ? "sending" : what == 2 ? "reading" : "loading", at, of, hisr,
+		     t_frames, play_ms(), snd_underruns);
 		play_stop();
+		elog_save();
 		snprintf(play_out, sizeof(play_out), "The DSP stopped answering.");
 		return 1;
 	}
@@ -541,7 +580,10 @@ int play_step(int ms)
 		char l[60];
 		snprintf(l, sizeof(l), "EPLAY ended: %ld underruns\n", snd_underruns);
 		nf_debug(l);			/* (the rigs; nothing on the Atari) */
+		elog("played to the end: %ld ms, %ld frames to the DSP, %ld underruns", play_ms(), t_frames,
+		     snd_underruns);
 		play_stop();
+		elog_save();
 		return 1;
 	}
 	sec = play_ms() / 1000;

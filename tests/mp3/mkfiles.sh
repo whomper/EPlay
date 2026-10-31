@@ -42,4 +42,10 @@ $L -V 5 --resample 22.05 "$s/noise.wav" "$d/lsfvbr.mp3"
 $L -b 24 --resample 11.025 "$s/mix.wav" "$d/lsf11.mp3"
 $L -b 32 --resample 12 -m m "$s/mix.wav" "$d/lsf12mono.mp3"
 $L -b 16 --resample 8 "$s/mix.wav" "$d/lsf8.mp3"
+# as players meet them: LAME's own header frame (Xing for VBR, Info for
+# CBR: the frame count, the length), and CRC-protected frames
+I="lame --quiet --noreplaygain"
+$I -V 0 "$s/mix.wav" "$d/xingvbr.mp3"
+$I -b 192 "$s/mix.wav" "$d/infocbr.mp3"
+$I -p -V 2 "$s/clicks.wav" "$d/crcvbr.mp3"
 rm -rf "$s"

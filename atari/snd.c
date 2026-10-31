@@ -108,15 +108,17 @@ static long play_pos(void)
 static const long internal[] = { 49170, 32780, 24585, 19668, 16390, 12292, 9834, 8195 };
 static const short prescale[] = { 1, 2, 3, 4, 5, 7, 9, 11 };
 
-/* the external clock: the DMA started on it over silence, and how far it
-   gets in 200 ms; none, and it doesn't move */
-static long measure_ext(void)
+static short ext_pre = 1;	/* the external clock's prescale (snd_open) */
+
+/* the DMA's rate on the external clock at prescale pre: started over
+   silence (a short part of the ring, cleared: 64 KB; the rest is played
+   only once written), and how far it gets in 200 ms. 0: it doesn't move */
+static long measure(short pre)
 {
-	long a, b, t0, rate;
+	long a, b, t0;
+	ext_pre = pre;
 	if (!snd_open(44100, 1))
 		return 0;
-	/* over silence: a short part of the ring, cleared (64 KB; the rest
-	   is played only once written) */
 	ring_n = 16384;
 	memset(ring, 0, (size_t)ring_n * 4);
 	x_setbuffer(0, ring, ring + 2 * ring_n);
@@ -135,13 +137,48 @@ static long measure_ext(void)
 		return 0;
 	if (b < a)
 		b += ring_n;
-	rate = (b - a) * 5;		/* frames in 200 ms (16384 is 0.33 s at 49.2 kHz) */
-	/* the FDI's two, near enough (the 200 Hz clock is coarse); anything
-	   else isn't a clock to play by (Hatari's runs at 50 kHz) */
-	if (rate > 43000 && rate < 45200)
-		return 44100;
-	if (rate > 46800 && rate < 49200)
-		return 48000;
+	return (b - a) * 5;		/* frames in 200 ms (16384 is 0.33 s at 49.2 kHz) */
+}
+
+long snd_ext_raw;		/* what the first measure found, Hz (for the log) */
+long snd_ext_clock;		/* the clock that makes, Hz */
+int snd_fdi;			/* the FDI's driver answers (Sndstatus $DD02: $4711) */
+
+/* the external clock: measured at prescale 1 (rate = clock / 256 / 2),
+   its frequency worked out from that, and the prescale that makes 44.1
+   or 48 kHz of it chosen, then measured again to be sure. The FDI's
+   clock may be 11.2896 MHz (256 x 44.1 kHz: prescale 0), 22.5792 (1) or
+   45.1584 (3), and the same for 48 kHz: 0.1 knew only 22.5792 MHz.
+   Hatari's runs at 50 kHz, a rate no music has: not taken */
+static long measure_ext(void)
+{
+	static const long want[2] = { 44100, 48000 };
+	long r = measure(1), clk;
+	int i;
+	snd_ext_raw = r;
+	snd_ext_clock = clk = r * 512;
+	ext_pre = 1;
+	if (r < 1000)
+		return 0;
+	for (i = 0; i < 2; i++) {
+		long p = (clk + want[i] * 128) / (want[i] * 256) - 1, got, d;
+		if (p < 0 || p > 15)
+			continue;
+		got = clk / 256 / (p + 1);
+		d = got - want[i];
+		if (d < 0)
+			d = -d;
+		if (d > want[i] / 40)		/* (the 200 Hz clock: 2.5 %) */
+			continue;
+		got = p == 1 ? r : measure((short)p);
+		d = got - want[i];
+		if (d < 0)
+			d = -d;
+		if (d <= want[i] / 40) {
+			ext_pre = (short)p;
+			return want[i];
+		}
+	}
 	return 0;
 }
 
@@ -158,6 +195,7 @@ int snd_init(const char **why)
 	}
 	locked = 1;
 	Supexec(keep_regs);
+	snd_fdi = trap14_ww(140, 0xDD02) == 0x4711;	/* Sndstatus: the FDI driver's sign */
 	snd_ext_rate = measure_ext();
 	return 1;
 }
@@ -203,7 +241,9 @@ int snd_open(long rate, int ext)
 		ring = p;
 		ring_n = n;
 	}
-	if (!ext)
+	if (ext)
+		pre = ext_pre;
+	else
 		for (i = 0; i < sizeof(internal) / sizeof(internal[0]); i++)
 			if (internal[i] == rate)
 				pre = prescale[i];

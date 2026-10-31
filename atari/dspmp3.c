@@ -32,6 +32,9 @@
 #define Offgibit(b)	trap14_ww(29, (b))
 
 static int locked, failed;
+static int f_what, f_hisr;	/* how it failed: 1 sending, 2 reading, 3 loading; the host status */
+static long f_at, f_of;		/* at which word of how many */
+static long put_i, put_n;	/* the word going, of how many (the tick's packets) */
 
 /* a word to the DSP; a second at most for its room */
 static void put(unsigned long w)
@@ -43,19 +46,23 @@ static void put(unsigned long w)
 		while (!(HISR & 2))
 			if (HZ200 - t0 > 200) {
 				failed = 1;
+				f_what = put_n ? 1 : 3;
+				f_at = put_i;
+				f_of = put_n;
+				f_hisr = HISR;
 				return;
 			}
 	}
 	HTX32 = w & 0xffffff;
 }
 
-/* the load, a piece at a time (dspmp3_load): the items are the
+/* the load, a piece at a time (dspmp3_tick_load): the items are the
    bootstrap's 512 words, the decoder's outer part (LOADP), the tables
    (mp3tab.h's mp3dsp_load) and t_dpair into internal Y, then RESET */
 #define NTAB ((int)(sizeof(mp3dsp_load) / sizeof(mp3dsp_load[0])))
 static int item;		/* the one going: 0 the bootstrap, 1 the outer part, 2.. the tables */
 static long done_w;		/* its words sent */
-static long chunk;		/* the words this Supexec may send */
+static long chunk;		/* the words this piece may send */
 
 static void item_of(int k, int *cmd, unsigned *addr, const unsigned long **w, long *n)
 {
@@ -101,14 +108,15 @@ static long load_some(void)
 	return 0;
 }
 
-int dspmp3_load(int ms)
+/* a piece of the load from the tick (supervisor already): 32 words a
+   tick, so the load takes two thirds of a second and leaves GEM most of
+   a stock Falcon's 68030 meanwhile (Play's stretch: 256 a tick 190 ms,
+   64 105 ms, 32 75 ms) */
+int dspmp3_tick_load(void)
 {
-	unsigned long t0 = tos_ms();
-	while (item <= NTAB + 3 && !failed) {
-		chunk = 512;
-		Supexec(load_some);
-		if (tos_ms() - t0 >= (unsigned long)ms)
-			break;
+	if (item <= NTAB + 3 && !failed) {
+		chunk = 32;
+		load_some();
 	}
 	return failed ? -1 : item > NTAB + 3;
 }
@@ -122,6 +130,8 @@ int dspmp3_open(void)
 		return DSPMP3_BUSY;
 	locked = 1;
 	failed = 0;
+	f_what = 0;
+	put_n = 0;
 	Ongibit(0x10);			/* the DSP held in reset (the sound chip's port A, bit 4) */
 	t0 = tos_ms();
 	while (tos_ms() - t0 < 5)	/* (a tick of the 200 Hz clock or two) */
@@ -158,10 +168,16 @@ void dspmp3_reset(void)
 void dspmp3_tick_send(const unsigned long *pk, int n)
 {
 	int i;
+	put_n = n + 2;
+	put_i = 0;
 	put(11);			/* PLAY */
+	put_i++;
 	put((unsigned long)n);
-	for (i = 0; i < n; i++)
+	for (i = 0; i < n; i++) {
+		put_i++;
 		put(pk[i]);
+	}
+	put_n = 0;
 }
 
 int dspmp3_tick_ready(void)
@@ -188,10 +204,22 @@ void dspmp3_tick_read(short *to, long frames)
 			while (!(HISR & 1))
 				if (HZ200 - t0 > 200) {
 					failed = 1;
+					f_what = 2;
+					f_at = frames * 2 - n;
+					f_of = frames * 2;
+					f_hisr = HISR;
 					break;
 				}
 		}
 	}
+}
+
+void dspmp3_fail_info(int *what, long *at, long *of, int *hisr)
+{
+	*what = f_what;
+	*at = f_at;
+	*of = f_of;
+	*hisr = f_hisr;
 }
 
 int dspmp3_failed(void)

@@ -36,6 +36,10 @@ contains:
 2. **File > Open…** (Control+O) plays another file; **Play** and **Stop** are in the window and in
    the Play menu.
 
+**EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
+found, each file's format and length, how playing ended. While EPlay is young, please send it
+with any report.
+
 **Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS
 (MagiC and MiNT not tried yet), 640×400 or larger.
 
