@@ -239,13 +239,52 @@ on Hatari's DSP core.
 without it adds about 5 %. 128 kbit/s: about 65 %. Further room, if the rest measures worse: a
 second butterfly in the synthesis DCT (about 2 %), and the transform's zero subbands.
 
+## The whole decoder on the DSP (31 Oct 2026)
+
+`dsp/mp3.a56` is the whole DSP side: a packet in, a frame's samples out, bit for bit as the model
+(`make dsptest`, `tests/dspmp3`: every sample of every frame of the 20 files compared, and the
+cycles counted on Hatari's DSP core). It holds the scalefactors (MPEG-1 and 2), the Huffman part,
+dequantising, mid/side and intensity stereo, reordering, alias reduction, the transform (long,
+short, start, stop and mixed blocks; subbands that are all zeros skipped) and the synthesis
+filter. The memory map is made by `tools/mkmp3tab.py` (`mp3map.inc` for the DSP, and the load list
+the 68030 will use: 13,800 words of tables, 2,500 of program outside internal P). The hot loops are
+in internal P; the rest runs from P:$7000.
+
+Two changes to the model came with it, neither changing its accuracy: a long block's first 18
+outputs are rounded once with the overlap they are added to (the DSP's `macr`), and the sign of a
+dequantised line and the frequency inversion are put on before the one limit.
+
+**Measured, a 32 MHz DSP (a stock Falcon's):**
+
+| Files | Share of the DSP |
+|---|---|
+| MPEG-2 and 2.5, 8 to 24 kHz | 12 to 41 % |
+| 44.1 kHz mono, 96 kbit/s | 41 % |
+| 44.1 kHz stereo, 128 kbit/s | 64 to 76 % |
+| 44.1 kHz stereo, 160 to 192 kbit/s, VBR | 70 to 83 % |
+| 48 kHz stereo, 192 kbit/s | 87 % |
+| 44.1 kHz stereo, 320 kbit/s | 92 % |
+| full-scale square waves, every granule short blocks | 114 % |
+
+Where the time goes at 320 kbit/s: the synthesis filter 29 %, the transform 17.5 %, dequantising
+15.5 %, the Huffman part 14 %, alias reduction 4 %. About half (the filter, the transform, the
+alias reduction) doesn't depend on the bit rate: 128 kbit/s is already 76 %.
+
+**So a stock Falcon's DSP plays up to about 192 kbit/s with room, and 256 to 320 kbit/s only
+just, or not.** What is left to gain on the DSP alone, about 10 % together: the synthesis DCT's
+second butterfly (about 2.5 %), alias reduction and the short blocks' transform in internal P
+(2 to 4 %, more for short-block-heavy music), and a tighter dequantising loop (about 3 %). The
+next step is Erez's choice (below, "The order of the work").
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
    measured on Hatari's DSP core, the rest estimated. The C model of the whole decoder is done
-   (above), MPEG-2 and 2.5 with it, and the Huffman part and the synthesis filter in `.a56`, bit
-   for bit and counted, with the speed-ups (above). Next: the transform's kernel, then the rest of
-   `dsp/mp3.a56`, and the whole decode counted.
+   (above), MPEG-2 and 2.5 with it, and the whole DSP decoder, `dsp/mp3.a56`, bit for bit and
+   counted (above): up to about 192 kbit/s with room on a stock Falcon, 320 kbit/s at 92 %. To
+   decide with Erez: how to make room for 320 kbit/s (the DSP's last 10 %; the 68030 taking the
+   Huffman part and dequantising where it is fast, as on the DFB1; or a lighter decode of the top
+   subbands when a stock Falcon falls behind).
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
    clock found and timed; WAV and AIFF playing. A test program first, for Erez's Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.

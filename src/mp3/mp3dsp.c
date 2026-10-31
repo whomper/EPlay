@@ -13,6 +13,16 @@
 #include "mp3frame.h"
 #include "mp3tab.h"
 
+#ifdef MP3DSP_DEBUG
+dw mp3dsp_dbg_xr[2][576], mp3dsp_dbg_sub[576];
+int mp3dsp_dbg_is[576];
+long mp3dsp_dbg_at;
+dw mp3dsp_dbg_rq[576];
+int mp3dsp_dbg_gr, mp3dsp_dbg_ch;	/* the granule and channel the stages are kept of */
+dw mp3dsp_dbg_st[2][576], mp3dsp_dbg_ro[576], mp3dsp_dbg_al[576];
+dw mp3dsp_dbg_sf[61];		/* SFL then SFS, as the DSP keeps them */
+#endif
+
 static inline dw sx(unsigned long w)
 {
 	return (dw)((long)(w ^ 0x800000UL) - 0x800000L);
@@ -193,11 +203,13 @@ static void huffman(BR *b, GC *c, long end)
 	b->pos = end;
 }
 
-/* |v|^(4/3) 2^(q/4), as value / 2^MP3_XS */
+/* |v|^(4/3) 2^(q/4), as value / 2^MP3_XS; the sign is put on before the
+ * value is limited to a word, as the DSP does it */
 static dw dequant(int v, int q, long *sat)
 {
 	int n = v < 0 ? -v : v, e, k, s;
-	dw m, p, x;
+	dw m, p;
+	da x;
 
 	if (!n)
 		return 0;
@@ -214,15 +226,14 @@ static dw dequant(int v, int q, long *sat)
 	p = d_rw(d_mpy(m, sx(t_gain[q & 3])));
 	e += k + 1 - MP3_XS;
 	if (e >= 0) {
-		da a = d_asl(d_w2a(p), e > 8 ? 8 : e);
-		x = d_a2w(a);
-		if ((a >> 24) > DW_MAX)
+		x = d_asl(d_w2a(p), e > 8 ? 8 : e);
+		if ((x >> 24) > DW_MAX)
 			(*sat)++;
 	} else {
 		s = -e;
-		x = s > 22 ? 0 : d_rw(d_asl(d_mpy(p, (dw)(0x400000L >> s)), 1));
+		x = s > 22 ? 0 : d_rnd(d_asl(d_mpy(p, (dw)(0x400000L >> s)), 1));
 	}
-	return v < 0 ? -x : x;
+	return d_a2w(v < 0 ? -x : x);
 }
 
 static void requantise(GC *c, int rate, long *sat)
@@ -406,17 +417,23 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
 					a += d_mpy(x[k], sx(t_imdct36[r * 18 + k]));
 				u[r] = d_rw(a);
 			}
+			/* the first 18 are rounded with the overlap they go to,
+			 * as one rounding (the DSP's macr); z holds them minus it */
 			for (i = 0; i < 36; i++) {
 				int m = map36[i];
 				dw win = sx(t_win[bt * 36 + i]);
-				z[i] = d_w2a(d_rw(d_mpy(u[(m < 0 ? -m : m) - 1], m < 0 ? -win : win)));
+				da p = d_mpy(u[(m < 0 ? -m : m) - 1], m < 0 ? -win : win);
+				if (i < 18)
+					z[i] = d_rnd(d_w2a(ov[18 * sb + i]) + p) - d_w2a(ov[18 * sb + i]);
+				else
+					z[i] = d_w2a(d_rw(p));
 			}
 		}
 		for (i = 0; i < 18; i++) {
-			dw o = d_a2w(d_w2a(ov[18 * sb + i]) + z[i]);
+			da o = d_w2a(ov[18 * sb + i]) + z[i];
 			if ((sb & 1) && (i & 1))
-				o = d_a2w(-d_w2a(o));	/* frequency inversion */
-			out[sb][i] = o;
+				o = -o;		/* frequency inversion */
+			out[sb][i] = d_a2w(o);
 			ov[18 * sb + i] = d_a2w(z[18 + i]);
 		}
 	}
@@ -499,6 +516,10 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 			c->nl = lsf ? 6 : 8;
 			end = b.pos + (long)c->g[0];
 			scalefactors(d, &b, c, gr, ch, lsf);
+#ifdef MP3DSP_DEBUG
+			if (gr == mp3dsp_dbg_gr && ch == mp3dsp_dbg_ch)
+				mp3dsp_dbg_at = b.pos;
+#endif
 #ifdef MP3DSP_HUFF_HOOK
 			{
 				long at = b.pos;
@@ -508,14 +529,48 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 #else
 			huffman(&b, c, end);
 #endif
+#ifdef MP3DSP_DEBUG
+			if (gr == mp3dsp_dbg_gr && ch == mp3dsp_dbg_ch)
+				memcpy(mp3dsp_dbg_is, c->is, sizeof(c->is));
+#endif
 			requantise(c, rate, &d->sat);
+#ifdef MP3DSP_DEBUG
+			if (gr == mp3dsp_dbg_gr && ch == mp3dsp_dbg_ch) {
+				int q, w;
+				memcpy(mp3dsp_dbg_rq, c->xr, sizeof(c->xr));
+				for (q = 0; q < 22; q++)
+					mp3dsp_dbg_sf[q] = c->sfl[q];
+				for (q = 0; q < 13; q++)
+					for (w = 0; w < 3; w++)
+						mp3dsp_dbg_sf[22 + 3 * q + w] = c->sfs[q][w];
+			}
+#endif
 		}
 		if (nch == 2)
 			stereo(&gc[0], &gc[1], flags, rate);
+#ifdef MP3DSP_DEBUG
+		if (gr == mp3dsp_dbg_gr)
+			for (ch = 0; ch < nch; ch++)
+				memcpy(mp3dsp_dbg_st[ch], gc[ch].xr, sizeof(gc[ch].xr));
+#endif
 		for (ch = 0; ch < nch; ch++) {
 			reorder(&gc[ch], rate);
+#ifdef MP3DSP_DEBUG
+			if (gr == mp3dsp_dbg_gr && ch == mp3dsp_dbg_ch)
+				memcpy(mp3dsp_dbg_ro, gc[ch].xr, sizeof(gc[ch].xr));
+#endif
 			alias(&gc[ch]);
+#ifdef MP3DSP_DEBUG
+			if (gr == mp3dsp_dbg_gr && ch == mp3dsp_dbg_ch)
+				memcpy(mp3dsp_dbg_al, gc[ch].xr, sizeof(gc[ch].xr));
+#endif
+#ifdef MP3DSP_DEBUG
+			memcpy(mp3dsp_dbg_xr[ch], gc[ch].xr, sizeof(gc[ch].xr));
+#endif
 			imdct(&gc[ch], d->ov[ch], sub);
+#ifdef MP3DSP_DEBUG
+			memcpy(mp3dsp_dbg_sub, sub, sizeof(mp3dsp_dbg_sub));
+#endif
 #ifdef MP3DSP_SYNTH_HOOK
 			{
 				static dw in[32][18];

@@ -1,0 +1,244 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * sim.c - dsp/mp3.a56, the whole DSP decoder, on Hatari's DSP core
+ * against the model (src/mp3), bit for bit: every frame of the files
+ * given goes to both as the 68030's packet, and every sample is compared.
+ * The program and its tables are loaded as the 68030 will load them
+ * (mp3tab.h's mp3dsp_load). Prints each file's DSP cycles a frame, and
+ * what they come to on a 32 MHz DSP for the file's own rate.
+ *
+ *     sim FILE.MP3...       (SIMDEBUG=1: stop at the first difference)
+ */
+#include <string.h>
+#include "../dspsim.h"
+#include "mp3frame.h"
+#include "mp3dsp.h"
+#include "mp3tab.h"
+#include "mp3_prog.h"
+
+extern dw mp3dsp_dbg_xr[2][576], mp3dsp_dbg_sub[576], mp3dsp_dbg_rq[576];
+extern dw mp3dsp_dbg_st[2][576], mp3dsp_dbg_ro[576], mp3dsp_dbg_al[576];
+extern int mp3dsp_dbg_gr, mp3dsp_dbg_ch;
+extern dw mp3dsp_dbg_sf[61];
+static MP3DSP dsave;		/* the model's state before the frame being looked at */
+static unsigned long sv_ov[1152], sv_ring[2048], sv_scf[44], sv_rp[2];	/* and the DSP's */
+
+static void getbuf(int space, unsigned addr, unsigned long *w, int n)
+{
+	int i;
+	put(8);
+	put((unsigned long)space);
+	put(addr);
+	put((unsigned long)n);
+	for (i = 0; i < n; i++)
+		w[i] = (unsigned long)get() & 0xffffff;
+}
+
+static void save_state(void)
+{
+	getbuf(4, 0x2b10, sv_ov, 1152);
+	getbuf(1, 0x2800, sv_ring, 2048);
+	getbuf(1, 0x0840, sv_scf, 44);
+	getbuf(1, 0x4d, sv_rp, 2);
+}
+
+static void restore_state(void)
+{
+	load(4, 0x2b10, sv_ov, 1152);
+	load(1, 0x2800, sv_ring, 2048);
+	load(1, 0x0840, sv_scf, 44);
+	load(1, 0x4d, sv_rp, 2);
+}
+
+/* the frame to the DSP again (its state as before it), to stage st of
+ * granule g, channel c */
+static void stage(int st, int g, int c, const unsigned long *pk, int np, int nout)
+{
+	unsigned long w;
+	int k;
+	restore_state();
+	w = (unsigned long)st;
+	load(1, 0x93, &w, 1);
+	w = (unsigned long)g;
+	load(1, 0x95, &w, 1);
+	w = (unsigned long)c;
+	load(1, 0x96, &w, 1);
+	put(7);
+	put((unsigned long)np);
+	for (k = 0; k < np; k++)
+		put(pk[k]);
+	sim_job();
+	for (k = 0; k < nout; k++)
+		get();
+}
+extern int mp3dsp_dbg_is[576];
+extern long mp3dsp_dbg_at;
+
+/* the DSP's buffer against the model's: the first difference */
+static void cmpbuf(const char *what, int space, unsigned addr, const dw *m, int n)
+{
+	int i, first = -1, count = 0;
+	long v, d0 = 0;
+	put(8);
+	put((unsigned long)space);
+	put(addr);
+	put((unsigned long)n);
+	for (i = 0; i < n; i++) {
+		v = get();
+		if (v != m[i]) {
+			if (first < 0) {
+				first = i;
+				d0 = v;
+			}
+			count++;
+		}
+	}
+	if (getenv("SIMDUMP") && !strcmp(getenv("SIMDUMP"), what)) {
+		put(8);
+		put((unsigned long)space);
+		put(addr);
+		put(24);
+		for (i = 0; i < 24; i++)
+			fprintf(stderr, "%ld/%ld ", get(), (long)m[i]);
+		fprintf(stderr, "\n");
+	}
+	if (first < 0)
+		fprintf(stderr, "  %-10s the same\n", what);
+	else
+		fprintf(stderr, "  %-10s %d differ, the first at %d: the DSP %ld, the model %ld\n",
+			what, count, first, d0, (long)m[first]);
+}
+
+#define XR0_ADDR 0x0600
+#define XR1_ADDR 0x2480
+#define SUBS_ADDR 0x2f90
+#define OV0_ADDR 0x2b10
+#define OV1_ADDR 0x2d50
+
+int main(int argc, char **argv)
+{
+	static unsigned long pk[PK_MAX];
+	static dw pcm[2][1152];
+	static unsigned char buf[16 << 20];
+	int a, i, fail = 0;
+	double worst = 0;
+	const char *worst_name = "";
+
+	sim_start(dsp_mp3_prog);
+	put(6);				/* the program's outer part */
+	put(DSP_MP3_PROG_EXT_AT);
+	put(DSP_MP3_PROG_EXT_N);
+	for (i = 0; i < DSP_MP3_PROG_EXT_N; i++)
+		put(dsp_mp3_prog_ext[i]);
+	for (i = 0; i < (int)(sizeof(mp3dsp_load) / sizeof(mp3dsp_load[0])); i++)
+		load(mp3dsp_load[i].space, mp3dsp_load[i].addr, mp3dsp_load[i].w, mp3dsp_load[i].n);
+	load(4, 0x0000, t_dpair, T_DPAIR_N);	/* internal Y */
+
+	for (a = 1; a < argc && !dead; a++) {
+		static MP3PARSE ps;
+		static MP3DSP d;
+		FILE *f = fopen(argv[a], "rb");
+		long n, off = 0, frames = 0, samples = 0, rate = 0, bad = 0;
+		unsigned long long c = 0, cmax = 0;
+		double share;
+		int nch = 1;
+		if (!f) {
+			perror(argv[a]);
+			return 1;
+		}
+		n = (long)fread(buf, 1, sizeof(buf), f);
+		fclose(f);
+		mp3_reset(&ps);
+		mp3dsp_reset(&d);
+		put(5);
+		while (off + 4 <= n && !dead) {
+			MP3HDR h;
+			int np, ns, ch, k, wrong = 0;
+			unsigned long long t;
+			if (!mp3_header(buf + off, &h) || off + h.length > n) {
+				off++;
+				continue;
+			}
+			np = mp3_packet(&ps, &h, buf + off, pk);
+			rate = h.rate;
+			off += h.length;
+			if (np < 0)
+				continue;
+			if (getenv("SIMDEBUG")) {
+				dsave = d;
+				save_state();
+			}
+			nch = mp3dsp_frame(&d, pk, pcm, &ns);
+			put(7);
+			put((unsigned long)np);
+			for (k = 0; k < np; k++)
+				put(pk[k]);
+			t = sim_job();
+			c += t;
+			if (t > cmax)
+				cmax = t;
+			for (ch = 0; ch < nch; ch++)
+				for (k = 0; k < ns && !dead; k++) {
+					long v = get();
+					if (v != pcm[ch][k] && !wrong++)
+						fprintf(stderr, "%s: frame %ld channel %d sample %d: the DSP %ld, the model %ld\n",
+							argv[a], frames, ch, k, v, (long)pcm[ch][k]);
+				}
+			bad += wrong != 0;
+			frames++;
+			samples += ns;
+			if (wrong && getenv("SIMDEBUG")) {
+				fprintf(stderr, "the frame's last granule, after alias reduction and the transform:\n");
+				cmpbuf("lines 0", 1, XR0_ADDR, mp3dsp_dbg_xr[0], 576);
+				if (nch > 1)
+					cmpbuf("lines 1", 1, XR1_ADDR, mp3dsp_dbg_xr[1], 576);
+				cmpbuf("subbands", 4, SUBS_ADDR, mp3dsp_dbg_sub, 576);
+				cmpbuf("overlap 0", 4, OV0_ADDR, d.ov[0], 576);
+				if (nch > 1)
+					cmpbuf("overlap 1", 4, OV1_ADDR, d.ov[1], 576);
+				{	/* the frame again, to the stages of SIMGR, SIMCH (0, 0) */
+					static dw isw[576];
+					int g = getenv("SIMGR") ? atoi(getenv("SIMGR")) : 0;
+					int cc = getenv("SIMCH") ? atoi(getenv("SIMCH")) : 0;
+					fprintf(stderr, "granule %d, channel %d:\n", g, cc);
+					/* the model again, keeping that granule's stages */
+					mp3dsp_dbg_gr = g;
+					mp3dsp_dbg_ch = cc;
+					mp3dsp_frame(&dsave, pk, pcm, &ns);
+					for (k = 0; k < 576; k++)
+						isw[k] = mp3dsp_dbg_is[k];
+					stage(1, g, cc, pk, np, nch * ns);
+					cmpbuf("Huffman", 1, cc ? XR1_ADDR : XR0_ADDR, isw, 576);
+					stage(2, g, cc, pk, np, nch * ns);
+					cmpbuf("dequant", 1, cc ? XR1_ADDR : XR0_ADDR, mp3dsp_dbg_rq, 576);
+					cmpbuf("scalefacs", 1, 0x0870, mp3dsp_dbg_sf, 61);
+					fprintf(stderr, "  side info g3 %06lx g4 %06lx g8 %06lx\n", pk[2 + (g * nch + cc) * 9 + 3],
+						pk[2 + (g * nch + cc) * 9 + 4], pk[2 + (g * nch + cc) * 9 + 8]);
+					if (nch > 1) {
+						stage(4, g, 0, pk, np, nch * ns);
+						cmpbuf("stereo 0", 1, XR0_ADDR, mp3dsp_dbg_st[0], 576);
+						cmpbuf("stereo 1", 1, XR1_ADDR, mp3dsp_dbg_st[1], 576);
+					}
+					stage(5, g, cc, pk, np, nch * ns);
+					cmpbuf("reorder", 1, cc ? XR1_ADDR : XR0_ADDR, mp3dsp_dbg_ro, 576);
+					stage(6, g, cc, pk, np, nch * ns);
+					cmpbuf("alias", 1, cc ? XR1_ADDR : XR0_ADDR, mp3dsp_dbg_al, 576);
+				}
+				return 1;
+			}
+		}
+		share = rate && frames ? 100.0 * c / ((double)samples / rate) / 32e6 : 0;
+		printf("%-14s %d ch %2ld kHz %5ld frames, %ld wrong: %7.0f cycles a frame (most %llu), %5.1f%% of the DSP\n",
+		       strrchr(argv[a], '/') ? strrchr(argv[a], '/') + 1 : argv[a], nch, rate / 1000, frames, bad,
+		       frames ? (double)c / frames : 0, cmax, share);
+		if (share > worst) {
+			worst = share;
+			worst_name = argv[a];
+		}
+		fail |= bad != 0;
+	}
+	if (argc > 2)
+		printf("the most: %.1f%% (%s)\n", worst, strrchr(worst_name, '/') ? strrchr(worst_name, '/') + 1 : worst_name);
+	return sim_done() | fail;
+}

@@ -23,8 +23,10 @@ uint16_t dsp56k_disasm(int mode, FILE *f) { (void)mode; (void)f; return 0; }
 const char *dsp56k_getInstructionText(void) { return ""; }
 static void sim_hint(int s) { (void)s; }
 
-static unsigned long long cycles, prof[512];
+static unsigned long long cycles, prof[32768];
 static int dead, profiling;
+static int sim_trace;		/* instructions still to print */
+static unsigned sim_trace_at;	/* SIMTRACE=ADDR (hex): print 40 from the first time there */
 
 static int step(void)
 {
@@ -32,9 +34,23 @@ static int step(void)
 	if (!dsp_core.running)
 		return 0;
 	pc = dsp_core.pc;
+	if (sim_trace > 0) {
+		sim_trace--;
+		fprintf(stderr, "P:%04x a %02x:%06x:%06x b %02x:%06x x0 %06x x1 %06x y0 %06x y1 %06x r0 %04x r1 %04x r4 %04x\n",
+			pc, dsp_core.registers[DSP_REG_A2], dsp_core.registers[DSP_REG_A1],
+			dsp_core.registers[DSP_REG_A0], dsp_core.registers[DSP_REG_B2],
+			dsp_core.registers[DSP_REG_B1], dsp_core.registers[DSP_REG_X0],
+			dsp_core.registers[DSP_REG_X1], dsp_core.registers[DSP_REG_Y0],
+			dsp_core.registers[DSP_REG_Y1], dsp_core.registers[DSP_REG_R0],
+			dsp_core.registers[DSP_REG_R1], dsp_core.registers[DSP_REG_R4]);
+	}
+	if (sim_trace_at && pc == sim_trace_at && !sim_trace) {
+		sim_trace = 40;
+		sim_trace_at = 0;
+	}
 	dsp56k_execute_instruction();
 	cycles += dsp_core.instr_cycle;
-	if (profiling && pc < 512)
+	if (profiling && pc < 32768)
 		prof[pc] += dsp_core.instr_cycle;
 	return 1;
 }
@@ -80,6 +96,8 @@ static void load(int cmd, unsigned addr, const unsigned long *w, long n)
 static void sim_start(const unsigned long *prog)
 {
 	int i;
+	if (getenv("SIMTRACE"))
+		sim_trace_at = (unsigned)strtoul(getenv("SIMTRACE"), NULL, 16);
 	dsp_core_init(sim_hint);
 	dsp56k_init_cpu();
 	dsp_core_reset();
@@ -106,7 +124,7 @@ static int sim_done(void)
 	if (getenv("SIMPROF")) {
 		FILE *pf = fopen(getenv("SIMPROF"), "w");
 		int i;
-		for (i = 0; i < 512; i++)
+		for (i = 0; i < 32768; i++)
 			if (prof[i])
 				fprintf(pf, "%04X %llu\n", i, prof[i]);
 		fclose(pf);

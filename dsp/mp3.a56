@@ -1,0 +1,2333 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; mp3.a56 - EPlay's MP3 decoder on the Falcon's DSP56001: a packet from
+; the 68030 (src/mp3/mp3frame.c) in, a frame's samples out, as the C
+; model (src/mp3/mp3dsp.c) has it, bit for bit: scalefactors (MPEG-1 and
+; MPEG-2), Huffman codes, dequantising, mid/side and intensity stereo,
+; reordering, alias reduction, the transform with its windows and overlap
+; (subbands that are all zeros skipped), and the synthesis filter.
+; tests/dspmp3 checks it against the model, frame by frame, and counts it.
+;
+; The host's words: 1 LOADX ADDR N, 4 LOADY, 6 LOADP: N words to ADDR;
+; 5 RESET: the overlap, the rings and the kept scalefactors to zero;
+; 7 FRAME N then the packet's N words: answers 1 (ready), decodes,
+; answers 2 (done), then sends channel 0's samples, then channel 1's (576
+; a granule); 8 DUMP SPACE ADDR N: N words from X (1) or Y (4).
+;
+; Memory: external X and Y are mp3map.inc's (tools/mkmp3tab.py), internal
+; X and Y below. What runs most is in internal P (the bootstrap's 512
+; words); the rest is from P:$7000 (X:$3000), loaded with LOADP.
+;
+; The bits (huff.a56's way): A1:A0 holds them from the top, r4 counts
+; them less 25, refilled 23 at a time (a main data word, positive, times
+; 2^(24 - count) lands under them), used by shifting A left.
+
+	include	"mp3map.inc"
+
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+XS	equ	1		; mp3dsp.h's MP3_XS
+IS_BAD	equ	99
+
+; ---- internal X
+EO	equ	$00		; the synthesis DCT's e[16], o[16] (modulo 32)
+V_FLAGS	equ	$20
+V_NCH	equ	$21
+V_NGR	equ	$22
+V_RATE	equ	$23
+V_LSF	equ	$24
+V_GR	equ	$25
+V_CH	equ	$26
+V_POS	equ	$27		; where this granule's bits start (main data bits)
+V_G	equ	$28		; its side information (Y)
+V_BT	equ	$29
+V_MIX	equ	$2a
+V_NL	equ	$2b		; a mixed block's long bands: 8, 6 in MPEG-2
+V_ROOT	equ	$2c
+V_LIN	equ	$2d
+V_TMP	equ	$2e
+V_W	equ	$5c
+V_END	equ	$30		; where its bits end
+V_NZ0	equ	$31		; lines that may be other than zero, each channel
+V_NZ1	equ	$32
+V_XR	equ	$33		; this channel's lines (X)
+V_SB	equ	$34
+V_SBMAX	equ	$35		; subbands from here are all zeros
+V_OV	equ	$36		; this channel's overlap (Y)
+V_SC	equ	$37		; 2 (1 + scalefac_scale)
+V_PF	equ	$38		; preflag
+V_GG	equ	$39		; global_gain - 210
+V_KK	equ	$3a		; q / 4 + 1 - XS
+V_CNT	equ	$84
+V_T2	equ	$56
+V_T3	equ	$92
+V_T4	equ	$4f
+V_DATA	equ	$3f		; the main data (Y)
+V_R1	equ	$40
+V_R2	equ	$41
+V_BV	equ	$42
+V_T0	equ	$43
+V_T1	equ	$44
+V_TT2	equ	$45
+V_C1	equ	$46
+V_PCM	equ	$47
+V_SW	equ	$48		; synthesis: 32 in odd ring slots
+V_P	equ	$49		; synthesis: the ring slot
+V_RING	equ	$4a
+V_START	equ	$4b
+V_T	equ	$4c
+V_RP0	equ	$4d		; each channel's ring slot
+V_RP1	equ	$4e
+V_ISH	equ	$3e		; MPEG-2's intensity scale
+V_G3	equ	$50		; side information words kept
+V_G4	equ	$51
+V_G8	equ	$52
+V_BT0	equ	$53		; each channel's block type and mixed flag
+V_MIX0	equ	$3d
+V_BT1	equ	$55
+V_MIX1	equ	$3c
+V_MB	equ	$57		; intensity: each window's top band (3)
+V_NB	equ	$5a
+V_NLONG	equ	$5b
+V_I	equ	$2f
+V_K	equ	$5d
+V_S	equ	$5e
+V_Q	equ	$5f
+XIN	equ	$60		; the transform: a subband's inputs (18)
+U	equ	$72		; its rows (18)
+V_ODD	equ	$3b		; the subband is odd
+V_RATE23 equ	$85		; SFBL + 23 rate
+V_RATE14 equ	$86		; SFBS + 14 rate
+V_E	equ	$87
+V_ROW	equ	$88
+V_NR	equ	$89
+V_SL	equ	$8a
+V_MAX	equ	$8b
+V_AT	equ	$8c
+V_PTR	equ	$8d
+V_NZ	equ	$8e
+V_M	equ	$8f
+V_CNT2	equ	$90
+V_SB2	equ	$91
+V_DBG	equ	$93		; tests: stop at a stage (dbgchk) of granule V_DGR, channel V_DCH
+V_DGR	equ	$95
+V_DCH	equ	$96
+
+; ---- internal Y
+DPAIR	equ	$00		; the window of outputs j and 32 - j (240)
+CQ	equ	$f0		; dequantising: the band's |v| = 1..15, worked out (-1: not yet)
+
+; ===================================================================
+; internal P: the start, the commands, and what runs most
+	org	p:$0
+	jmp	start
+
+	org	p:$2			; (no interrupts: the vectors are free)
+start
+	movep	#1,x:$ffe0		; port B is the host port
+	movep	#0,x:$fffe		; no wait states
+	ori	#3,mr			; no interrupts
+	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits)
+	movec	m0,m1
+	movec	m0,m2
+	movec	m0,m3
+	movec	m0,m4
+	movec	m0,m5
+	movec	m0,m6
+	movec	m0,m7
+
+cmd	jsr	rd			; LOADP here; the rest from the external part
+	move	x0,a
+	move	#>6,x1
+	cmp	x1,a
+	jne	cmdx
+	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lp
+	jsr	rd
+	movem	x0,p:(r0)+
+lp
+	jmp	cmd
+
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+wr	jclr	#1,x:HSR,wr
+	movep	x1,x:HRX
+	rts
+
+; ---- the bits: refill while fewer than 25 (r1: the next word, in Y)
+refill	jclr	#15,r4,rf1
+	move	r4,n7
+	move	#>P2+25,r7
+	move	y:(r1)+,x0
+	move	y:(r7+n7),y0
+	mac	x0,y0,a
+	move	#>23,n4
+	nop
+	move	(r4)+n4
+	jmp	refill
+rf1	rts
+
+; ---- the Huffman part's regions: from r0 to line x0 of V_XR, table y0
+region	move	x0,b
+	move	x:V_XR,x0
+	add	x0,b
+	move	r0,x0
+	sub	x0,b			; the lines
+	jle	rgx
+	move	b1,x:V_TMP
+	move	y0,n2
+	move	#>SEL,r2
+	move	y0,n5
+	move	#>SELY,r5
+	nop
+	move	x:(r2+n2),b		; the root
+	move	y:(r5+n5),y0		; the linbits
+	move	y0,x:V_LIN
+	move	b1,x:V_ROOT
+	tst	b
+	jeq	rgz
+	move	x:V_TMP,b
+	asr	b
+	move	b1,x0			; the pairs
+	do	x0,rgp
+	jsset	#15,r4,refill
+	move	a1,x0
+	mpy	x0,y1,b		x:V_ROOT,y0
+	and	x1,b			; the next 8 bits
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b
+	jclr	#23,x0,pfast
+	jsr	pslow
+	jmp	pnext
+pfast	rep	x0			; the code and its signs
+	asl	a
+	move	x0,n4
+	move	b1,r2			; the signed pair table
+	move	b1,r5
+	move	(r4)-n4
+	move	x:(r2),x0	y:(r5),b
+	move	x0,x:(r0)+
+	move	b,x:(r0)+
+pnext	nop
+rgp
+rgx	rts
+rgz	move	x:V_TMP,x0		; table 0: zeros, no bits
+	clr	b
+	rep	x0
+	move	b,x:(r0)+
+	rts
+
+; ---- dequantising a run: r0 its first line (X), x0 how many, y1 the
+; gain 2^((q mod 4) / 4) / 2, V_KK = q / 4 + 1 - XS; r2 = POWM, r5 = PSH,
+; r6 = CQ: the band's values for |v| < 16, each worked out the first time
+; (the same way, so the same value) and kept
+dqrun	do	x0,dqe
+	move	x:(r0),b
+	tst	b		b,x1		; (x1 keeps the sign)
+	jeq	dqn
+	abs	b
+	move	#>16,x0
+	cmp	x0,b
+	jge	dqfar			; (back at dqsg)
+	move	b1,n6
+	nop
+	move	y:(r6+n6),a		; kept?
+	tst	a
+	jmi	dqnew			; (back at dqsg)
+dqsg	jclr	#23,x1,dqs
+	neg	a
+dqs	move	a,x:(r0)
+dqn	move	(r0)+
+dqe
+	rts
+
+; ---- the 18 rows of a long block: XIN into U (r1, r2, r4: r5 and r6
+; are the caller's)
+imrows	move	#>IM36,r4
+	move	#>U,r2
+	move	#>XIN,r1		; (XIN: a multiple of 32, for modulo 18)
+	movec	#17,m1
+	do	#18,imr
+	clr	a		x:(r1)+,x0	y:(r4)+,y0
+	rep	#17
+	mac	x0,y0,a		x:(r1)+,x0	y:(r4)+,y0
+	macr	x0,y0,a
+	move	a,x:(r2)+
+imr
+	movec	#$ffff,m1
+	rts
+
+; ---- a long block's 36 outputs: U, the window at r4 (Y), the overlap at
+; r5 (Y), the subband's 18 samples to r6 (Y); odd subbands (V_ODD) have
+; their odd samples negated (the frequency inversion)
+imlong	move	#>U,r1
+	jset	#0,x:V_ODD,iml1
+	do	#9,il1
+	move	x:(r1)+,x0	y:(r4)+,y0
+	move	y:(r5)+,a
+	macr	x0,y0,a
+	move	a,y:(r6)+
+il1
+	move	(r1)-
+	do	#9,il2
+	move	x:(r1)-,x0	y:(r4)+,y0
+	move	y:(r5)+,a
+	macr	-x0,y0,a
+	move	a,y:(r6)+
+il2
+	jmp	iml2
+iml1	do	#4,il3			; odd subband: the odd samples negated
+	move	x:(r1)+,x0	y:(r4)+,y0
+	move	y:(r5)+,a
+	macr	x0,y0,a
+	move	a,y:(r6)+
+	move	x:(r1)+,x0	y:(r4)+,y0
+	move	y:(r5)+,a
+	macr	x0,y0,a
+	neg	a
+	move	a,y:(r6)+
+il3
+	move	x:(r1)+,x0	y:(r4)+,y0	; i = 8
+	move	y:(r5)+,a
+	macr	x0,y0,a
+	move	a,y:(r6)+
+	move	(r1)-
+	do	#4,il4			; i 9..16: odd first
+	move	x:(r1)-,x0	y:(r4)+,y0
+	move	y:(r5)+,a
+	macr	-x0,y0,a
+	neg	a
+	move	a,y:(r6)+
+	move	x:(r1)-,x0	y:(r4)+,y0
+	move	y:(r5)+,a
+	macr	-x0,y0,a
+	move	a,y:(r6)+
+il4
+	move	x:(r1)-,x0	y:(r4)+,y0	; i = 17
+	move	y:(r5)+,a
+	macr	-x0,y0,a
+	neg	a
+	move	a,y:(r6)+
+iml2	move	#>-18,n5		; the overlap again, for the new one
+	move	#>U+9,r1
+	nop
+	move	(r5)+n5
+	do	#9,il5			; i 18..26: U[9..17]
+	move	x:(r1)+,x0	y:(r4)+,y0
+	mpyr	x0,y0,b
+	move	b,y:(r5)+
+il5
+	move	(r1)-
+	do	#9,il6			; i 27..35: U[17..9]
+	move	x:(r1)-,x0	y:(r4)+,y0
+	mpyr	x0,y0,b
+	move	b,y:(r5)+
+il6
+	rts
+
+; ---- the synthesis filter: a slot (synth.a56's), the 32 subband samples
+; at slot V_T (SUBS + 18 k + t) into the ring's next slot, 32 samples to
+; r0 (Y)
+slot	move	x:V_P,b
+	move	#>1,x0
+	add	x0,b
+	move	#>15,x0
+	and	x0,b
+	move	b1,x:V_P
+	clr	a
+	jclr	#0,b1,sl0
+	move	#>32,a
+sl0	move	a1,x:V_SW
+	move	#>SUBS,b		; the butterfly: x[k] = SUBS + 18 k + t
+	move	x:V_T,x0
+	add	x0,b
+	move	b1,r1
+	move	#>31*18,x0
+	add	x0,b
+	move	b1,r3
+	move	#>18,n1
+	move	#>-18,n3
+	move	#>EO,r2
+	move	#>EO+16,r6
+	do	#16,bf
+	move	y:(r1)+n1,a
+	tfr	a,b		y:(r3)+n3,x0
+	add	x0,a
+	sub	x0,b		a,x:(r2)+
+	move	b,x:(r6)+
+bf
+	move	x:V_P,x0		; the slot's start: RING + 64 P
+	move	#>64,y0
+	mpy	x0,y0,b
+	asr	b
+	move	b0,b
+	move	x:V_RING,x0
+	add	x0,b
+	move	b1,x:V_START
+	move	x:V_SW,x0		; X[0..15]: minus, rows 48 + n and 48 - n
+	move	#>48,a
+	add	x0,a
+	move	#>63,x0
+	and	x0,a
+	add	b,a
+	move	a1,r2
+	move	a1,r3
+	movec	#63,m2
+	movec	#63,m3
+	move	#>EO,r1
+	movec	#31,m1
+	move	#>DCT,r5
+	do	#16,dl
+	clr	a		x:(r1)+,x0	y:(r5)+,y0
+	rep	#15
+	mac	x0,y0,a		x:(r1)+,x0	y:(r5)+,y0
+	macr	x0,y0,a
+	neg	a
+	move	a,x:(r2)+
+	move	a,x:(r3)-
+dl
+	move	x:V_START,b		; X[16..31]: row n - 16, and minus row 48 - n
+	move	x:V_SW,x0
+	move	x0,a
+	add	b,a
+	move	a1,r2
+	move	#>32,a
+	add	x0,a
+	move	#>63,x0
+	and	x0,a
+	add	b,a
+	move	a1,r3
+	do	#16,dh
+	clr	a		x:(r1)+,x0	y:(r5)+,y0
+	rep	#15
+	mac	x0,y0,a		x:(r1)+,x0	y:(r5)+,y0
+	macr	x0,y0,a
+	move	a,x:(r2)+
+	neg	a
+	move	a,x:(r3)-
+dh
+	move	x:V_SW,x0		; V[16] = 0
+	move	#>16,a
+	add	x0,a
+	move	#>63,x0
+	and	x0,a
+	add	b,a
+	move	a1,r2
+	clr	a
+	move	a,x:(r2)
+	movec	#1023,m1		; the window: the ring modulo 1024
+	movec	#1023,m2
+	movec	#$ffff,m3
+	move	#>-64,n1
+	move	#>64,n2
+	move	x:V_SW,x0		; output 0 (row 0) and 16 (row 16)
+	tfr	b,a
+	move	#>D016,r6
+	add	x0,a
+	move	a1,r1
+	nop
+	clr	a		x:(r1)+n1,x0	y:(r6)+,y0
+	rep	#15
+	mac	x0,y0,a		x:(r1)+n1,x0	y:(r6)+,y0
+	mac	x0,y0,a		(r6)+
+	asl	a
+	asl	a
+	rnd	a
+	move	a,y:(r0)
+	move	x:V_SW,x0
+	move	#>16,a
+	add	x0,a
+	move	#>63,x0
+	and	x0,a
+	add	b,a
+	move	a1,r1
+	nop
+	clr	a		x:(r1)+n1,x0	y:(r6)+,y0
+	rep	#15
+	mac	x0,y0,a		x:(r1)+n1,x0	y:(r6)+,y0
+	mac	x0,y0,a
+	asl	a
+	asl	a
+	rnd	a
+	move	#>16,n3
+	move	r0,r3
+	nop
+	move	a,y:(r3+n3)
+	move	x:V_SW,x0		; outputs j and 32 - j, j = 1..15
+	move	#>1,a
+	add	x0,a
+	add	b,a
+	move	a1,r1			; row 1 of this slot
+	move	x:V_SW,x0
+	move	#>31,a
+	add	x0,a
+	move	#>63,x0
+	and	x0,a
+	move	#>64,x0
+	add	x0,a
+	add	b,a
+	move	x:V_RING,x0
+	sub	x0,a
+	move	#>1023,x0
+	and	x0,a
+	move	x:V_RING,x0
+	add	x0,a
+	move	a1,r2			; row 31 of slot P - 15
+	move	#>DPAIR,r5
+	move	r0,r3
+	move	#>1,n0
+	move	#>32,n3
+	move	(r0)+n0
+	move	(r3)+n3
+	do	#15,pj
+	clr	a		x:(r1)+n1,x0	y:(r5)+,y0
+	clr	b		x:(r2)+n2,x1
+	do	#15,pt
+	mac	x0,y0,a		x:(r1)+n1,x0
+	mac	-x1,y0,b	x:(r2)+n2,x1	y:(r5)+,y0
+pt
+	mac	x0,y0,a
+	mac	-x1,y0,b
+	asl	a		(r1)+
+	asl	a		(r2)-
+	rnd	a
+	asl	b		a,y:(r0)+
+	asl	b		(r3)-
+	rnd	b
+	move	b,y:(r3)
+pj
+	movec	#$ffff,m1
+	movec	#$ffff,m2
+	move	#>16,n0
+	nop
+	move	(r0)+n0			; the next slot's samples
+	rts
+
+; ===================================================================
+; external P: the frame, and what runs once a granule
+	org	p:$7000
+
+cmdx	move	#>1,x1			; the commands (x0), but LOADP
+	cmp	x1,a
+	jeq	loadx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	loady
+	move	#>7,x1
+	cmp	x1,a
+	jeq	frame
+	move	#>5,x1
+	cmp	x1,a
+	jeq	dreset
+	move	#>8,x1
+	cmp	x1,a
+	jeq	dump
+	jmp	cmd
+loadx	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lx
+	jsr	rd
+	move	x0,x:(r0)+
+lx
+	jmp	cmd
+loady	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ly
+	jsr	rd
+	move	x0,y:(r0)+
+ly
+	jmp	cmd
+
+; ---- alias reduction: r0 at the first subband's line 17, x0 boundaries
+aliasr	do	x0,ale
+	move	r0,r1
+	move	#>ALIAS,r4
+	move	#>ALIAS+8,r5
+	move	#>26,n0			; afterwards: 8 back down, then 18 on
+	move	(r1)+			; line 18: the next subband's first
+	do	#8,alb
+	move	x:(r0),x0
+	move	x:(r1),x1
+	move	y:(r4)+,y0		; cs
+	move	y:(r5)+,y1		; ca
+	mpy	x0,y0,a
+	macr	-x1,y1,a
+	mpy	x1,y0,b
+	macr	x0,y1,b
+	move	a,x:(r0)-
+	move	b,x:(r1)+
+alb
+	move	(r0)+n0
+	nop
+ale
+	rts
+
+; ---- mid/side over x0 lines of both channels, from r0 (XR0..), r1 (XR1..)
+msrun	move	#>MISC,r5
+	nop
+	nop
+	move	y:(r5),y0		; 1/sqrt(2)
+	do	x0,mse
+	move	x:(r0),x0
+	move	x:(r1),x1
+	mpy	x0,y0,a
+	macr	x1,y0,a
+	mpy	x0,y0,b
+	macr	-x1,y0,b
+	move	a,x:(r0)+
+	move	b,x:(r1)+
+mse
+	rts
+
+dreset	jsr	clear
+	jmp	cmd
+
+clear	clr	a
+	move	#>RING0,r0
+	do	#2048,cl1
+	move	a,x:(r0)+
+cl1
+	move	#>OV0,r0
+	do	#1152,cl2
+	move	a,y:(r0)+
+cl2
+	move	#>SCF,r0
+	do	#44,cl3
+	move	a,x:(r0)+
+cl3
+	move	a,x:V_RP0
+	move	a,x:V_RP1
+	rts
+
+dump	jsr	rd
+	move	x0,b
+	jsr	rd
+	move	x0,r0
+	jsr	rd
+	move	#>1,x1
+	cmp	x1,b
+	jne	dmy
+	do	x0,dmx
+	move	x:(r0)+,x1
+	jsr	wr
+dmx
+	jmp	cmd
+dmy	do	x0,dmz
+	move	y:(r0)+,x1
+	jsr	wr
+dmz
+	jmp	cmd
+
+; ---- a frame: read, decoded, sent
+frame	jsr	rd
+	move	#>PKT,r0
+	do	x0,fr1
+	jsr	rd
+	move	x0,y:(r0)+
+fr1
+	move	#>1,x1
+	jsr	wr			; ready
+	jsr	decode
+	move	#>2,x1
+	jsr	wr			; done
+	move	#>PCM,r0
+	jsr	sendch
+	jclr	#0,x:V_FLAGS,fr2
+	move	#>PCM+1152,r0
+	jsr	sendch
+fr2	jmp	cmd
+sendch	move	#>576,x0
+	jset	#8,x:V_FLAGS,sc1
+	move	#>1152,x0
+sc1	do	x0,sc2
+	move	y:(r0)+,x1
+	jsr	wr
+sc2
+	rts
+
+decode	move	#>PKT,r0
+	nop
+	move	y:(r0)+,x0		; the flags
+	move	x0,x:V_FLAGS
+	move	#>1,a
+	jclr	#0,x0,dc1
+	move	#>2,a
+dc1	move	a1,x:V_NCH
+	move	#>2,a
+	clr	b
+	move	#>8,y1
+	jclr	#8,x0,dc2
+	move	#>1,a
+	move	#>1,b
+	move	#>6,y1
+dc2	move	a1,x:V_NGR
+	move	b1,x:V_LSF
+	move	y1,x:V_NL
+	move	x0,a			; the rate: bits 4-7
+	move	#>$f0,x1
+	and	x1,a
+	move	a1,x0
+	move	#>$080000,y0		; >> 4
+	mpy	x0,y0,a
+	move	a1,x:V_RATE
+	move	a1,x0			; SFBL + 23 rate, SFBS + 14 rate
+	move	#>23,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	#>SFBL,x1
+	add	x1,a
+	move	a1,x:V_RATE23
+	move	#>14,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	#>SFBS,x1
+	add	x1,a
+	move	a1,x:V_RATE14
+	jset	#3,x:V_FLAGS,mute
+	move	x:V_NGR,x0		; the main data, after the side information
+	move	x:V_NCH,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,x0
+	move	#>9,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	#>PKT+2,x0
+	add	x0,a
+	move	a1,x:V_DATA
+	clr	a
+	move	a,x:V_POS
+	move	a,x:V_GR
+dgr	clr	a
+	move	a,x:V_CH
+dgc	jsr	gchan			; scalefactors, Huffman codes, dequantising
+	move	x:V_CH,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_CH
+	move	x:V_NCH,x0
+	cmp	x0,b
+	jlt	dgc
+	jclr	#0,x:V_FLAGS,dst
+	jsr	stereo
+dst	clr	a
+	move	a,x:V_CH		; (tests: 4, after stereo: channel 0 asked)
+	move	#>4,x0
+	move	#>0,y0
+	jsr	dbgchk
+	clr	a
+	move	a,x:V_CH
+dgo	jsr	gout			; reorder, alias, transform, synthesis
+	move	x:V_CH,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_CH
+	move	x:V_NCH,x0
+	cmp	x0,b
+	jlt	dgo
+	move	x:V_GR,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_GR
+	move	x:V_NGR,x0
+	cmp	x0,b
+	jlt	dgr
+	rts
+
+mute	clr	a			; no data yet: silence; the overlap and V cleared
+	move	#>RING0,r0
+	do	#2048,mu2
+	move	a,x:(r0)+
+mu2
+	move	#>OV0,r0
+	do	#1152,mu3
+	move	a,y:(r0)+
+mu3
+	move	#>PCM,r0
+	do	#2304,mu1
+	move	a,y:(r0)+
+mu1
+	rts
+
+; ---- a granule of a channel: its side information, scalefactors,
+; Huffman codes and dequantised lines
+gchan	move	x:V_GR,x0		; PKT + 2 + (gr nch + ch) 9
+	move	x:V_NCH,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	x:V_CH,x0
+	add	x0,a
+	move	a1,x0
+	move	#>9,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	#>PKT+2,x0
+	add	x0,a
+	move	a1,x:V_G
+	move	a1,r6
+	move	#>XR0,a
+	jclr	#0,x:V_CH,gc1
+	move	#>XR1,a
+gc1	move	a1,x:V_XR
+	move	y:(r6)+,x0		; 0 part2_3_length
+	move	x:V_POS,a
+	add	x0,a
+	move	a1,x:V_END
+	move	y:(r6)+,x0		; 1 big_values * 2
+	move	x0,x:V_BV
+	move	y:(r6)+,a		; 2 global_gain
+	move	#>210,x0
+	sub	x0,a
+	move	a1,x:V_GG
+	move	y:(r6)+,x0		; 3 slen / MPEG-2's
+	move	x0,x:V_G3
+	move	y:(r6)+,x0		; 4 block type and flags
+	move	x0,x:V_G4
+	move	x0,a
+	move	#>3,x1
+	and	x1,a
+	move	a1,x:V_BT
+	clr	a
+	jclr	#2,x0,gc2
+	move	#>1,a
+gc2	move	a1,x:V_MIX
+	move	#>2,a
+	jclr	#3,x0,gc3
+	move	#>4,a
+gc3	move	a1,x:V_SC
+	clr	a
+	jclr	#4,x0,gc4
+	move	#>1,a
+gc4	move	a1,x:V_PF
+	clr	a
+	jclr	#5,x0,gc5
+	move	#>1,a
+gc5	move	a1,x:V_C1
+	clr	a
+	jclr	#6,x0,gc6
+	move	#>1,a
+gc6	move	a1,x:V_ISH
+	move	y:(r6)+,x0		; 5 the tables
+	move	x0,a
+	move	#>31,x1
+	and	x1,a
+	move	a1,x:V_T0
+	move	#>$040000,y0		; >> 5
+	mpy	x0,y0,a
+	move	a1,x0
+	move	x0,a
+	and	x1,a
+	move	a1,x:V_T1
+	mpy	x0,y0,a
+	move	a1,a
+	and	x1,a
+	move	a1,x:V_TT2
+	move	y:(r6)+,x0		; 6, 7 the regions
+	move	x0,x:V_R1
+	move	y:(r6)+,x0
+	move	x0,x:V_R2
+	move	y:(r6)+,x0		; 8 subblock gains
+	move	x0,x:V_G8
+	move	x:V_BT,x0		; this channel's block, for gout and stereo
+	move	x:V_MIX,x1
+	jset	#0,x:V_CH,gc7
+	move	x0,x:V_BT0
+	move	x1,x:V_MIX0
+	jmp	gc8
+gc7	move	x0,x:V_BT1
+	move	x1,x:V_MIX1
+gc8	jsr	sfprep
+	jsr	binit
+	jsr	scalef
+	move	x:V_DBG,b		; (tests: 3, stop here, the bit position at x:$94)
+	move	#>3,x0
+	cmp	x0,b
+	jne	gc8a
+	move	x:V_GR,b
+	move	x:V_DGR,x0
+	cmp	x0,b
+	jne	gc8a
+	move	x:V_CH,b
+	move	x:V_DCH,x0
+	cmp	x0,b
+	jne	gc8a
+	move	r1,b
+	move	x:V_DATA,x0
+	sub	x0,b
+	move	b1,x0
+	move	#>23,y0
+	mpy	x0,y0,b
+	asr	b
+	move	b0,b
+	move	r4,x0
+	sub	x0,b
+	move	#>25,x0
+	sub	x0,b
+	move	b1,x:$94
+	jmp	dbgx
+gc8a
+	move	x:V_XR,r0		; the Huffman codes
+	move	#>255,x1		; a pair root's 8 bits: mask, multiplier
+	move	#>$80,y1
+	move	x:V_R1,x0
+	move	x:V_T0,y0
+	jsr	region
+	move	x:V_R2,x0
+	move	x:V_T1,y0
+	jsr	region
+	move	x:V_BV,x0
+	move	x:V_TT2,y0
+	jsr	region
+	jsr	count1
+	move	x:V_XR,x0		; the lines decoded: the rest are zeros
+	move	r0,b
+	sub	x0,b
+	move	b1,x:V_NZ
+	jset	#0,x:V_CH,gc9
+	move	b1,x:V_NZ0
+	jmp	gc10
+gc9	move	b1,x:V_NZ1
+gc10	move	#>576,a
+	sub	b,a
+	jle	gc11
+	move	a1,x0
+	clr	b
+	rep	x0
+	move	b,x:(r0)+
+gc11	move	#>1,x0
+	move	#>1,y0
+	jsr	dbgchk
+	jsr	requant
+	move	#>2,x0
+	move	#>1,y0
+	jsr	dbgchk
+	move	x:V_END,x0
+	move	x0,x:V_POS
+	rts
+
+dbgx	movec	ssh,x0			; (tests) out of decode: gchan's return dropped
+	rts
+; (tests) stop at stage x0 if V_DBG asks it of this granule and channel:
+; out of decode: dbgchk's return dropped, and y0 (0 or 1) more
+dbgchk	move	x:V_DBG,b
+	cmp	x0,b
+	jne	dbc1
+	move	x:V_GR,b
+	move	x:V_DGR,x0
+	cmp	x0,b
+	jne	dbc1
+	move	x:V_CH,b
+	move	x:V_DCH,x0
+	cmp	x0,b
+	jne	dbc1
+	movec	ssh,x0
+	move	y0,b
+	tst	b
+	jeq	dbc1
+	movec	ssh,x0
+dbc1	rts
+
+; ---- the bits from V_POS: the word pos / 23, then pos mod 23 used
+binit	move	x:V_POS,x0
+	move	#>729445,y0		; 2^24 / 23, rounded up
+	mpy	x0,y0,a
+	asr	a
+	move	a1,x1			; pos / 23
+	move	#>23,y0
+	mpy	x1,y0,b
+	asr	b
+	move	b0,b
+	move	x0,a
+	sub	b,a
+	move	a1,x:V_TMP		; pos mod 23
+	move	x:V_DATA,b
+	add	x1,b
+	move	b1,r1
+	nop
+	move	y:(r1)+,x0
+	move	x0,a
+	asl	a
+	move	#>$fffe,r4		; 23 there, less 25
+	jsr	refill
+	move	x:V_TMP,b
+	tst	b
+	jeq	bi1
+	move	b1,x0
+	rep	x0
+	asl	a
+	move	x0,n4
+	nop
+	move	(r4)-n4
+bi1	jsr	refill
+	rts
+
+; ---- b = the next x0 bits (0..13), used
+gbits	clr	b
+	move	x0,n2
+	move	x0,b
+	tst	b
+	jeq	gb1
+	jsr	refill
+	move	#>LT,r2
+	nop
+	move	x:(r2+n2),x1		; 2^n - 1
+	move	y:(r2+n2),y1		; 2^(n - 1)
+	move	a1,x0
+	mpy	x0,y1,b
+	and	x1,b
+	move	b1,b
+	move	n2,x0
+	rep	x0
+	asl	a
+	move	n2,n4
+	nop
+	move	(r4)-n4
+gb1	rts
+
+; ---- what the scalefactors need, worked out before the bits start (A is
+; the bit buffer from binit on: the scalefactors leave it to gbits)
+sfprep	jset	#0,x:V_LSF,sp2
+	move	x:V_G3,a		; MPEG-1: slen1, slen2
+	move	#>15,x1
+	and	x1,a
+	move	a1,x:V_T3
+	move	x:V_G3,x0
+	move	#>$080000,y0		; >> 4
+	mpy	x0,y0,a
+	move	a1,x:V_T4
+	clr	a			; scfsi << 8, in granule 1
+	jclr	#0,x:V_GR,sp1
+	move	x:V_G4,a
+	move	#>$f00,x0
+	and	x0,a
+sp1	move	a1,x:V_T2
+	move	x:V_CH,x0		; SCF + 22 ch
+	move	#>22,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	#>SCF,x0
+	add	x0,a
+	move	a1,x:V_SB2
+	rts
+sp2	move	x:V_G3,a		; MPEG-2: the row
+	move	#>$070000,x1
+	and	x1,a
+	move	a1,x0
+	move	#>$000080,y0		; >> 16
+	mpy	x0,y0,a
+	move	a1,x:V_ROW
+	clr	b			; the block: 0 long, 1 short, 2 mixed
+	move	#>22,y1			; and its long bands
+	move	x:V_BT,a
+	move	#>2,x0
+	cmp	x0,a
+	jne	sp3
+	move	#>1,b
+	move	#>0,y1
+	jclr	#0,x:V_MIX,sp3
+	move	#>2,b
+	move	#>6,y1
+sp3	move	y1,x:V_NLONG
+	move	x:V_ROW,x0		; NSF + row 12 + block 4
+	move	#>12,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	b1,x0
+	move	#>4,y0
+	mpy	x0,y0,b
+	asr	b
+	move	b0,b
+	add	b,a
+	move	#>NSF,x0
+	add	x0,a
+	move	a1,x:V_NR
+	move	#>SFS,a			; the short part: from s = 3 if mixed
+	move	x:V_NLONG,b
+	move	#>6,x0
+	cmp	x0,b
+	jne	sp4
+	move	#>SFS+9,a
+sp4	move	a1,x:V_PTR
+	move	x:V_G3,x0
+	move	x0,x:V_K		; the slens, 4 bits each
+	rts
+
+; ---- the scalefactors into SFL and SFS, and as intensity positions into
+; ISPL and ISPS (b, x and y only: A is the bits)
+scalef	clr	b
+	move	#>SFL,r0		; SFL, SFS, ISPL, ISPS: one after the other
+	rep	#122
+	move	b,x:(r0)+
+	jset	#0,x:V_LSF,sflsf
+	move	x:V_BT,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	sfl0
+	; short blocks: (mixed: 8 long with slen1), then s from 0 or 3
+	move	#>SFS,r0
+	move	#>18,b			; slen1's: (6 - s) 3
+	jclr	#0,x:V_MIX,sfs1
+	move	#>SFL,r0
+	do	#8,sfs0
+	move	x:V_T3,x0
+	jsr	gbits
+	move	b,x:(r0)+
+sfs0
+	move	#>SFS+9,r0
+	move	#>9,b
+sfs1	move	b1,x0
+	do	x0,sfs2
+	move	x:V_T3,x0
+	jsr	gbits
+	move	b,x:(r0)+
+sfs2
+	do	#18,sfs3
+	move	x:V_T4,x0
+	jsr	gbits
+	move	b,x:(r0)+
+sfs3
+	jmp	sfkeep
+	; long blocks: four groups, each read or (granule 1, scfsi) kept
+sfl0	move	#>SFL,r0
+	move	x:V_SB2,r3		; SCF + 22 ch
+	move	#>6,x0			; 0-5, slen1, scfsi bit 11
+	move	x:V_T3,y0
+	move	#>11,y1
+	jsr	sfgrp
+	move	#>5,x0			; 6-10
+	move	x:V_T3,y0
+	move	#>10,y1
+	jsr	sfgrp
+	move	#>5,x0			; 11-15, slen2
+	move	x:V_T4,y0
+	move	#>9,y1
+	jsr	sfgrp
+	move	#>5,x0			; 16-20
+	move	x:V_T4,y0
+	move	#>8,y1
+	jsr	sfgrp
+sfkeep	jset	#0,x:V_GR,sfpos		; granule 0: kept for granule 1's scfsi
+	move	x:V_SB2,r3
+	move	#>SFL,r0
+	do	#22,sfk
+	move	x:(r0)+,x0
+	move	x0,x:(r3)+
+sfk
+	; MPEG-1: the positions are the scalefactors
+sfpos	move	#>SFL,r0
+	move	#>ISPL,r3
+	do	#61,sfp
+	move	x:(r0)+,x0
+	move	x0,x:(r3)+
+sfp
+	rts
+; a group: x0 scalefactors, y0 their bits, y1 its scfsi bit (8-11) in
+; V_T2; r0 into SFL, r3 into SCF (granule 0's, kept)
+sfgrp	move	x0,x:V_CNT
+	move	y0,x:V_SL
+	move	y1,b			; 2^bit: LTY at bit + 1
+	move	#>1,x1
+	add	x1,b
+	move	b1,n2
+	move	#>LTY,r2
+	nop
+	move	y:(r2+n2),x1
+	move	x:V_T2,b
+	and	x1,b
+	jeq	sgr
+	move	x:V_CNT,x0		; kept from granule 0
+	do	x0,sgk
+	move	x:(r3)+,x0
+	move	x0,x:(r0)+
+sgk
+	rts
+sgr	move	x:V_CNT,x0		; read
+	do	x0,sgd
+	move	x:V_SL,x0
+	jsr	gbits
+	move	b,x:(r0)+
+	move	(r3)+
+sgd
+	rts
+
+; MPEG-2's: four parts of nr_of_sfb, slen bits each; in the right
+; channel of intensity stereo (rows 3-5) a part's largest value is no
+; position
+sflsf	clr	b
+	move	b,x:V_AT
+	do	#4,sfm9
+	move	x:V_K,b
+	move	#>15,x1
+	and	x1,b
+	move	b1,x:V_SL
+	move	b1,n2
+	move	#>LT,r2
+	nop
+	move	x:(r2+n2),x0		; 2^slen - 1: the largest
+	move	x0,x:V_MAX
+	move	x:V_K,x0
+	move	#>$080000,y0		; >> 4
+	mpy	x0,y0,b
+	move	b1,x:V_K
+	move	x:V_NR,r2
+	nop
+	move	y:(r2)+,x0		; this part's count
+	move	r2,x:V_NR
+	move	x0,b
+	tst	b
+	jeq	sfm8
+	do	x0,sfm7
+	move	x:V_SL,x0
+	jsr	gbits
+	move	b1,x0			; v
+	move	b1,y0			; its position
+	move	x:V_ROW,b
+	move	#>3,x1
+	cmp	x1,b
+	jlt	sfm4
+	move	x:V_SL,b
+	tst	b
+	jeq	sfm4
+	move	x:V_MAX,b
+	cmp	y0,b
+	jne	sfm4
+	move	#>IS_BAD,y0
+sfm4	move	x:V_AT,b
+	move	x:V_NLONG,x1
+	cmp	x1,b
+	jge	sfm5
+	move	b1,n2			; long: SFL[at], ISPL[at]
+	move	#>SFL,r2
+	move	#>ISPL,r3
+	move	b1,n3
+	nop
+	move	x0,x:(r2+n2)
+	move	y0,x:(r3+n3)
+	jmp	sfm6
+sfm5	move	x:V_PTR,r2		; short: in order from V_PTR
+	move	#>ISPS-SFS,n2
+	nop
+	move	x0,x:(r2)
+	move	y0,x:(r2+n2)
+	move	(r2)+
+	move	r2,x:V_PTR
+sfm6	move	x:V_AT,b
+	move	#>1,x1
+	add	x1,b
+	move	b1,x:V_AT
+	nop
+sfm7
+sfm8	nop
+sfm9
+	rts
+
+; ---- count1: quadruples while there are bits and lines (huff.a56's)
+count1	move	r1,b			; the bits read: 23 (words in) - (r4 + 25)
+	move	x:V_DATA,x0
+	sub	x0,b
+	move	b1,x0
+	move	#>23,y0
+	mpy	x0,y0,b
+	asr	b
+	move	b0,b
+	move	r4,x0
+	sub	x0,b
+	move	#>25,x0
+	sub	x0,b
+	neg	b
+	move	x:V_END,x0
+	add	x0,b			; the bits left
+	move	b1,r3
+	move	#>63,x1			; a count1 root's 6 bits
+	move	#>$20,y1
+	move	x:V_C1,n2
+	move	#>SEL+32,r2
+	nop
+	move	x:(r2+n2),x0
+	move	x0,x:V_ROOT
+	move	#>4,n0
+	move	x:V_XR,b
+	move	#>573,x0
+	add	x0,b
+	move	b1,x:V_TMP		; fewer than 4 lines left from here
+c1l	move	r0,b
+	move	x:V_TMP,x0
+	cmp	x0,b
+	jge	c1x
+	jset	#15,r3,c1x
+	move	r3,b
+	tst	b
+	jeq	c1x
+	jsr	refill
+	move	a1,x0
+	mpy	x0,y1,b		x:V_ROOT,y0
+	and	x1,b
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b
+	rep	x0
+	asl	a
+	move	x0,n4
+	move	x0,n3
+	move	(r4)-n4
+	move	(r3)-n3
+	move	b1,y0			; v w x y
+	clr	b
+	jclr	#3,y0,q3z
+	move	#>1,b
+	jclr	#23,a1,q3p
+	neg	b
+q3p	asl	a
+	move	(r4)-
+	move	(r3)-
+q3z	move	b,x:(r0)+
+	clr	b
+	jclr	#2,y0,q2z
+	move	#>1,b
+	jclr	#23,a1,q2p
+	neg	b
+q2p	asl	a
+	move	(r4)-
+	move	(r3)-
+q2z	move	b,x:(r0)+
+	clr	b
+	jclr	#1,y0,q1z
+	move	#>1,b
+	jclr	#23,a1,q1p
+	neg	b
+q1p	asl	a
+	move	(r4)-
+	move	(r3)-
+q1z	move	b,x:(r0)+
+	clr	b
+	jclr	#0,y0,q0z
+	move	#>1,b
+	jclr	#23,a1,q0p
+	neg	b
+q0p	asl	a
+	move	(r4)-
+	move	(r3)-
+q0z	move	b,x:(r0)+
+	jclr	#15,r3,c1l
+	move	(r0)-n0			; it ran over: it isn't there
+c1x	rts
+
+; ---- a pair the slower way (huff.a56's)
+pslow	jset	#22,x0,psnode
+	move	b1,r2
+	move	b1,r5
+	move	x0,b
+	and	x1,b
+	move	b1,x0
+psleaf	rep	x0
+	asl	a
+	move	x0,n4
+	nop
+	move	(r4)-n4
+	move	x:(r2),b
+	jsr	val
+	move	y:(r5),b
+	jsr	val
+	rts
+psnode	move	x0,b
+	move	#>15,x0
+	and	x0,b
+	neg	b
+	move	b1,x0
+	move	y:(r5),b
+	move	#>8,y0
+	jsr	nd0
+	move	#>255,x1
+	move	#>$80,y1
+	move	b1,r2
+	move	b1,r5
+	jmp	psleaf
+val	tst	b
+	jeq	vz
+	move	#>15,x0
+	cmp	x0,b
+	jeq	vlin
+vs	jclr	#23,a1,vp
+	neg	b
+vp	asl	a
+	move	(r4)-
+vz	move	b,x:(r0)+
+	rts
+vlin	move	x:V_LIN,b
+	tst	b
+	jeq	vl0
+	jsr	refill
+	move	x:V_LIN,n3
+	move	#>LT,r3
+	move	x:V_LIN,n7
+	move	#>LTY,r7
+	nop
+	move	x:(r3+n3),x1
+	move	y:(r7+n7),y1
+	move	a1,x0
+	mpy	x0,y1,b
+	and	x1,b
+	move	b1,b
+	move	x:V_LIN,x0
+	rep	x0
+	asl	a
+	move	x0,n4
+	move	#>15,x0
+	add	x0,b
+	move	(r4)-n4
+	move	#>255,x1
+	move	#>$80,y1
+	jmp	vs
+vl0	move	#>15,b
+	jmp	vs
+nd0	rep	y0
+	asl	a
+	move	y0,n4
+	move	b1,x:V_TMP
+	move	(r4)-n4
+	move	x0,b
+	neg	b
+	move	b1,n2
+	move	#>LT,r2
+	move	b1,n5
+	move	#>LTY,r5
+	move	b1,x:V_W
+	move	x:(r2+n2),x1
+	move	y:(r5+n5),y1
+	move	a1,x0
+	mpy	x0,y1,b		x:V_TMP,y0
+	and	x1,b
+	add	y0,b
+	move	b1,r2
+	move	b1,r5
+	nop
+	move	x:(r2),x0	y:(r5),b
+	move	x:V_W,y0
+	jset	#23,x0,nd0
+	rts
+
+; ---- dequantising out of dqrun's loop: |v| >= 16, or not kept yet.
+; Back at dqsg with a = the value before its sign
+dqnew	jsr	dqval			; |v| < 16: worked out, and kept if a word
+	move	a,x0			; holds it as it is (1.0 and more aren't:
+	move	x0,b			; the sign goes on before the limit)
+	cmp	a,b
+	jne	dqsg
+	move	x0,y:(r6+n6)
+	jmp	dqsg
+dqfar	jsr	dqval
+	jmp	dqsg
+; a = |v|^(4/3) 2^(q/4) (b = |v|), rounded, before its sign and limit
+dqval	move	#>1024,x0
+	cmp	x0,b
+	jge	dqbig			; (back at dqm with x0 = m, b = e)
+	move	b1,n2
+	nop
+	move	x:(r2+n2),x0		; m
+	move	y:(r2+n2),b		; e
+dqm	mpyr	x0,y1,a			; p = m g
+	move	x:V_KK,x0
+	add	x0,b			; E
+	jge	dqpos
+	move	#>128,x0
+	add	x0,b
+	move	b1,n5
+	move	a,x0			; p, a word
+	nop
+	move	y:(r5+n5),y0		; 2^(E - 1), or 0 below -22
+	mpy	x0,y0,a
+	asl	a
+	rnd	a
+	rts
+
+; ---- dequantising's rare paths, out of dqrun's loop and back
+dqbig	move	b1,x0			; n >= 1024: m from a = n / 8 and f = n mod 8
+	move	#>$100000,y0		; >> 3
+	mpy	x0,y0,a
+	move	#>POWB-128,y0
+	add	y0,a
+	move	a1,r3
+	move	x0,a
+	move	#>7,y0
+	and	y0,a
+	rep	#20
+	asl	a			; f << 20
+	move	a1,y0
+	move	y:(r3)+,x0		; b0
+	move	y:(r3)+,b		; b1
+	sub	x0,b
+	move	x0,a
+	move	b1,x0			; b1 - b0
+	mac	x0,y0,a
+	rnd	a
+	move	a,x0			; m
+	move	#>18,b			; e
+	jmp	dqm
+dqpos	move	a,x0			; E >= 0: p (a word) << E, 8 at most
+	move	x0,a
+	move	#>8,x0
+	cmp	x0,b
+	jle	dqp1
+	move	x0,b
+dqp1	tst	b
+	jeq	dqp2
+	move	b1,x0
+	rep	x0
+	asl	a
+dqp2	rts
+
+; ---- dequantising (requantise): band by band, lines below V_NZ only
+requant	move	#>POWM,r2
+	move	#>PSH,r5
+	move	x:V_BT,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	rq1
+	jclr	#0,x:V_MIX,rqs
+	move	x:V_NL,x0		; mixed: its long bands
+	jmp	rq2
+rq1	move	#>22,x0
+rq2	move	x0,x:V_CNT
+	clr	a
+	move	a,x:V_K			; sfb
+rql	move	x:V_K,n3		; q = gg - sc (sf + pf pretab)
+	move	#>SFL,r3
+	move	#>PRETAB,r6
+	move	x:V_K,n6
+	nop
+	move	x:(r3+n3),a
+	move	y:(r6+n6),x0
+	jclr	#0,x:V_PF,rq3
+	add	x0,a
+rq3	asl	a			; sc: 2 or 4
+	jclr	#2,x:V_SC,rq4
+	asl	a
+rq4	move	x:V_GG,b
+	sub	a,b
+	move	b1,x0
+	move	x:V_RATE23,r6		; the band's lines
+	move	x:V_K,n6
+	nop
+	move	y:(r6+n6),a		; start
+	move	(r6)+
+	nop
+	move	y:(r6+n6),b		; end
+	jsr	dqband
+	move	x:V_K,a
+	move	#>1,x1
+	add	x1,a
+	move	a1,x:V_K
+	move	x:V_CNT,x1
+	cmp	x1,a
+	jlt	rql
+	move	x:V_BT,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	rqx
+rqs	clr	a			; short bands from s = 0, or 3 when mixed
+	jclr	#0,x:V_MIX,rqs1
+	move	#>3,a
+rqs1	move	a1,x:V_S
+rqsl	move	x:V_RATE14,r6		; width, and 3 start
+	move	x:V_S,n6
+	nop
+	move	y:(r6+n6),x0
+	move	(r6)+
+	nop
+	move	y:(r6+n6),a
+	sub	x0,a
+	move	a1,x:V_W		; wd
+	move	x0,a
+	asl	a
+	add	x0,a
+	move	a1,x:V_START		; base
+	clr	a
+	move	a,x:V_I			; w
+rqw	move	x:V_I,x0		; q = gg - 8 sbg[w] - sc sfs[s][w]
+	move	x:V_G8,a
+	jclr	#0,x0,rqw1
+	move	a1,x0			; >> 3
+	move	#>$100000,y0
+	mpy	x0,y0,a
+rqw1	move	x:V_I,x0
+	jclr	#1,x0,rqw2
+	move	a1,x0			; >> 6
+	move	#>$020000,y0
+	mpy	x0,y0,a
+rqw2	move	#>7,x1
+	and	x1,a
+	move	a1,a			; (the shift's low bits gone: asl would bring them up)
+	rep	#3
+	asl	a
+	move	a1,y1			; 8 sbg
+	move	x:V_S,a			; SFS + 3 s + w
+	move	a1,x0
+	asl	a
+	add	x0,a
+	move	x:V_I,x0
+	add	x0,a
+	move	a1,n3
+	move	#>SFS,r3
+	nop
+	move	x:(r3+n3),a
+	asl	a
+	jclr	#2,x:V_SC,rqw3
+	asl	a
+rqw3	move	x:V_GG,b
+	sub	a,b
+	move	y1,x0
+	sub	x0,b
+	move	b1,x0			; q
+	move	x:V_I,y0		; start: base + w wd
+	move	x:V_W,x1
+	mpy	x1,y0,a
+	asr	a
+	move	a0,a
+	move	x:V_START,y0
+	add	y0,a
+	move	x:V_W,y0
+	move	a1,b
+	add	y0,b			; end
+	jsr	dqband
+	move	x:V_I,a
+	move	#>1,x1
+	add	x1,a
+	move	a1,x:V_I
+	move	#>3,x1
+	cmp	x1,a
+	jlt	rqw
+	move	x:V_S,a
+	move	#>1,x1
+	add	x1,a
+	move	a1,x:V_S
+	move	#>13,x1
+	cmp	x1,a
+	jlt	rqsl
+rqx	rts
+
+; a band: lines a1..b1 (below V_NZ), q in x0
+dqband	move	x:V_NZ,y0		; end = min(end, nz)
+	cmp	y0,b
+	jle	db1
+	move	y0,b
+db1	sub	a,b			; how many
+	jle	db2
+	move	b1,x:V_CNT2
+	move	x:V_XR,y0
+	add	y0,a
+	move	a1,x:V_PTR
+	move	x0,a			; q mod 4: the gain
+	move	#>3,x1
+	and	x1,a
+	move	a1,n6
+	move	#>GAIN,r6
+	move	x0,a			; q / 4 + 1 - XS
+	asr	a
+	asr	a
+	move	#>1-XS,x1
+	add	x1,a
+	move	a1,x:V_KK
+	move	y:(r6+n6),y1
+	move	#>-1,a			; the cache: nothing kept
+	move	#>CQ,r6
+	rep	#16
+	move	a,y:(r6)+
+	move	#>CQ,r6
+	move	x:V_PTR,r0
+	move	x:V_CNT2,x0
+	jsr	dqrun
+db2	rts
+
+; ---- stereo: mid/side, intensity
+stereo	move	x:V_NZ0,a		; M = the larger NZ
+	move	x:V_NZ1,x0
+	cmp	x0,a
+	jge	st1
+	move	x0,a
+st1	move	a1,x:V_M
+	jset	#2,x:V_FLAGS,isst
+	jclr	#1,x:V_FLAGS,st2
+	move	#>XR0,r0
+	move	#>XR1,r1
+	move	x:V_M,x0
+	tst	a
+	jeq	st3
+	jsr	msrun
+st3	move	x:V_M,x0
+	move	x0,x:V_NZ0
+	move	x0,x:V_NZ1
+st2	rts
+
+; intensity stereo, as the model's stereo(): the bands as the left
+; channel has them, the right's positions, each window's top band
+isst	clr	a
+	move	a,x:V_NB
+	move	a,x:V_NLONG
+	move	#>BSTART,r0
+	move	#>BWID,r1
+	move	#>BPOS,r3
+	move	x:V_BT0,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	is1
+	jclr	#0,x:V_MIX0,is4
+	move	x:V_NL,x0
+	jmp	is2
+is1	move	#>22,x0
+is2	move	x0,x:V_NLONG
+	move	x0,x:V_NB
+	move	x:V_RATE23,r6
+	move	#>ISPL,r2
+	do	x0,is3
+	move	y:(r6)+,x1		; start
+	move	y:(r6),a		; the next start
+	sub	x1,a
+	move	x1,x:(r0)+
+	move	a1,x:(r1)+
+	move	x:(r2)+,x0
+	move	x0,x:(r3)+
+is3
+	move	x:V_BT0,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	is7
+is4	clr	a			; short bands: s from 0, or 3 when mixed
+	jclr	#0,x:V_MIX0,is5
+	move	#>3,a
+is5	move	a1,x:V_S
+is6	move	x:V_RATE14,r6
+	move	x:V_S,n6
+	nop
+	move	y:(r6+n6),x0		; ss[s]
+	move	(r6)+
+	nop
+	move	y:(r6+n6),a
+	sub	x0,a
+	move	a1,y1			; wd
+	move	x0,a
+	asl	a
+	add	x0,a			; 3 ss[s]
+	move	x:V_S,b			; ISPS + 3 s
+	move	b1,x0
+	asl	b
+	add	x0,b
+	move	#>ISPS,x0
+	add	x0,b
+	move	b1,r2
+	do	#3,is8
+	move	a1,x:(r0)+		; start
+	move	y1,x:(r1)+		; width
+	move	x:(r2)+,x0
+	move	x0,x:(r3)+		; position
+	add	y1,a
+	move	x:V_NB,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_NB
+	nop
+is8
+	move	x:V_S,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_S
+	move	#>13,x0
+	cmp	x0,a
+	jlt	is6
+is7	move	#>-1,x0			; each window's top band with a right line
+	move	x0,x:V_MB
+	move	x0,x:V_MB+1
+	move	x0,x:V_MB+2
+	clr	a
+	move	a,x:V_I
+	move	a,x:V_K			; i mod 3
+is9	move	x:V_I,a
+	move	x:V_NB,x0
+	cmp	x0,a
+	jge	is12
+	move	x:V_I,n0
+	move	#>BSTART,r0
+	move	#>BWID,r1
+	move	x:V_I,n1
+	nop
+	move	x:(r0+n0),a
+	move	#>XR1,x0
+	add	x0,a
+	move	a1,r2
+	move	x:(r1+n1),x0
+	do	x0,is10
+	move	x:(r2)+,a
+	tst	a
+	jeq	is11
+	move	x:V_K,n3		; mb[i mod 3] = i
+	move	#>V_MB,r3
+	move	x:V_I,x1
+	nop
+	move	x1,x:(r3+n3)
+	enddo
+	jmp	is10
+is11	nop
+is10	move	x:V_I,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_I
+	move	x:V_K,a
+	add	x0,a
+	move	#>3,x0
+	cmp	x0,a
+	jlt	is10a
+	clr	a
+is10a	move	a1,x:V_K
+	jmp	is9
+is12	move	x:V_NLONG,a		; with long bands, the largest for all three
+	tst	a
+	jeq	is13
+	move	x:V_MB,a
+	move	x:V_MB+1,x0
+	cmp	x0,a
+	jge	is12a
+	move	x0,a
+is12a	move	x:V_MB+2,x0
+	cmp	x0,a
+	jge	is12b
+	move	x0,a
+is12b	move	a1,x:V_MB
+	move	a1,x:V_MB+1
+	move	a1,x:V_MB+2
+is13	move	#>1,a			; the top band has no scalefactor of its own
+	move	x:V_BT0,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	is14
+	move	#>3,a
+is14	move	a1,x:V_W		; nw
+	clr	a
+	move	a,x:V_I			; w
+is15	move	x:V_NB,a		; top = nb - nw + w, prev = top - nw
+	move	x:V_W,x0
+	sub	x0,a
+	move	x:V_I,x0
+	add	x0,a
+	move	a1,x:V_T2		; top
+	move	x:V_W,x0
+	sub	x0,a
+	move	a1,x:V_T3		; prev
+	move	x:V_I,n0
+	move	#>V_MB,r0
+	nop
+	move	x:(r0+n0),b		; mb[w]
+	cmp	a,b
+	jlt	is16
+	clr	a			; MPEG-2: 0
+	jset	#0,x:V_LSF,is17
+	move	#>3,a			; MPEG-1: 3
+	jmp	is17
+is16	move	x:V_T3,n1		; pos[prev]
+	move	#>BPOS,r1
+	nop
+	move	x:(r1+n1),a
+is17	move	x:V_T2,n1
+	move	#>BPOS,r1
+	nop
+	move	a1,x:(r1+n1)
+	move	x:V_I,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_I
+	move	x:V_W,x0
+	cmp	x0,a
+	jlt	is15
+	clr	a			; each band: intensity, or mid/side
+	move	a,x:V_I
+	move	a,x:V_K
+is18	move	x:V_I,a
+	move	x:V_NB,x0
+	cmp	x0,a
+	jge	is30
+	move	x:V_K,n0		; i > mb[i mod 3]?
+	move	#>V_MB,r0
+	nop
+	move	x:(r0+n0),b
+	cmp	b,a
+	jle	is25
+	move	x:V_I,n1		; and its position legal?
+	move	#>BPOS,r1
+	nop
+	move	x:(r1+n1),b
+	jset	#0,x:V_LSF,is19
+	move	#>7,x0			; MPEG-1: below 7
+	cmp	x0,b
+	jge	is25
+	move	b1,n2
+	move	#>IST,r2
+	nop
+	move	y:(r2+n2),y0		; kl
+	move	#>IST+7,r2
+	nop
+	move	y:(r2+n2),y1		; kr
+	jmp	is20
+is19	move	#>IS_BAD,x0		; MPEG-2: not IS_BAD
+	cmp	x0,b
+	jeq	is25
+	move	b1,x0			; k = LSFIS[((pos + 1) >> 1) << ish]
+	move	b1,a
+	move	#>1,x1
+	add	x1,a
+	asr	a
+	jclr	#0,x:V_ISH,is19a
+	asl	a
+is19a	move	a1,n2
+	move	#>LSFIS,r2
+	nop
+	move	y:(r2+n2),y0
+	move	#>$7fffff,y1
+	jset	#0,x0,is20		; odd: kl = k, kr = 1
+	move	y0,y1			; even: kl = 1, kr = k
+	move	#>$7fffff,y0
+is20	move	x:V_I,n0		; the band's lines
+	move	#>BSTART,r0
+	move	#>BWID,r1
+	move	x:V_I,n1
+	nop
+	move	x:(r0+n0),a
+	move	x:(r1+n1),x1
+	move	#>XR0,x0
+	add	x0,a
+	move	a1,r2
+	move	#>XR1-XR0,n2
+	nop
+	do	x1,is21
+	move	x:(r2),x0
+	mpyr	x0,y1,b
+	mpyr	x0,y0,a
+	move	b,x:(r2+n2)
+	move	a,x:(r2)+
+is21
+	jmp	is26
+is25	jclr	#1,x:V_FLAGS,is26	; mid/side on the band
+	move	x:V_I,n0
+	move	#>BSTART,r0
+	move	#>BWID,r1
+	move	x:V_I,n1
+	nop
+	move	x:(r0+n0),a
+	move	x:(r1+n1),x0
+	move	a1,b
+	move	#>XR0,x1
+	add	x1,a
+	move	#>XR1,x1
+	add	x1,b
+	move	a1,r0
+	move	b1,r1
+	jsr	msrun
+is26	move	x:V_I,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_I
+	move	x:V_K,a
+	add	x0,a
+	move	#>3,x0
+	cmp	x0,a
+	jlt	is27
+	clr	a
+is27	move	a1,x:V_K
+	jmp	is18
+is30	move	#>576,x0		; (no lines skipped after intensity stereo)
+	move	x0,x:V_NZ0
+	move	x0,x:V_NZ1
+	rts
+
+; ---- a granule of a channel out: reorder, alias, the transform, the
+; synthesis filter
+gout	move	#>XR0,a
+	move	#>OV0,b
+	move	x:V_NZ0,x0
+	move	x:V_BT0,x1
+	move	x:V_MIX0,y1
+	jclr	#0,x:V_CH,go1
+	move	#>XR1,a
+	move	#>OV1,b
+	move	x:V_NZ1,x0
+	move	x:V_BT1,x1
+	move	x:V_MIX1,y1
+go1	move	a1,x:V_XR
+	move	b1,x:V_OV
+	move	x0,x:V_NZ
+	move	x1,x:V_BT
+	move	y1,x:V_MIX
+	move	x:V_BT,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	go2
+	jsr	reorder
+go2	move	#>5,x0			; (tests: 5, after reordering)
+	move	#>1,y0
+	jsr	dbgchk
+	clr	b			; the alias boundaries: 0 short, 1 mixed, 31 long
+	move	x:V_BT,a
+	move	#>2,x0
+	cmp	x0,a
+	jeq	go3
+	move	#>31,b
+	jmp	go4
+go3	jclr	#0,x:V_MIX,go4
+	move	#>1,b
+go4	move	x:V_NZ,x0		; at most (NZ + 7) / 18
+	move	#>7,a
+	add	x0,a
+	move	a1,x0
+	move	#>932068,y0		; 2^24 / 18, rounded up
+	mpy	x0,y0,a
+	asr	a
+	cmp	a,b
+	jle	go5
+	move	a1,b
+go5	tst	b
+	jeq	go6
+	move	x:V_XR,a
+	move	#>17,x0
+	add	x0,a
+	move	a1,r0
+	move	b1,x0
+	jsr	aliasr
+go6	move	#>6,x0			; (tests: 6, after alias reduction)
+	move	#>1,y0
+	jsr	dbgchk
+	move	#>32,b			; subbands that may hold anything: short 32,
+	move	x:V_BT,a		; else (NZ + 25) / 18
+	move	#>2,x0
+	cmp	x0,a
+	jeq	go7
+	move	x:V_NZ,x0
+	move	#>25,a
+	add	x0,a
+	move	a1,x0
+	move	#>932068,y0
+	mpy	x0,y0,a
+	asr	a
+	cmp	a,b
+	jle	go7
+	move	a1,b
+go7	move	b1,x:V_SBMAX
+	clr	a
+	move	a,x:V_SB
+go8	jsr	imsb
+	move	x:V_SB,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_SB
+	move	#>32,x0
+	cmp	x0,a
+	jlt	go8
+	; the synthesis filter: 18 slots to PCM + 1152 ch + 576 gr
+	move	#>RING0,a
+	move	x:V_RP0,x0
+	jclr	#0,x:V_CH,go9
+	move	#>RING1,a
+	move	x:V_RP1,x0
+go9	move	a1,x:V_RING
+	move	x0,x:V_P
+	move	#>PCM,a
+	jclr	#0,x:V_CH,go10
+	move	#>PCM+1152,a
+go10	jclr	#0,x:V_GR,go11
+	move	#>576,x0
+	add	x0,a
+go11	move	a1,r0
+	clr	a
+	move	a,x:V_T
+	do	#18,go12
+	jsr	slot
+	move	x:V_T,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_T
+	nop
+go12
+	move	x:V_P,x0
+	jset	#0,x:V_CH,go13
+	move	x0,x:V_RP0
+	rts
+go13	move	x0,x:V_RP1
+	rts
+
+; ---- short blocks' lines in the order the transform takes them
+reorder	clr	a			; s0 = 0, or 3 when mixed
+	jclr	#0,x:V_MIX,ro1
+	move	#>3,a
+ro1	move	a1,x:V_S
+	move	a1,n6			; copy from 3 ss[s0] to SUBS
+	move	x:V_RATE14,r6
+	nop
+	move	y:(r6+n6),x0
+	move	x0,a
+	asl	a
+	add	x0,a
+	move	a1,x:V_START
+	move	#>576,b
+	sub	a,b
+	move	x:V_XR,x0
+	add	x0,a
+	move	a1,r0
+	move	x:V_START,a
+	move	#>SUBS,x0
+	add	x0,a
+	move	a1,r4
+	move	b1,x0
+	do	x0,ro2
+	move	x:(r0)+,x0
+	move	x0,y:(r4)+
+ro2
+	move	#>3,n0
+ro3	move	x:V_RATE14,r6		; each band: wd, base = 3 ss[s]
+	move	x:V_S,n6
+	nop
+	move	y:(r6+n6),x0
+	move	(r6)+
+	nop
+	move	y:(r6+n6),a
+	sub	x0,a
+	move	a1,x:V_W
+	move	x0,a
+	asl	a
+	add	x0,a
+	move	a1,x:V_START
+	clr	a
+	move	a,x:V_I
+ro4	move	x:V_START,a		; from SUBS + base + w wd
+	move	x:V_I,x0
+	move	x:V_W,y0
+	mpy	x0,y0,b
+	asr	b
+	move	b0,b
+	add	b,a
+	move	#>SUBS,x1
+	add	x1,a
+	move	a1,r4
+	move	x:V_START,a		; to xr + base + w, every third
+	add	x0,a
+	move	x:V_XR,x1
+	add	x1,a
+	move	a1,r0
+	move	x:V_W,x0
+	do	x0,ro5
+	move	y:(r4)+,x1
+	move	x1,x:(r0)+n0
+ro5
+	move	x:V_I,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_I
+	move	#>3,x0
+	cmp	x0,a
+	jlt	ro4
+	move	x:V_S,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_S
+	move	#>13,x0
+	cmp	x0,a
+	jlt	ro3
+	rts
+
+; ---- the transform of subband V_SB: to SUBS + 18 sb, the overlap at
+; V_OV + 18 sb
+imsb	move	x:V_SB,x0
+	move	#>18,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	a1,x:V_T2		; 18 sb
+	move	#>SUBS,x0
+	add	x0,a
+	move	a1,r6
+	move	x:V_T2,a
+	move	x:V_OV,x0
+	add	x0,a
+	move	a1,r5
+	clr	a
+	jclr	#0,x:V_SB,ims1
+	move	#>1,a
+ims1	move	a1,x:V_ODD
+	move	x:V_SB,a
+	move	x:V_SBMAX,x0
+	cmp	x0,a
+	jlt	ims3
+	clr	b			; all zeros: the overlap out, and cleared
+	do	#18,ims2
+	move	y:(r5),a
+	jclr	#0,x:V_ODD,ims2a
+	move	r6,x0			; (odd sample: r6 - SUBS - 18 sb odd)
+	move	x:V_T2,x1
+	jclr	#0,x0,ims2a
+	neg	a
+ims2a	move	a,y:(r6)+
+	move	b,y:(r5)+
+ims2
+	rts
+ims3	move	x:V_T2,a		; this subband's lines
+	move	x:V_XR,x0
+	add	x0,a
+	move	a1,r0
+	move	x:V_BT,b
+	move	#>2,x0
+	cmp	x0,b
+	jne	ims4
+	jclr	#0,x:V_MIX,imshort
+	move	x:V_SB,a
+	move	#>2,x0
+	cmp	x0,a
+	jge	imshort
+	clr	b			; mixed's lowest two: long, window 0
+ims4	move	#>XIN,r1
+	do	#18,ims5
+	move	x:(r0)+,x0
+	move	x0,x:(r1)+
+ims5
+	move	b1,x0			; the window: WIN + 36 bt
+	move	#>36,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	#>WIN,x0
+	add	x0,a
+	move	a1,x:V_TMP
+	jsr	imrows
+	move	x:V_TMP,r4
+	jsr	imlong
+	rts
+
+; short: three windows of 6, overlapped by 6
+imshort	move	r0,x:V_PTR
+	move	#>CTMP,r3
+	clr	a
+	move	a,x:V_I			; w
+ish1	move	x:V_PTR,a		; XIN[k] = x[3k + w]
+	move	x:V_I,x0
+	add	x0,a
+	move	a1,r0
+	move	#>3,n0
+	move	#>XIN,r1
+	do	#6,ish2
+	move	x:(r0)+n0,x0
+	move	x0,x:(r1)+
+ish2
+	move	#>IM12,r4		; U[r] = XIN . IM12[r]
+	move	#>U,r2
+	do	#6,ish3
+	move	#>XIN,r1
+	nop
+	clr	a		x:(r1)+,x0	y:(r4)+,y0
+	rep	#5
+	mac	x0,y0,a		x:(r1)+,x0	y:(r4)+,y0
+	macr	x0,y0,a
+	move	a,x:(r2)+
+ish3
+	move	#>WIN+72,r4		; the 12 contributions, signed as map12
+	move	#>U,r1
+	do	#3,ish4			; u0 u1 u2 +
+	move	x:(r1)+,x0	y:(r4)+,y0
+	mpyr	x0,y0,a
+	move	a,y:(r3)+
+ish4
+	move	(r1)-
+	do	#3,ish5			; u2 u1 u0 -
+	move	x:(r1)-,x0	y:(r4)+,y0
+	mpyr	-x0,y0,a
+	move	a,y:(r3)+
+ish5
+	move	#>U+3,r1
+	nop
+	do	#3,ish6			; u3 u4 u5 +
+	move	x:(r1)+,x0	y:(r4)+,y0
+	mpyr	x0,y0,a
+	move	a,y:(r3)+
+ish6
+	move	(r1)-
+	do	#3,ish7			; u5 u4 u3 +
+	move	x:(r1)-,x0	y:(r4)+,y0
+	mpyr	x0,y0,a
+	move	a,y:(r3)+
+ish7
+	move	x:V_I,a
+	move	#>1,x0
+	add	x0,a
+	move	a1,x:V_I
+	move	#>3,x0
+	cmp	x0,a
+	jlt	ish1
+	; outputs 0..17: the overlap and the windows' contributions (C0 from
+	; 6, C1 from 12, C2 from 18); then the new overlap, 18..35
+	move	#>CTMP,r1		; C0
+	move	#>CTMP+12,r2		; C1
+	move	#>CTMP+24,r3		; C2
+	do	#3,ish8			; 0..5: the overlap
+	move	y:(r5)+,a
+	move	a,y:(r6)+
+	move	y:(r5)+,a
+	jclr	#0,x:V_ODD,ishp1
+	neg	a
+ishp1	move	a,y:(r6)+
+ish8
+	do	#3,ish9			; 6..11: + C0
+	move	y:(r5)+,a
+	move	y:(r1)+,x0
+	add	x0,a
+	move	a,y:(r6)+
+	move	y:(r5)+,a
+	move	y:(r1)+,x0
+	add	x0,a
+	jclr	#0,x:V_ODD,ishp2
+	neg	a
+ishp2	move	a,y:(r6)+
+ish9
+	do	#3,ish10		; 12..17: + C0 + C1
+	move	y:(r5)+,a
+	move	y:(r1)+,x0
+	add	x0,a
+	move	y:(r2)+,x0
+	add	x0,a
+	move	a,y:(r6)+
+	move	y:(r5)+,a
+	move	y:(r1)+,x0
+	add	x0,a
+	move	y:(r2)+,x0
+	add	x0,a
+	jclr	#0,x:V_ODD,ishp3
+	neg	a
+ishp3	move	a,y:(r6)+
+ish10
+	move	#>-18,n5		; the new overlap
+	nop
+	move	(r5)+n5
+	do	#6,ish11		; 18..23: C1 + C2
+	move	y:(r2)+,a
+	move	y:(r3)+,x0
+	add	x0,a
+	move	a,y:(r5)+
+ish11
+	do	#6,ish12		; 24..29: C2
+	move	y:(r3)+,a
+	move	a,y:(r5)+
+ish12
+	clr	a			; 30..35: none
+	rep	#6
+	move	a,y:(r5)+
+	rts
