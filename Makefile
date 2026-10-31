@@ -33,4 +33,9 @@ $(B) $(B)/atari:
 	mkdir -p $@
 clean:
 	rm -rf $(B) binary dist
-.PHONY: all test clean
+.PHONY: all test clean icons
+
+# the desktop icon and its headers, from common/icons/EPLAY.txt (committed)
+icons:
+	python3 common/tools/appicon.py EPLAY --rsc icons/EPLAY.RSC --rscnv icons/EPLAYNV.RSC \
+		--icn icons/EPLAY.ICN --mask icons/EPLAYMK.ICN --headers ui --docs docs

@@ -1,6 +1,6 @@
 # EPlay
 
-<img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: an Atari SM124-style monitor showing WHAT-IT-SHOWS">
+<img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
 ONE SENTENCE: what it is, for which Ataris. *(e.g. "A calendar for the Atari ST, STE, TT and Falcon,
 written in C for GEM.")*
