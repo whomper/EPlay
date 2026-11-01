@@ -33,6 +33,7 @@
 #include "snd.h"
 #include "feed.h"
 #include "dspmp3.h"
+#include "hostirq.h"
 #include "../src/pcm.h"
 #include "mp3frame.h"
 #include "elog.h"
@@ -195,6 +196,29 @@ static void tick_pcm(void)
 }
 
 /* n bytes of the queue from q_r on, into fr (the queue's end crossed) */
+/* the tick timed for the log (its share of the 68030), by the 200 Hz
+   clock and Timer C's count within its 5 ms (192 steps of 26 us): a
+   clock that doesn't wrap however long a tick is (Timer A's own count
+   did, past a tick's 1 ms) */
+#define TCDR (*(volatile unsigned char *)0xfffffa23L)
+#define HZ200 (*(volatile unsigned long *)0x4baL)
+static volatile unsigned long t_busy, t_parse, t_push, t_t0, t_last;	/* (the tick's: GEM can't read the clocks) */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* (fixed hardware addresses) */
+static unsigned long fine_now(void)
+{
+	unsigned long h, h2;
+	unsigned c;
+	do {
+		h = HZ200;
+		c = TCDR;
+		h2 = HZ200;
+	} while (h != h2);
+	return h * 192 + (192 - (c ? c : 192));
+}
+#pragma GCC diagnostic pop
+
 static void peek(long n)
 {
 	long at = q_roff, k = q_size - at;
@@ -244,7 +268,11 @@ static void next_packet(void)
 				src_out = 1;	/* (a frame cut short at the file's end) */
 			return;
 		}
-		np = mp3_packet(&parse, &h, bytes_at(h.length), pk);
+		{
+			unsigned long a = fine_now();
+			np = mp3_packet(&parse, &h, bytes_at(h.length), pk);
+			t_parse += fine_now() - a;
+		}
 		adv(h.length);
 		if (np > 0) {
 			pk_n = np;
@@ -262,12 +290,12 @@ static long s_spf;		/* a frame's samples (1152, or 576 for MPEG-2 and 2.5) */
 
 static void tick_mp3(void)
 {
-	if (!s_started) {
-		dspmp3_tick_stream();
-		s_started = 1;
-	}
 	dspmp3_tick_status();
-	dspmp3_tick_push();
+	{
+		unsigned long a = fine_now();
+		dspmp3_tick_push();
+		t_push += fine_now() - a;
+	}
 	if (dspmp3_tick_asks() && s_end < 3) {
 		if (!pk_n)
 			next_packet();
@@ -287,25 +315,45 @@ static void tick_mp3(void)
 	}
 	if (s_end == 3 && !dspmp3_tick_pushing())
 		t_end = 1;			/* (the count 0 gone: the DSP's last silence plays) */
-	if (!pk_n)
-		next_packet();
+	if (!pk_n && !dspmp3_tick_pushing())
+		next_packet();		/* (once the one going is in: not while the DSP
+					   waits for its words) */
 }
 
 static void tick_body(void);
 
-/* the tick, timed by Timer A's own count (it runs from 154 down to 1 a
-   tick: 6.5 us a step at 1000 a second, 26 us at 250) for the log: the
-   68030's share it takes */
-#define TADR (*(volatile unsigned char *)0xfffffa1fL)
-static volatile unsigned long t_busy, t_ticks;
+/* MP3, once the DSP is loaded: the DSP's host interrupt feeds it, when
+   it asks for a packet, sends its status, or has taken a word of one
+   going (no tick a thousand times a second: the 68030 spared) */
+static void host_irq(void)
+{
+	unsigned long a = fine_now();
+	if (!t_t0)
+		t_t0 = a;
+	dspmp3_tick_status();		/* (always: a word left unread asks again at once) */
+	if (!t_end && !t_failed) {
+		tick_mp3();
+		hirq_want = HIRQ_RX | (dspmp3_tick_pushing() ? HIRQ_TX : 0);
+	} else
+		hirq_want = 0;		/* (the end: nothing more asked for) */
+	t_last = fine_now();
+	t_busy += t_last - a;
+}
+
+static long start_stream(void)
+{
+	dspmp3_tick_stream();
+	return 0;
+}
 
 static void tick(void)
 {
-	unsigned c0 = TADR, c1;
+	unsigned long a = fine_now();
+	if (!t_t0)
+		t_t0 = a;
 	tick_body();
-	c1 = TADR;
-	t_busy += c0 >= c1 ? c0 - c1 : c0 + 154 - c1;
-	t_ticks++;
+	t_last = fine_now();
+	t_busy += t_last - a;
 }
 
 static void tick_body(void)
@@ -323,14 +371,10 @@ static void tick_body(void)
 			loading = 0;
 		return;
 	}
-	if (!t_end && !t_failed) {
-		if (kind)
-			tick_pcm();
-		else
-			tick_mp3();
-		if (!kind && dspmp3_failed())
-			t_failed = 1;
-	}
+	if (!t_end && !t_failed && kind)
+		tick_pcm();
+	if (!kind && dspmp3_failed())
+		t_failed = 1;
 	if (t_end && kind) {
 		/* silence after the end, so that the ring isn't played again */
 		long room = snd_room(), k;
@@ -548,7 +592,8 @@ int play_open(const char *path, char *err, int n)
 	t_frames = 0;
 	s_started = s_end = 0;
 	s_spf = 1152;
-	t_busy = t_ticks = 0;
+	t_busy = t_parse = t_push = 0;
+	t_t0 = t_last = 0;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
 	last_sec = -1;
@@ -573,7 +618,8 @@ void play_start(void)
 
 void play_stop(void)
 {
-	feed_off();			/* first: the tick no longer runs */
+	feed_off();			/* first: the tick and the DSP's interrupt no longer run */
+	hostirq_off();
 	loading = 0;
 	snd_close();
 	t_dsp = 0;
@@ -608,7 +654,20 @@ long play_ms(void)
 /* the tick's share of the 68030, % */
 long play_tick_share(void)
 {
-	return t_ticks ? (long)(t_busy * 100 / (t_ticks * 154)) : 0;
+	unsigned long all = t_t0 ? t_last - t_t0 : 0;
+	return all ? (long)(t_busy * 100 / all) : 0;
+}
+
+long play_push_share(void)
+{
+	unsigned long all = t_t0 ? t_last - t_t0 : 0;
+	return all ? (long)(t_push * 100 / all) : 0;
+}
+
+long play_parse_share(void)
+{
+	unsigned long all = t_t0 ? t_last - t_t0 : 0;
+	return all ? (long)(t_parse * 100 / all) : 0;
 }
 
 /* frames at this rate as ms (-1 stays -1) */
@@ -620,12 +679,13 @@ static long f_ms(long f)
 /* how the sound kept up, for the log: the first gap and the least lead */
 const char *play_keep_up(void)
 {
-	static char b[120];
+	static char b[200];
 	if (!kind) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
 		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late; the DSP's waits a frame: least %ld, "
-			 "mean %ld; the tick %ld%% of the 68030", fr, late, wmin, wavg, play_tick_share());
+			 "mean %ld; the tick %ld%% of the 68030 (frames made %ld%%, sent %ld%%)", fr, late, wmin,
+			 wavg, play_tick_share(), play_parse_share(), play_push_share());
 		return b;
 	}
 	if (snd_underruns)
@@ -650,6 +710,14 @@ int play_step(int ms)
 		return 0;
 	if (loading == 2 && dspmp3_reset_step())
 		loading = 1;		/* (drawn, the DSP reset: the tick may load it) */
+	if (!kind && !loading && !s_started && !t_failed) {
+		feed_off();		/* loaded: the stream, fed by the DSP's interrupt */
+		hostirq_on(host_irq);
+		Supexec(start_stream);
+		s_started = 1;
+	}
+	if (!kind && s_started && dspmp3_stream_stalled(tos_hz200()))
+		t_failed = 1;
 	if (t_failed) {
 		int what, hisr;
 		long at, of;

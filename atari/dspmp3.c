@@ -290,7 +290,17 @@ void dspmp3_tick_offer(const unsigned long *pk, int n)
 
 void dspmp3_tick_push(void)
 {
-	while (s_have && (HISR & 2)) {
+	while (s_have) {
+		if (!(HISR & 2)) {
+			/* the DSP takes a word each 1.2 us while it listens
+			   (its waits, its packet's start): a few us for it,
+			   else (it is decoding) the interrupt when it takes one */
+			int k = 24;
+			while (!(HISR & 2) && --k)
+				;
+			if (!k)
+				break;
+		}
 		if (s_i < 0) {
 			HTX32 = (unsigned long)s_n;
 			s_i = 0;
@@ -308,11 +318,13 @@ int dspmp3_tick_pushing(void)
 
 void dspmp3_tick_status(void)
 {
-	if (HISR & 1) {
+	while (HISR & 1) {
 		unsigned long w = HTX32 & 0xffffff;
 		long waits = (long)(w & 0xffff);
-		int l8 = (int)(w >> 16) & 0xff;
-		s_late += (l8 - s_late8) & 0xff;
+		int l8 = (int)(w >> 16) & 0x7f;
+		if (w & 0x800000)
+			continue;		/* (a packet wanted: HF2 says it) */
+		s_late += (l8 - s_late8) & 0x7f;
 		s_late8 = l8;
 		if (s_frames >= 4 && (s_wmin < 0 || waits < s_wmin))
 			s_wmin = waits;		/* (past the start, the ring's first fill) */
@@ -320,13 +332,20 @@ void dspmp3_tick_status(void)
 		s_frames++;
 		s_last = HZ200;
 	}
-	if (HZ200 - s_last > 400 && !failed) {	/* two seconds without a frame */
+}
+
+/* GEM's side: two seconds without a frame from the stream is a DSP
+   that stopped (hz: the 200 Hz clock now) */
+int dspmp3_stream_stalled(unsigned long hz)
+{
+	if (!failed && hz - s_last > 400) {
 		failed = 1;
 		f_what = 4;
 		f_at = s_frames;
 		f_of = 0;
-		f_hisr = HISR;
+		f_hisr = -1;
 	}
+	return failed;
 }
 
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg)

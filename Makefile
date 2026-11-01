@@ -29,11 +29,11 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main draw about play snd feed dspmp3 elog pcm mp3frame
+OWN     := main draw about play snd feed hostirq dspmp3 elog pcm mp3frame
 CSRC    := bidi
 CATARI  := libc tos gem crash
 CUI     := mbar aboutbox aboutline alert dialog av cpucheck
-OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o \
+OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
@@ -87,6 +87,8 @@ $(OBJDIR)/crash_s.o: common/atari/crash.S | $(OBJDIR)
 $(OBJDIR)/nf.o: common/atari/nf.S | $(OBJDIR)
 	$(CC) -m68030 -c -o $@ $<
 $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
+	$(CC) -m68030 -c -o $@ $<
+$(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
 	$(CC) -m68030 -c -o $@ $<
 
 binary:

@@ -612,7 +612,7 @@ tue	movep	x:SSISR,x:V_JUNK	; (an underrun: the status read, then the word)
 ; clock. A packet comes as its count and its words, while HF2 is set: from
 ; when the frame's last granule is read (PKT free) until it is in. Count 0:
 ; the end. After each frame a status word if the 68030 has read the last:
-; granules late (bits 16-23) and waits (0-15)
+; granules late (bits 16-22) and waits (0-15). $800000: a packet wanted
 stream	clr	a
 	move	#>PCM,r0
 	do	#2304,stc
@@ -645,7 +645,7 @@ stl	jsr	getpkt			; the whole packet
 	jle	sm1
 	move	x0,a
 sm1	move	x:V_LATE,b
-	move	#>$ff,x0
+	move	#>$7f,x0		; (bit 23 is the wake word's)
 	and	x0,b
 	rep	#16
 	lsl	b
@@ -670,7 +670,9 @@ pkfree	bset	#2,x:V_SF
 	clr	a
 	move	a,x:V_PKI
 	bset	#3,x:HCR
-	rts
+	jclr	#1,x:HSR,pkf1		; a word to wake the 68030 (its interrupt):
+	movep	#$800000,x:HRX		; if the last isn't read yet, its reading
+pkf1	rts				; will see HF2
 
 ; a packet's word if one is there (b, x0, x1 used)
 pkpoll	jclr	#2,x:V_SF,pkp9
@@ -704,9 +706,14 @@ pkp2	bclr	#3,x:HCR		; all in
 	bclr	#2,x:V_SF
 pkp9	rts
 
-getpkt	jsr	pkpoll
-	jset	#2,x:V_SF,getpkt
-	rts
+getpkt	jclr	#2,x:V_SF,gp9		; (in already)
+	jsr	pkpoll
+	move	x:V_IDLE,b		; (a wait too: time the DSP had to spare)
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_IDLE
+	jmp	getpkt
+gp9	rts
 
 ; the SSI in the half the next granule goes to: Z set (b, x0, x1 used)
 inhalf	move	#>PCM+1152,x1

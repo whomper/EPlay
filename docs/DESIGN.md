@@ -75,6 +75,18 @@ disk --32 KB reads--> MP3 data (TT RAM) --host interrupt, as the DSP asks--> DSP
   The SSI is put in step with the frame (TFS) before its interrupt is on, so left is left. No
   `rep` longer than a few µs is left in the decoder (they became `do` loops): the SSI's
   interrupt can't wait through one.
+- **The feed, after the load, is the DSP's host interrupt** (level 6, vector 255 as IVR names it;
+  `atari/hostirq.S`): the DSP writes a wake word ($800000) when it wants a packet, its status
+  word after a frame, and while a packet goes the host port's room asks again (TREQ). The
+  68030 waits a few µs for room while the DSP listens, else it leaves it to that interrupt;
+  it makes the next packet only once the one going is in. No tick a thousand times a second:
+  the tick took 20% of a stock Falcon's 68030 (7% making frames, 4% sending, 9% being a
+  tick at all), the interrupt 15%. A handler leaves no word of the DSP's unread, else its
+  request stays and comes again at once (Hatari hung so at a file's end, before this).
+- **Hatari's DSP keeps the 68030's pace:** with the 68030 at 32 MHz (`Falcon`) the DSP had
+  12,500 waits a frame to spare, at 16 MHz (`Falcon-4`) 3,720, on the same file. A real DSP
+  runs at 32 MHz whatever the 68030 does, so `Falcon-4` is the measure of the DSP, and the
+  32 MHz machine's DSP looks twice as fast as it is (0.1's "Hatari decodes faster").
 - **As built in 0.1 (the team's choice, for one sound path):** the samples come back to the 68030
   through the host port (`PLAY`, command 11: each sample's top 16 bits) and go into the same ring
   as WAV's. The queue holds the MP3's bytes as they are; the tick (1000 a second here) makes a
