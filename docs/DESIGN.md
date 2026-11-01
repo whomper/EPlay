@@ -116,6 +116,10 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   the same row starts the action, so a double click plays the track on its second release;
   let go elsewhere, nothing more; moved while held, a drag. Shift and Control change the
   selection on the press only. The speed rig times press-to-row apart from release-to-action.
+  The window's own buttons (phase 1's Open, Play and Stop; later the transport) follow 5.8 too
+  (the hub, guidelines 914368f): drawn pressed on the press, their action on the release over
+  them, nothing if let go elsewhere, as GEM's dialog buttons. The music is fed while one is held
+  (a loop of EPlay's own until common's `click.c` is on main).
 - **The small player** (View > Small player, saved in the INF): the window shrinks to the
   transport row and the title. Under MiNT, XaAES or MagiC it plays beside everything else. Iconified
   (`iconify.c`) it shows the icon and the time played.
