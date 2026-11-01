@@ -116,6 +116,10 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   the same row starts the action, so a double click plays the track on its second release;
   let go elsewhere, nothing more; moved while held, a drag. Shift and Control change the
   selection on the press only. The speed rig times press-to-row apart from release-to-action.
+  The window's own buttons (phase 1's Open, Play and Stop; later the transport) follow 5.8 too
+  (the hub, guidelines 914368f): drawn pressed on the press, their action on the release over
+  them, nothing if let go elsewhere, as GEM's dialog buttons. The music is fed while one is held
+  (a loop of EPlay's own until common's `click.c` is on main).
 - **The small player** (View > Small player, saved in the INF): the window shrinks to the
   transport row and the title. Under MiNT, XaAES or MagiC it plays beside everything else. Iconified
   (`iconify.c`) it shows the icon and the time played.
@@ -414,6 +418,49 @@ file, and after a second severe crackles that bring the playing down.
 
 The log also has the DSP port's GPIO as EPlay found it (the FDI's program leaves it at direction 7,
 data 2) and each prescale tried with its measure.
+
+### 0.3 on Erez's Falcon (1 Nov 2026), and what Cubase Audio does
+
+Erez's log (an MP3 of 23 MB, VBR, 44.1 kHz, 11:45):
+
+```
+the FDI's driver answers ($4711)
+the DSP port's clock: 48150 Hz at prescale 1 (a clock of 24652800 Hz); taken as 48000 Hz
+the DSP port's GPIO: direction 7, data 2; tried 48000 Hz at prescale 1: 48150 Hz
+output: 49170 Hz, the Falcon's clock
+the DSP stopped answering reading word 5 of 2304 (host status $06), frame 202; 21803 ms played, 13870 underruns
+the sound: the first at 2010 ms; the least lead 0 ms
+```
+
+1. **The clock is found now, and it is 48 kHz** (24.576 MHz, prescale 1), with the GPIO as the
+   FDI's program leaves it (data 2). A 44.1 kHz file can't play on it bit for bit, so EPlay used
+   the Falcon's own 49,170 Hz: faster than the file, and not the FDI's clock.
+2. **The DSP fell behind and stopped.** About 86 frames (2 s, the ring) went before the DMA
+   started; after that 116 frames in 20 s, about a sixth of what playing needs, and at last no
+   answer for a second. Hatari plays a heavier file (pink noise, LAME -V0, 239 kbit/s) with a
+   least lead of 575 ms, and its DSP counts the Falcon's zero-wait external memory and its
+   penalties. Not the cause: a loop count of 0 (Hatari runs it 65,536 times, as the DSP does),
+   the bus control register (the decoder clears it), the file's reading (seconds ahead). Not
+   known yet: what on the real machine makes it six times slower.
+
+**Cubase Audio 2.06** (Erez's copy; packed with LArc's PFX lz5, unpacked to read it) knows the FDI
+and plays from the DSP:
+
+- **The FDI:** the same sign, `Sndstatus($DD02)` = `$4711`, then `Gpio(0, 7)` (all three lines out).
+- **The rate:** `Gpio(2, 4)`, 50 ms, then `Gpio(2, 3)` for 48 kHz or `Gpio(2, 2)` for 44.1 (its
+  rate table: index 0 44,100, 1 48,000), 50 ms. With the S/PDIF input as the clock: `Gpio(2, 0)`;
+  in its 16-track modes 7 and 5. Erez's FDI measured 48 kHz at data 2, which Cubase calls 44.1: so
+  EPlay must measure each, not trust the table.
+- **The FDI's own chip** is set by a control word sent as bits (`$1100` a one, `$1000` a zero) in
+  a DMA buffer played to `EXTOUT` at prescale 8 with GPIO 4, then GPIO 5 or 7: two words, one for
+  the FDI's input as the clock and one for its own.
+- **The clock checked:** the rate counted over 200 ms, twice, the two to agree and be 44.1 or 48 kHz
+  ("No (or instable) External Sample Clock!").
+- **The sound from the DSP:** `Devconnect(DSPXMIT, DAC | EXTOUT, CLKEXT, prescale, NO_SHAKE)`, the
+  other sources on the external clock too, `Dsptristate(1, 1)`. The DSP's SSI plays straight into
+  the matrix on the FDI's clock: no buffer in ST RAM, nothing through the host port, no 68030 in
+  the way. That is phase 2's plan for MP3; Cubase does it for 8 tracks at 44.1/48 kHz in 16 or 24
+  bits, and 16 tracks compressed on the DSP.
 
 ## The order of the work
 

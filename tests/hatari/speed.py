@@ -5,7 +5,8 @@
 build/prof/EPLAY.PRG (make prof: -DAES_PROFILE=20) on a stock Falcon,
 the longest stretch between event calls of each thing the user does,
 from the AESGAP lines on the emulator's console (common/tests/speed).
-Fails when one is over its time.
+Fails when one is over its time. A button's press (drawn pressed) is
+timed apart from its release (the action), as the guidelines' 5.8 asks.
 
     make prof && make -C tests/hatari && speed.py WORK [MACHINE [mp3|wav]]
     (MACHINE: Falcon-4:16; both kinds by default)
@@ -44,6 +45,17 @@ class Rig(speed.Rig):
         time.sleep(3)
         return True
 
+    def press(self, x, y):
+        """the button down over x, y (held: the guidelines' 5.8 times the
+        press, the button drawn pressed, apart from the release's action)"""
+        g = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", self.win()).split())
+        self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
+        time.sleep(0.4)
+        self.xdo("mousedown", "1")
+
+    def let_go(self):
+        self.xdo("mouseup", "1")
+
 
 def session(work, spec, kind):
     """EPlay started with a file of kind (mp3: 320 kbit/s at 44.1 kHz;
@@ -71,11 +83,13 @@ def session(work, spec, kind):
         r.act("About box opened (playing)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
-        r.act("Stop", speed.KEY, lambda: r.click(*STOP))
+        r.act("Stop: pressed (drawn pressed)", speed.KEY, lambda: r.press(*STOP))
+        r.act("Stop: let go (stops)", speed.KEY, r.let_go)
         r.act("About box opened (stopped)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
-        r.act("Play: the file again", speed.KEY, lambda: r.click(*PLAY))
+        r.act("Play: pressed (drawn pressed)", speed.KEY, lambda: r.press(*PLAY))
+        r.act("Play: let go (the file again)", speed.KEY, r.let_go)
         r.act("%s playing, 5 s more" % what, speed.KEY, lambda: time.sleep(5))
         r.act("Stop again", speed.KEY, lambda: r.click(*STOP))
         rc = r.report()

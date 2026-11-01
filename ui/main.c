@@ -58,6 +58,7 @@ static GRECT work;
 static int quit;
 static char path[256], name[64], file[320];	/* the file selector's, and the file */
 static GRECT b_open, b_play, b_stop;
+static GRECT *b_held;		/* the button drawn pressed (guidelines 5.8), or 0 */
 
 static void status(const char *s)
 {
@@ -90,9 +91,10 @@ static void layout(void)
 static void button(GRECT *b, const char *s, int on)
 {
 	short n = (short)strlen(s);
-	fill(b, 0);
+	int down = b == b_held;
+	fill(b, down ? 1 : 0);
 	frame(b, 1);
-	text_at(b->x + (b->w - n * cw) / 2, b->y + 2, s, n, n, on ? 0 : TX_DIM);
+	text_at(b->x + (b->w - n * cw) / 2, b->y + 2, s, n, n, down ? TX_INVERSE : on ? 0 : TX_DIM);
 }
 
 /* the rows 0..3 and the buttons, within area */
@@ -252,6 +254,60 @@ static void command(int c)
 static int inside(const GRECT *b, short x, short y)
 {
 	return x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h;
+}
+
+static void message(short *msg);
+
+/* the music fed between events; the window's time or end shown */
+static void step(int playing)
+{
+	if (playing && play_step(20)) {
+		if (play_state() != PS_PLAYING) {
+			status(play_out[0] == 'T' ? play_out : "Played to the end.");
+			redraw(0, 0, ROWS - 1);
+		} else {
+			redraw(0, 3, 3);
+		}
+	}
+}
+
+/* a button pressed (guidelines 5.8): drawn pressed at once, its action
+   on the release over it, nothing if let go elsewhere; drawn pressed
+   again as the pointer comes back, as GEM's dialog buttons are. The
+   music is fed all the while (a loop of its own, not evnt_button's
+   wait). 1: let go over it */
+static int track(GRECT *b)
+{
+	short msg[8];
+	AEVENT ev;
+	int in = 1;
+	b_held = b;
+	redraw(b, ROWS - 1, ROWS - 1);
+	while (!quit) {
+		short which;
+		int playing = play_state() == PS_PLAYING;
+		evnt_set_m1(in, b->x, b->y, b->w, b->h);
+		which = evnt_multi_(MU_MESAG | MU_BUTTON | MU_M1 | MU_TIMER, 1, 1, 0, play_wait_ms(), msg, &ev);
+		if (which & MU_MESAG)
+			message(msg);
+		if (which & MU_BUTTON) {
+			in = inside(b, ev.mx, ev.my);
+			break;
+		}
+		if (which & MU_M1) {
+			in = !in;
+			b_held = in ? b : 0;
+			redraw(b, ROWS - 1, ROWS - 1);
+		}
+		step(playing);
+	}
+	b_held = 0;
+	/* (Play and Stop redraw the whole window as they act: drawn once,
+	   unless the music ended while Stop was held) */
+	if (!in || quit || !((b == &b_play && play_state() != PS_PLAYING) ||
+			     (b == &b_stop && play_state() == PS_PLAYING)))
+		redraw(b, ROWS - 1, ROWS - 1);
+	return in && !quit;
 }
 
 static void message(short *msg)
@@ -414,21 +470,20 @@ int app_main(void)
 			}
 		}
 		if ((which & MU_BUTTON) && ev.mbutton == 1) {
-			if (inside(&b_open, ev.mx, ev.my))
-				command(C_OPEN);
-			else if (inside(&b_play, ev.mx, ev.my))
-				command(C_PLAY);
-			else if (inside(&b_stop, ev.mx, ev.my))
-				command(C_STOP);
-		}
-		if (playing && play_step(20)) {
-			if (play_state() != PS_PLAYING) {
-				status(play_out[0] == 'T' ? play_out : "Played to the end.");
-				redraw(0, 0, ROWS - 1);
-			} else {
-				redraw(0, 3, 3);
+			/* (only a button that would act: Play with a file stopped,
+			   Stop while it plays) */
+			if (inside(&b_open, ev.mx, ev.my)) {
+				if (track(&b_open))
+					command(C_OPEN);
+			} else if (inside(&b_play, ev.mx, ev.my) && play_name[0] && play_state() != PS_PLAYING) {
+				if (track(&b_play))
+					command(C_PLAY);
+			} else if (inside(&b_stop, ev.mx, ev.my) && play_state() == PS_PLAYING) {
+				if (track(&b_stop))
+					command(C_STOP);
 			}
 		}
+		step(playing);
 	}
 
 	play_stop();
