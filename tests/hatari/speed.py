@@ -9,7 +9,7 @@ Fails when one is over its time. A button's press (drawn pressed) is
 timed apart from its release (the action), as the guidelines' 5.8 asks.
 
     make prof && make -C tests/hatari && speed.py WORK [MACHINE [mp3|wav]]
-    (MACHINE: Falcon-4:16; both kinds by default)
+    (MACHINE: Falcon-4:16; both kinds by default; AERA_WITH_NVDI=1: under NVDI)
 
 EPlay starts with a file (C:\\LAUNCH.PRG gives it, as the desktop does):
 an MP3 at 320 kbit/s, the heaviest there is (the DSP's program and
@@ -62,7 +62,8 @@ def session(work, spec, kind):
     wav: 16-bit stereo at 44.1 kHz, both played at 49170 Hz with no
     external clock: the most a stock Falcon is asked), then the user's
     actions while it plays"""
-    r = Rig(os.path.join(work, kind), spec)
+    # (AERA_WITH_NVDI=1: under Erez's NVDI, as the hub runs it)
+    r = Rig(os.path.join(work, kind), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1")
     try:
         r.put(os.path.join(TOP, "build", "prof", "EPLAY.PRG"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
