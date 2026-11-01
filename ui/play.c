@@ -46,6 +46,7 @@
 char play_name[64], play_info[80], play_out[80];
 
 static int state = PS_IDLE, kind, fh = -1, eof;
+static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
 static volatile int loading;	/* MP3: the DSP's program still going in (the tick's);
 				   2 while GEM's steps reset the DSP, after Play's draw */
 static PCMFMT fmt;
@@ -53,7 +54,8 @@ static long rate, out_rate, len_ms, file_size;
 static unsigned char *fbuf;	/* the file's first bytes, fpos..fend */
 static long fpos, fend;
 static MP3PARSE parse;		/* the tick's */
-static unsigned long pks[2][PK_MAX];	/* the tick's packets: one going to the DSP, */
+#define PKS_MAX (1 + 1152 > PK_MAX ? 1 + 1152 : PK_MAX)	/* (a PCM packet: 576 frames) */
+static unsigned long pks[2][PKS_MAX];	/* the tick's packets: one going to the DSP, */
 static unsigned long *pk = pks[0];	/* the next made in the other */
 static unsigned char fr[2048];	/* the tick's: a frame, whole */
 static long last_sec = -1;
@@ -281,9 +283,69 @@ static void next_packet(void)
 	}
 }
 
-/* MP3: the DSP plays from its SSI (STREAM). Its packets as it asks for
-   them; at the file's end two frames of silence (the ring's two halves),
-   then the count 0, and the end */
+/* WAV, AIFF through the DSP (PSTREAM): a packet of 576 frames from the
+   queue, the last one filled with silence; each sample a word, (s +
+   32768) << 7 (no data word has bit 23). No division here either */
+static short pcmbuf[576 * 2];
+static long pcm_got;		/* frames in pcmbuf so far */
+
+static void next_pcm_packet(void)
+{
+	unsigned long *w;
+	long i;
+	while (pcm_got < 576) {
+		long hb = q_w - q_r, tail = q_size - q_roff, k = 576 - pcm_got, kb;
+		if (hb < fmt.bytes)
+			break;
+		if (hb > tail)
+			hb = tail;
+		kb = FR2B(k);
+		if (kb > hb) {
+			k = B2FR(hb);
+			kb = FR2B(k);
+		}
+		pcm_convert(&fmt, q + q_roff, pcmbuf + 2 * pcm_got, k);
+		adv(kb);
+		pcm_got += k;
+	}
+	if (pcm_got < 576) {
+		if (!src_done)
+			return;		/* (more to come: what was taken waits here) */
+		if (!pcm_got) {
+			src_out = 1;
+			return;
+		}
+		memset(pcmbuf + 2 * pcm_got, 0, (size_t)(576 - pcm_got) * 4);
+	}
+	w = pk;
+	if (fmt.channels == 2) {
+		*w++ = PK_PCM | PK_LSF | PK_STEREO;
+		for (i = 0; i < 1152; i++)
+			*w++ = (unsigned long)((long)pcmbuf[i] + 32768) << 7;
+		pk_n = 1153;
+	} else {			/* mono: the left of each frame (the DMA's twice) */
+		*w++ = PK_PCM | PK_LSF;
+		for (i = 0; i < 1152; i += 2)
+			*w++ = (unsigned long)((long)pcmbuf[i] + 32768) << 7;
+		pk_n = 577;
+	}
+	pk_samples = 576;
+	pcm_got = 0;
+}
+
+static void make_packet(void)
+{
+	if (kind) {
+		unsigned long a = fine_now();
+		next_pcm_packet();
+		t_parse += fine_now() - a;
+	} else
+		next_packet();
+}
+
+/* The DSP plays from its SSI (STREAM; PSTREAM for WAV and AIFF). Its
+   packets as it asks for them; at the file's end two frames of silence
+   (the ring's two halves), then the count 0, and the end */
 static int s_started, s_end;	/* s_end: 1, 2 silences offered, 3 the end */
 static unsigned long s_flags, s_mute[1];
 static long s_spf;		/* a frame's samples (1152, or 576 for MPEG-2 and 2.5) */
@@ -298,7 +360,7 @@ static void tick_mp3(void)
 	}
 	if (dspmp3_tick_asks() && s_end < 3) {
 		if (!pk_n)
-			next_packet();
+			make_packet();
 		if (pk_n) {
 			dspmp3_tick_offer(pk, pk_n);
 			s_flags = pk[0];
@@ -311,12 +373,16 @@ static void tick_mp3(void)
 			dspmp3_tick_offer(s_mute, s_end < 2 ? 1 : 0);
 			s_end++;
 		}
-		dspmp3_tick_push();
+		{
+			unsigned long a = fine_now();
+			dspmp3_tick_push();
+			t_push += fine_now() - a;
+		}
 	}
 	if (s_end == 3 && !dspmp3_tick_pushing())
 		t_end = 1;			/* (the count 0 gone: the DSP's last silence plays) */
 	if (!pk_n && !dspmp3_tick_pushing())
-		next_packet();		/* (once the one going is in: not while the DSP
+		make_packet();		/* (once the one going is in: not while the DSP
 					   waits for its words) */
 }
 
@@ -330,7 +396,7 @@ static void tick_body(void);
    Audio doesn't use it either */
 static long start_stream(void)
 {
-	dspmp3_tick_stream(rate, out_rate);
+	dspmp3_tick_stream(rate, out_rate, kind != 0);
 	return 0;
 }
 
@@ -346,7 +412,7 @@ static void tick(void)
 
 static void tick_body(void)
 {
-	if (kind)
+	if (!dsp)
 		snd_update();
 	if (loading) {			/* the DSP's program first, a piece a tick */
 		int r;
@@ -364,16 +430,16 @@ static void tick_body(void)
 			loading = 0;
 		return;
 	}
-	if (!t_end && !t_failed && kind)
+	if (!t_end && !t_failed && !dsp)
 		tick_pcm();
-	if (!kind && s_started) {
+	if (dsp && s_started) {
 		dspmp3_tick_status();	/* (its words read even at the end) */
 		if (!t_end && !t_failed)
 			tick_mp3();
 	}
-	if (!kind && dspmp3_failed())
+	if (dsp && dspmp3_failed())
 		t_failed = 1;
-	if (t_end && kind) {
+	if (t_end && !dsp) {
 		/* silence after the end, so that the ring isn't played again */
 		long room = snd_room(), k;
 		if (t_ended_at < 0)
@@ -482,6 +548,8 @@ int play_open(const char *path, char *err, int n)
 	eof = 0;
 	refill();
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
+	dsp = 0;
+	pcm_got = 0;
 	elog("open %s (%ld bytes)", path, file_size);
 	if (pcm_probe(fbuf, fend, &fmt, &why)) {
 		kind = fmt.kind;
@@ -508,6 +576,7 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 		kind = 0;
+		dsp = 1;
 		rate = h.rate;
 		bitrate = h.bitrate;
 		{
@@ -578,15 +647,40 @@ int play_open(const char *path, char *err, int n)
 			elog("the MFP after: %s", mn);
 		}
 	} else {
+		/* WAV, AIFF: the DMA at the file's rate, the FDI put at it where
+		   it can be; else through the DSP, resampled, when it is free and
+		   its samples are 25,000 a second at most (mono to 25 kHz); else
+		   the DMA at the nearest rate. Each sample is a host-port word,
+		   3 to 4 us of a stock Falcon's 68030 on its bus: CD's stereo
+		   took 46 % of it (the About box 330 ms to open), 22.05 kHz
+		   stereo 29 %; an MP3 takes about 15 % */
 		out_rate = snd_rate_for(rate, &ext);
-		if (!snd_open(out_rate, ext)) {
+		if (out_rate != rate && snd_fdi) {
+			spurious_on();
+			if (snd_fdi_set(rate)) {
+				ext = 1;
+				out_rate = rate;
+			}
+			if (snd_fdi_note[0])
+				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
+		}
+		if (out_rate != rate && rate * fmt.channels <= 25000) {
+			int r = dspmp3_open();
+			if (r == DSPMP3_OK) {
+				dsp = 1;
+				out_rate = snd_rate_dsp(rate, &ext);
+			} else
+				elog("the DSP %s: the DMA at the nearest rate", r == DSPMP3_BUSY ? "in use" :
+				     r == DSPMP3_NONE ? "not there" : "didn't answer");
+		}
+		if (!dsp && !snd_open(out_rate, ext)) {
 			snprintf(err, n, "There isn't the ST RAM to play.");
 			play_stop();
 			return 0;
 		}
 	}
 	khz(kr, sizeof(kr), out_rate);
-	if (!kind && out_rate != rate) {	/* (the DSP resamples) */
+	if (dsp && out_rate != rate) {	/* (the DSP resamples) */
 		char fr[16];
 		khz(fr, sizeof(fr), rate);
 		snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr, fr);
@@ -597,7 +691,7 @@ int play_open(const char *path, char *err, int n)
 	else
 		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
 	elog("output: %ld Hz, %s%s; queue %ld bytes", out_rate, ext ? "the external clock" : "the Falcon's clock",
-	     !kind && out_rate != rate ? ", resampled on the DSP" : "", q_size);
+	     dsp && out_rate != rate ? ", resampled on the DSP" : "", q_size);
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;
@@ -615,14 +709,14 @@ void play_start(void)
 {
 	if (fh >= 0 && state != PS_PLAYING) {
 		state = PS_PLAYING;
-		if (!kind) {
+		if (dsp) {
 			snd_dsp_out(out_rate, out_rate == snd_ext_rate);
 			elog("the matrix: $%04X $%04X $%04X $%04X", snd_matrix[0], snd_matrix[1], snd_matrix[2],
 			     snd_matrix[3]);
 		}
-		loading = kind ? 0 : 2;	/* (the tick loads the DSP first: not waiting for GEM) */
-		feed_on(tick, kind ? 250 : 500);	/* (WAV: 1024 frames a tick, 4 times what
-						   plays; MP3: the DSP's next packet at once) */
+		loading = dsp ? 2 : 0;	/* (the tick loads the DSP first: not waiting for GEM) */
+		feed_on(tick, dsp ? 500 : 250);	/* (the DMA: 1024 frames a tick, 4 times what
+						   plays; the DSP: its next packet at once) */
 	}
 }
 
@@ -636,10 +730,10 @@ void play_stop(void)
 	loading = 0;
 	snd_close();
 	t_dsp = 0;
-	if (!kind && state == PS_PLAYING)
+	if (dsp && state == PS_PLAYING)
 		snd_dsp_off();		/* (the DSP left as it is: whoever takes it
 					   next resets it) */
-	if (!kind)
+	if (dsp)
 		dspmp3_close();
 	close_file();
 	free_queue();
@@ -654,11 +748,11 @@ int play_state(void)
 long play_ms(void)
 {
 	long f;
-	if (!kind) {
+	if (dsp) {			/* (the file's samples: at its rate, resampled or not) */
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
 		f = fr > 1 ? (fr - 1) * s_spf : 0;
-		return out_rate ? (f / out_rate) * 1000 + (f % out_rate) * 1000 / out_rate : 0;
+		return rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0;
 	}
 	f = snd_played();
 	return rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0;
@@ -693,7 +787,7 @@ static long f_ms(long f)
 const char *play_keep_up(void)
 {
 	static char b[260];
-	if (!kind) {
+	if (dsp) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
 		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late, %ld packets broken; the DSP's waits a "
@@ -722,11 +816,11 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
-	if (!kind && !loading && !s_started && !t_failed) {
+	if (dsp && !loading && !s_started && !t_failed) {
 		Supexec(start_stream);	/* loaded: the stream, fed by the tick */
 		s_started = 1;
 	}
-	if (!kind && s_started && dspmp3_stream_stalled(tos_hz200()))
+	if (dsp && s_started && dspmp3_stream_stalled(tos_hz200()))
 		t_failed = 1;
 	if (t_failed) {
 		int what, hisr;
@@ -749,7 +843,7 @@ int play_step(int ms)
 		return 1;
 	}
 	fill(t0, ms);
-	if (!kind && t_end) {
+	if (dsp && t_end) {
 		long fr, late, wmin, wavg;
 		char l[60];
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
@@ -760,7 +854,7 @@ int play_step(int ms)
 		elog_save();
 		return 1;
 	}
-	if (kind && !snd_playing() && (snd_written() >= out_rate / 4 || t_end))
+	if (!dsp && !snd_playing() && (snd_written() >= out_rate / 4 || t_end))
 		snd_play();
 	if (t_end && t_ended_at >= 0 && snd_played() >= t_ended_at) {
 		char l[60];

@@ -315,7 +315,7 @@ static long s_frames, s_late, s_wmin, s_wsum, s_rsy;
 static int s_f4, s_l6, s_r4;
 static unsigned long s_last;		/* HZ200 at the last status word */
 
-void dspmp3_tick_stream(long rin, long rout)
+void dspmp3_tick_stream(long rin, long rout, int pcm)
 {
 	s_have = 0;
 	s_frames = s_late = s_wsum = s_rsy = 0;
@@ -330,7 +330,7 @@ void dspmp3_tick_stream(long rin, long rout)
 		put((unsigned long)(((unsigned long long)(rin % rout) << 24) / (unsigned long long)rout));
 		put(rin > rout ? 2 : 1);
 	}
-	put(12);			/* STREAM */
+	put(pcm ? 14 : 12);		/* PSTREAM, STREAM */
 }
 
 int dspmp3_tick_asks(void)

@@ -145,6 +145,9 @@ V_RSI	equ	$a0		; the step: input samples an output (si, then sf
 V_RSS	equ	$a1		; as A0), and 28, read in turn (r3, modulo 3)
 V_RS28	equ	$a2
 V_WS	equ	$fe		; resampled, streaming: where the granule's outputs began
+V_PKB	equ	$ff		; where a packet goes: PKT, or PKP (a PCM stream's)
+PKP	equ	OV0		; a PCM packet (1 + 1152 words): over the overlap (and
+				; the gap after it), which PCM doesn't use
 RSZ	equ	2576		; the ring, resampled (PCM's words)
 RSREG	equ	1290		; a granule's outputs at most, and some (words)
 V_PKN	equ	$a3		; its words expected (-1: the count not yet)
@@ -705,6 +708,8 @@ ima
 ; (the commands seldom run)
 dreset	clr	a			; no resampling
 	move	a,x:V_RSTB
+	move	#>PKT,x0
+	move	x0,x:V_PKB
 	movec	m0,m1			; all linear (m0 since the start)
 	movec	m0,m2
 	movec	m0,m3
@@ -760,7 +765,11 @@ dmz
 ; next count (that frame dropped). After each frame a status word if the
 ; 68030 has read the last (counts that run on: sm1's). $800000: a packet
 ; wanted
-stream	clr	a
+stream	move	#>PKT,x0		; MP3's packets
+	jmp	stm0
+pstream	move	#>PKP,x0		; PSTREAM (14): PCM's (PK_PCM), bigger
+stm0	move	x0,x:V_PKB
+	clr	a
 	move	#>PCM,r0
 	move	#>2304,x0		; the ring: a frame, or resampled RSZ
 	move	x:V_RSTB,b
@@ -898,7 +907,7 @@ pkp0	move	x:V_PKN,b		; a word with no count before it: passed
 	jmp	pkp9
 pkp1	move	r3,x:V_SVP
 	move	x:V_PKI,b
-	move	#>PKT,x1
+	move	x:V_PKB,x1
 	add	x1,b
 	move	b1,r3
 	nop
@@ -1089,6 +1098,9 @@ cmdx	move	#>1,x1			; the commands (x0), but LOADP
 	move	#>13,x1
 	cmp	x1,a
 	jeq	rsset
+	move	#>14,x1
+	cmp	x1,a
+	jeq	pstream
 	move	#>12,x1
 	cmp	x1,a
 	jeq	stream
@@ -1156,8 +1168,18 @@ rst2
 
 ; ---- a frame: read, decoded, sent (resampled: its outputs' count first)
 frame	jsr	rd
+	move	x0,x1			; (its words)
+	jsr	rd			; the flags: PCM's packet to PKP
 	move	#>PKT,r0
-	do	x0,fr1
+	jclr	#10,x0,fr0
+	move	#>PKP,r0
+fr0	move	r0,x:V_PKB
+	move	x0,y:(r0)+
+	move	x1,a
+	move	#>1,x1
+	sub	x1,a
+	jeq	fr1
+	do	a1,fr1
 	jsr	rd
 	move	x0,y:(r0)+
 fr1
@@ -1224,7 +1246,7 @@ sc3	do	x0,sc2
 sc2
 	rts
 
-decode	move	#>PKT,r0
+decode	move	x:V_PKB,r0
 	nop
 	move	y:(r0)+,x0		; the flags
 	move	x0,x:V_FLAGS
@@ -1265,6 +1287,7 @@ dc2	move	a1,x:V_NGR
 	add	x1,a
 	move	a1,x:V_RATE14
 	jset	#3,x:V_FLAGS,mute
+	jset	#10,x:V_FLAGS,pcmdec	; PCM (WAV, AIFF): no decoding
 	move	x:V_NGR,x0		; the main data, after the side information
 	move	x:V_NCH,y0
 	mpy	x0,y0,a
@@ -1320,7 +1343,7 @@ dgo	jsr	gout			; reorder, alias reduction, the transform
 	cmp	x0,b
 	jlt	dgo
 	jsr	gsyn			; the synthesis filter, both channels
-	jclr	#0,x:V_SF,dgl
+dlate	jclr	#0,x:V_SF,dgl
 	move	x:V_RSTB,b
 	tst	b
 	jne	dgr2
@@ -2739,7 +2762,7 @@ gs4	clr	a
 	move	#>XR0,x0
 	move	x0,x:V_XR
 	move	#>T0+7,r0
-	jsr	slot
+	jsr	slsel
 	move	x:V_P,x0
 	move	x0,x:V_RP0
 	jclr	#0,x:V_FLAGS,gs3	; stereo: channel 1
@@ -2750,7 +2773,7 @@ gs4	clr	a
 	move	#>XR1,x0
 	move	x0,x:V_XR
 	move	#>T1+7,r0
-	jsr	slot
+	jsr	slsel
 	move	x:V_P,x0
 	move	x0,x:V_RP1
 gs3	move	x:V_RSTB,b
@@ -2838,6 +2861,63 @@ rslate	move	x:V_OUT,b
 rsl1	jsr	rsdist
 	cmp	b,a
 	rts
+
+; a slot of the granule: the synthesis filter's, or PCM's samples as they are
+slsel	jset	#10,x:V_FLAGS,pslot
+	jmp	slot
+pslot	move	x:V_T,x0		; XR + 32 t: the slot's 32
+	move	#>32,y0
+	mpy	x0,y0,a
+	asr	a
+	move	a0,a
+	move	x:V_XR,x0
+	add	x0,a
+	move	a1,r1
+	nop
+	do	#32,ps1
+	move	x:(r1)+,x1
+	move	x1,x:(r0)+
+ps1
+	rts
+
+; ---- a PCM packet (PK_PCM, with PK_LSF: one granule): 576 frames, each
+; sample a word, offset binary in 22..7 ((s + 32768) << 7: no data word
+; has bit 23), left and right in turn; into XR0 (and XR1) as Q23, the
+; packet free, and the granule's slots as the synthesis filter would give
+pcmdec	jset	#0,x:V_SF,pcd0		; (a frame on its own: from PCM on, as decode)
+	bclr	#1,x:V_SF
+	move	#>PCM,x0
+	move	x0,x:V_OUT
+pcd0	move	x:V_PKB,r0
+	move	#>XR0,r1
+	move	#>XR1,r2
+	move	#>$800000,x0		; -1: (s + 32768) 2^8 - 2^23 = s 2^8
+	move	(r0)+
+	jclr	#0,x:V_FLAGS,pcd2
+	do	#576,pcd1
+	move	y:(r0)+,a
+	asl	a
+	add	x0,a
+	move	a,x:(r1)+
+	move	y:(r0)+,a
+	asl	a
+	add	x0,a
+	move	a,x:(r2)+
+pcd1
+	jmp	pcd3
+pcd2	do	#576,pcd4
+	move	y:(r0)+,a
+	asl	a
+	add	x0,a
+	move	a,x:(r1)+
+pcd4
+pcd3	jclr	#0,x:V_SF,pcd5		; streaming: the next packet may come
+	jsr	pkfree
+pcd5	clr	a
+	move	a,x:V_GR
+	move	a,x:V_CH
+	jsr	gsyn
+	jmp	dlate			; (late, the half, the granule counted)
 
 ; a slot resampled (rsl, in internal P) into the ring at V_OUT on; then the
 ; position a slot on, and each channel's last 7 inputs to the front

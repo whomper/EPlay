@@ -38,7 +38,9 @@ int dspmp3_failed(void);	/* it stopped answering */
    dspmp3_tick_pushing says it has gone). A packet of count 0 ends it. dspmp3_stream_info: frames
    decoded, granules late (the sound played the one before again), the
    least and the mean of its waits a frame (its time to spare: 0 none) */
-void dspmp3_tick_stream(long rin, long rout);	/* from rin to rout Hz: resampled if they differ */
+/* from rin to rout Hz (resampled if they differ); pcm: PSTREAM, WAV's
+   and AIFF's packets (PK_PCM) */
+void dspmp3_tick_stream(long rin, long rout, int pcm);
 void dspmp3_tick_status(void);
 void dspmp3_tick_push(void);
 int dspmp3_tick_asks(void);

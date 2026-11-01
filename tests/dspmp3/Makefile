@@ -15,6 +15,9 @@ run: $(B)/sim
 	SIMRS=1 ./$(B)/sim $(FILES)
 	@echo "48 kHz resampled to 44.1 (SIMRS=2):"
 	SIMRS=2 ./$(B)/sim $(FILES)
+	@echo "PCM through the DSP (SIMPCM=1), as is and to the Falcon's clock:"
+	SIMPCM=1 ./$(B)/sim $(FILES)
+	SIMPCM=1 SIMRS=1 ./$(B)/sim $(FILES)
 $(B)/mp3tab.h: $(TOP)/tools/mkmp3tab.py | $(B)
 	python3 $(TOP)/tools/mkmp3tab.py $(TOP)/data $@
 $(B)/mp3_prog.h: $(TOP)/dsp/mp3.a56 $(B)/mp3tab.h

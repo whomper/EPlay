@@ -46,7 +46,9 @@ disk --32 KB reads--> file buffer (TT RAM) --convert, in GEM steps--> ring (ST R
   moves on can be torn (Hatari counted a whole ring twice).
 - Conversion: 8-bit to 16-bit, mono to stereo, AIFF is big-endian as the 68030 is, WAV is
   little-endian (bytes swapped), 24-bit is cut to 16 with dither. Done in the 68030's steps.
-- The WAV and AIFF path never needs the DSP, so it never takes it from another program.
+- The WAV and AIFF path needs the DSP only for a rate the clock hasn't (phase 2, below): then it
+  goes through the DSP, resampled, if the DSP is free; else the DMA plays it at the nearest rate,
+  as before.
 
 ### Falcon: MP3 (on the DSP)
 
@@ -122,8 +124,8 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
 
 ## The DSP rule (the hub writes it into the guidelines)
 
-- A program holds the DSP only while it uses it: EPlay locks it (`Dsp_Lock`) while an MP3 plays
-  and unlocks it on pause and stop.
+- A program holds the DSP only while it uses it: EPlay locks it (`Dsp_Lock`) while an MP3 plays,
+  or a WAV or AIFF it resamples, and unlocks it on pause and stop.
 - Nobody waits for the DSP or asks another program to let go of it: `Dsp_Lock` refused means the
   68030's code (TLS, EWeb's pictures).
 - EPlay says when it can't have the DSP ("The DSP is in use by another program.") and doesn't try
@@ -676,6 +678,38 @@ SSI:
   49,170 Hz; mix48.mp3 77.8 to 87.8 % at 44.1 kHz). 320 kbit/s on a stock Falcon without the FDI
   is near the top; the synthesis filter's 16-point DCT and its slots' set-up are what is left to
   win back. The FDI at the file's rate costs 1.4 % more than before (the slots' copy).
+
+### WAV and AIFF through the DSP (1 Nov 2026)
+
+A WAV at 44.1 kHz on a stock Falcon is played by the DMA at 49,170 Hz, 11.5 % fast. The DSP can
+now take PCM and resample it as it does an MP3's samples:
+- **At the file's rate** (the Falcon's own clock has it, or the FDI put at it, as for an MP3): the
+  DMA, as before; bit for bit, no DSP.
+- **Else, through the DSP, resampled, where the host port can carry it:** the DSP free and the
+  samples 25,000 a second at most (mono to 25 kHz). The tick makes packets of 576 frames from the
+  queue (`next_pcm_packet`: converted to 16 bits as for the DMA, the last filled with silence),
+  each sample a word in offset binary, (s + 32768) << 7, since the stream's framing keeps bit 23
+  for its counts. PSTREAM (14) is STREAM with these packets (PK_PCM), which go over the
+  transform's overlap (1,264 words) since PCM doesn't use it. The DSP takes a packet into its
+  lines' buffers, lets the next one come, and runs the granule's slots as for an MP3, copying
+  where the synthesis filter would give: the resampler, the ring, its waits and its late count
+  are the same code.
+- **Else** (more samples, the DSP in use, or none): the DMA at the nearest rate, as before; the
+  log says why.
+
+**Why the limit:** each sample is a host-port word, 3 to 4 µs of a stock Falcon's 68030 on its
+bus (a status read and a long write, whatever the 68030's own speed: a DFB1's goes through the
+same bus). Measured on Falcon-4: CD stereo through the DSP took 46 % of the 68030 (the About box
+330 ms to open, its time 150); 22.05 kHz stereo 29 %; 22.05 kHz mono 18 %, about what an MP3
+takes (15 %). On Hatari's DSP the PCM path is 7 % of it as it is, 18 % resampled (`make dsptest`,
+SIMPCM: the model's samples sent back as PCM, bit for bit both ways).
+
+**For CD's rate, a proposal (not built):** the matrix can take the DMA's playback into the DSP's
+SSI receive (DMAPLAY to DSPRECV), which costs the 68030 nothing more than the DMA path does now.
+The link runs on the Falcon's clock, 49,170 frames a second, so the 68030 would fill the ring a
+step through the file at a time (as the TT's path will: some frames twice), and the DSP, knowing
+the same steps, would drop the doubles and resample what is left. It wants the DSP's receive
+interrupt, an address register of its own, and a real Falcon to check the crossbar's timing.
 
 ## The order of the work
 

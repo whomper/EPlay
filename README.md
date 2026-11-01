@@ -17,7 +17,12 @@ window. Written in C and DSP56001 assembly for GEM.
   the file's frames, when the DSP asks.
 - **Through the FDI:** with a SoundPool FDI on the DSP port, EPlay sets it to the file's rate
   (44.1 or 48 kHz, as Cubase Audio does) and the DSP plays into it on its clock, bit for bit.
-- **Shares the DSP:** EPlay holds the DSP only while an MP3 plays.
+- **At its own pitch:** an MP3 at a rate the clock hasn't (44.1 kHz on a stock Falcon, which has
+  49,170 Hz) is resampled on the DSP; so is a mono WAV or AIFF up to 25 kHz. Other WAV and AIFF
+  files still play at the nearest rate the Falcon has (CD's 44.1 kHz at 49,170 Hz, 11.5 % fast)
+  unless an FDI gives their rate.
+- **Shares the DSP:** EPlay holds the DSP only while it plays through it: an MP3, or a WAV or AIFF
+  it resamples. When another program has it, that WAV plays at the nearest rate instead.
 
 *Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
 window. Phase 2, from 0.4, plays MP3 three ways, chosen in the settings: on the Falcon's DSP, through

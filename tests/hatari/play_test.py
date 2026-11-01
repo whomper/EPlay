@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, aiff, mp3, mp3long, vbr, fsel; all by default. The machines: Falcon (Erez's, with the
+The cases: wav, aiff, wav22, mp3, mp3long, vbr, fsel; all by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -36,10 +36,15 @@ REC_RATE = 48000
 
 # name: (file, how sox makes its source, lame's arguments or None, the
 # rate the Falcon plays it at, the left and right tones heard, seconds).
-# An MP3 the DSP resamples to the Falcon's clock: heard at its own pitch
+# What the DSP resamples to the Falcon's clock (an MP3, a WAV at 44.1 kHz)
+# is heard at its own pitch
 CASES = {
     "wav": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
     "aiff": ("TONE.AIF", ["-r", "32780", "-c", "1", "-b", "16"], None, 32780, (1000, 1000), 3),
+    # a rate the Falcon's clock hasn't, 22.05 kHz mono: through the DSP,
+    # resampled to 24585 Hz (CD's stereo stays on the DMA, at 49170: a
+    # host-port word a sample would cost a stock Falcon's 68030 too much)
+    "wav22": ("HALF.WAV", ["-r", "22050", "-c", "1", "-b", "16"], None, 24585, (1000, 1000), 3),
     "mp3": ("TONE.MP3", ["-r", "32000", "-c", "2", "-b", "16"], ["-b", "128", "-m", "s"], 32780,
             (1000, 1500), 3),
     # ten seconds at 320 kbit/s: the ring wraps four times, the file
@@ -116,6 +121,9 @@ def tone(x, rate):
     return best, 2 * bp / n / total
 
 
+RESAMPLED = {"wav22"}       # (and every MP3)
+
+
 def analyse(rec, case):
     """(ok, what was found) for the recording"""
     with wave.open(rec) as w:
@@ -142,15 +150,16 @@ def analyse(rec, case):
     note = ""
     pitch = near((fl, fr), want)
     # (an MP3 is played by the DSP's SSI, not the DMA: no swap excused)
-    if not pitch and near((fr, fl), want) and hatari_keeps_parity() and not CASES[case][2]:
+    if not pitch and near((fr, fl), want) and hatari_keeps_parity() and not CASES[case][2] \
+            and case not in RESAMPLED:
         # Hatari 2.4 doesn't start a DMA's stereo on the left: it keeps the
         # word count's parity from the DMA's last stop (EPlay's clock
         # measurement), fixed in later Hatari (crossbar.c, "1st frame is
         # left"). The Falcon starts each frame on the left.
         pitch, note = True, " (left and right swapped: Hatari %s's DMA)" % HATARI
     _, fmt, lame, out, _, length = CASES[case]
-    if not lame:
-        length = length * int(fmt[1]) / out  # (WAV, AIFF: at the Falcon's rate, if not the file's)
+    if not lame and case not in RESAMPLED:
+        length = length * int(fmt[1]) / out  # (the DMA: at the Falcon's rate, if not the file's)
     ok = (abs(secs - length) < 0.1 and not gaps and pitch and ql > 0.9 and qr > 0.9
           and max(rms[b + 2:] or [0]) < 50)     # (silence after: past the block the end falls in)
     return ok, ("%.2f s of sound, %d gaps; left %d Hz (%.0f %% of its power), right %d Hz (%.0f %%); "

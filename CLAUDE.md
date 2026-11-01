@@ -95,8 +95,9 @@ read it first, and change it with the code when a decision changes.
   68030's speed: Erez's DFB1 runs it at 50 MHz.
 - **The sound is fed by interrupts from memory**; GEM only refills the buffers, in bgwork steps.
   Nothing the music needs waits on the AES, the disk or another program.
-- **The DSP rule:** lock it only while an MP3 plays, unlock on pause and stop; if `Dsp_Lock` is
-  refused, say so ("The DSP is in use by another program.") and don't retry by yourself.
+- **The DSP rule:** lock it only while it plays (an MP3, or a WAV or AIFF it resamples), unlock
+  on pause and stop; if `Dsp_Lock` is refused, an MP3 says so ("The DSP is in use by another
+  program.") and a WAV plays at the nearest rate, and neither retries by itself.
 - **The DSP decoder** is tested as common's DSP programs are: a C model of its arithmetic against a
   reference decoder (ISO 11172-4 full accuracy), then the `.a56` against the model, bit for bit, on
   Hatari's DSP core. Third-party code: name its licence first; it goes into `NOTICES.TXT`.

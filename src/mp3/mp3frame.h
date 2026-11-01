@@ -41,6 +41,8 @@
 #define PK_IS		0x04
 #define PK_MUTE		0x08
 #define PK_LSF		0x100
+#define PK_PCM		0x400	/* WAV, AIFF through the DSP: 576 frames (PK_LSF too),
+				   each sample a word, (s + 32768) << 7: no bit 23 */
 #define PK_RATE(f)	(((f) >> 4) & 15)	/* 0-2: 44.1, 48, 32 kHz; 3-5: 22.05,
 						 * 24, 16; 6-8: 11.025, 12, 8 */
 #define PK_GC		9

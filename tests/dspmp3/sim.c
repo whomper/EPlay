@@ -137,6 +137,9 @@ int main(int argc, char **argv)
 	/* SIMRS=1: each file resampled to the Falcon's clock above its rate,
 	 * SIMRS=2: a 48 kHz file to 44.1 (the others left out) */
 	int rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0;
+	/* SIMPCM=1: the model's samples (their top 16 bits) sent back as PCM
+	 * packets (PK_PCM: WAV's way through the DSP), each granule one */
+	int pcmmode = getenv("SIMPCM") ? atoi(getenv("SIMPCM")) : 0;
 	const char *worst_name = "";
 
 	sim_start(dsp_mp3_prog);
@@ -212,6 +215,47 @@ int main(int argc, char **argv)
 								argv[a], frames, k, ch, v, m);
 					}
 				c += cycles - t0;
+				bad += wrong != 0;
+				frames++;
+				samples += ns;
+				continue;
+			}
+			if (pcmmode) {		/* the frame's samples again, as PCM */
+				static unsigned long pp[1 + 1152];
+				static dw in[2][1152], ro2[2][MP3RS_MAX];
+				int g, ngr = ns / 576, no;
+				for (g = 0; g < ngr && !dead; g++) {
+					int q = 1;
+					for (k = 0; k < 576; k++)
+						for (ch = 0; ch < nch; ch++) {
+							long s16 = (long)pcm[ch][576 * g + k] >> 8;
+							pp[q++] = (unsigned long)(s16 + 32768) << 7;
+							in[ch][k] = (dw)(s16 * 256);
+						}
+					pp[0] = PK_PCM | PK_LSF | (nch == 2 ? PK_STEREO : 0);
+					put(7);
+					put((unsigned long)q);
+					for (k = 0; k < q; k++)
+						put(pp[k]);
+					t = sim_job();
+					c += t;
+					no = 576;
+					if (rs_on) {
+						no = mp3rs_run(&rs, in, 576, nch, ro2);
+						if ((int)get() != no) {
+							fprintf(stderr, "%s: PCM: the resampled count differs\n", argv[a]);
+							dead = 1;
+						}
+					}
+					for (ch = 0; ch < nch && !dead; ch++)
+						for (k = 0; k < no && !dead; k++) {
+							long v = get(), m = rs_on ? (long)ro2[ch][k] : (long)in[ch][k];
+							if (v != m && !wrong++)
+								fprintf(stderr, "%s: frame %ld granule %d channel %d sample %d: "
+									"PCM through the DSP %ld, wanted %ld\n",
+									argv[a], frames, g, ch, k, v, m);
+						}
+				}
 				bad += wrong != 0;
 				frames++;
 				samples += ns;
