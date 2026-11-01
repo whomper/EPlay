@@ -135,6 +135,8 @@ V_SVN3	equ	$a8
 V_JUNK	equ	$aa		; (the underrun interrupt's)
 V_SVA	equ	$ab		; gout: a kept over waitsyn
 V_SVP	equ	$ac		; pkpoll: r3 kept
+V_RSY	equ	$ae		; streaming: packets found broken, the stream taken up again
+V_FRM	equ	$af		; streaming: frames decoded (the status word's count)
 
 ; ---- internal Y
 CQ	equ	$00		; dequantising: the band's |v| = 1..15, worked out (-1: not yet)
@@ -611,8 +613,11 @@ tue	movep	x:SSISR,x:V_JUNK	; (an underrun: the status read, then the word)
 ; of a granule, left and right in turn) that the SSI plays on the matrix's
 ; clock. A packet comes as its count and its words, while HF2 is set: from
 ; when the frame's last granule is read (PKT free) until it is in. Count 0:
-; the end. After each frame a status word if the 68030 has read the last:
-; granules late (bits 16-22) and waits (0-15). $800000: a packet wanted
+; the end. A packet's count has bit 23 set, which no data word has: a word
+; lost or doubled on the way is found and the stream taken up again at the
+; next count (that frame dropped). After each frame a status word if the
+; 68030 has read the last (counts that run on: sm1's). $800000: a packet
+; wanted
 stream	clr	a
 	move	#>PCM,r0
 	do	#2304,stc
@@ -621,6 +626,8 @@ stc
 	move	a,x:V_SF
 	move	a,x:V_IDLE
 	move	a,x:V_LATE
+	move	a,x:V_RSY
+	move	a,x:V_FRM
 	bset	#0,x:V_SF		; streaming
 	move	#>PCM,r7
 	movec	#2303,m7
@@ -639,19 +646,37 @@ stl	jsr	salign			; left and right in step, each frame
 	jsr	getpkt			; the whole packet
 	jset	#3,x:V_SF,stx
 	jsr	decode
+	move	x:V_FRM,b		; the frames decoded
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_FRM
 	jclr	#1,x:HSR,sm2		; (the 68030 hasn't read the last: none)
+	move	#>15,x0			; the frames (19-22), packets broken (15-18), granules
+	and	x0,b			; late (9-14), waits / 32 (0-8): each a count that
+	rep	#4			; runs on, so a word read twice or not at all
+	lsl	b			; takes nothing away (bit 23: the wake word's)
+	move	x:V_RSY,a
+	and	x0,a
+	move	a1,x1
+	or	x1,b
+	rep	#6
+	lsl	b
+	move	x:V_LATE,a
+	move	#>63,x0
+	and	x0,a
+	move	a1,x1
+	or	x1,b
+	rep	#9
+	lsl	b
 	move	x:V_IDLE,a
-	move	#>$ffff,x0
+	rep	#5
+	asr	a
+	move	#>511,x0
 	cmp	x0,a
 	jle	sm1
 	move	x0,a
-sm1	move	x:V_LATE,b
-	move	#>$7f,x0		; (bit 23 is the wake word's)
-	and	x0,b
-	rep	#16
-	lsl	b
-	move	a1,x0
-	or	x0,b
+sm1	move	a1,x1
+	or	x1,b
 	movep	b1,x:HRX
 sm2	clr	a
 	move	a,x:V_IDLE
@@ -697,15 +722,26 @@ pkf1	rts				; will see HF2
 pkpoll	jclr	#2,x:V_SF,pkp9
 	jclr	#0,x:HSR,pkp9
 	movep	x:HRX,x0
-	move	x:V_PKN,b
-	tst	b
-	jge	pkp1
-	move	x0,x:V_PKN		; the count
-	move	x0,b
+	jclr	#23,x0,pkp0		; bit 23: a packet's count (no data word has it)
+	move	x:V_PKN,b		; one in the middle of a packet: a word was lost,
+	tst	b			; that packet dropped, this one taken
+	jlt	pkpc
+	jsr	resync
+pkpc	move	x0,b
+	move	#>$7fffff,x1
+	and	x1,b
+	move	b1,x:V_PKN
+	clr	a
+	move	a,x:V_PKI
 	tst	b
 	jne	pkp9
-	bset	#3,x:V_SF		; 0: the end
+	bset	#3,x:V_SF		; count 0: the end
 	jmp	pkp2
+pkp0	move	x:V_PKN,b		; a word with no count before it: passed
+	tst	b
+	jge	pkp1
+	jsr	resync
+	jmp	pkp9
 pkp1	move	r3,x:V_SVP
 	move	x:V_PKI,b
 	move	#>PKT,x1
@@ -724,6 +760,12 @@ pkp1	move	r3,x:V_SVP
 pkp2	bclr	#3,x:HCR		; all in
 	bclr	#2,x:V_SF
 pkp9	rts
+
+resync	move	x:V_RSY,b		; (b used)
+	move	#>1,x1
+	add	x1,b
+	move	b1,x:V_RSY
+	rts
 
 getpkt	jclr	#2,x:V_SF,gp9		; (in already)
 	jsr	pkpoll

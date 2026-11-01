@@ -38,6 +38,7 @@ static int f_what, f_hisr;	/* how it failed: 1 sending, 2 reading, 3 loading; th
 static long f_at, f_of;		/* at which word of how many */
 static long put_i, put_n;	/* the word going, of how many (the tick's packets) */
 static int rst;			/* dspmp3_reset_step's: 3 done */
+static int t_rst, t_cnt;	/* dspmp3_tick_reset's */
 static unsigned long rst_t;
 
 /* a word to the DSP; a second at most for its room */
@@ -138,6 +139,7 @@ int dspmp3_open(void)
 	item = 0;
 	done_w = 0;
 	rst = 0;
+	t_rst = t_cnt = 0;
 	return DSPMP3_OK;
 }
 
@@ -164,6 +166,53 @@ int dspmp3_reset_step(void)
 		if (tos_ms() - rst_t < 5)
 			return 0;
 		rst = 3;
+		/* fall through */
+	default:
+		return 1;
+	}
+}
+
+/* the same from the tick (an interrupt, supervisor), so that nothing the
+   music needs waits on GEM: the file selector opened at once held GEM's
+   steps, and with them the DSP's reset and so its load (the play rig's
+   fsel, now and then). The sound chip's port A bit 4 set and cleared as
+   Ongibit and Offgibit do, the processor's level 7 meanwhile (TOS's own
+   writes to the chip are at 7 too). After `after` ticks (Play's redraw
+   first), each wait at least `wait` ticks; 1 when done */
+#define PSG_SEL (*(volatile unsigned char *)0xffff8800L)
+#define PSG_WR  (*(volatile unsigned char *)0xffff8802L)
+static void psg_bit4(int on)
+{
+	unsigned short sr;
+	unsigned char v;
+	__asm__ volatile("move.w %%sr,%0\n\tori.w #0x0700,%%sr" : "=d"(sr) : : "cc");
+	PSG_SEL = 14;
+	v = PSG_SEL;
+	PSG_WR = on ? (unsigned char)(v | 0x10) : (unsigned char)(v & ~0x10);
+	__asm__ volatile("move.w %0,%%sr" : : "d"(sr) : "cc");
+}
+
+int dspmp3_tick_reset(int after, int wait)
+{
+	switch (t_rst) {
+	case 0:
+		if (++t_cnt < after)
+			return 0;
+		psg_bit4(1);
+		t_cnt = 0;
+		t_rst = 1;
+		return 0;
+	case 1:
+		if (++t_cnt < wait)
+			return 0;
+		psg_bit4(0);
+		t_cnt = 0;
+		t_rst = 2;
+		return 0;
+	case 2:
+		if (++t_cnt < wait)
+			return 0;
+		t_rst = 3;
 		/* fall through */
 	default:
 		return 1;
@@ -262,16 +311,16 @@ int dspmp3_failed(void)
 #define HF2 0x08
 static const unsigned long *s_buf;	/* the packet going (the player's, kept until sent) */
 static int s_n, s_i, s_have;		/* its words, the next (-1: its count) */
-static long s_frames, s_late, s_wmin, s_wsum;
-static int s_late8;
+static long s_frames, s_late, s_wmin, s_wsum, s_rsy;
+static int s_f4, s_l6, s_r4;
 static unsigned long s_last;		/* HZ200 at the last status word */
 
 void dspmp3_tick_stream(void)
 {
 	s_have = 0;
-	s_frames = s_late = s_wsum = 0;
+	s_frames = s_late = s_wsum = s_rsy = 0;
 	s_wmin = -1;
-	s_late8 = 0;
+	s_f4 = s_l6 = s_r4 = 0;
 	s_last = HZ200;
 	put(12);			/* STREAM */
 }
@@ -303,7 +352,7 @@ void dspmp3_tick_push(void)
 				break;
 		}
 		if (s_i < 0) {
-			HTX32 = (unsigned long)s_n;
+			HTX32 = 0x800000UL | (unsigned long)s_n;	/* (bit 23: a count) */
 			s_i = 0;
 		} else
 			HTX32 = s_buf[s_i++] & 0xffffff;
@@ -321,16 +370,24 @@ void dspmp3_tick_status(void)
 {
 	while (HISR & 1) {
 		unsigned long w = HTX32 & 0xffffff;
-		long waits = (long)(w & 0xffff);
-		int l8 = (int)(w >> 16) & 0x7f;
+		long waits = (long)(w & 511) * 32;
+		int f4 = (int)(w >> 19) & 15, r4 = (int)(w >> 15) & 15, l6 = (int)(w >> 9) & 63, df;
 		if (w & 0x800000)
 			continue;		/* (a packet wanted: HF2 says it) */
-		s_late += (l8 - s_late8) & 0x7f;
-		s_late8 = l8;
+		/* counts that run on: a word read twice adds nothing, one
+		   missed nothing lost */
+		df = (f4 - s_f4) & 15;
+		if (!df)
+			continue;
+		s_f4 = f4;
+		s_late += (l6 - s_l6) & 63;
+		s_l6 = l6;
+		s_rsy += (r4 - s_r4) & 15;
+		s_r4 = r4;
 		if (s_frames >= 4 && (s_wmin < 0 || waits < s_wmin))
 			s_wmin = waits;		/* (past the start, the ring's first fill) */
-		s_wsum += waits;
-		s_frames++;
+		s_wsum += waits * df;
+		s_frames += df;
 		s_last = HZ200;
 	}
 }
@@ -375,6 +432,11 @@ void dspmp3_stall_note(char *b, int n)
 	snprintf(b, (size_t)n, "ISR $%02X (HF2 %d, RXDF %d, TXDE %d), ICR $%02X, wanted %d, busy %d; "
 		 "a packet going %d, word %d of %d", st_isr, (st_isr >> 3) & 1, st_isr & 1, (st_isr >> 1) & 1,
 		 st_icr, st_want, st_busy, st_have, st_i, st_n);
+}
+
+long dspmp3_stream_resyncs(void)
+{
+	return s_rsy;
 }
 
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg)
