@@ -26,7 +26,7 @@ extern void (*feed_fn)(void);
 extern volatile short feed_busy;
 
 static void *old_vec;
-static unsigned char old_cr, old_ier, old_imr, cr;
+static unsigned char old_cr, old_ier, old_imr, cr, dr;
 static int on;
 
 static unsigned short sr_off(void)
@@ -50,7 +50,7 @@ static long take(void)
 	old_imr = IMRA & TA_BIT;
 	TACR = 0;
 	TA_VEC = (void *)feed_vec;
-	TADR = 154;
+	TADR = dr;
 	IPRA = (unsigned char)~TA_BIT;		/* (a pending one dropped) */
 	IERA |= TA_BIT;
 	IMRA |= TA_BIT;
@@ -76,7 +76,9 @@ void feed_on(void (*tick)(void), int hz)
 {
 	if (on)
 		feed_off();
-	cr = hz > 250 ? 3 : 5;
+	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154 */
+	cr = hz > 500 ? 3 : 5;
+	dr = hz > 250 && hz <= 500 ? 77 : 154;
 	feed_fn = tick;
 	feed_busy = 0;
 	Supexec(take);
