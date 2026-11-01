@@ -15,6 +15,8 @@
 #include "av.h"
 #include "crash.h"
 #include "aboutbox.h"
+#include "text.h"
+#include "offdraw.h"
 #include "play.h"
 #include "elog.h"
 #include "snd.h"
@@ -150,22 +152,37 @@ static void draw_rows(GRECT *area, int from, int to)
 	clip_off();
 }
 
-/* rows from..to again, through the AES's rectangles */
+/* rows from..to again, through the AES's rectangles. A row alone (the
+   time, each second) is drawn off the screen and shown in one step
+   (common's offdraw, where it can be: no flicker), else on it */
 static void redraw(GRECT *area, int from, int to)
 {
 	GRECT r, a;
+	int one = area == 0 && from == to && to < 4;
 	if (wh <= 0)
 		return;
 	if (!area) {
 		a = work;
+		if (one) {
+			a.y = work.y + from * ch + 4;
+			a.h = ch;
+		}
 		area = &a;
 	}
+	draw_forget();			/* (the About box draws with this handle too) */
 	wind_update(BEG_UPDATE);
 	graf_mouse(M_OFF, 0);
 	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w && r.h) {
-		if (rc_intersect(area, &r))
-			draw_rows(&r, from, to);
+		if (rc_intersect(area, &r)) {
+			if (one && off_begin(vdi_h, r.x, r.y, r.w, r.h)) {
+				draw_forget();
+				draw_rows(&r, from, to);
+				off_end();
+				draw_forget();
+			} else
+				draw_rows(&r, from, to);
+		}
 		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
 	}
 	graf_mouse(M_ON, 0);
@@ -400,6 +417,7 @@ int app_main(void)
 		return 1;
 	}
 	vst_alignment(vdi_h, 0, 5);
+	text_font(vdi_h, 1, cw, ch);		/* (the system font: common's fast text) */
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
 	crash_cleanup = crash_quit;

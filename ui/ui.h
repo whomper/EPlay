@@ -30,6 +30,7 @@ void line_col(short x1, short y1, short x2, short y2, short color);
 void text_at(short x, short y, const char *s, long n, short cols, short flags);
 void clip_on(GRECT *r);
 void clip_off(void);
+void draw_forget(void);	/* the VDI's attributes not as draw.c left them (the About box) */
 void font_sys_push(void);
 void font_sys_pop(void);
 void *st_ram(long n);
