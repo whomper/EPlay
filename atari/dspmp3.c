@@ -17,6 +17,7 @@
 #include "dspmp3.h"
 #include "mp3tab.h"
 #include "mp3_prog.h"
+#include "mp3frame.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 #pragma GCC diagnostic ignored "-Wunused-const-variable"	/* mp3tab.h's model tables */
@@ -248,4 +249,92 @@ void dspmp3_fail_info(int *what, long *at, long *of, int *hisr)
 int dspmp3_failed(void)
 {
 	return failed;
+}
+
+/* ---- STREAM (12): the DSP plays its frames from its SSI on the
+   matrix's clock. A packet goes when the DSP asks (HF2: its packet
+   buffer free), a word whenever the host port has room, never waiting
+   for it: what doesn't go this tick goes the next. After each frame the
+   DSP says how it kept up: granules late (bits 16-23, a count that runs
+   on) and its waits for the sound to move on (bits 0-15: the time it had
+   to spare) */
+#define HF2 0x08
+static unsigned long s_buf[PK_MAX];
+static int s_n, s_i, s_have;		/* the packet going: its words, the next (-1: its count) */
+static long s_frames, s_late, s_wmin, s_wsum;
+static int s_late8;
+static unsigned long s_last;		/* HZ200 at the last status word */
+
+void dspmp3_tick_stream(void)
+{
+	s_have = 0;
+	s_frames = s_late = s_wsum = 0;
+	s_wmin = -1;
+	s_late8 = 0;
+	s_last = HZ200;
+	put(12);			/* STREAM */
+}
+
+int dspmp3_tick_asks(void)
+{
+	return !s_have && (HISR & HF2);
+}
+
+void dspmp3_tick_offer(const unsigned long *pk, int n)
+{
+	int i;
+	for (i = 0; i < n; i++)
+		s_buf[i] = pk[i] & 0xffffff;
+	s_n = n;
+	s_i = -1;
+	s_have = 1;
+}
+
+void dspmp3_tick_push(void)
+{
+	while (s_have && (HISR & 2)) {
+		if (s_i < 0) {
+			HTX32 = (unsigned long)s_n;
+			s_i = 0;
+		} else
+			HTX32 = s_buf[s_i++];
+		if (s_i == s_n)
+			s_have = 0;
+	}
+}
+
+int dspmp3_tick_pushing(void)
+{
+	return s_have;
+}
+
+void dspmp3_tick_status(void)
+{
+	if (HISR & 1) {
+		unsigned long w = HTX32 & 0xffffff;
+		long waits = (long)(w & 0xffff);
+		int l8 = (int)(w >> 16) & 0xff;
+		s_late += (l8 - s_late8) & 0xff;
+		s_late8 = l8;
+		if (s_frames >= 4 && (s_wmin < 0 || waits < s_wmin))
+			s_wmin = waits;		/* (past the start, the ring's first fill) */
+		s_wsum += waits;
+		s_frames++;
+		s_last = HZ200;
+	}
+	if (HZ200 - s_last > 400 && !failed) {	/* two seconds without a frame */
+		failed = 1;
+		f_what = 4;
+		f_at = s_frames;
+		f_of = 0;
+		f_hisr = HISR;
+	}
+}
+
+void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg)
+{
+	*frames = s_frames;
+	*late = s_late;
+	*wmin = s_wmin;
+	*wavg = s_frames ? s_wsum / s_frames : 0;
 }

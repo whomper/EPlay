@@ -29,6 +29,13 @@
 	include	"mp3map.inc"
 
 HSR	equ	$ffe9
+HCR	equ	$ffe8
+PCC	equ	$ffe1
+CRA	equ	$ffec
+CRB	equ	$ffed
+SSISR	equ	$ffee
+TX	equ	$ffef
+IPR	equ	$ffff
 HRX	equ	$ffeb
 XS	equ	1		; mp3dsp.h's MP3_XS
 IS_BAD	equ	99
@@ -66,7 +73,8 @@ V_CNT	equ	$84
 V_T2	equ	$56
 V_T3	equ	$92
 V_T4	equ	$4f
-V_DATA	equ	$3f		; the main data (Y)
+V_SF	equ	$3f		; streaming's flags: STRM 0, HALF 1, PKF 2, STOP 3
+V_DATA	equ	$ad		; the main data (Y)
 V_R1	equ	$40
 V_R2	equ	$41
 V_BV	equ	$42
@@ -118,6 +126,15 @@ V_DGR	equ	$95
 V_DCH	equ	$96
 V_NLSB	equ	$97		; the transform: long subbands from the start (32, mixed 2, short 0)
 V_WIN	equ	$98		; and their window
+V_PKN	equ	$a3		; its words expected (-1: the count not yet)
+V_PKI	equ	$a4		; its words in
+V_IDLE	equ	$a5		; waits this frame (the decoder ahead of the sound)
+V_LATE	equ	$a6		; granules late (the sound played the old one again)
+V_SV3	equ	$a7		; refill: r3 and n3 kept
+V_SVN3	equ	$a8
+V_JUNK	equ	$aa		; (the underrun interrupt's)
+V_SVA	equ	$ab		; gout: a kept over waitsyn
+V_SVP	equ	$ac		; pkpoll: r3 kept
 
 ; ---- internal Y
 CQ	equ	$00		; dequantising: the band's |v| = 1..15, worked out (-1: not yet)
@@ -127,11 +144,8 @@ DPAIR	equ	$10		; the window of outputs j and 32 - j (240)
 ; internal P: the start, the commands, and what runs most
 	org	p:$0
 	jmp	start
-
-	org	p:$2			; (no interrupts: the vectors are free)
-start
-	movep	#1,x:$ffe0		; port B is the host port
-	movep	#0,x:$fffe		; no wait states
+start	movep	#1,x:$ffe0		; port B is the host port (P:2-F: the vectors
+	movep	#0,x:$fffe		; no wait states                 not taken)
 	ori	#3,mr			; no interrupts
 	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits)
 	movec	m0,m1
@@ -139,7 +153,19 @@ start
 	movec	m0,m3
 	movec	m0,m4
 	movec	m0,m5
-	movec	m0,m6
+	jmp	start2
+
+; the SSI's transmit, a fast interrupt: the ring (Y, r7 modulo m7) to the
+; matrix, a word each time slot (left, right). r7 is the SSI's alone: the
+; decoder doesn't touch it
+	org	p:$10
+	movep	y:(r7)+,x:TX
+	nop
+	org	p:$12			; with an underrun: the status read, then the word
+	jsr	tue
+
+	org	p:$14
+start2	movec	m0,m6
 	movec	m0,m7
 
 cmd	jsr	rd			; LOADP here; the rest from the external part
@@ -159,21 +185,22 @@ lp
 rd	jclr	#0,x:HSR,rd
 	movep	x:HRX,x0
 	rts
-wr	jclr	#1,x:HSR,wr
-	movep	x1,x:HRX
-	rts
 
 ; ---- the bits: refill while fewer than 25 (r1: the next word, in Y)
 refill	jclr	#15,r4,rf1
-	move	r4,n7
-	move	#>P2+25,r7
+	move	r3,x:V_SV3		; (r7 is the SSI's: r3 kept instead)
+	move	n3,x:V_SVN3
+rf0	move	r4,n3
+	move	#>P2+25,r3
 	move	y:(r1)+,x0
-	move	y:(r7+n7),y0
+	move	y:(r3+n3),y0
 	mac	x0,y0,a
 	move	#>23,n4
 	nop
 	move	(r4)+n4
-	jmp	refill
+	jset	#15,r4,rf0
+	move	x:V_SV3,r3
+	move	x:V_SVN3,n3
 rf1	rts
 
 ; ---- the Huffman part's regions: from r0 to line x0 of V_XR, table y0
@@ -225,8 +252,9 @@ rgp
 rgx	rts
 rgz	move	x:V_TMP,x0		; table 0: zeros, no bits
 	clr	b
-	rep	x0
+	do	x0,rgz1			; (do, not rep: the SSI's interrupt may come)
 	move	b,x:(r0)+
+rgz1
 	rts
 
 ; ---- dequantising a run: r0 its first line (X), x0 how many, y1 the
@@ -500,7 +528,7 @@ bf2
 	rts
 ; the DCT's rows in pairs: n even (8, from r1: e2 and o2 in turn, modulo
 ; 16), n odd (16, from r2: o, modulo 16); r5 the rows. X[0..15]: minus, to
-; r6 (up) and r7 (down)
+; r6 (up) and r3 (down)
 sdlo	do	#8,dl
 	clr	a		x:(r1)+,x0	y:(r5)+,y0
 	rep	#7
@@ -508,17 +536,17 @@ sdlo	do	#8,dl
 	macr	x0,y0,a
 	neg	a
 	move	a,x:(r6)+
-	move	a,x:(r7)-
+	move	a,x:(r3)-
 	clr	a		x:(r2)+,x0	y:(r5)+,y0
 	rep	#15
 	mac	x0,y0,a		x:(r2)+,x0	y:(r5)+,y0
 	macr	x0,y0,a
 	neg	a
 	move	a,x:(r6)+
-	move	a,x:(r7)-
+	move	a,x:(r3)-
 dl
 	rts
-; X[16..31]: to r6 (up), and minus to r7 (down)
+; X[16..31]: to r6 (up), and minus to r3 (down)
 sdhi	do	#8,dh
 	clr	a		x:(r1)+,x0	y:(r5)+,y0
 	rep	#7
@@ -526,14 +554,14 @@ sdhi	do	#8,dh
 	macr	x0,y0,a
 	move	a,x:(r6)+
 	neg	a
-	move	a,x:(r7)-
+	move	a,x:(r3)-
 	clr	a		x:(r2)+,x0	y:(r5)+,y0
 	rep	#15
 	mac	x0,y0,a		x:(r2)+,x0	y:(r5)+,y0
 	macr	x0,y0,a
 	move	a,x:(r6)+
 	neg	a
-	move	a,x:(r7)-
+	move	a,x:(r3)-
 dh
 	rts
 ; output 0 or 16: r1 its row (n1 = -64), r6 its window (Y): a = it
@@ -560,8 +588,8 @@ pt
 	asl	a		(r1)+
 	asl	a		(r2)-
 	rnd	a
-	asl	b		a,y:(r0)+
-	asl	b		(r3)-
+	asl	b		a,y:(r0)+n0
+	asl	b		(r3)-n3
 	rnd	b
 	move	b,y:(r3)
 pj
@@ -570,6 +598,140 @@ pj
 ; ===================================================================
 ; external P: the frame, and what runs once a granule
 	org	p:$7000
+
+wr	jclr	#1,x:HSR,wr
+	movep	x1,x:HRX
+	rts
+
+tue	movep	x:SSISR,x:V_JUNK	; (an underrun: the status read, then the word)
+	movep	y:(r7)+,x:TX
+	rti
+
+;---- STREAM (12): frames decoded into the ring (PCM, a frame: two halves
+; of a granule, left and right in turn) that the SSI plays on the matrix's
+; clock. A packet comes as its count and its words, while HF2 is set: from
+; when the frame's last granule is read (PKT free) until it is in. Count 0:
+; the end. After each frame a status word if the 68030 has read the last:
+; granules late (bits 16-23) and waits (0-15)
+stream	clr	a
+	move	#>PCM,r0
+	do	#2304,stc
+	move	a,y:(r0)+
+stc
+	move	a,x:V_SF
+	move	a,x:V_IDLE
+	move	a,x:V_LATE
+	bset	#0,x:V_SF		; streaming
+	move	#>PCM,r7
+	movec	#2303,m7
+	movep	#$1f8,x:PCC		; port C: the SSI
+	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
+	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
+	movep	#$3000,x:IPR		; the SSI at level 2
+	movep	#0,x:TX			; in step with the frame: a word written goes
+smt	jclr	#6,x:SSISR,smt		; out in the next slot; while slot 0 (TFS)
+	jclr	#2,x:SSISR,smr		; goes, a silent right, so that the ring's
+	movep	#0,x:TX			; left comes next
+smt2	jclr	#6,x:SSISR,smt2
+smr	andi	#$fc,mr			; interrupts on: the left first
+	jsr	pkfree
+stl	jsr	getpkt			; the whole packet
+	jset	#3,x:V_SF,stx
+	jsr	decode
+	jclr	#1,x:HSR,sm2		; (the 68030 hasn't read the last: none)
+	move	x:V_IDLE,a
+	move	#>$ffff,x0
+	cmp	x0,a
+	jle	sm1
+	move	x0,a
+sm1	move	x:V_LATE,b
+	move	#>$ff,x0
+	and	x0,b
+	rep	#16
+	lsl	b
+	move	a1,x0
+	or	x0,b
+	movep	b1,x:HRX
+sm2	clr	a
+	move	a,x:V_IDLE
+	jmp	stl
+stx	ori	#3,mr			; the end: interrupts and the SSI off
+	movep	#0,x:CRB
+	movep	#0,x:IPR
+	movec	#$ffff,m7
+	bclr	#0,x:V_SF
+	bclr	#3,x:HCR
+	jmp	cmd
+
+; PKT free: the next packet may come (HF2)
+pkfree	bset	#2,x:V_SF
+	move	#>-1,x0
+	move	x0,x:V_PKN
+	clr	a
+	move	a,x:V_PKI
+	bset	#3,x:HCR
+	rts
+
+; a packet's word if one is there (b, x0, x1 used)
+pkpoll	jclr	#2,x:V_SF,pkp9
+	jclr	#0,x:HSR,pkp9
+	movep	x:HRX,x0
+	move	x:V_PKN,b
+	tst	b
+	jge	pkp1
+	move	x0,x:V_PKN		; the count
+	move	x0,b
+	tst	b
+	jne	pkp9
+	bset	#3,x:V_SF		; 0: the end
+	jmp	pkp2
+pkp1	move	r3,x:V_SVP
+	move	x:V_PKI,b
+	move	#>PKT,x1
+	add	x1,b
+	move	b1,r3
+	nop
+	move	x0,y:(r3)
+	move	x:V_SVP,r3
+	move	x:V_PKI,b
+	move	#>1,x1
+	add	x1,b
+	move	b1,x:V_PKI
+	move	x:V_PKN,x1
+	cmp	x1,b
+	jlt	pkp9
+pkp2	bclr	#3,x:HCR		; all in
+	bclr	#2,x:V_SF
+pkp9	rts
+
+getpkt	jsr	pkpoll
+	jset	#2,x:V_SF,getpkt
+	rts
+
+; the SSI in the half the next granule goes to: Z set (b, x0, x1 used)
+inhalf	move	#>PCM+1152,x1
+	move	r7,b
+	cmp	x1,b
+	move	#>0,b			; (a move: the flags stay the cmp's)
+	jlt	ih1
+	move	#>1,b
+ih1	move	#>0,x0
+	jclr	#1,x:V_SF,ih2
+	move	#>1,x0
+ih2	cmp	x0,b
+	rts
+
+; before a granule's synthesis: wait while the SSI plays its half (the
+; one before last there), taking the next packet's words meanwhile
+waitsyn	jsr	inhalf
+	jne	ws9
+	jsr	pkpoll
+	move	x:V_IDLE,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_IDLE
+	jmp	waitsyn
+ws9	rts
 
 ; ---- the synthesis filter: a slot (synth.a56's), the 32 subband samples
 ; at slot V_T (SUBS + 18 k + t) into the ring's next slot, 32 samples to
@@ -609,9 +771,9 @@ sl0	move	a1,x:V_SW
 	and	x0,a
 	add	b,a
 	move	a1,r6
-	move	a1,r7
+	move	a1,r3
 	movec	#63,m6
-	movec	#63,m7
+	movec	#63,m3
 	move	#>EO,r1
 	movec	#15,m1
 	move	#>EO+16,r2
@@ -628,10 +790,10 @@ sl0	move	a1,x:V_SW
 	move	#>63,x0
 	and	x0,a
 	add	b,a
-	move	a1,r7
+	move	a1,r3
 	jsr	sdhi
 	movec	#$ffff,m6
-	movec	#$ffff,m7
+	movec	#$ffff,m3
 	move	x:V_SW,x0		; V[16] = 0
 	move	#>16,a
 	add	x0,a
@@ -663,7 +825,7 @@ sl0	move	a1,x:V_SW
 	move	a1,r1
 	nop
 	jsr	sw1
-	move	#>16,n3
+	move	#>32,n3			; (left and right in turn: output 16 at 32)
 	move	r0,r3
 	nop
 	move	a,y:(r3+n3)
@@ -689,14 +851,15 @@ sl0	move	a1,x:V_SW
 	move	a1,r2			; row 31 of slot P - 15
 	move	#>DPAIR,r5
 	move	r0,r3
-	move	#>1,n0
-	move	#>32,n3
+	move	#>2,n0			; j at 2 j, 32 - j at 64 - 2 j
+	move	#>64,n3
 	move	(r0)+n0
 	move	(r3)+n3
+	move	#>2,n3
 	jsr	swpair
 	movec	#$ffff,m1
 	movec	#$ffff,m2
-	move	#>16,n0
+	move	#>32,n0
 	nop
 	move	(r0)+n0			; the next slot's samples
 	rts
@@ -704,6 +867,9 @@ sl0	move	a1,x:V_SW
 cmdx	move	#>1,x1			; the commands (x0), but LOADP
 	cmp	x1,a
 	jeq	loadx
+	move	#>12,x1
+	cmp	x1,a
+	jeq	stream
 	move	#>11,x1
 	cmp	x1,a
 	jeq	play
@@ -752,7 +918,7 @@ fr1
 	move	#>PCM,r0
 	jsr	sendch
 	jclr	#0,x:V_FLAGS,fr2
-	move	#>PCM+1152,r0
+	move	#>PCM+1,r0
 	jsr	sendch
 fr2	jmp	cmd
 ; ---- PLAY: a frame decoded, and sent as the DMA plays it
@@ -764,30 +930,31 @@ play	jsr	rd
 pl1
 	jsr	decode
 	move	#>PCM,r0		; left
-	move	#>PCM+1152,r1		; right (mono: left again)
-	jset	#0,x:V_FLAGS,pl2
-	move	#>PCM,r1
+	move	#>PCM+1,r1		; right (mono: the left, copied)
+	move	#>2,n0
+	move	#>2,n1
 pl2	move	#>576,x0
 	jset	#8,x:V_FLAGS,pl3
 	move	#>1152,x0
 pl3	move	#>$008000,y0		; >> 8: the top 16 bits, down to the low 16
 	do	x0,pl4
-	move	y:(r0)+,x1
+	move	y:(r0)+n0,x1
 	mpy	x1,y0,a
 pl5	jclr	#1,x:HSR,pl5
 	movep	a1,x:HRX
-	move	y:(r1)+,x1
+	move	y:(r1)+n1,x1
 	mpy	x1,y0,a
 pl6	jclr	#1,x:HSR,pl6
 	movep	a1,x:HRX
 pl4
 	jmp	cmd
 
-sendch	move	#>576,x0
+sendch	move	#>576,x0		; a channel: every second word
+	move	#>2,n0
 	jset	#8,x:V_FLAGS,sc1
 	move	#>1152,x0
 sc1	do	x0,sc2
-	move	y:(r0)+,x1
+	move	y:(r0)+n0,x1
 	jsr	wr
 sc2
 	rts
@@ -848,6 +1015,8 @@ dc2	move	a1,x:V_NGR
 	clr	a
 	move	a,x:V_POS
 	move	a,x:V_GR
+	jset	#0,x:V_SF,dgr
+	bclr	#1,x:V_SF
 dgr	clr	a
 	move	a,x:V_CH
 dgc	jsr	gchan			; scalefactors, Huffman codes, dequantising
@@ -858,7 +1027,15 @@ dgc	jsr	gchan			; scalefactors, Huffman codes, dequantising
 	move	x:V_NCH,x0
 	cmp	x0,b
 	jlt	dgc
-	jclr	#0,x:V_FLAGS,dst
+	jclr	#0,x:V_SF,dpk		; streaming: the packet read, the next may come
+	move	x:V_GR,b
+	move	#>1,x0
+	add	x0,b
+	move	x:V_NGR,x0
+	cmp	x0,b
+	jne	dpk
+	jsr	pkfree
+dpk	jclr	#0,x:V_FLAGS,dst
 	jsr	stereo
 dst	clr	a
 	move	a,x:V_CH		; (tests: 4, after stereo: channel 0 asked)
@@ -875,6 +1052,14 @@ dgo	jsr	gout			; reorder, alias, transform, synthesis
 	move	x:V_NCH,x0
 	cmp	x0,b
 	jlt	dgo
+	jclr	#0,x:V_SF,dgl
+	jsr	inhalf			; the SSI came into it before it was done: late
+	jne	dgl
+	move	x:V_LATE,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_LATE
+dgl	bchg	#1,x:V_SF		; the next granule to the other half
 	move	x:V_GR,b
 	move	#>1,x0
 	add	x0,b
@@ -884,7 +1069,8 @@ dgo	jsr	gout			; reorder, alias, transform, synthesis
 	jlt	dgr
 	rts
 
-mute	clr	a			; no data yet: silence; the overlap and V cleared
+mute	jset	#0,x:V_SF,smute
+	clr	a			; no data yet: silence; the overlap and V cleared
 	move	#>RING0,r0
 	do	#2048,mu2
 	move	a,x:(r0)+
@@ -897,6 +1083,23 @@ mu3
 	do	#2304,mu1
 	move	a,y:(r0)+
 mu1
+	rts
+smute	jsr	pkfree			; (nothing more read from PKT)
+	move	x:V_NGR,x0
+	do	x0,smu2
+	jsr	waitsyn
+	move	#>PCM,a
+	jclr	#1,x:V_SF,smu1
+	move	#>1152,x0
+	add	x0,a
+smu1	move	a1,r0
+	clr	a
+	do	#1152,smu3
+	move	a,y:(r0)+
+smu3
+	bchg	#1,x:V_SF
+	nop
+smu2
 	rts
 
 ; ---- a granule of a channel: its side information, scalefactors,
@@ -1044,7 +1247,7 @@ gc10	move	#>576,a
 	jle	gc11
 	move	a1,x0
 	clr	b
-	rep	x0
+	do	x0,gc11			; (do, not rep: the SSI's interrupt may come)
 	move	b,x:(r0)+
 gc11	move	#>1,x0
 	move	#>1,y0
@@ -1210,8 +1413,9 @@ sp4	move	a1,x:V_PTR
 ; ISPL and ISPS (b, x and y only: A is the bits)
 scalef	clr	b
 	move	#>SFL,r0		; SFL, SFS, ISPL, ISPS: one after the other
-	rep	#122
+	do	#122,scz		; (do, not rep: the SSI's interrupt may come)
 	move	b,x:(r0)+
+scz
 	jset	#0,x:V_LSF,sflsf
 	move	x:V_BT,b
 	move	#>2,x0
@@ -1514,12 +1718,10 @@ vlin	move	x:V_LIN,b
 	jeq	vl0
 	jsr	refill
 	move	x:V_LIN,n3
-	move	#>LT,r3
-	move	x:V_LIN,n7
-	move	#>LTY,r7
+	move	#>LT,r3			; (LT and LTY: the same address in X and Y)
 	nop
 	move	x:(r3+n3),x1
-	move	y:(r7+n7),y1
+	move	y:(r3+n3),y1
 	move	a1,x0
 	mpy	x0,y1,b
 	and	x1,b
@@ -2171,13 +2373,18 @@ go7	move	b1,x:V_SBMAX
 	move	x:V_RP1,x0
 go9	move	a1,x:V_RING
 	move	x0,x:V_P
-	move	#>PCM,a
+	move	#>PCM,a		; PCM + ch + 1152 half: left and right in turn
 	jclr	#0,x:V_CH,go10
-	move	#>PCM+1152,a
-go10	jclr	#0,x:V_GR,go11
-	move	#>576,x0
+	move	#>PCM+1,a
+go10	jclr	#1,x:V_SF,go11
+	move	#>1152,x0
 	add	x0,a
-go11	move	a1,r0
+go11	jset	#0,x:V_CH,go11b		; streaming: the SSI out of this half first
+	jclr	#0,x:V_SF,go11b
+	move	a1,x:V_SVA
+	jsr	waitsyn
+	move	x:V_SVA,a
+go11b	move	a1,r0
 	clr	a
 	move	a,x:V_T
 	do	#18,go12
@@ -2191,7 +2398,18 @@ go12
 	move	x:V_P,x0
 	jset	#0,x:V_CH,go13
 	move	x0,x:V_RP0
-	rts
+	jset	#0,x:V_FLAGS,go14	; mono: the right as the left
+	move	#>PCM,a
+	jclr	#1,x:V_SF,go15
+	move	#>1152,x0
+	add	x0,a
+go15	move	a1,r0
+	nop
+	do	#576,go16
+	move	y:(r0)+,x0
+	move	x0,y:(r0)+
+go16
+go14	rts
 go13	move	x0,x:V_RP1
 	rts
 

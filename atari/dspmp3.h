@@ -27,8 +27,25 @@ void dspmp3_tick_send(const unsigned long *pk, int n);
 int dspmp3_tick_ready(void);
 void dspmp3_tick_read(short *to, long frames);
 int dspmp3_failed(void);	/* it stopped answering */
+
+/* STREAM: the DSP plays from its SSI (the matrix: DSPXMIT to the DAC and
+   the FDI, on the clock it is given), frames as it asks. From the tick:
+   dspmp3_tick_stream once loaded; then each tick dspmp3_tick_status (its
+   word after a frame), dspmp3_tick_push (what may go), and when
+   dspmp3_tick_asks a packet offered (copied: pk may be made again at
+   once). A packet of count 0 ends it. dspmp3_stream_info: frames
+   decoded, granules late (the sound played the one before again), the
+   least and the mean of its waits a frame (its time to spare: 0 none) */
+void dspmp3_tick_stream(void);
+void dspmp3_tick_status(void);
+void dspmp3_tick_push(void);
+int dspmp3_tick_asks(void);
+int dspmp3_tick_pushing(void);
+void dspmp3_tick_offer(const unsigned long *pk, int n);
+void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg);
 /* where: what 1 sending a packet, 2 reading a frame, 3 loading; the word
-   it waited for, of how many; the host port's status then */
+   it waited for, of how many; the host port's status then. 4: no frame
+   from the stream for two seconds (at: the frames) */
 void dspmp3_fail_info(int *what, long *at, long *of, int *hisr);
 
 #endif

@@ -380,16 +380,19 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "IM12", 0x2ae0, 36, "t_imdct12"),
     ("Y", "OV0", 0x2b10, 576, None),
     ("Y", "OV1", 0x2d50, 576, None),
-    ("Y", "SUBS", 0x2f90, 576, None),
-    ("Y", "PKT", 0x31d0, 742, None),
-    ("Y", "PCM", 0x34c0, 2304, None),
-    ("Y", "CTMP", 0x3dc0, 36, None),
+    # the output ring: a frame, left and right in turn, that the SSI plays
+    # with r7 modulo 2304: on a multiple of 4096 (the DSP's modulo rule)
+    ("Y", "PCM", 0x3000, 2304, None),
+    ("Y", "SUBS", 0x3900, 576, None),
+    ("Y", "PKT", 0x3b40, 742, None),
+    ("Y", "CTMP", 0x3e30, 36, None),
 ]
 for sp in "XY":   # nothing overlaps, and all of it is external memory
     spans = sorted((a, a + n, nm) for s_, nm, a, n, _ in MAP if s_ == sp)
     for (a0, e0, n0), (a1, e1, n1) in zip(spans, spans[1:]):
         assert e0 <= a1, "%s: %s overlaps %s" % (sp, n0, n1)
     assert spans[0][0] >= 0x200 and spans[-1][1] <= 0x4000
+assert [a for s_, nm, a, n, _ in MAP if nm == "PCM"][0] % 4096 == 0
 sizes = {name: len(words) for name, words, _ in tabs}
 for sp, nm, a, n, t in MAP:
     assert t is None or sizes[t] == n, (nm, sizes.get(t), n)

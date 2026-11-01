@@ -63,6 +63,18 @@ disk --32 KB reads--> MP3 data (TT RAM) --host interrupt, as the DSP asks--> DSP
 - The 68030 feeds the compressed bytes from memory by the DSP's host interrupt: at 320 kbit/s
   that is 40 KB/s, about 14,000 host-port words a second.
 - Pause and stop unlock the DSP (the DSP rule).
+- **As built in phase 2 (STREAM, command 12):** the DSP plays its own output. The ring is one
+  frame in Y (`PCM` at `Y:$3000`, 2304 words, left and right in turn): two halves of a granule.
+  The SSI's transmit is a fast interrupt (`movep y:(r7)+,x:TX`, `r7` modulo 2304, the SSI's
+  alone). Before a granule's synthesis the decoder waits until the SSI is out of that half;
+  a granule finished with the SSI already back in its half counts as late. The next frame's
+  packet comes while it waits: from the moment the last granule's bits are read (PKT free), the
+  DSP sets HF2, and the tick sends words whenever the host port has room, never waiting for it.
+  After each frame the DSP sends a status word: granules late, and its waits (each about
+  1.2 µs: its time to spare). EPLAY.LOG gives them, so a real Falcon says how the DSP keeps up.
+  The SSI is put in step with the frame (TFS) before its interrupt is on, so left is left. No
+  `rep` longer than a few µs is left in the decoder (they became `do` loops): the SSI's
+  interrupt can't wait through one.
 - **As built in 0.1 (the team's choice, for one sound path):** the samples come back to the 68030
   through the host port (`PLAY`, command 11: each sample's top 16 bits) and go into the same ring
   as WAV's. The queue holds the MP3's bytes as they are; the tick (1000 a second here) makes a

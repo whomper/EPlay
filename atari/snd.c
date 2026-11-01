@@ -33,8 +33,11 @@ static long x_setbuffer(short reg, void *beg, void *end)
 #define Buffoper(m)		trap14_ww(136, (m))
 #define Devconnect(s, d, c, p, h) trap14_w6(139, (s), (d), (c), (p), (h), 0)
 #define Buffptr(p)		trap14_wl(141, (long)(p))
+#define Dsptristate(x, r)	trap14_w6(137, (x), (r), 0, 0, 0, 0)
+#define Gpio(m, d)		trap14_w6(138, (m), (d), 0, 0, 0, 0)
 
 #define DMAPLAY		0
+#define DSPXMIT		1
 #define EXTOUT		4
 #define DAC		8
 #define CLK25M		0
@@ -213,6 +216,90 @@ static long measure_ext(void)
 	return 0;
 }
 
+/* the FDI set to rate (44.1 or 48 kHz) as Cubase Audio does it: 4 on
+   its lines, 50 ms, then 2 for 44.1 or 3 for 48 (Cubase's), 50 ms. Each
+   is measured, and the other tried: Erez's FDI gave 48 kHz at 2. 1 when
+   the clock is at rate (snd_ext_rate, ext_pre set); else the lines as
+   they were */
+int snd_fdi_changed;		/* EPlay changed the FDI's lines (put back at the end) */
+char snd_fdi_note[120];
+
+static void wait_ms(long ms)
+{
+	unsigned long t0 = tos_ms();
+	while ((long)(tos_ms() - t0) < ms)
+		;
+}
+
+int snd_fdi_set(long rate)
+{
+	int k, v[2], n = 0;
+	if (!snd_fdi || (rate != 44100 && rate != 48000))
+		return 0;
+	if (snd_ext_rate == rate)
+		return 1;
+	v[0] = rate == 44100 ? 2 : 3;
+	v[1] = 5 - v[0];
+	snd_fdi_note[0] = 0;
+	for (k = 0; k < 2; k++) {
+		long got;
+		Gpio(0, 7);
+		Gpio(2, 4);
+		wait_ms(50);
+		Gpio(2, v[k]);
+		wait_ms(50);
+		snd_fdi_changed = 1;
+		got = measure_ext();
+		n += snprintf(snd_fdi_note + n, sizeof(snd_fdi_note) - (size_t)n, "%s%d: %ld Hz", n ? "; " : "",
+			      v[k], snd_ext_raw);
+		if (n >= (int)sizeof(snd_fdi_note))
+			n = (int)sizeof(snd_fdi_note) - 1;
+		snd_ext_rate = got;
+		if (got == rate)
+			return 1;
+	}
+	Gpio(2, snd_gpio_data);		/* (neither: as the FDI's program left it) */
+	wait_ms(50);
+	snd_ext_rate = measure_ext();
+	return 0;
+}
+
+unsigned short snd_matrix[4];	/* $FF8930-$FF8937 after snd_dsp_out (the log) */
+static long read_matrix(void)
+{
+	volatile unsigned short *r = (volatile unsigned short *)0xffff8930L;
+	int i;
+	for (i = 0; i < 4; i++)
+		snd_matrix[i] = r[i];
+	return 0;
+}
+
+/* the matrix: the DSP's SSI (DSPXMIT) to the DAC and the FDI (EXTOUT),
+   on the external clock or the Falcon's at the rate's prescale; the DSP
+   joined to the matrix (Dsptristate). Cubase Audio's way */
+void snd_dsp_out(long rate, int ext)
+{
+	short pre = 1;
+	unsigned i;
+	if (ext)
+		pre = ext_pre;
+	else
+		for (i = 0; i < sizeof(internal) / sizeof(internal[0]); i++)
+			if (internal[i] == rate)
+				pre = prescale[i];
+	Buffoper(0);
+	Devconnect(DSPXMIT, DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+	Dsptristate(1, 1);
+	Supexec(read_matrix);
+}
+
+/* the DSP off the matrix, the matrix as EPlay found it */
+void snd_dsp_off(void)
+{
+	Dsptristate(0, 0);
+	Supexec(put_regs);
+}
+
 int snd_init(const char **why)
 {
 	long snd = get_cookie(0x5F534E44L);	/* _SND: bit 2 the codec, 4 the matrix */
@@ -235,6 +322,11 @@ int snd_init(const char **why)
 void snd_exit(void)
 {
 	snd_close();
+	if (snd_fdi_changed) {		/* the FDI's lines as its program left them */
+		Gpio(0, snd_gpio_dir);
+		Gpio(2, snd_gpio_data);
+		snd_fdi_changed = 0;
+	}
 	if (locked) {
 		Supexec(put_regs);
 		Unlocksnd();

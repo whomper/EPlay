@@ -22,7 +22,13 @@ extern long snd_ext_raw;	/* the DMA's rate on it at prescale 1, as measured (0: 
 extern long snd_ext_clock;	/* the clock's frequency from that, Hz */
 extern int snd_fdi;		/* the FDI's driver is there */
 extern int snd_gpio_dir, snd_gpio_data;	/* the DSP port's GPIO at the start (the FDI's) */
-extern char snd_ext_note[];	/* what was tried after the first measure, for the log */
+extern char snd_ext_note[];
+extern char snd_fdi_note[];	/* snd_fdi_set's tries: each value and its measure */
+
+int snd_fdi_set(long rate);	/* the FDI to 44.1 or 48 kHz: 1 when its clock is at it */
+void snd_dsp_out(long rate, int ext);	/* the DSP's SSI to the DAC and the FDI, at rate */
+void snd_dsp_off(void);
+extern unsigned short snd_matrix[4];	/* $FF8930-7 after snd_dsp_out */		/* off the matrix again */	/* what was tried after the first measure, for the log */
 
 /* the rate to play a file of rate Hz at: exactly, through the external
    clock or the Falcon's own (49170, 32780, 24585... Hz), else the
