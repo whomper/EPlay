@@ -727,6 +727,11 @@ int play_step(int ms)
 		     at, of, hisr,
 		     t_frames, play_ms(), snd_underruns);
 		elog("the sound: %s", play_keep_up());
+		if (what == 4) {
+			char note[160];
+			dspmp3_stall_note(note, sizeof(note));
+			elog("the stream then: %s", note);
+		}
 
 		play_stop();
 		elog_save();

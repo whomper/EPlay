@@ -44,6 +44,7 @@ int dspmp3_tick_pushing(void);
 void dspmp3_tick_offer(const unsigned long *pk, int n);
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg);
 int dspmp3_stream_stalled(unsigned long hz);	/* GEM: no frame for 2 s (hz: the 200 Hz clock) */
+void dspmp3_stall_note(char *b, int n);	/* what both sides were doing then, for the log */
 /* where: what 1 sending a packet, 2 reading a frame, 3 loading; the word
    it waited for, of how many; the host port's status then. 4: no frame
    from the stream for two seconds (at: the frames) */

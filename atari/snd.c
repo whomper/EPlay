@@ -217,10 +217,12 @@ static long measure_ext(void)
 }
 
 /* the FDI set to rate (44.1 or 48 kHz) as Cubase Audio does it: 4 on
-   its lines, 50 ms, then 2 for 44.1 or 3 for 48 (Cubase's), 50 ms. Each
-   is measured, and the other tried: Erez's FDI gave 48 kHz at 2. 1 when
-   the clock is at rate (snd_ext_rate, ext_pre set); else the lines as
-   they were */
+   its lines, 50 ms, then 2 for 44.1 or 3 for 48 (Cubase's, its own
+   clock), and 0 (Cubase's "S/PDIF controls the clock": the clock of what
+   comes into its S/PDIF input), with time for it to settle. Each is
+   measured, and the first at rate kept: Erez's FDI gave 48 kHz at 2 and
+   at 3 (0.4), with a 44.1 kHz signal into its input. 1 when the clock is
+   at rate (snd_ext_rate, ext_pre set); else the lines as they were */
 int snd_fdi_changed;		/* EPlay changed the FDI's lines (put back at the end) */
 char snd_fdi_note[120];
 
@@ -233,21 +235,22 @@ static void wait_ms(long ms)
 
 int snd_fdi_set(long rate)
 {
-	int k, v[2], n = 0;
+	int k, v[3], n = 0;
 	if (!snd_fdi || (rate != 44100 && rate != 48000))
 		return 0;
 	if (snd_ext_rate == rate)
 		return 1;
 	v[0] = rate == 44100 ? 2 : 3;
 	v[1] = 5 - v[0];
+	v[2] = 0;
 	snd_fdi_note[0] = 0;
-	for (k = 0; k < 2; k++) {
+	for (k = 0; k < 3; k++) {
 		long got;
 		Gpio(0, 7);
 		Gpio(2, 4);
 		wait_ms(50);
 		Gpio(2, v[k]);
-		wait_ms(50);
+		wait_ms(v[k] ? 50 : 200);	/* (the input's clock: its receiver to lock) */
 		snd_fdi_changed = 1;
 		got = measure_ext();
 		n += snprintf(snd_fdi_note + n, sizeof(snd_fdi_note) - (size_t)n, "%s%d: %ld Hz", n ? "; " : "",

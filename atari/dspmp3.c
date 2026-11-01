@@ -18,6 +18,7 @@
 #include "mp3tab.h"
 #include "mp3_prog.h"
 #include "mp3frame.h"
+#include <stdio.h>
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 #pragma GCC diagnostic ignored "-Wunused-const-variable"	/* mp3tab.h's model tables */
@@ -335,17 +336,45 @@ void dspmp3_tick_status(void)
 }
 
 /* GEM's side: two seconds without a frame from the stream is a DSP
-   that stopped (hz: the 200 Hz clock now) */
+   that stopped (hz: the 200 Hz clock now); what both sides were doing
+   then is kept for the log (dspmp3_stall_note) */
+extern volatile unsigned char hirq_want, hirq_busy;
+static unsigned char st_isr, st_icr, st_want, st_busy;
+static int st_have, st_i, st_n;
+
+static long stall_snap(void)
+{
+	st_isr = HISR;
+	st_icr = *(volatile unsigned char *)0xffffa200L;
+	st_want = hirq_want;
+	st_busy = hirq_busy;
+	st_have = s_have;
+	st_i = s_i;
+	st_n = s_n;
+	return 0;
+}
+
 int dspmp3_stream_stalled(unsigned long hz)
 {
 	if (!failed && hz - s_last > 400) {
+		Supexec(stall_snap);
 		failed = 1;
 		f_what = 4;
 		f_at = s_frames;
 		f_of = 0;
-		f_hisr = -1;
+		f_hisr = st_isr;
 	}
 	return failed;
+}
+
+/* the stall's state: the host port's ISR (bit 3 HF2: the DSP asks for a
+   packet; 0 RXDF, 1 TXDE) and ICR (the 68030's requests), the handler's,
+   and the packet going (its word of how many: -1 its count) */
+void dspmp3_stall_note(char *b, int n)
+{
+	snprintf(b, (size_t)n, "ISR $%02X (HF2 %d, RXDF %d, TXDE %d), ICR $%02X, wanted %d, busy %d; "
+		 "a packet going %d, word %d of %d", st_isr, (st_isr >> 3) & 1, st_isr & 1, (st_isr >> 1) & 1,
+		 st_icr, st_want, st_busy, st_have, st_i, st_n);
 }
 
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg)

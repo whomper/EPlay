@@ -486,6 +486,33 @@ and plays from the DSP:
   the way. That is phase 2's plan for MP3; Cubase does it for 8 tracks at 44.1/48 kHz in 16 or 24
   bits, and 16 tracks compressed on the DSP.
 
+### 0.4 on Erez's Falcon (1 Nov 2026; the DFB1X off: a stock Falcon)
+
+"Better in the sense of speed, and it did not stop. However there are many crackles." The log:
+
+```
+the FDI to 44100 Hz: 2: 48050 Hz; 3: 47775 Hz
+output: 49170 Hz, the Falcon's clock
+the DSP stopped answering streaming word 4863 of 0 ..., frame 4864; 113911 ms played
+the sound: 4863 frames decoded, 3697 granules late; the DSP's waits a frame: least 0, mean 1022;
+  the tick 25% of the 68030 (frames made 15%, sent 7%)
+```
+
+1. **The FDI stayed at 48 kHz** on 2 and on 3, so the DSP played on the Falcon's 49,170 Hz into
+   an S/PDIF at 48 kHz: crackles. Erez's set-up: a sound card's optical output into the FDI's
+   S/PDIF input at 44.1 kHz, and Cubase plays 44.1 kHz right. Cubase's other setting, 0, takes
+   the input's clock ("S/PDIF controls the clock"): 0.5 tries it too, measured as the others.
+   Cubase's routine that programs a chip by a DMA bit pattern is for its own interface (the
+   C.A.C.), not the FDI: with the FDI's driver answering, Cubase only sets the lines.
+2. **The DSP fell behind:** 38 % of the granules late (played again: crackles), with about 1 ms
+   to spare a frame on average, where Hatari has 4 for a heavier file (pink noise, 239 kbit/s).
+   At 49,170 Hz a 320 kbit/s frame needs 96 % of the DSP by Hatari's count; Erez's music (VBR,
+   266 kbit/s) at it, on a real DSP, is past it. Next: the decoder made faster, and the output
+   at 44.1 or 48 kHz (Erez's choice for a FDI at 48 kHz: resampled to 48 kHz on the DSP).
+3. **The stream stopped twice**, at frames 4,864 and 224 of the same file: timing, not the
+   data, and never in Hatari. 0.5's log says what both sides were doing then (the host port's
+   flags, the handler's, the packet going).
+
 ## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
 
 Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the
