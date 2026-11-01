@@ -28,6 +28,7 @@ extern char snd_fdi_note[];	/* snd_fdi_set's tries: each value and its measure *
 int snd_fdi_set(long rate);	/* the FDI to 44.1 or 48 kHz: 1 when its clock is at it */
 void snd_dsp_out(long rate, int ext);	/* the DSP's SSI to the DAC and the FDI, at rate */
 void snd_dsp_off(void);
+void snd_mfp_note(char *b, int n);	/* the MFP's interrupts and inputs now, for the log */
 extern unsigned short snd_matrix[4];	/* $FF8930-7 after snd_dsp_out */		/* off the matrix again */	/* what was tried after the first measure, for the log */
 
 /* the rate to play a file of rate Hz at: exactly, through the external

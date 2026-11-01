@@ -565,13 +565,20 @@ int play_open(const char *path, char *err, int n)
 	if (!kind) {
 		/* MP3 from the DSP: the FDI at the file's rate where it can be,
 		   else the nearest rate (phase 2 resamples it) */
+		char mn[100];
+		spurious_on();		/* (from here: 0.5 met 24 bombs as it began) */
+		snd_mfp_note(mn, sizeof(mn));
+		elog("the MFP before: %s", mn);
 		if (snd_fdi_set(rate)) {
 			ext = 1;
 			out_rate = rate;
 		} else
 			out_rate = snd_rate_for(rate, &ext);
-		if (snd_fdi_note[0])
+		if (snd_fdi_note[0]) {
 			elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
+			snd_mfp_note(mn, sizeof(mn));
+			elog("the MFP after: %s", mn);
+		}
 	} else {
 		out_rate = snd_rate_for(rate, &ext);
 		if (!snd_open(out_rate, ext)) {
@@ -620,6 +627,9 @@ void play_stop(void)
 {
 	feed_off();			/* first: the tick and the DSP's interrupt no longer run */
 	hostirq_off();
+	if (hirq_spur)
+		elog("spurious interrupts while playing: %lu", (unsigned long)hirq_spur);
+	spurious_off();
 	loading = 0;
 	snd_close();
 	t_dsp = 0;

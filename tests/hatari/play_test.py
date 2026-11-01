@@ -140,7 +140,8 @@ def analyse(rec, case):
         return abs(a[0] - b[0]) < 8 and abs(a[1] - b[1]) < 8
     note = ""
     pitch = near((fl, fr), want)
-    if not pitch and near((fr, fl), want) and hatari_keeps_parity():
+    # (an MP3 is played by the DSP's SSI, not the DMA: no swap excused)
+    if not pitch and near((fr, fl), want) and hatari_keeps_parity() and not CASES[case][2]:
         # Hatari 2.4 doesn't start a DMA's stereo on the left: it keeps the
         # word count's parity from the DMA's last stop (EPlay's clock
         # measurement), fixed in later Hatari (crossbar.c, "1st frame is

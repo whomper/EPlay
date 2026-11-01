@@ -513,6 +513,20 @@ the sound: 4863 frames decoded, 3697 granules late; the DSP's waits a frame: lea
    data, and never in Hatari. 0.5's log says what both sides were doing then (the host port's
    flags, the handler's, the packet going).
 
+### 0.5 on Erez's Falcon (1 Nov 2026)
+
+The window said "External clock 44.1 kHz": the FDI on its input's clock (0) is at the file's
+rate. Then some 24 bombs as it began to play: a spurious interrupt (one asked for that no one
+answered at its acknowledge). New in 0.5 was the FDI's 0; the FDI's own program reads one of
+its lines on the MFP's GPIP bit 3, so the FDI may drive an MFP line there. 0.6 answers vector 24
+itself while playing (counted, let go; given back at stop), logs how many, and logs the MFP's
+interrupt set-up and inputs before and after the FDI is set.
+
+0.6 also keeps left and right in step each frame (the DSP's salign: its interrupt held until a
+slot begins, TFS says which, r7 a word on if needed): the start's alignment alone met Hatari
+with them swapped now and then. The play rig no longer excuses a swap for MP3 (the SSI's, not
+Hatari's DMA).
+
 ## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
 
 Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the

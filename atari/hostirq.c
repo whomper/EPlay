@@ -15,6 +15,10 @@
 #define VEC	(*(void * volatile *)(255 * 4L))
 
 extern void hirq_vec(void);
+extern void spur_vec(void);
+#define SPUR	(*(void * volatile *)(24 * 4L))
+static void *old_spur;
+static int spur_on_;
 extern void (*hirq_fn)(void);
 
 static void *old_vec;
@@ -61,5 +65,43 @@ void hostirq_off(void)
 	if (on) {
 		Supexec(give_back);
 		on = 0;
+	}
+}
+
+/* vector 24, the spurious interrupt, answered by counting it (hirq_spur)
+   while EPlay plays, and given back */
+static long spur_take(void)
+{
+	unsigned short sr;
+	__asm__ volatile("move.w %%sr,%0\n\tori.w #0x0700,%%sr" : "=d"(sr) : : "cc");
+	old_spur = SPUR;
+	SPUR = (void *)spur_vec;
+	__asm__ volatile("move.w %0,%%sr" : : "d"(sr) : "cc");
+	return 0;
+}
+
+static long spur_give(void)
+{
+	unsigned short sr;
+	__asm__ volatile("move.w %%sr,%0\n\tori.w #0x0700,%%sr" : "=d"(sr) : : "cc");
+	SPUR = old_spur;
+	__asm__ volatile("move.w %0,%%sr" : : "d"(sr) : "cc");
+	return 0;
+}
+
+void spurious_on(void)
+{
+	if (!spur_on_) {
+		hirq_spur = 0;
+		Supexec(spur_take);
+		spur_on_ = 1;
+	}
+}
+
+void spurious_off(void)
+{
+	if (spur_on_) {
+		Supexec(spur_give);
+		spur_on_ = 0;
 	}
 }

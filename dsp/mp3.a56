@@ -635,7 +635,8 @@ smt	jclr	#6,x:SSISR,smt		; out in the next slot; while slot 0 (TFS)
 smt2	jclr	#6,x:SSISR,smt2
 smr	andi	#$fc,mr			; interrupts on: the left first
 	jsr	pkfree
-stl	jsr	getpkt			; the whole packet
+stl	jsr	salign			; left and right in step, each frame
+	jsr	getpkt			; the whole packet
 	jset	#3,x:V_SF,stx
 	jsr	decode
 	jclr	#1,x:HSR,sm2		; (the 68030 hasn't read the last: none)
@@ -662,6 +663,24 @@ stx	ori	#3,mr			; the end: interrupts and the SSI off
 	bclr	#0,x:V_SF
 	bclr	#3,x:HCR
 	jmp	cmd
+
+; left and right in step: the SSI's interrupt held a moment, until a
+; slot begins (TDE; its word written then goes in the slot after it). In
+; slot 0 (TFS) the next is the right's (r7 odd), in slot 1 the left's
+; (r7 even); r7 one word on if not. The start's own alignment met Hatari
+; with left and right swapped now and then
+salign	ori	#3,mr
+	nop
+	nop
+sa1	jclr	#6,x:SSISR,sa1
+	move	r7,b
+	jset	#2,x:SSISR,sa3
+	jclr	#0,b1,sa9		; slot 1: the left's next, r7 even: in step
+	jmp	sa8
+sa3	jset	#0,b1,sa9		; slot 0: the right's next, r7 odd: in step
+sa8	move	(r7)+			; one word on
+sa9	andi	#$fc,mr
+	rts
 
 ; PKT free: the next packet may come (HF2)
 pkfree	bset	#2,x:V_SF

@@ -267,6 +267,26 @@ int snd_fdi_set(long rate)
 	return 0;
 }
 
+/* the MFP's interrupt set-up and its inputs, for the log: GPIP, AER,
+   IERA, IERB, IMRA, IMRB (bit 3 of GPIP is the FDI's line its program
+   reads; IERB bit 3 its interrupt) */
+static unsigned char mfp_now[6];
+static long mfp_read(void)
+{
+	static const unsigned char at[6] = { 0x01, 0x03, 0x07, 0x09, 0x13, 0x15 };
+	int i;
+	for (i = 0; i < 6; i++)
+		mfp_now[i] = *(volatile unsigned char *)(0xfffffa00L + at[i]);
+	return 0;
+}
+
+void snd_mfp_note(char *b, int n)
+{
+	Supexec(mfp_read);
+	snprintf(b, (size_t)n, "GPIP $%02X, AER $%02X, IERA $%02X, IERB $%02X, IMRA $%02X, IMRB $%02X", mfp_now[0],
+		 mfp_now[1], mfp_now[2], mfp_now[3], mfp_now[4], mfp_now[5]);
+}
+
 unsigned short snd_matrix[4];	/* $FF8930-$FF8937 after snd_dsp_out (the log) */
 static long read_matrix(void)
 {

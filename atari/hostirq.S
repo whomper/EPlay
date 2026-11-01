@@ -27,8 +27,18 @@ hirq_vec:
 	sf	hirq_busy
 1:	rte
 
+| a spurious interrupt (vector 24: asked for, and no one answered its
+| acknowledge) counted and let go, while EPlay plays: TOS's own shows
+| 24 bombs (Erez's Falcon, 0.5, the FDI on its input's clock)
+	.globl	spur_vec
+spur_vec:
+	addq.l	#1,hirq_spur
+	rte
+
 	.bss
-	.globl	hirq_busy, hirq_fn, hirq_want
+	.globl	hirq_busy, hirq_fn, hirq_want, hirq_spur
+	.even
+hirq_spur:	.skip	4
 	.even
 hirq_fn:	.skip	4
 hirq_busy:	.skip	1
