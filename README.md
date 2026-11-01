@@ -12,16 +12,19 @@ window. Written in C and DSP56001 assembly for GEM.
   and from the DSP waits for the host port's flag, so an accelerated Falcon (a DFB1 at 50 MHz)
   plays exactly as a stock one.
 - **MP3 on the DSP:** the whole decoder (MPEG-1, 2 and 2.5 layer III) runs on the Falcon's
-  DSP56001, checked bit for bit against a model that meets ISO 11172-4's full accuracy.
-- **Through an external clock:** with a clock on the DSP port (a SoundPool FDI: 44.1 or 48 kHz to
-  S/PDIF), files at that rate play at their own rate, bit for bit.
+  DSP56001, checked bit for bit against a model that meets ISO 11172-4's full accuracy, and the
+  DSP plays what it decodes itself (its SSI port to the DAC or the FDI): the 68030 only hands it
+  the file's frames, when the DSP asks.
+- **Through the FDI:** with a SoundPool FDI on the DSP port, EPlay sets it to the file's rate
+  (44.1 or 48 kHz, as Cubase Audio does) and the DSP plays into it on its clock, bit for bit.
 - **Shares the DSP:** EPlay holds the DSP only while an MP3 plays.
 
-*Phase 1 (releases 0.1 to 0.3) is the first try on a real Falcon: the sound core and a minimal
-window. The playlist, the small player, the guide and resampling (files at 44.1 kHz with no
-external clock) come in the next phases, named by what they bring: phase 2, every Falcon with
-output and volume settings; 3, the player window; 4, playlists and folders; 5, the small player,
-keys, MiNT and MagiC; 6, the TT and STE. Release numbers count releases, not phases.*
+*Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
+window. Phase 2, from 0.4, plays MP3 three ways, chosen in the settings: on the Falcon's DSP, through
+the FDI as Cubase Audio does (the FDI set to the file's rate), or on a 68030 (TT, or a Falcon
+without its DSP free) at the quality it keeps up with; with resampling and the settings. 0.4 brings
+the first part: the DSP plays MP3 itself, straight to the DAC and the FDI. Then 3, the player
+window; 4, playlists and folders; 5, the small player, keys, MiNT and MagiC; 6, the TT and STE.*
 
 ## Getting started
 
@@ -39,8 +42,9 @@ contains:
    the Play menu.
 
 **EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
-found, each file's format and length, how playing ended. While EPlay is young, please send it
-with any report.
+found and how it set the FDI, each file's format and length, how playing ended, and how the DSP
+and the 68030 kept up (the DSP's time to spare a frame, the share of the 68030 that playing
+took). While EPlay is young, please send it with any report.
 
 **Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS
 (MagiC and MiNT not tried yet), 640×400 or larger.
