@@ -52,7 +52,8 @@ static long rate, out_rate, len_ms, file_size;
 static unsigned char *fbuf;	/* the file's first bytes, fpos..fend */
 static long fpos, fend;
 static MP3PARSE parse;		/* the tick's */
-static unsigned long pk[PK_MAX];	/* the tick's: a packet */
+static unsigned long pks[2][PK_MAX];	/* the tick's packets: one going to the DSP, */
+static unsigned long *pk = pks[0];	/* the next made in the other */
 static unsigned char fr[2048];	/* the tick's: a frame, whole */
 static long last_sec = -1;
 static long data_left;		/* bytes still to read into the queue */
@@ -205,6 +206,16 @@ static void peek(long n)
 	}
 }
 
+/* the next n bytes whole: where they are in the queue, else (round its
+   end) copied into fr */
+static const unsigned char *bytes_at(long n)
+{
+	if (q_size - q_roff >= n)
+		return q + q_roff;
+	peek(n);
+	return fr;
+}
+
 /* the next frame made into a packet for the DSP (pk, pk_n words): 1
    when there is one; a byte that starts none (a tag, damage) passed,
    4096 at most a call */
@@ -224,8 +235,7 @@ static void next_packet(void)
 				src_out = 1;
 			return;
 		}
-		peek(4);
-		if (!mp3_header(fr, &h)) {
+		if (!mp3_header(bytes_at(4), &h)) {
 			adv(1);
 			continue;
 		}
@@ -234,8 +244,7 @@ static void next_packet(void)
 				src_out = 1;	/* (a frame cut short at the file's end) */
 			return;
 		}
-		peek(h.length);
-		np = mp3_packet(&parse, &h, fr, pk);
+		np = mp3_packet(&parse, &h, bytes_at(h.length), pk);
 		adv(h.length);
 		if (np > 0) {
 			pk_n = np;
@@ -268,6 +277,7 @@ static void tick_mp3(void)
 			s_spf = pk_samples;
 			t_frames++;
 			pk_n = 0;
+			pk = pk == pks[0] ? pks[1] : pks[0];	/* (the next made in the other) */
 		} else if (src_out) {
 			s_mute[0] = s_flags | 8;	/* (bit 3: silence) */
 			dspmp3_tick_offer(s_mute, s_end < 2 ? 1 : 0);
@@ -281,7 +291,24 @@ static void tick_mp3(void)
 		next_packet();
 }
 
+static void tick_body(void);
+
+/* the tick, timed by Timer A's own count (it runs from 154 down to 1 a
+   tick: 6.5 us a step at 1000 a second, 26 us at 250) for the log: the
+   68030's share it takes */
+#define TADR (*(volatile unsigned char *)0xfffffa1fL)
+static volatile unsigned long t_busy, t_ticks;
+
 static void tick(void)
+{
+	unsigned c0 = TADR, c1;
+	tick_body();
+	c1 = TADR;
+	t_busy += c0 >= c1 ? c0 - c1 : c0 + 154 - c1;
+	t_ticks++;
+}
+
+static void tick_body(void)
 {
 	if (kind)
 		snd_update();
@@ -521,6 +548,7 @@ int play_open(const char *path, char *err, int n)
 	t_frames = 0;
 	s_started = s_end = 0;
 	s_spf = 1152;
+	t_busy = t_ticks = 0;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
 	last_sec = -1;
@@ -577,6 +605,12 @@ long play_ms(void)
 	return rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0;
 }
 
+/* the tick's share of the 68030, % */
+long play_tick_share(void)
+{
+	return t_ticks ? (long)(t_busy * 100 / (t_ticks * 154)) : 0;
+}
+
 /* frames at this rate as ms (-1 stays -1) */
 static long f_ms(long f)
 {
@@ -590,15 +624,16 @@ const char *play_keep_up(void)
 	if (!kind) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
-		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late; the DSP's waits a frame: least %ld, mean %ld",
-			 fr, late, wmin, wavg);
+		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late; the DSP's waits a frame: least %ld, "
+			 "mean %ld; the tick %ld%% of the 68030", fr, late, wmin, wavg, play_tick_share());
 		return b;
 	}
 	if (snd_underruns)
 		snprintf(b, sizeof(b), "the first at %ld ms; the least lead %ld ms", f_ms(snd_first_under),
 			 f_ms(snd_least_lead));
 	else
-		snprintf(b, sizeof(b), "the least lead %ld ms", f_ms(snd_least_lead));
+		snprintf(b, sizeof(b), "the least lead %ld ms; the tick %ld%% of the 68030", f_ms(snd_least_lead),
+			 play_tick_share());
 	return b;
 }
 

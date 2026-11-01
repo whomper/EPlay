@@ -26,6 +26,7 @@ extern char play_name[64];	/* the file's name */
 extern char play_info[80];	/* "MP3  128 kbit/s  44.1 kHz  stereo" */
 extern char play_out[80];	/* "FDI  44.1 kHz" */
 long play_ms(void);		/* how far it has played */
+long play_tick_share(void);		/* the tick's share of the 68030, % (the log) */
 const char *play_keep_up(void);	/* the first underrun and the least lead, for the log */
 long play_len_ms(void);		/* how long it is (an MP3's: from its Xing or VBRI frame, else its first frame's bit rate) */
 

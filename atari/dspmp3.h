@@ -32,8 +32,8 @@ int dspmp3_failed(void);	/* it stopped answering */
    the FDI, on the clock it is given), frames as it asks. From the tick:
    dspmp3_tick_stream once loaded; then each tick dspmp3_tick_status (its
    word after a frame), dspmp3_tick_push (what may go), and when
-   dspmp3_tick_asks a packet offered (copied: pk may be made again at
-   once). A packet of count 0 ends it. dspmp3_stream_info: frames
+   dspmp3_tick_asks a packet offered (not copied: kept as it is until
+   dspmp3_tick_pushing says it has gone). A packet of count 0 ends it. dspmp3_stream_info: frames
    decoded, granules late (the sound played the one before again), the
    least and the mean of its waits a frame (its time to spare: 0 none) */
 void dspmp3_tick_stream(void);

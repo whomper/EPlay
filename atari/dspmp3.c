@@ -259,8 +259,8 @@ int dspmp3_failed(void)
    on) and its waits for the sound to move on (bits 0-15: the time it had
    to spare) */
 #define HF2 0x08
-static unsigned long s_buf[PK_MAX];
-static int s_n, s_i, s_have;		/* the packet going: its words, the next (-1: its count) */
+static const unsigned long *s_buf;	/* the packet going (the player's, kept until sent) */
+static int s_n, s_i, s_have;		/* its words, the next (-1: its count) */
 static long s_frames, s_late, s_wmin, s_wsum;
 static int s_late8;
 static unsigned long s_last;		/* HZ200 at the last status word */
@@ -282,9 +282,7 @@ int dspmp3_tick_asks(void)
 
 void dspmp3_tick_offer(const unsigned long *pk, int n)
 {
-	int i;
-	for (i = 0; i < n; i++)
-		s_buf[i] = pk[i] & 0xffffff;
+	s_buf = pk;
 	s_n = n;
 	s_i = -1;
 	s_have = 1;
@@ -297,7 +295,7 @@ void dspmp3_tick_push(void)
 			HTX32 = (unsigned long)s_n;
 			s_i = 0;
 		} else
-			HTX32 = s_buf[s_i++];
+			HTX32 = s_buf[s_i++] & 0xffffff;
 		if (s_i == s_n)
 			s_have = 0;
 	}

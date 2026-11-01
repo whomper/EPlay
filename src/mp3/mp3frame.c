@@ -257,8 +257,14 @@ int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned l
 		int extra = (int)((long)nw * 23 - nbytes * 8);
 		for (i = 0; i < nw; i++, bit += 23) {
 			const unsigned char *p = d + (bit >> 3);
+#if defined(__mc68020__) || defined(__mc68030__) || defined(__mc68040__) || defined(__mc68060__)
+			/* (a 68020 and later read a long at any address, in the
+			   stream's own order: one read, not four) */
+			unsigned long v = *(const unsigned long *)(const void *)p;
+#else
 			unsigned long v = (unsigned long)p[0] << 24 | (unsigned long)p[1] << 16 |
 					  (unsigned long)p[2] << 8 | p[3];
+#endif
 			g[i] = (v << (bit & 7)) >> 9 & 0x7fffffUL;
 		}
 		if (nw)
