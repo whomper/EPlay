@@ -5,7 +5,8 @@
  * tests/ec/fetch-hatari.sh) behind the Falcon's host port, a program
  * loaded through the bootstrap, words both ways, tables loaded with the
  * test programs' LOADX (1) and LOADY (4), and the cycles counted (and, with
- * SIMPROF=FILE, each address's, written by sim_done()).
+ * SIMPROF=FILE, each address's, written by sim_done()), and the system
+ * stack's deepest.
  */
 #ifndef DSPSIM_H
 #define DSPSIM_H
@@ -25,6 +26,7 @@ static void sim_hint(int s) { (void)s; }
 
 static unsigned long long cycles, prof[32768];
 static int dead, profiling;
+static unsigned sp_most, sp_most_at;	/* the system stack's deepest, and where */
 static int sim_trace;		/* instructions still to print */
 static unsigned sim_trace_at;	/* SIMTRACE=ADDR (hex): print 40 from the first time there */
 
@@ -49,6 +51,10 @@ static int step(void)
 		sim_trace_at = 0;
 	}
 	dsp56k_execute_instruction();
+	if ((dsp_core.registers[DSP_REG_SP] & 15) > sp_most) {
+		sp_most = dsp_core.registers[DSP_REG_SP] & 15;
+		sp_most_at = pc;
+	}
 	cycles += dsp_core.instr_cycle;
 	if (profiling && pc < 32768)
 		prof[pc] += dsp_core.instr_cycle;
@@ -131,6 +137,12 @@ static int sim_done(void)
 	}
 	if (dead) {
 		fprintf(stderr, "the DSP stopped answering at P:%04x\n", dsp_core.pc);
+		return 1;
+	}
+	/* the system stack holds 15: a subroutine takes one, a do loop two */
+	printf("system stack: %u of 15 at most (P:%04x)\n", sp_most, sp_most_at);
+	if (sp_most >= 15) {
+		fprintf(stderr, "the system stack ran over\n");
 		return 1;
 	}
 	return 0;

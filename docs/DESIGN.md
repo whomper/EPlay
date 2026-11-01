@@ -607,6 +607,42 @@ one the machine has.
   AIFF through the DSP, the settings, and the 68030's decoder last (a new part). The TT's WAV and
   AIFF (phase 6) come with the 68030 way where they share the code.
 
+### The faster decoder (1 Nov 2026)
+
+0.7 played Erez's music at about 93 % of the DSP, with a few granules late; the FDI at 48 kHz
+and resampling need room too. Three changes, each bit for bit between the model and the DSP and
+with the error against minimp3 where it was (0.19 of ISO's limit at most):
+- **The long block's transform as two 9-point DCTs and a rotation.** The 18 lines go into sums
+  and differences in pairs, a 9-point DCT of each (its outputs m and 8 - m share the sums of its
+  even and its odd inputs), and the two DCTs' outputs 8 - r rotate into rows r and 18 + r. Every
+  factor is a cosine, at most 1, and nothing is chained: unlike Lee's form (above), there is
+  nothing for the roundings to add up in, and no input needs scaling. On a master made loud
+  (hot.mp3, a new test file: clipped, 12 dB over) nothing on the way gets bigger than the rows
+  the matrix made (0.60 and 0.84 of full scale). About 260 instructions a subband, not 420.
+- **The short block's the same way**, with 3-point DCTs, and the window folded into the
+  rotation's factors: each of a window's 12 contributions is a cd[m] + b sd[m]. Its core runs in
+  internal P, its contributions in internal X; from external P every access to external memory
+  cost a cycle more.
+- **The overlap holds the frequency inversion.** An odd subband's windows have their odd samples
+  negated, so its overlap carries the sign and no block type needs a path of its own. That and
+  the subbands' loop (internal memory only, so as fast from external P) made the room in
+  internal P. The reorder's two copies run there too, a word an instruction.
+
+The DSP test reports the system stack's deepest too: 10 of 15.
+
+| Files (Hatari's DSP, 32 MHz) | 0.8, average | Now | 0.8, the worst frame | Now |
+|---|---|---|---|---|
+| 44.1 kHz stereo, 128 kbit/s | 70.5 % | 66.3 % | 81.7 % | 72.3 % |
+| 44.1 kHz stereo, VBR (-V 2, -V 0) | 74.5 to 81.5 % | 70.0 to 76.3 % | 87.1 to 87.6 % | 77.8 to 78.3 % |
+| 44.1 kHz stereo, 320 kbit/s | 86.5 % | 81.5 % | 95.5 % | 85.6 % |
+| 48 kHz stereo, 192 kbit/s | 81.0 % | 76.2 % | 100.7 % | 90.3 % |
+| clicks (short blocks), 160 kbit/s and VBR | 52.7 to 65.8 % | 49.7 to 60.5 % | 106 to 115 % | 91.5 to 100 % |
+| full-scale square waves, all short blocks | 111.3 % | 96.6 % | 124 % | 109 % |
+
+The worst frames gained most: they are the short blocks', which make granules late. Next, if
+needed: the synthesis filter's 16-point DCT-IV the same way (about 3 %), and its set-up for each
+slot (4 %).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts

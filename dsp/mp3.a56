@@ -110,6 +110,9 @@ U	equ	$72		; its rows (18)
 CI	equ	$b0		; a long block's sums (9), its differences (9, then
 SI	equ	$c0		; a spare word), each at a multiple of 16 (modulo 9)
 CDS	equ	$d0		; and their 9-point DCTs: c's at even places, s's odd
+C0	equ	$60		; a short block's windows' contributions (12 each,
+C1	equ	$6c		; over XIN and U)
+C2	equ	$78
 V_ODD	equ	$3b		; the subband is odd
 V_RATE23 equ	$85		; SFBL + 23 rate
 V_RATE14 equ	$86		; SFBS + 14 rate
@@ -130,6 +133,8 @@ V_DCH	equ	$96
 V_NLSB	equ	$97		; the transform: long subbands from the start (32, mixed 2, short 0)
 V_WIN	equ	$98		; and their window: an even subband's,
 V_WINO	equ	$99		; an odd one's (its odd samples negated)
+V_SR5	equ	$9a		; a short block: r5 and r6 kept
+V_SR6	equ	$9b
 V_PKN	equ	$a3		; its words expected (-1: the count not yet)
 V_PKI	equ	$a4		; its words in
 V_IDLE	equ	$a5		; waits this frame (the decoder ahead of the sound)
@@ -412,6 +417,94 @@ d9a
 	add	x0,a
 	move	a,x:(r2)
 	movec	#$ffff,m1
+	rts
+
+; ---- one window of a short block (mp3dsp.c's): its 6 lines (r0, X, a
+; step of 3) into sums and differences (CI: c0 c1 c2 s0 s1 s2), a 3-point
+; DCT of each (CDS: c's at even places, s's odd), then its 12
+; contributions C[i], the window in the factors (r4, Y, on 24), into C_w:
+; r5 its C + 2, r6 its C + 3
+shw	move	#3,n0
+	move	#>CI,r1
+	move	#>CI+5,r3
+	move	x:(r0)+n0,x0
+	move	x0,x:(r1)+		; c0 = l0
+	move	x:(r0)+n0,a		; l3
+	move	x:(r0)+n0,x0		; l6
+	tfr	a,b
+	add	x0,a
+	sub	x0,b		a,x:(r1)+	; c1 = l3 + l6
+	move	b,x:(r3)-		; s2 = l3 - l6
+	move	x:(r0)+n0,a		; l9
+	move	x:(r0)+n0,x0		; l12
+	tfr	a,b
+	add	x0,a
+	sub	x0,b		a,x:(r1)+	; c2
+	move	x:(r0)+n0,x0		; l15
+	move	b,x:(r3)-		; s1
+	move	x0,x:(r3)		; s0
+	move	y:IM3,y1		; 1/2
+	move	y:IM3+1,y0		; cos(pi/6)
+	move	#>CI,r1
+	move	#>CDS,r2
+	move	#2,n2
+	jsr	dct3
+	move	#>CDS+1,r2		; (r1 at CI + 3: s)
+	jsr	dct3
+	move	#>CDS,r1
+	move	r5,r2			; C[2 - m] down, C[3 + m] up
+	move	r6,r3
+	move	#9,n2			; (then C[8 - m] down, C[9 + m] up)
+	move	#3,n3
+	do	#3,shw1
+	move	x:(r1)+,x0	y:(r4)+,y0
+	mpy	x0,y0,a		x:(r1)+,x1	y:(r4)+,y0
+	macr	x1,y0,a		y:(r4)+,y0
+	mpy	x0,y0,b		a,x:(r2)-	y:(r4)+,y0
+	macr	x1,y0,b
+	move	b,x:(r3)+
+shw1
+	move	#>CDS,r1
+	move	(r2)+n2
+	move	(r3)+n3
+	do	#3,shw2
+	move	x:(r1)+,x0	y:(r4)+,y0
+	mpy	x0,y0,a		x:(r1)+,x1	y:(r4)+,y0
+	macr	x1,y0,a		y:(r4)+,y0
+	mpy	x0,y0,b		a,x:(r2)-	y:(r4)+,y0
+	macr	x1,y0,b
+	move	b,x:(r3)+
+shw2
+	rts
+
+; a 3-point DCT (mp3dsp.c's dct3): r1 its inputs (X), r2 its outputs (X,
+; a step of n2 = 2); y0 cos(pi/6), y1 1/2
+dct3	move	x:(r1)+,a		; v0
+	move	x:(r1)+,x0		; v1
+	mpy	x0,y0,b		x:(r1)+,x1	; o = v1 cos(pi/6); x1 = v2
+	mac	x1,y1,a		a,x0		; e = v0 + v2/2; x0 = v0
+	add	a,b			; e + o
+	subl	b,a			; e - o
+	rnd	b
+	rnd	a		b,x:(r2)+n2	; o0
+	tfr	x0,b
+	sub	x1,b			; o1 = v0 - v2
+	move	b,x:(r2)+n2
+	move	a,x:(r2)+n2		; o2
+	rts
+
+; ---- the reorder's copies (here, where a word costs the one bus access
+; it needs): x0 words from r0 (X) to r4 (Y); and from r4 (Y) to r0 (X, a
+; step of n0). A word goes each time slot, the first (a's) none
+cpxy	move	x:(r0)+,a
+	do	x0,cpx1
+	move	x:(r0)+,a	a,y:(r4)+
+cpx1
+	rts
+cpyx	move	y:(r4)+,a
+	do	x0,cpy1
+	move	a,x:(r0)+n0	y:(r4)+,a
+cpy1
 	rts
 
 ; ---- a long block's 36 outputs: U, the window at r4 (Y), the overlap at
@@ -2533,10 +2626,7 @@ ro1	move	a1,x:V_S
 	add	x0,a
 	move	a1,r4
 	move	b1,x0
-	do	x0,ro2
-	move	x:(r0)+,x0
-	move	x0,y:(r4)+
-ro2
+	jsr	cpxy
 	move	#>3,n0
 ro3	move	x:V_RATE14,r6		; each band: wd, base = 3 ss[s]
 	move	x:V_S,n6
@@ -2569,10 +2659,7 @@ ro4	move	x:V_START,a		; from SUBS + base + w wd
 	add	x1,a
 	move	a1,r0
 	move	x:V_W,x0
-	do	x0,ro5
-	move	y:(r4)+,x1
-	move	x1,x:(r0)+n0
-ro5
+	jsr	cpyx
 	move	x:V_I,a
 	move	#>1,x0
 	add	x0,a
@@ -2601,100 +2688,53 @@ imzero	move	#>18,n0			; (the overlap holds the inversion already)
 imz1
 	rts
 
-; short: three windows of 6, overlapped by 6
+; short: three windows of 6, overlapped by 6. Each window's 12
+; contributions (shw, in internal P) into C0, C1, C2; then the outputs
+; and the new overlap from them
 imshort	move	r0,x:V_PTR		; (r0 left at the next subband's lines)
-	move	#>CTMP,r3
-	clr	a
-	move	a,x:V_I			; w
-ish1	move	x:V_PTR,a		; XIN[k] = x[3k + w]
-	move	x:V_I,x0
-	add	x0,a
-	move	a1,r0
-	move	#>3,n0
-	move	#>XIN,r1
-	do	#6,ish2
-	move	x:(r0)+n0,x0
-	move	x0,x:(r1)+
-ish2
-	move	#>IM12,r4		; U[r] = XIN . IM12[r]
-	move	#>U,r2
-	do	#6,ish3
-	move	#>XIN,r1
-	nop
-	clr	a		x:(r1)+,x0	y:(r4)+,y0
-	rep	#5
-	mac	x0,y0,a		x:(r1)+,x0	y:(r4)+,y0
-	macr	x0,y0,a
-	move	a,x:(r2)+
-ish3
-	move	#>WIN+72,r4		; the 12 contributions, signed as map12
-	jclr	#0,x:V_ODD,ishw		; (an odd subband: the signed window)
-	move	#>WIN+144+72,r4
-ishw
-	move	#>U,r1
-	do	#3,ish4			; u0 u1 u2 +
-	move	x:(r1)+,x0	y:(r4)+,y0
-	mpyr	x0,y0,a
-	move	a,y:(r3)+
-ish4
-	move	(r1)-
-	do	#3,ish5			; u2 u1 u0 -
-	move	x:(r1)-,x0	y:(r4)+,y0
-	mpyr	-x0,y0,a
-	move	a,y:(r3)+
-ish5
-	move	#>U+3,r1
-	nop
-	do	#3,ish6			; u3 u4 u5 +
-	move	x:(r1)+,x0	y:(r4)+,y0
-	mpyr	x0,y0,a
-	move	a,y:(r3)+
-ish6
-	move	(r1)-
-	do	#3,ish7			; u5 u4 u3 +
-	move	x:(r1)-,x0	y:(r4)+,y0
-	mpyr	x0,y0,a
-	move	a,y:(r3)+
-ish7
-	move	x:V_I,a
-	move	#>1,x0
-	add	x0,a
-	move	a1,x:V_I
-	move	#>3,x0
-	cmp	x0,a
-	jlt	ish1
+	move	r5,x:V_SR5
+	move	r6,x:V_SR6
+	move	#>SH,r4			; the factors, the window in them
+	jclr	#0,x:V_ODD,ish0
+	move	#>SH+24,r4		; (an odd subband's: its odd samples negated)
+ish0	move	#>C0+2,r5
+	move	#>C0+3,r6
+	jsr	shw			; window 0: lines 0, 3, .. 15
+	move	x:V_PTR,r0
+	move	#>1,n0
+	move	#>-24,n4		; (the same factors for each window)
+	move	(r0)+n0
+	move	(r4)+n4
+	move	#>C1+2,r5
+	move	#>C1+3,r6
+	jsr	shw			; window 1: lines 1, 4, .. 16
+	move	x:V_PTR,r0
+	move	#>2,n0
+	move	#>-24,n4
+	move	(r0)+n0
+	move	(r4)+n4
+	move	#>C2+2,r5
+	move	#>C2+3,r6
+	jsr	shw			; window 2
 	; outputs 0..17: the overlap and the windows' contributions (C0 from
 	; 6, C1 from 12, C2 from 18); then the new overlap, 18..35
-	move	#>CTMP,r1		; C0
-	move	#>CTMP+12,r2		; C1
-	move	#>CTMP+24,r3		; C2
-	do	#3,ish8			; 0..5: the overlap
-	move	y:(r5)+,a
-	move	a,y:(r6)+
+	move	x:V_SR5,r5
+	move	x:V_SR6,r6
+	move	#>C0,r1
+	move	#>C1,r2
+	move	#>C2,r3
+	do	#6,ish8			; 0..5: the overlap
 	move	y:(r5)+,a
 	move	a,y:(r6)+
 ish8
-	do	#3,ish9			; 6..11: + C0
-	move	y:(r5)+,a
-	move	y:(r1)+,x0
-	add	x0,a
-	move	a,y:(r6)+
-	move	y:(r5)+,a
-	move	y:(r1)+,x0
+	do	#6,ish9			; 6..11: + C0
+	move	x:(r1)+,x0	y:(r5)+,a
 	add	x0,a
 	move	a,y:(r6)+
 ish9
-	do	#3,ish10		; 12..17: + C0 + C1
-	move	y:(r5)+,a
-	move	y:(r1)+,x0
-	add	x0,a
-	move	y:(r2)+,x0
-	add	x0,a
-	move	a,y:(r6)+
-	move	y:(r5)+,a
-	move	y:(r1)+,x0
-	add	x0,a
-	move	y:(r2)+,x0
+	do	#6,ish10		; 12..17: + C0 + C1
+	move	x:(r1)+,x0	y:(r5)+,a
+	add	x0,a		x:(r2)+,x0
 	add	x0,a
 	move	a,y:(r6)+
 ish10
@@ -2702,13 +2742,13 @@ ish10
 	nop
 	move	(r5)+n5
 	do	#6,ish11		; 18..23: C1 + C2
-	move	y:(r2)+,a
-	move	y:(r3)+,x0
+	move	x:(r2)+,a
+	move	x:(r3)+,x0
 	add	x0,a
 	move	a,y:(r5)+
 ish11
 	do	#6,ish12		; 24..29: C2
-	move	y:(r3)+,a
+	move	x:(r3)+,a
 	move	a,y:(r5)+
 ish12
 	clr	a			; 30..35: none

@@ -425,34 +425,55 @@ static void rows36(const dw *x, dw u[18])
 	}
 }
 
+/* a 3-point DCT, o[m] = sum v[j] cos(pi j (2m+1) / 6): v0 + v1 cos(pi/6)
+ * + v2/2, v0 - v2, v0 - v1 cos(pi/6) + v2/2 */
+static void dct3(const dw *v, dw *o)
+{
+	da e = d_w2a(v[0]) + d_mpy(v[2], sx(t_im3[0])), b = d_mpy(v[1], sx(t_im3[1])) + e;
+	da a = d_asl(e, 1) - b;
+	o[0] = d_rw(b);
+	o[1] = d_a2w(d_w2a(v[0]) - d_w2a(v[2]));
+	o[2] = d_rw(a);
+}
+
+/* a short window, the same way as a long block's: its 6 lines' sums and
+ * differences, a 3-point DCT of each, and each of its 12 contributions
+ * (the 12-point transform's 6 rows u, as u0 u1 u2 -u2 -u1 -u0 u3 u4 u5
+ * u5 u4 u3, times the window) from one pair of the DCTs' outputs, in t_sh's order: C[i] for
+ * i = 2 - m, 3 + m, then 8 - m, 9 + m (m = 0..2) */
+static const signed char sh_at[12] = { 2, 3, 1, 4, 0, 5, 8, 9, 7, 10, 6, 11 };
+
 /* where each of the 36 outputs comes from among the 18 rows worked out,
- * and its sign; the same for the 12 of a short block */
+ * and its sign */
 static const signed char map36[36] = {
 	1, 2, 3, 4, 5, 6, 7, 8, 9, -9, -8, -7, -6, -5, -4, -3, -2, -1,
 	10, 11, 12, 13, 14, 15, 16, 17, 18, 18, 17, 16, 15, 14, 13, 12, 11, 10
 };
-static const signed char map12[12] = { 1, 2, 3, -3, -2, -1, 4, 5, 6, 6, 5, 4 };
 
 static void imdct(GC *c, dw *ov, dw out[32][18])
 {
-	int sb, i, k, r, w;
+	int sb, i, w;
 	for (sb = 0; sb < 32; sb++) {
 		const dw *x = &c->xr[18 * sb];
 		da z[36];
 		memset(z, 0, sizeof(z));
 		if (c->bt == 2 && !(c->mixed && sb < 2)) {
 			for (w = 0; w < 3; w++) {
-				dw u[6];
-				for (r = 0; r < 6; r++) {
-					da a = 0;
-					for (k = 0; k < 6; k++)
-						a += d_mpy(x[3 * k + w], sx(t_imdct12[r * 6 + k]));
-					u[r] = d_rw(a);
-				}
+				const dw *l = x + w;	/* its lines, a step of 3 */
+				dw cs[6], cd[3], sd[3];
+				cs[0] = l[0];
+				cs[1] = d_a2w(d_w2a(l[3]) + d_w2a(l[6]));
+				cs[2] = d_a2w(d_w2a(l[9]) + d_w2a(l[12]));
+				cs[3] = l[15];
+				cs[4] = d_a2w(d_w2a(l[9]) - d_w2a(l[12]));
+				cs[5] = d_a2w(d_w2a(l[3]) - d_w2a(l[6]));
+				dct3(cs, cd);
+				dct3(cs + 3, sd);
 				for (i = 0; i < 12; i++) {
-					int m = map12[i];
-					dw win = sx(t_win[(sb & 1) * 144 + 2 * 36 + i]);
-					z[6 + 6 * w + i] += d_w2a(d_rw(d_mpy(u[(m < 0 ? -m : m) - 1], m < 0 ? -win : win)));
+					const unsigned long *t = &t_sh[(sb & 1) * 24 + 2 * i];
+					int m = (i % 6) / 2;
+					z[6 + 6 * w + sh_at[i]] += d_w2a(d_rw(d_mpy(cd[m], sx(t[0])) +
+									      d_mpy(sd[m], sx(t[1]))));
 				}
 			}
 		} else {

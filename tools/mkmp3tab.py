@@ -30,8 +30,7 @@ def add(name, words, comment):
     tabs.append((name, [w & 0xffffff for w in words], comment))
 
 
-# ---- the inverse transforms: rows that differ (the others are them, or
-# minus them; mp3dsp.c says which)
+# ---- the inverse transforms
 # the 36-point one as two 9-point DCTs and a rotation (mp3dsp.c's
 # rows36): the DCT's pairs of outputs m and 8 - m, m < 4, take its even
 # inputs 2..8, then its odd ones 1..7 (the first, input 0, is added whole)
@@ -49,10 +48,6 @@ def rot(r):
 
 add("t_rot", [w for r in range(9) for w in rot(r)],
     "the rotation: for rows r = 0..8 (and 18 + r), the factors of s and c, then of s and c")
-r12 = [0, 1, 2, 6, 7, 8]
-add("t_imdct12", [q23(math.cos(math.pi / 24 * (2 * i + 7) * (2 * k + 1)))
-                  for i in r12 for k in range(6)],
-    "12-point IMDCT, rows 0-2 and 6-8 of cos(pi/24 (2i+7)(2k+1)), 6 x 6")
 
 
 def win(bt):
@@ -77,6 +72,53 @@ add("t_win", wins + [-w if i & 1 else w for i, w in enumerate(wins)],
     "the windows of block types 0-3, 36 each (type 2: the 12 of a short block); then the same "
     "with the odd samples negated, for odd subbands (the frequency inversion)")
 c = [-0.6, -0.535, -0.33, -0.185, -0.095, -0.041, -0.0142, -0.0037]
+# a short block's window: its 6 lines into sums and differences, a
+# 3-point DCT of each (cd, sd), and its 12 contributions (the 12-point
+# transform's rows, signed as mp3dsp.c's map12, times the window) as
+# a cd[m] + b sd[m]. In the DSP's order: first C[2 - m] and C[3 + m],
+# then C[8 - m] and C[9 + m], for m = 0..2; then the same for an odd
+# subband (its odd samples negated)
+def short_factors():
+    sw = [math.sin(math.pi / 12 * (i + 0.5)) for i in range(12)]
+    f = {}
+    for i in range(12):
+        m = [2, 1, 0, 0, 1, 2][i % 6]
+        cm, sm = math.cos((2 * m + 1) * math.pi / 24), math.sin((2 * m + 1) * math.pi / 24)
+        sg = -1 if m % 2 == 0 else 1
+        if i < 6:
+            si = 1 if i < 3 else -1
+            f[i] = (m, sw[i] * si * sm, sw[i] * si * sg * cm)
+        else:
+            f[i] = (m, -sw[i] * cm, sw[i] * sg * sm)
+    # the self-check: the same as the rows straight from the definition
+    import random
+    rnd = random.Random(1)
+    rows = [0, 1, 2, 6, 7, 8]
+    map12 = [1, 2, 3, -3, -2, -1, 4, 5, 6, 6, 5, 4]
+    for t in range(20):
+        x = [rnd.uniform(-1, 1) for _ in range(6)]
+        u = [sum(x[k] * math.cos(math.pi / 24 * (2 * r + 7) * (2 * k + 1)) for k in range(6)) for r in rows]
+        c, s_ = [x[0], x[1] + x[2], x[3] + x[4]], [x[5], x[3] - x[4], x[1] - x[2]]
+
+        def dct3(v):
+            e, o = v[0] + v[2] / 2, v[1] * math.cos(math.pi / 6)
+            return [e + o, v[0] - v[2], e - o]
+        cd, sd = dct3(c), dct3(s_)
+        for i in range(12):
+            m, a, b = f[i]
+            want = sw[i] * (1 if map12[i] > 0 else -1) * u[abs(map12[i]) - 1]
+            assert abs(a * cd[m] + b * sd[m] - want) < 1e-12, (i, t)
+    order = [i for m in range(3) for i in (2 - m, 3 + m)] + [i for m in range(3) for i in (8 - m, 9 + m)]
+    even = [q23(v) for i in order for v in f[i][1:]]
+    odd = [-w if order[k // 2] & 1 else w for k, w in enumerate(even)]
+    return even + odd
+
+
+add("t_sh", short_factors(),
+    "a short window's contributions C[i] = a cd[m] + b sd[m]: a, b for i = 2-m, 3+m (m = 0..2), "
+    "then 8-m, 9+m; then the same for an odd subband")
+add("t_im3", [q23(0.5), q23(math.cos(math.pi / 6))], "the 3-point DCT's factors: 1/2, cos(pi/6)")
+
 add("t_alias", [q23(1 / math.sqrt(1 + x * x)) for x in c] + [q23(x / math.sqrt(1 + x * x)) for x in c],
     "alias reduction: cs[0..7], then ca[0..7]")
 
@@ -393,7 +435,8 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "PRETAB", 0x2a00, 22, "t_pretab"),
     ("Y", "IM9", 0x2a20, 32, "t_im9"),
     ("Y", "ROT", 0x2a40, 36, "t_rot"),
-    ("Y", "IM12", 0x2ae0, 36, "t_imdct12"),
+    ("Y", "SH", 0x2a70, 48, "t_sh"),
+    ("Y", "IM3", 0x2aa0, 2, "t_im3"),
     ("Y", "OV0", 0x2b10, 576, None),
     ("Y", "OV1", 0x2d50, 576, None),
     # the output ring: a frame, left and right in turn, that the SSI plays
@@ -401,7 +444,6 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "PCM", 0x3000, 2304, None),
     ("Y", "SUBS", 0x3900, 576, None),
     ("Y", "PKT", 0x3b40, 742, None),
-    ("Y", "CTMP", 0x3e30, 36, None),
 ]
 for sp in "XY":   # nothing overlaps, and all of it is external memory
     spans = sorted((a, a + n, nm) for s_, nm, a, n, _ in MAP if s_ == sp)
