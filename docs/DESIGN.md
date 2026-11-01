@@ -105,8 +105,11 @@ The Falcon's own clock gives 49170, 32780 and 24585 Hz (and lower). Music is 44.
   output. EPlay finds the clock by starting the DMA on it with silence and timing it against the
   200 Hz timer: no clock, no movement. It leaves the FDI's own settings (made by its program at
   boot) as they are, and puts the matrix back as it found it when it quits.
-- **Without one:** EPlay resamples to 49170 Hz (MP3: on the DSP; WAV and AIFF: on the 68030 in
-  its steps). Settings can name the output explicitly (`OUTPUT=auto|codec|external`).
+- **Without one:** EPlay resamples to the Falcon's clock at or above the rate (49170 Hz for
+  44.1 kHz). An MP3 on the DSP (phase 2, "Resampling on the DSP"); a WAV or AIFF on the DSP
+  too where the host port carries it (mono to 25 kHz), else, for now, at the nearest rate
+  ("WAV and AIFF through the DSP", below). Settings can name the output explicitly
+  (`OUTPUT=auto|codec|external`).
 
 ### TT and STE: WAV and AIFF in 8 bits
 
@@ -606,7 +609,15 @@ one the machine has.
   ("68030, half rate"). The music doesn't break up. An ST or STE has no MP3.
 - **The order:** the FDI way first (Erez's Falcon, and it removes 0.3's two faults: the clock
   and the DSP's output through the host port), then the DSP way with resampling, then WAV and
-  AIFF through the DSP, the settings, and the 68030's decoder last (a new part). The TT's WAV and
+  AIFF through the DSP, the settings, and the 68030's decoder last (a new part).
+- **The 68030's decoder runs in slices from the timer's interrupt** (the hub asked: slices or
+  interrupt-driven, and why). Not in GEM's steps: GEM stops in a menu held down, the file
+  selector and a dialog, and nothing the music needs may wait on the AES. Not a frame in one
+  handler either: a stock 68030 needs 20 to 50 ms for one, all other interrupts held. So the
+  tick, after its own work, lowers the interrupt mask below its level and decodes a granule at
+  a time while the ring is short of a second's lead, guarded against coming in again; the tick
+  itself, the VBL and the keyboard go on meanwhile, and GEM gets what the music leaves. The
+  quality it decodes at is chosen once at the start from a granule timed then. The TT's WAV and
   AIFF (phase 6) come with the 68030 way where they share the code.
 
 ### The faster decoder (1 Nov 2026)
