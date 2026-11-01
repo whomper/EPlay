@@ -42,7 +42,8 @@ int main(int argc, char **argv)
 		/* LAME's files made with -t have no header frame; the others do */
 		has = !strstr(argv[a], "/mix") && !strstr(argv[a], "/lsf") && !strstr(argv[a], "/mono") &&
 		      !strstr(argv[a], "/square") && !strstr(argv[a], "/noise") && !strstr(argv[a], "/sweep") &&
-		      !strstr(argv[a], "/clicks") && !strstr(argv[a], "/tones") && !strstr(argv[a], "/loud");
+		      !strstr(argv[a], "/clicks") && !strstr(argv[a], "/tones") && !strstr(argv[a], "/loud") &&
+		      !strstr(argv[a], "/hot");
 		if (has ? info != frames - 1 : info != 0) {
 			printf("%-32s %ld frames, the header says %ld: wrong\n", argv[a], frames, info);
 			bad++;

@@ -34,6 +34,9 @@ $L -b 192 "$s/mix48.wav" "$d/mix48.mp3"
 $L -b 128 "$s/mix32.wav" "$d/mix32.mp3"
 $L -b 96 "$s/mono.wav" "$d/mono.mp3"
 $L -b 320 "$s/loud.wav" "$d/loud.mp3"
+# as a master made loud is: clipped, 12 dB over (the decoder's headroom)
+sox -V1 "$s/mix.wav" "$s/hot.wav" gain 12
+$L -b 320 "$s/hot.wav" "$d/hot.mp3"
 # MPEG-2 (22.05, 24, 16 kHz) and MPEG-2.5 (11.025, 12, 8 kHz)
 $L -b 64 --resample 22.05 "$s/mix.wav" "$d/lsf22.mp3"
 $L -b 64 --resample 24 "$s/clicks.wav" "$d/lsf24.mp3"

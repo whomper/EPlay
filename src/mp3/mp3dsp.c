@@ -378,6 +378,53 @@ static void alias(GC *c)
 		}
 }
 
+/* a 9-point DCT, o[m] = sum v[j] cos(pi j (2m+1) / 18). Outputs m and
+ * 8 - m share their sums of the even (e) and the odd (o) inputs, as e + o
+ * and e - o (on the DSP add and subl, exact); the middle one is
+ * v0 - v2 + v4 - v6 + v8 */
+static void dct9(const dw *v, dw *o)
+{
+	int m, j;
+	for (m = 0; m < 4; m++) {
+		const unsigned long *k = &t_im9[8 * m];
+		da a = d_w2a(v[0]), b = 0;
+		for (j = 0; j < 4; j++)
+			a += d_mpy(v[2 + 2 * j], sx(k[j]));
+		for (j = 0; j < 4; j++)
+			b += d_mpy(v[1 + 2 * j], sx(k[4 + j]));
+		b += a;
+		a = d_asl(a, 1) - b;
+		o[m] = d_rw(b);
+		o[8 - m] = d_rw(a);
+	}
+	o[4] = d_a2w(d_w2a(v[0]) - d_w2a(v[2]) + d_w2a(v[4]) - d_w2a(v[6]) + d_w2a(v[8]));
+}
+
+/* a long block's 18 rows (u[r] = sum x[k] cos(pi/72 (2r+19)(2k+1)), rows
+ * 0-8 then 18-26) the fast way: the lines' sums c and differences s, in
+ * pairs; a 9-point DCT of each; then a rotation of the two DCTs' outputs
+ * 8 - r into rows r and 18 + r. Every factor is at most 1, and nothing on
+ * the way gets bigger than the rows themselves (hot.mp3, a clipped master) */
+static void rows36(const dw *x, dw u[18])
+{
+	dw c[9], s[9], cd[9], sd[9];
+	int i, r;
+	c[0] = x[0];
+	for (i = 0; i < 8; i++) {
+		da p = d_w2a(x[1 + 2 * i]), q = d_w2a(x[2 + 2 * i]);
+		c[1 + i] = d_a2w(p + q);
+		s[8 - i] = d_a2w(p - q);
+	}
+	s[0] = x[17];
+	dct9(c, cd);
+	dct9(s, sd);
+	for (r = 0; r < 9; r++) {
+		const unsigned long *t = &t_rot[4 * r];
+		u[r] = d_rw(d_mpy(sd[8 - r], sx(t[0])) + d_mpy(cd[8 - r], sx(t[1])));
+		u[9 + r] = d_rw(d_mpy(sd[8 - r], sx(t[2])) + d_mpy(cd[8 - r], sx(t[3])));
+	}
+}
+
 /* where each of the 36 outputs comes from among the 18 rows worked out,
  * and its sign; the same for the 12 of a short block */
 static const signed char map36[36] = {
@@ -411,12 +458,7 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
 		} else {
 			int bt = c->bt == 2 ? 0 : c->bt;
 			dw u[18];
-			for (r = 0; r < 18; r++) {
-				da a = 0;
-				for (k = 0; k < 18; k++)
-					a += d_mpy(x[k], sx(t_imdct36[r * 18 + k]));
-				u[r] = d_rw(a);
-			}
+			rows36(x, u);
 			/* the first 18 are rounded with the overlap they go to,
 			 * as one rounding (the DSP's macr); z holds them minus it */
 			for (i = 0; i < 36; i++) {

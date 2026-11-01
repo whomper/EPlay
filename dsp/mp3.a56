@@ -107,6 +107,9 @@ V_S	equ	$5e
 V_Q	equ	$5f
 XIN	equ	$60		; the transform: a subband's inputs (18)
 U	equ	$72		; its rows (18)
+CI	equ	$b0		; a long block's sums (9), its differences (9, then
+SI	equ	$c0		; a spare word), each at a multiple of 16 (modulo 9)
+CDS	equ	$d0		; and their 9-point DCTs: c's at even places, s's odd
 V_ODD	equ	$3b		; the subband is odd
 V_RATE23 equ	$85		; SFBL + 23 rate
 V_RATE14 equ	$86		; SFBS + 14 rate
@@ -319,12 +322,7 @@ imall	clr	a
 	move	x:V_NLSB,x0
 	cmp	x0,b
 	jge	ims
-	move	#>XIN,r1		; a long block: its lines into XIN
-	do	#18,ilc
-	move	x:(r0)+,x0
-	move	x0,x:(r1)+
-ilc
-	jsr	imrows
+	jsr	imfast			; a long block
 	move	x:V_WIN,r4
 	jsr	imlong
 	jmp	imnx
@@ -381,58 +379,76 @@ msrun	move	#>MISC,r5
 mse
 	rts
 
-dreset	jsr	clear
-	jmp	cmd
-
-clear	clr	a
-	move	#>RING0,r0
-	do	#2048,cl1
-	move	a,x:(r0)+
-cl1
-	move	#>OV0,r0
-	do	#1152,cl2
-	move	a,y:(r0)+
-cl2
-	move	#>SCF,r0
-	do	#44,cl3
-	move	a,x:(r0)+
-cl3
-	move	a,x:V_RP0
-	move	a,x:V_RP1
+; ---- a long block's 18 rows, the fast way (mp3dsp.c's rows36): the
+; lines at r0 (X, 18 on) into their sums and differences (CI, SI), a
+; 9-point DCT of each (CDS), then the rotation into U. (r1-r4, n1-n3)
+imfast	move	#>CI,r2
+	move	#>SI+9,r3		; (SI + 9: the first b, which is none)
+	move	x:(r0)+,x0
+	move	x0,x:(r2)+		; c0 = x0
+	move	x:(r0)+,x0
+	do	#8,imf1			; c[1 + i] = x[1 + 2i] + x[2 + 2i],
+	tfr	x0,a		x:(r0)+,x1	; s[8 - i] the difference
+	add	x1,a		b,x:(r3)-
+	tfr	x0,b		a,x:(r2)+
+	sub	x1,b		x:(r0)+,x0
+imf1
+	move	b,x:(r3)-
+	move	x0,x:(r3)		; s0 = x17
+	move	#>CI,r1
+	move	#>CDS,r2
+	move	#>CDS+16,r3
+	jsr	dct9
+	move	#>SI,r1
+	move	#>CDS+1,r2
+	move	#>CDS+17,r3
+	jsr	dct9
+	move	#>CDS+17,r1		; s's output 8, then c's: 8 - r
+	move	#>ROT,r4
+	move	#>U,r2
+	move	#>U+8,r3		; (U + 8: the first b, which is none; row 8 comes later)
+	do	#9,imf2
+	move	x:(r1)-,x1	y:(r4)+,y0		; rows r and 18 + r
+	mpy	x1,y0,a		x:(r1)-,x0	y:(r4)+,y0
+	macr	x0,y0,a		b,x:(r3)+	y:(r4)+,y0
+	mpy	x1,y0,b		a,x:(r2)+	y:(r4)+,y0
+	macr	x0,y0,b
+imf2
+	move	b,x:(r3)
 	rts
 
-dump	jsr	rd
-	move	x0,b
-	jsr	rd
-	move	x0,r0
-	jsr	rd
-	move	#>1,x1
-	cmp	x1,b
-	jne	dmy
-	do	x0,dmx
-	move	x:(r0)+,x1
-	jsr	wr
-dmx
-	jmp	cmd
-dmy	do	x0,dmz
-	move	y:(r0)+,x1
-	jsr	wr
-dmz
-	jmp	cmd
-
-; ---- the 18 rows of a long block: XIN into U (r1, r2, r4: r5 and r6
-; are the caller's)
-imrows	move	#>IM36,r4
-	move	#>U,r2
-	move	#>XIN,r1		; (XIN: a multiple of 32, for modulo 18)
-	movec	#17,m1
-	do	#18,imr
-	clr	a		x:(r1)+,x0	y:(r4)+,y0
-	rep	#17
-	mac	x0,y0,a		x:(r1)+,x0	y:(r4)+,y0
-	macr	x0,y0,a
-	move	a,x:(r2)+
-imr
+; a 9-point DCT (mp3dsp.c's dct9): r1 its inputs (X, at a multiple of
+; 16: read modulo 9, a step of 2, the even ones then the odd), r2 its
+; outputs from 0 up, r3 from 8 down, each a step of 2
+dct9	movec	#8,m1
+	move	#2,n1
+	move	#2,n2
+	move	#2,n3
+	move	#>IM9,r4
+	do	#4,d9a			; outputs m and 8 - m
+	move	x:(r1)+n1,a
+	move	x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,a		x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,a		x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,a		x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,a		x:(r1)+n1,x0	y:(r4)+,y0
+	mpy	x0,y0,b		x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,b		x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,b		x:(r1)+n1,x0	y:(r4)+,y0
+	mac	x0,y0,b
+	add	a,b			; e + o
+	subl	b,a			; e - o
+	rnd	b
+	rnd	a		b,x:(r2)+n2
+	move	a,x:(r3)-n3
+d9a
+	move	x:(r1)+n1,a		; output 4: v0 - v2 + v4 - v6 + v8
+	move	x:(r1)+n1,x0
+	sub	x0,a		x:(r1)+n1,x0
+	add	x0,a		x:(r1)+n1,x0
+	sub	x0,a		x:(r1)+n1,x0
+	add	x0,a
+	move	a,x:(r2)
 	movec	#$ffff,m1
 	rts
 
@@ -608,6 +624,46 @@ wr	jclr	#1,x:HSR,wr
 tue	movep	x:SSISR,x:V_JUNK	; (an underrun: the status read, then the word)
 	movep	y:(r7)+,x:TX
 	rti
+
+; (the commands seldom run)
+dreset	jsr	clear
+	jmp	cmd
+
+clear	clr	a
+	move	#>RING0,r0
+	do	#2048,cl1
+	move	a,x:(r0)+
+cl1
+	move	#>OV0,r0
+	do	#1152,cl2
+	move	a,y:(r0)+
+cl2
+	move	#>SCF,r0
+	do	#44,cl3
+	move	a,x:(r0)+
+cl3
+	move	a,x:V_RP0
+	move	a,x:V_RP1
+	rts
+
+dump	jsr	rd
+	move	x0,b
+	jsr	rd
+	move	x0,r0
+	jsr	rd
+	move	#>1,x1
+	cmp	x1,b
+	jne	dmy
+	do	x0,dmx
+	move	x:(r0)+,x1
+	jsr	wr
+dmx
+	jmp	cmd
+dmy	do	x0,dmz
+	move	y:(r0)+,x1
+	jsr	wr
+dmz
+	jmp	cmd
 
 ;---- STREAM (12): frames decoded into the ring (PCM, a frame: two halves
 ; of a granule, left and right in turn) that the SSI plays on the matrix's

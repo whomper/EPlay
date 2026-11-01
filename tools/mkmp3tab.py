@@ -32,10 +32,23 @@ def add(name, words, comment):
 
 # ---- the inverse transforms: rows that differ (the others are them, or
 # minus them; mp3dsp.c says which)
-r36 = list(range(0, 9)) + list(range(18, 27))
-add("t_imdct36", [q23(math.cos(math.pi / 72 * (2 * i + 19) * (2 * k + 1)))
-                  for i in r36 for k in range(18)],
-    "36-point IMDCT, rows 0-8 and 18-26 of cos(pi/72 (2i+19)(2k+1)), 18 x 18")
+# the 36-point one as two 9-point DCTs and a rotation (mp3dsp.c's
+# rows36): the DCT's pairs of outputs m and 8 - m, m < 4, take its even
+# inputs 2..8, then its odd ones 1..7 (the first, input 0, is added whole)
+add("t_im9", [q23(math.cos(math.pi * j * (2 * m + 1) / 18)) for m in range(4)
+              for j in (2, 4, 6, 8, 1, 3, 5, 7)],
+    "the 9-point DCT cos(pi j (2m+1) / 18): for m = 0..3, j = 2, 4, 6, 8, 1, 3, 5, 7")
+
+
+def rot(r):
+    # rows r and 18 + r from the DCTs' output 8 - r: their s, then c, factors
+    a, b = math.cos(math.pi * (19 + 2 * r) / 72), math.cos(math.pi * (17 - 2 * r) / 72)
+    sg = 1 if r & 1 else -1
+    return [q23(sg * b), q23(a), q23(sg * a), q23(-b)]
+
+
+add("t_rot", [w for r in range(9) for w in rot(r)],
+    "the rotation: for rows r = 0..8 (and 18 + r), the factors of s and c, then of s and c")
 r12 = [0, 1, 2, 6, 7, 8]
 add("t_imdct12", [q23(math.cos(math.pi / 24 * (2 * i + 7) * (2 * k + 1)))
                   for i in r12 for k in range(6)],
@@ -376,7 +389,8 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "WIN", 0x28d0, 144, "t_win"),
     ("Y", "ALIAS", 0x2960, 16, "t_alias"),
     ("Y", "PRETAB", 0x2970, 22, "t_pretab"),
-    ("Y", "IM36", 0x2990, 324, "t_imdct36"),
+    ("Y", "IM9", 0x2990, 32, "t_im9"),
+    ("Y", "ROT", 0x29b0, 36, "t_rot"),
     ("Y", "IM12", 0x2ae0, 36, "t_imdct12"),
     ("Y", "OV0", 0x2b10, 576, None),
     ("Y", "OV1", 0x2d50, 576, None),
