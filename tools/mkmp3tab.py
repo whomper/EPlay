@@ -167,8 +167,15 @@ def rs_table(fc):
     return out
 
 
-add("t_rsup", rs_table(0.9), "resampling up: 8 taps (n - 3 .. n + 4) for each of 32 phases")
-add("t_rsdn", rs_table(0.9 * 44100 / 48000), "resampling down (48 to 44.1 kHz): the same")
+# as the DSP reads them: tap j of phase p at 32 j + (p + 16) mod 32, so its
+# phase, signed (p, or p - 32 from 16), is an offset from the middle
+def rs_dsp(t):
+    return [t[8 * ((i - 16) % 32) + j] for j in range(8) for i in range(32)]
+
+
+add("t_rsup", rs_dsp(rs_table(0.9)),
+    "resampling up: tap j (input n - 3 + j) of phase p at 32 j + (p + 16) mod 32, 8 x 32")
+add("t_rsdn", rs_dsp(rs_table(0.9 * 44100 / 48000)), "resampling down (48 to 44.1 kHz): the same")
 
 # ---- dequantising
 mant, expo = [], []
@@ -436,8 +443,11 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("X", "SEL", 0x0f00, 34, "t_dselx"),
     ("X", "HUFF", DSP_HUFF, len(dx), "t_dhx"),
     ("X", "XR1", 0x2480, 576, None),
+    ("X", "RSCR", 0x26c0, 192, None),    # the reorder's: a short band's 3 windows
     ("X", "RING0", 0x2800, 1024, None),
     ("X", "RING1", 0x2c00, 1024, None),
+    # P:$7000.. is X:$3000.. (the Falcon's DSP RAM: P $4000-$7FFF is X):
+    # the program's external part
     ("X", "CODE", 0x3000, 4096, None),
     ("Y", "POWE", 0x0200, 1024, "t_pow43e"),
     ("Y", "POWB", 0x0600, 899, "t_pow43b"),
@@ -466,11 +476,14 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "IM3", 0x2aa0, 2, "t_im3"),
     ("Y", "OV0", 0x2b10, 576, None),
     ("Y", "OV1", 0x2d50, 576, None),
-    # the output ring: a frame, left and right in turn, that the SSI plays
-    # with r7 modulo 2304: on a multiple of 4096 (the DSP's modulo rule)
-    ("Y", "PCM", 0x3000, 2304, None),
-    ("Y", "SUBS", 0x3900, 576, None),
-    ("Y", "PKT", 0x3b40, 742, None),
+    # the output ring, left and right in turn, that the SSI plays with r7
+    # modulo its size, on a multiple of 4096 (the DSP's modulo rule): a
+    # frame (2304), or resampled two granules' outputs (to 2 x 643 pairs)
+    ("Y", "PCM", 0x3000, 2576, None),
+    ("Y", "RSUP", 0x3a10, 256, "t_rsup"),
+    ("Y", "RSDN", 0x3b10, 256, "t_rsdn"),
+    ("Y", "RSH", 0x3c10, 14, None),      # the resampler's last 7 inputs, each channel
+    ("Y", "PKT", 0x3c20, 742, None),
 ]
 for sp in "XY":   # nothing overlaps, and all of it is external memory
     spans = sorted((a, a + n, nm) for s_, nm, a, n, _ in MAP if s_ == sp)

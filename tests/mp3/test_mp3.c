@@ -44,18 +44,18 @@ static int ref_run(REFRS *q, const double *in, int ns, int nch, double out[2][MP
 			memcpy(q->hist[ch], x[ch] + 32, sizeof(q->hist[ch]));
 		}
 		while (q->r.n <= 27) {
-			const unsigned long *h = &tab[8 * (q->r.f >> 18)];
+			const unsigned long *h = &tab[((q->r.f >> 19) + 16) & 31];
 			for (ch = 0; ch < nch; ch++) {
 				double a = 0;
 				for (j = 0; j < 8; j++)
 					a += x[ch][q->r.n + 4 + j] *
-					     ((long)(h[j] ^ 0x800000UL) - 0x800000L) / 8388608.0;
+					     ((long)(h[32 * j] ^ 0x800000UL) - 0x800000L) / 8388608.0;
 				out[ch][k] = a;
 			}
 			k++;
 			q->r.f += q->r.sf;
-			q->r.n += (int)q->r.si + (int)(q->r.f >> 23);
-			q->r.f &= 0x7fffff;
+			q->r.n += (int)q->r.si + (int)(q->r.f >> 24);
+			q->r.f &= 0xffffff;
 		}
 		q->r.n -= 32;
 	}
@@ -173,6 +173,8 @@ static int one(const char *name, int quiet)
 			for (i = 0; i < ns * nch; i++)	/* (clipped, as the model's are) */
 				in[i] = ref[i] >= 1 ? 1 - 1 / 8388608.0 : ref[i] < -1 ? -1 : ref[i];
 			for (r = 0; r < nrs; r++) {
+				if (pk[0] & PK_MUTE)
+					mp3rs_mute(&rs[r]);
 				no = mp3rs_run(&rs[r], pcm, ns, nch, rout);
 				if (ref_run(&rr[r], in, ns, nch, rref) != no) {
 					fprintf(stderr, "%s: frame %ld: the resamplers gave different counts\n",

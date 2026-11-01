@@ -112,9 +112,20 @@ static void cmpbuf(const char *what, int space, unsigned addr, const dw *m, int 
 
 #define XR0_ADDR 0x0600
 #define XR1_ADDR 0x2480
-#define SUBS_ADDR 0x2f90
 #define OV0_ADDR 0x2b10
 #define OV1_ADDR 0x2d50
+
+/* the Falcon's clock for a file's rate: the lowest of 49170 / k at or above it */
+static long falcon_rate(long rin)
+{
+	static const long k10[] = { 10, 15, 20, 25, 30, 40, 50, 60 };	/* (k x 10) */
+	long best = 49170;
+	int i;
+	for (i = 0; i < 8; i++)
+		if (491700 / k10[i] >= rin)
+			best = 491700 / k10[i];
+	return best;
+}
 
 int main(int argc, char **argv)
 {
@@ -123,6 +134,9 @@ int main(int argc, char **argv)
 	static unsigned char buf[16 << 20];
 	int a, i, fail = 0;
 	double worst = 0;
+	/* SIMRS=1: each file resampled to the Falcon's clock above its rate,
+	 * SIMRS=2: a 48 kHz file to 44.1 (the others left out) */
+	int rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0;
 	const char *worst_name = "";
 
 	sim_start(dsp_mp3_prog);
@@ -138,6 +152,9 @@ int main(int argc, char **argv)
 	for (a = 1; a < argc && !dead; a++) {
 		static MP3PARSE ps;
 		static MP3DSP d;
+		static MP3RS rs;
+		static dw ro[2][MP3RS_MAX];
+		int rs_on = 0;
 		FILE *f = fopen(argv[a], "rb");
 		long n, off = 0, frames = 0, samples = 0, rate = 0, bad = 0;
 		unsigned long long c = 0, cmax = 0;
@@ -162,6 +179,16 @@ int main(int argc, char **argv)
 			}
 			np = mp3_packet(&ps, &h, buf + off, pk);
 			rate = h.rate;
+			if (rsmode == 2 && rate != 48000)
+				break;
+			if (rsmode && !rs_on) {	/* RSSET */
+				mp3rs_set(&rs, rate, rsmode == 2 ? 44100 : falcon_rate(rate));
+				put(13);
+				put(rs.si);
+				put(rs.sf);
+				put(rs.down ? 2 : 1);
+				rs_on = 1;
+			}
 			off += h.length;
 			if (np < 0)
 				continue;
@@ -198,6 +225,30 @@ int main(int argc, char **argv)
 			c += t;
 			if (t > cmax)
 				cmax = t;
+			if (rs_on) {		/* the count, then each channel's outputs */
+				int no, cnt;
+				if (pk[0] & PK_MUTE)
+					mp3rs_mute(&rs);
+				no = mp3rs_run(&rs, pcm, ns, nch, ro);
+				cnt = (int)get();
+				if (cnt != no) {
+					fprintf(stderr, "%s: frame %ld: the DSP resampled to %d, the model %d\n",
+						argv[a], frames, cnt, no);
+					wrong++;
+					dead = 1;
+				}
+				for (ch = 0; ch < nch && !dead; ch++)
+					for (k = 0; k < no && !dead; k++) {
+						long v = get();
+						if (v != ro[ch][k] && !wrong++)
+							fprintf(stderr, "%s: frame %ld channel %d output %d: the DSP %ld, the model %ld\n",
+								argv[a], frames, ch, k, v, (long)ro[ch][k]);
+					}
+				bad += wrong != 0;
+				frames++;
+				samples += ns;
+				continue;
+			}
 			for (ch = 0; ch < nch; ch++)
 				for (k = 0; k < ns && !dead; k++) {
 					long v = get();
@@ -209,11 +260,8 @@ int main(int argc, char **argv)
 			frames++;
 			samples += ns;
 			if (wrong && getenv("SIMDEBUG")) {
-				fprintf(stderr, "the frame's last granule, after alias reduction and the transform:\n");
-				cmpbuf("lines 0", 1, XR0_ADDR, mp3dsp_dbg_xr[0], 576);
-				if (nch > 1)
-					cmpbuf("lines 1", 1, XR1_ADDR, mp3dsp_dbg_xr[1], 576);
-				cmpbuf("subbands", 4, SUBS_ADDR, mp3dsp_dbg_sub, 576);
+				fprintf(stderr, "the frame's last granule, after the transform (in place):\n");
+				cmpbuf("subbands", 1, nch > 1 ? XR1_ADDR : XR0_ADDR, mp3dsp_dbg_sub, 576);
 				cmpbuf("overlap 0", 4, OV0_ADDR, d.ov[0], 576);
 				if (nch > 1)
 					cmpbuf("overlap 1", 4, OV1_ADDR, d.ov[1], 576);

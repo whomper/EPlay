@@ -664,8 +664,13 @@ void mp3rs_set(MP3RS *r, long rin, long rout)
 {
 	memset(r, 0, sizeof(*r));
 	r->si = (unsigned long)(rin / rout);
-	r->sf = (unsigned long)(((unsigned long long)(rin % rout) << 23) / (unsigned long long)rout);
+	r->sf = (unsigned long)(((unsigned long long)(rin % rout) << 24) / (unsigned long long)rout);
 	r->down = rin > rout;
+}
+
+void mp3rs_mute(MP3RS *r)
+{
+	memset(r->hist, 0, sizeof(r->hist));
 }
 
 int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
@@ -680,17 +685,17 @@ int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
 			memcpy(r->hist[ch], x[ch] + 32, sizeof(r->hist[ch]));
 		}
 		while (r->n <= 27) {	/* (its taps up to n + 4, in the block) */
-			const unsigned long *h = &tab[8 * (r->f >> 18)];
+			const unsigned long *h = &tab[((r->f >> 19) + 16) & 31];
 			for (ch = 0; ch < nch; ch++) {
 				da a = 0;
 				for (j = 0; j < 8; j++)
-					a += d_mpy(x[ch][r->n + 4 + j], sx(h[j]));
+					a += d_mpy(x[ch][r->n + 4 + j], sx(h[32 * j]));
 				out[ch][k] = d_a2w_out(d_rnd(a));
 			}
 			k++;
 			r->f += r->sf;
-			r->n += (int)r->si + (int)(r->f >> 23);
-			r->f &= 0x7fffff;
+			r->n += (int)r->si + (int)(r->f >> 24);
+			r->f &= 0xffffff;
 		}
 		r->n -= 32;
 	}

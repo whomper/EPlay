@@ -37,8 +37,8 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
 #define MP3RS_MAX 1300		/* a frame's outputs at most (x 1.115) */
 
 typedef struct {
-	unsigned long si, sf;	/* the step: si + sf / 2^23 input samples */
-	unsigned long f;	/* the position: its fraction (Q23) */
+	unsigned long si, sf;	/* the step: si + sf / 2^24 input samples */
+	unsigned long f;	/* the position: its fraction (24 bits: the DSP's A0) */
 	int n;			/* and its sample, from the block's first */
 	int down;		/* t_rsdn */
 	dw hist[2][7];		/* each channel's last 7 inputs */
@@ -46,6 +46,10 @@ typedef struct {
 
 /* from rate rin to rout; the step as the 68030 works it out for the DSP */
 void mp3rs_set(MP3RS *r, long rin, long rout);
+
+/* a mute frame's: its last inputs silence (then its samples, 0, through
+ * mp3rs_run: its outputs 0, as many as ever) */
+void mp3rs_mute(MP3RS *r);
 
 /* ns samples of nch channels in (a multiple of 32), the outputs into out;
  * gives how many */

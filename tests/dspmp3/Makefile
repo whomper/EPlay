@@ -2,7 +2,8 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 # dsp/mp3.a56, the whole DSP decoder, on Hatari's DSP core against the
 # model, bit for bit, and its cycles: make (after the top-level make test
-# has made the files)
+# has made the files). Then again resampled (mp3rs): to the Falcon's clock,
+# and 48 kHz to 44.1
 H := ../../common/tests/ec/build/hatari
 B := build
 TOP := ../..
@@ -10,6 +11,10 @@ FILES ?= $(wildcard $(TOP)/build/mp3files/*.mp3)
 
 run: $(B)/sim
 	./$(B)/sim $(FILES)
+	@echo "resampled to the Falcon's clock (SIMRS=1):"
+	SIMRS=1 ./$(B)/sim $(FILES)
+	@echo "48 kHz resampled to 44.1 (SIMRS=2):"
+	SIMRS=2 ./$(B)/sim $(FILES)
 $(B)/mp3tab.h: $(TOP)/tools/mkmp3tab.py | $(B)
 	python3 $(TOP)/tools/mkmp3tab.py $(TOP)/data $@
 $(B)/mp3_prog.h: $(TOP)/dsp/mp3.a56 $(B)/mp3tab.h
