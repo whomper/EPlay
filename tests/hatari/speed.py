@@ -56,6 +56,21 @@ class Rig(speed.Rig):
     def let_go(self):
         self.xdo("mouseup", "1")
 
+    def held_shown(self, x, y, what):
+        """a press held still a second, its button seen pressed on the
+        screen before the release (guidelines 5.8, AERA-Atari 60d1ea5: TOS's
+        AES holds BEG_UPDATE back while the button is held, unseen by
+        AESGAP): the button's inside mostly dark (filled in pen 1)"""
+        from PIL import Image
+        time.sleep(1)
+        img = Image.open(self.shot("held-" + what)).convert("L")
+        box = [img.getpixel((x + dx, y + dy)) for dx in range(-40, 41, 4) for dy in (-4, 0, 4)]
+        dark = sum(1 for v in box if v < 96) / len(box)
+        ok = dark > 0.6
+        print("%s  %s held 1 s: %d %% of the button dark (drawn pressed before the release)"
+              % ("ok  " if ok else "FAIL", what, dark * 100))
+        self.held_ok = getattr(self, "held_ok", True) and ok
+
 
 def session(work, spec, kind):
     """EPlay started with a file of kind (mp3: 320 kbit/s at 44.1 kHz;
@@ -85,15 +100,19 @@ def session(work, spec, kind):
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
         r.act("Stop: pressed (drawn pressed)", speed.KEY, lambda: r.press(*STOP))
+        r.held_shown(STOP[0], STOP[1], "Stop")
         r.act("Stop: let go (stops)", speed.KEY, r.let_go)
         r.act("About box opened (stopped)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
         r.act("Play: pressed (drawn pressed)", speed.KEY, lambda: r.press(*PLAY))
+        r.held_shown(PLAY[0], PLAY[1], "Play")
         r.act("Play: let go (the file again)", speed.KEY, r.let_go)
         r.act("%s playing, 5 s more" % what, speed.KEY, lambda: time.sleep(5))
         r.act("Stop again", speed.KEY, lambda: r.click(*STOP))
         rc = r.report()
+        if not getattr(r, "held_ok", True):
+            rc = 1
         n = sum(1 for l in r.console().split("\n") if l.startswith("EPLAY playing"))
         if n != 2:
             print("FAIL  played %d times, not 2" % n)

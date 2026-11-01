@@ -17,6 +17,7 @@
 #include "aboutbox.h"
 #include "text.h"
 #include "offdraw.h"
+#include "click.h"
 #include "play.h"
 #include "elog.h"
 #include "snd.h"
@@ -61,6 +62,7 @@ static int quit;
 static char path[256], name[64], file[320];	/* the file selector's, and the file */
 static GRECT b_open, b_play, b_stop;
 static GRECT *b_held;		/* the button drawn pressed (guidelines 5.8), or 0 */
+static int press_draw;		/* drawn while the button is held: press_update_begin's lock */
 
 static void status(const char *s)
 {
@@ -158,7 +160,7 @@ static void draw_rows(GRECT *area, int from, int to)
 static void redraw(GRECT *area, int from, int to)
 {
 	GRECT r, a;
-	int one = area == 0 && from == to && to < 4;
+	int one = area == 0 && from == to && to < 4, took;
 	if (wh <= 0)
 		return;
 	if (!area) {
@@ -170,7 +172,9 @@ static void redraw(GRECT *area, int from, int to)
 		area = &a;
 	}
 	draw_forget();			/* (the About box draws with this handle too) */
-	wind_update(BEG_UPDATE);
+	/* (while a button is held, TOS's AES holds BEG_UPDATE back until it
+	   is let go: click.c's lock, which skips it there) */
+	took = press_draw ? press_update_begin() : (wind_update(BEG_UPDATE), 1);
 	graf_mouse(M_OFF, 0);
 	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w && r.h) {
@@ -186,7 +190,10 @@ static void redraw(GRECT *area, int from, int to)
 		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
 	}
 	graf_mouse(M_ON, 0);
-	wind_update(END_UPDATE);
+	if (press_draw)
+		press_update_end(took);
+	else
+		wind_update(END_UPDATE);
 }
 
 static void open_window(void)
@@ -299,7 +306,9 @@ static int track(GRECT *b)
 	AEVENT ev;
 	int in = 1;
 	b_held = b;
+	press_draw = 1;
 	redraw(b, ROWS - 1, ROWS - 1);
+	press_draw = 0;
 	while (!quit) {
 		short which;
 		int playing = play_state() == PS_PLAYING;
@@ -314,7 +323,9 @@ static int track(GRECT *b)
 		if (which & MU_M1) {
 			in = !in;
 			b_held = in ? b : 0;
+			press_draw = 1;
 			redraw(b, ROWS - 1, ROWS - 1);
+			press_draw = 0;
 		}
 		step(playing);
 	}
