@@ -451,7 +451,7 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
 				}
 				for (i = 0; i < 12; i++) {
 					int m = map12[i];
-					dw win = sx(t_win[2 * 36 + i]);
+					dw win = sx(t_win[(sb & 1) * 144 + 2 * 36 + i]);
 					z[6 + 6 * w + i] += d_w2a(d_rw(d_mpy(u[(m < 0 ? -m : m) - 1], m < 0 ? -win : win)));
 				}
 			}
@@ -463,7 +463,7 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
 			 * as one rounding (the DSP's macr); z holds them minus it */
 			for (i = 0; i < 36; i++) {
 				int m = map36[i];
-				dw win = sx(t_win[bt * 36 + i]);
+				dw win = sx(t_win[(sb & 1) * 144 + bt * 36 + i]);
 				da p = d_mpy(u[(m < 0 ? -m : m) - 1], m < 0 ? -win : win);
 				if (i < 18)
 					z[i] = d_rnd(d_w2a(ov[18 * sb + i]) + p) - d_w2a(ov[18 * sb + i]);
@@ -472,10 +472,10 @@ static void imdct(GC *c, dw *ov, dw out[32][18])
 			}
 		}
 		for (i = 0; i < 18; i++) {
-			da o = d_w2a(ov[18 * sb + i]) + z[i];
-			if ((sb & 1) && (i & 1))
-				o = -o;		/* frequency inversion */
-			out[sb][i] = d_a2w(o);
+			/* (an odd subband's windows have their odd samples
+			 * negated: the frequency inversion, which its
+			 * overlap then holds too) */
+			out[sb][i] = d_a2w(d_w2a(ov[18 * sb + i]) + z[i]);
 			ov[18 * sb + i] = d_a2w(z[18 + i]);
 		}
 	}

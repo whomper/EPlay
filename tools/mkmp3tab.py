@@ -72,8 +72,10 @@ def win(bt):
     return w
 
 
-add("t_win", win(0) + win(1) + win(2) + win(3),
-    "the windows of block types 0-3, 36 each (type 2: the 12 of a short block)")
+wins = win(0) + win(1) + win(2) + win(3)
+add("t_win", wins + [-w if i & 1 else w for i, w in enumerate(wins)],
+    "the windows of block types 0-3, 36 each (type 2: the 12 of a short block); then the same "
+    "with the odd samples negated, for odd subbands (the frequency inversion)")
 c = [-0.6, -0.535, -0.33, -0.185, -0.095, -0.041, -0.0142, -0.0037]
 add("t_alias", [q23(1 / math.sqrt(1 + x * x)) for x in c] + [q23(x / math.sqrt(1 + x * x)) for x in c],
     "alias reduction: cs[0..7], then ca[0..7]")
@@ -386,11 +388,11 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "SFBL", 0x2730, 207, "t_sfbl"),
     ("Y", "SFBS", 0x2800, 126, "t_sfbs"),
     ("Y", "NSF", 0x2880, 72, "t_nsf"),
-    ("Y", "WIN", 0x28d0, 144, "t_win"),
-    ("Y", "ALIAS", 0x2960, 16, "t_alias"),
-    ("Y", "PRETAB", 0x2970, 22, "t_pretab"),
-    ("Y", "IM9", 0x2990, 32, "t_im9"),
-    ("Y", "ROT", 0x29b0, 36, "t_rot"),
+    ("Y", "WIN", 0x28d0, 288, "t_win"),
+    ("Y", "ALIAS", 0x29f0, 16, "t_alias"),
+    ("Y", "PRETAB", 0x2a00, 22, "t_pretab"),
+    ("Y", "IM9", 0x2a20, 32, "t_im9"),
+    ("Y", "ROT", 0x2a40, 36, "t_rot"),
     ("Y", "IM12", 0x2ae0, 36, "t_imdct12"),
     ("Y", "OV0", 0x2b10, 576, None),
     ("Y", "OV1", 0x2d50, 576, None),

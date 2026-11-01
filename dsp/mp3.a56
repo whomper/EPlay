@@ -128,7 +128,8 @@ V_DBG	equ	$93		; tests: stop at a stage (dbgchk) of granule V_DGR, channel V_DCH
 V_DGR	equ	$95
 V_DCH	equ	$96
 V_NLSB	equ	$97		; the transform: long subbands from the start (32, mixed 2, short 0)
-V_WIN	equ	$98		; and their window
+V_WIN	equ	$98		; and their window: an even subband's,
+V_WINO	equ	$99		; an odd one's (its odd samples negated)
 V_PKN	equ	$a3		; its words expected (-1: the count not yet)
 V_PKI	equ	$a4		; its words in
 V_IDLE	equ	$a5		; waits this frame (the decoder ahead of the sound)
@@ -152,13 +153,12 @@ DPAIR	equ	$10		; the window of outputs j and 32 - j (240)
 start	movep	#1,x:$ffe0		; port B is the host port (P:2-F: the vectors
 	movep	#0,x:$fffe		; no wait states                 not taken)
 	ori	#3,mr			; no interrupts
-	movec	#$ffff,m0		; linear (not #-1: a56 makes that 8 bits)
-	movec	m0,m1
-	movec	m0,m2
-	movec	m0,m3
-	movec	m0,m4
-	movec	m0,m5
-	jmp	start2
+	movec	#$ffff,m0		; linear, for the loads (not #-1: a56 makes that
+	jmp	cmd			; 8 bits); the others at RESET
+
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
 
 ; the SSI's transmit, a fast interrupt: the ring (Y, r7 modulo m7) to the
 ; matrix, a word each time slot (left, right). r7 is the SSI's alone: the
@@ -170,9 +170,6 @@ start	movep	#1,x:$ffe0		; port B is the host port (P:2-F: the vectors
 	jsr	tue
 
 	org	p:$14
-start2	movec	m0,m6
-	movec	m0,m7
-
 cmd	jsr	rd			; LOADP here; the rest from the external part
 	move	x0,a
 	move	#>6,x1
@@ -186,10 +183,6 @@ cmd	jsr	rd			; LOADP here; the rest from the external part
 	movem	x0,p:(r0)+
 lp
 	jmp	cmd
-
-rd	jclr	#0,x:HSR,rd
-	movep	x:HRX,x0
-	rts
 
 ; ---- the bits: refill while fewer than 25 (r1: the next word, in Y)
 refill	jclr	#15,r4,rf1
@@ -307,37 +300,6 @@ dqm	mpyr	x0,y1,a			; p = m g
 	rnd	a
 	rts
 
-; ---- the transform of all 32 subbands: r0 the lines (X), r5 the
-; overlap, r6 the subband samples (Y), each running on 18 a subband;
-; V_NLSB long subbands (window V_WIN), then short ones; from V_SBMAX all
-; zeros
-imall	clr	a
-	move	a,x:V_SB
-	move	a,x:V_ODD
-	do	#32,ima
-	move	x:V_SB,b
-	move	x:V_SBMAX,x0
-	cmp	x0,b
-	jge	imz
-	move	x:V_NLSB,x0
-	cmp	x0,b
-	jge	ims
-	jsr	imfast			; a long block
-	move	x:V_WIN,r4
-	jsr	imlong
-	jmp	imnx
-imz	jsr	imzero
-	jmp	imnx
-ims	jsr	imshort
-imnx	move	x:V_SB,b
-	move	#>1,x0
-	add	x0,b
-	move	b1,x:V_SB
-	bchg	#0,x:V_ODD
-	nop
-ima
-	rts
-
 ; ---- alias reduction: r0 at the first subband's line 17, x0 boundaries
 aliasr	do	x0,ale
 	move	r0,r1
@@ -453,10 +415,10 @@ d9a
 	rts
 
 ; ---- a long block's 36 outputs: U, the window at r4 (Y), the overlap at
-; r5 (Y), the subband's 18 samples to r6 (Y); odd subbands (V_ODD) have
-; their odd samples negated (the frequency inversion)
+; r5 (Y), the subband's 18 samples to r6 (Y). (An odd subband's window has
+; its odd samples negated: the frequency inversion, which the overlap
+; then holds too)
 imlong	move	#>U,r1
-	jset	#0,x:V_ODD,iml1
 	do	#9,il1
 	move	x:(r1)+,x0	y:(r4)+,y0
 	move	y:(r5)+,a
@@ -470,40 +432,7 @@ il1
 	macr	-x0,y0,a
 	move	a,y:(r6)+
 il2
-	jmp	iml2
-iml1	do	#4,il3			; odd subband: the odd samples negated
-	move	x:(r1)+,x0	y:(r4)+,y0
-	move	y:(r5)+,a
-	macr	x0,y0,a
-	move	a,y:(r6)+
-	move	x:(r1)+,x0	y:(r4)+,y0
-	move	y:(r5)+,a
-	macr	x0,y0,a
-	neg	a
-	move	a,y:(r6)+
-il3
-	move	x:(r1)+,x0	y:(r4)+,y0	; i = 8
-	move	y:(r5)+,a
-	macr	x0,y0,a
-	move	a,y:(r6)+
-	move	(r1)-
-	do	#4,il4			; i 9..16: odd first
-	move	x:(r1)-,x0	y:(r4)+,y0
-	move	y:(r5)+,a
-	macr	-x0,y0,a
-	neg	a
-	move	a,y:(r6)+
-	move	x:(r1)-,x0	y:(r4)+,y0
-	move	y:(r5)+,a
-	macr	-x0,y0,a
-	move	a,y:(r6)+
-il4
-	move	x:(r1)-,x0	y:(r4)+,y0	; i = 17
-	move	y:(r5)+,a
-	macr	-x0,y0,a
-	neg	a
-	move	a,y:(r6)+
-iml2	move	#>-18,n5		; the overlap again, for the new one
+	move	#>-18,n5		; the overlap again, for the new one
 	move	#>U+9,r1
 	nop
 	move	(r5)+n5
@@ -625,8 +554,49 @@ tue	movep	x:SSISR,x:V_JUNK	; (an underrun: the status read, then the word)
 	movep	y:(r7)+,x:TX
 	rti
 
+; ---- the transform of all 32 subbands: r0 the lines (X), r5 the
+; overlap, r6 the subband samples (Y), each running on 18 a subband;
+; V_NLSB long subbands (window V_WIN), then short ones; from V_SBMAX all
+; zeros. (In external P: it touches internal memory only, so it runs as
+; fast here)
+imall	clr	a
+	move	a,x:V_SB
+	move	a,x:V_ODD
+	do	#32,ima
+	move	x:V_SB,b
+	move	x:V_SBMAX,x0
+	cmp	x0,b
+	jge	imz
+	move	x:V_NLSB,x0
+	cmp	x0,b
+	jge	ims
+	jsr	imfast			; a long block
+	move	x:V_WIN,r4
+	jclr	#0,x:V_ODD,iml0
+	move	x:V_WINO,r4
+iml0	jsr	imlong
+	jmp	imnx
+imz	jsr	imzero
+	jmp	imnx
+ims	jsr	imshort
+imnx	move	x:V_SB,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_SB
+	bchg	#0,x:V_ODD
+	nop
+ima
+	rts
+
 ; (the commands seldom run)
-dreset	jsr	clear
+dreset	movec	m0,m1			; all linear (m0 since the start)
+	movec	m0,m2
+	movec	m0,m3
+	movec	m0,m4
+	movec	m0,m5
+	movec	m0,m6
+	movec	m0,m7
+	jsr	clear
 	jmp	cmd
 
 clear	clr	a
@@ -2485,6 +2455,9 @@ go7a	move	#>0,y1			; short: none long, but mixed's 2
 go7	move	b1,x:V_SBMAX
 	move	y1,x:V_NLSB
 	move	x1,x:V_WIN
+	move	#>144,a			; (the signed windows: 144 on)
+	add	x1,a
+	move	a1,x:V_WINO
 	move	x:V_XR,r0
 	move	x:V_OV,r5
 	move	#>SUBS,r6
@@ -2617,26 +2590,15 @@ ro5
 	rts
 
 ; a subband of zeros: the overlap out (the frequency inversion), cleared
-imzero	move	#>18,n0
+imzero	move	#>18,n0			; (the overlap holds the inversion already)
 	clr	b
 	nop
 	move	(r0)+n0
-	jset	#0,x:V_ODD,imz2
 	do	#18,imz1
 	move	y:(r5),a
 	move	a,y:(r6)+
 	move	b,y:(r5)+
 imz1
-	rts
-imz2	do	#9,imz3
-	move	y:(r5),a
-	move	a,y:(r6)+
-	move	b,y:(r5)+
-	move	y:(r5),a
-	neg	a
-	move	a,y:(r6)+
-	move	b,y:(r5)+
-imz3
 	rts
 
 ; short: three windows of 6, overlapped by 6
@@ -2666,6 +2628,9 @@ ish2
 	move	a,x:(r2)+
 ish3
 	move	#>WIN+72,r4		; the 12 contributions, signed as map12
+	jclr	#0,x:V_ODD,ishw		; (an odd subband: the signed window)
+	move	#>WIN+144+72,r4
+ishw
 	move	#>U,r1
 	do	#3,ish4			; u0 u1 u2 +
 	move	x:(r1)+,x0	y:(r4)+,y0
@@ -2707,9 +2672,7 @@ ish7
 	move	y:(r5)+,a
 	move	a,y:(r6)+
 	move	y:(r5)+,a
-	jclr	#0,x:V_ODD,ishp1
-	neg	a
-ishp1	move	a,y:(r6)+
+	move	a,y:(r6)+
 ish8
 	do	#3,ish9			; 6..11: + C0
 	move	y:(r5)+,a
@@ -2719,9 +2682,7 @@ ish8
 	move	y:(r5)+,a
 	move	y:(r1)+,x0
 	add	x0,a
-	jclr	#0,x:V_ODD,ishp2
-	neg	a
-ishp2	move	a,y:(r6)+
+	move	a,y:(r6)+
 ish9
 	do	#3,ish10		; 12..17: + C0 + C1
 	move	y:(r5)+,a
@@ -2735,9 +2696,7 @@ ish9
 	add	x0,a
 	move	y:(r2)+,x0
 	add	x0,a
-	jclr	#0,x:V_ODD,ishp3
-	neg	a
-ishp3	move	a,y:(r6)+
+	move	a,y:(r6)+
 ish10
 	move	#>-18,n5		; the new overlap
 	nop
