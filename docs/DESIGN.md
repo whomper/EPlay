@@ -111,7 +111,11 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
 - **One window**, with the info line as the status: the track, its time, its rate and where it
   plays ("44.1 kHz  •  FDI"). The transport in the window's top row: previous, play/pause, stop,
   next, and the position as a bar that can be clicked or dragged. Under it, the playlist, with
-  common's `panebar.c` beside it.
+  common's `panebar.c` beside it. Its rows follow the guidelines' 5.8 (Erez, 1 Nov 2026): mouse
+  down draws the row selected at once (only the old and new rows, within 50 ms); a release over
+  the same row starts the action, so a double click plays the track on its second release;
+  let go elsewhere, nothing more; moved while held, a drag. Shift and Control change the
+  selection on the press only. The speed rig times press-to-row apart from release-to-action.
 - **The small player** (View > Small player, saved in the INF): the window shrinks to the
   transport row and the title. Under MiNT, XaAES or MagiC it plays beside everything else. Iconified
   (`iconify.c`) it shows the icon and the time played.
