@@ -32,7 +32,7 @@ LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 OWN     := main draw about play snd feed hostirq dspmp3 elog pcm mp3frame
 CSRC    := bidi
 CATARI  := libc tos gem crash
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
