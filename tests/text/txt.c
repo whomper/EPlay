@@ -576,6 +576,29 @@ static void timing(void)
 					 (unsigned long)(tos_ms() - t));
 				say(line);
 			}
+			snprintf(line, sizeof(line), "TXT time: (text_plain_state %d here)", text_plain_state());
+			say(line);
+			t = tos_ms();
+			for (k = 0; k < 320; k++) {
+				short b[4] = { 16, (short)(2 * ch), 31, (short)(2 * ch + 15) };
+				scr_xor(vh, b);
+			}
+			snprintf(line, sizeof(line), "TXT time: 320 boxes of 16x16 on one word: scr_xor %lu ms", (unsigned long)(tos_ms() - t));
+			say(line);
+			/* where a small box's time goes: the Logbase call alone, and
+			   the boxes on one word (x 16) */
+			t = tos_ms();
+			for (k = 0; k < 320; k++)
+				(void)trap14_w(3);
+			snprintf(line, sizeof(line), "TXT time: 320 Logbase calls %lu ms", (unsigned long)(tos_ms() - t));
+			say(line);
+			t = tos_ms();
+			for (k = 0; k < 320; k++) {
+				short b[4] = { 16, (short)(2 * ch), 31, (short)(2 * ch + 15) };
+				scr_fill(vh, b, 0);
+			}
+			snprintf(line, sizeof(line), "TXT time: 320 boxes of 16x16 on one word: scr_fill %lu ms", (unsigned long)(tos_ms() - t));
+			say(line);
 		}
 		text_noclip(vh);
 	}
