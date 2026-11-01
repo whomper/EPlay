@@ -462,6 +462,28 @@ and plays from the DSP:
   the way. That is phase 2's plan for MP3; Cubase does it for 8 tracks at 44.1/48 kHz in 16 or 24
   bits, and 16 tracks compressed on the DSP.
 
+## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
+
+Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the
+one the machine has.
+
+| Way | For | The decoding, and the sound |
+|---|---|---|
+| **68030** | a TT, a Falcon without its DSP free, any 68030 machine | the 68030 decodes; the sound DMA plays (the ring, as WAV) |
+| **DSP** | every Falcon | the DSP decodes and plays from its SSI on the Falcon's clock; a rate the Falcon hasn't (44.1 kHz) resampled on the DSP |
+| **FDI** | a Falcon with the FDI | Cubase's way: the FDI set to the file's rate (44.1 or 48 kHz, each measured), the DSP's SSI on its clock, bit for bit |
+
+- **Settings:** Output: Auto (the default: the FDI where its driver answers, else the DSP on a
+  Falcon, else the 68030), or one of the three; only what the machine has is offered. Volume:
+  0 dB, the default. Both in EPLAY.INF.
+- **The 68030's quality follows the machine** (Erez's choice): the highest it keeps up with, full
+  on a fast 68030 (a DFB1), half the rate or mono on a stock Falcon or a TT; the window says which
+  ("68030, half rate"). The music doesn't break up. An ST or STE has no MP3.
+- **The order:** the FDI way first (Erez's Falcon, and it removes 0.3's two faults: the clock
+  and the DSP's output through the host port), then the DSP way with resampling, then WAV and
+  AIFF through the DSP, the settings, and the 68030's decoder last (a new part). The TT's WAV and
+  AIFF (phase 6) come with the 68030 way where they share the code.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts

@@ -84,7 +84,8 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
 ## EPlay
 
-EPlay plays MP3 (on the Falcon's DSP), WAV and AIFF (Falcon, TT, STE). It is a program only, no
+EPlay plays MP3 (on the Falcon's DSP, through the FDI as Cubase does, or on a 68030 at the quality
+it keeps up with: Erez, 1 Nov 2026), WAV and AIFF (Falcon, TT, STE). It is a program only, no
 accessory (Erez, 31 Oct 2026). The design, and the order of the work, are in `docs/DESIGN.md`:
 read it first, and change it with the code when a decision changes.
 
