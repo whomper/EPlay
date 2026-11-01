@@ -322,24 +322,12 @@ static void tick_mp3(void)
 
 static void tick_body(void);
 
-/* MP3, once the DSP is loaded: the DSP's host interrupt feeds it, when
-   it asks for a packet, sends its status, or has taken a word of one
-   going (no tick a thousand times a second: the 68030 spared) */
-static void host_irq(void)
-{
-	unsigned long a = fine_now();
-	if (!t_t0)
-		t_t0 = a;
-	dspmp3_tick_status();		/* (always: a word left unread asks again at once) */
-	if (!t_end && !t_failed) {
-		tick_mp3();
-		hirq_want = HIRQ_RX | (dspmp3_tick_pushing() ? HIRQ_TX : 0);
-	} else
-		hirq_want = 0;		/* (the end: nothing more asked for) */
-	t_last = fine_now();
-	t_busy += t_last - a;
-}
-
+/* MP3, once the DSP is loaded: the tick feeds it, polling the host port
+   (its words read, a packet's sent as there is room). 0.4 to 0.6 had the
+   DSP's own host interrupt do it, which a Falcon with the FDI on its
+   input's clock answered with spurious interrupts (24 bombs in 0.5; 111
+   in 10 s and a hang in 0.6, the host port's requests found off); Cubase
+   Audio doesn't use it either */
 static long start_stream(void)
 {
 	dspmp3_tick_stream();
@@ -373,6 +361,11 @@ static void tick_body(void)
 	}
 	if (!t_end && !t_failed && kind)
 		tick_pcm();
+	if (!kind && s_started) {
+		dspmp3_tick_status();	/* (its words read even at the end) */
+		if (!t_end && !t_failed)
+			tick_mp3();
+	}
 	if (!kind && dspmp3_failed())
 		t_failed = 1;
 	if (t_end && kind) {
@@ -618,7 +611,7 @@ void play_start(void)
 			     snd_matrix[3]);
 		}
 		loading = kind ? 0 : 2;	/* (the tick loads the DSP first: not waiting for GEM) */
-		feed_on(tick, kind ? 250 : 1000);	/* (WAV: 1024 frames a tick, 4 times what
+		feed_on(tick, kind ? 250 : 500);	/* (WAV: 1024 frames a tick, 4 times what
 						   plays; MP3: the DSP's next packet at once) */
 	}
 }
@@ -721,9 +714,7 @@ int play_step(int ms)
 	if (loading == 2 && dspmp3_reset_step())
 		loading = 1;		/* (drawn, the DSP reset: the tick may load it) */
 	if (!kind && !loading && !s_started && !t_failed) {
-		feed_off();		/* loaded: the stream, fed by the DSP's interrupt */
-		hostirq_on(host_irq);
-		Supexec(start_stream);
+		Supexec(start_stream);	/* loaded: the stream, fed by the tick */
 		s_started = 1;
 	}
 	if (!kind && s_started && dspmp3_stream_stalled(tos_hz200()))

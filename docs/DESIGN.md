@@ -527,6 +527,29 @@ slot begins, TFS says which, r7 a word on if needed): the start's alignment alon
 with them swapped now and then. The play rig no longer excuses a swap for MP3 (the SSI's, not
 Hatari's DMA).
 
+### 0.6 on Erez's Falcon (1 Nov 2026)
+
+```
+the FDI to 44100 Hz: 2: 47925 Hz; 3: 48000 Hz; 0: 44125 Hz
+output: 44100 Hz, the external clock
+the DSP stopped answering streaming ... frame 403; 10422 ms played
+the sound: 400 frames decoded, 0 granules late; the DSP's waits a frame: least 0, mean 1085
+the stream then: ISR $06 (HF2 0, RXDF 0, TXDE 1), ICR $00, wanted 3, busy 0; a packet going 1, word 1 of 297
+spurious interrupts while playing: 111
+```
+
+- **The FDI on its input's clock is at 44.1 kHz** (0), and at 44.1 kHz the DSP kept up: no
+  granule late. The first run hung after 15 s with a click looping (the DSP playing its ring on,
+  the 68030 stuck); the second stopped after 10 s.
+- **Spurious interrupts only with the FDI on 0** (none in 0.4's 113 s on 2 and 3), and the host
+  port's requests found off with a packet half sent: the DSP's host interrupt (level 6, its
+  vector from IVR) doesn't hold up there. Cubase Audio doesn't use it (no vector of its own at
+  $3FC nor $60). 0.7 feeds the stream from the tick again, polling the host port, at 500 a
+  second (the packet is asked for in the frame's middle, so 2 ms is lost in the DSP's waits):
+  in Hatari the DSP has more to spare so (mean 4,945 waits a frame, against 3,720 by the
+  interrupt), and the 68030 gives 16 %. The spurious interrupts are still counted and let go,
+  and the log will say whether they come without the DSP's interrupt.
+
 ## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
 
 Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the
