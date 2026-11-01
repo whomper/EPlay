@@ -565,6 +565,26 @@ The DSP had about 1.7 ms to spare a frame on average, and none in the heaviest: 
 busy on this music (VBR, 265 kbit/s). So the faster decoder still matters, for heavier files
 and for a Falcon without the FDI (49,170 Hz, and resampling).
 
+### 0.7 again (1 Nov 2026), another track, and 0.8
+
+"It stopped after 10 seconds with DSP not responding." The log: 730 frames decoded where the
+68030 had sent 641 packets, 1,280 granules late, and then the DSP silent, HF2 off, the host
+port empty: it had lost the packets' step (a word lost or misread on the way: Erez's DFB1X on
+again, the 68030 at 50 MHz), taken data words for counts, decoded what came, and at last taken a
+0 for the end. 0.8: a packet's count has bit 23 set, which no data word has (23 bits a word),
+so the DSP passes stray words and takes up the stream at the next count, that frame dropped
+("packets broken" in the log); the status word's counts run on (frames, broken packets, late
+granules), so one read twice or missed takes nothing away. Tested in Hatari with a word
+dropped on purpose: one packet broken, playing on to the end.
+
+Erez also saw channel 3 of his SoundPool Analog 8 at full scale: the matrix's tracks as another
+program left them (Cubase Audio leaves 4). The DSP sends two words a frame and decodes two
+channels; 0.8 sets one stereo pair (Settracks, Setmontracks) when the DSP plays.
+
+And the DSP's reset is the tick's now (port A bit 4 at level 7, 60 ms after Play's draw): in
+GEM's steps the file selector, opened at once, held it and with it the load (the play rig's
+fsel failed once in seven).
+
 ## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
 
 Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the

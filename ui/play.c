@@ -350,8 +350,13 @@ static void tick_body(void)
 		snd_update();
 	if (loading) {			/* the DSP's program first, a piece a tick */
 		int r;
-		if (loading == 2)
-			return;		/* (Play's draw first: its stretch, 75 ms to 50) */
+		if (loading == 2) {	/* the DSP's reset: after Play's draw (60 ms), each
+					   wait 6 ms at least (here, not in GEM's steps,
+					   which the file selector holds) */
+			if (dspmp3_tick_reset(30, 3))
+				loading = 1;
+			return;
+		}
 		r = dspmp3_tick_load();
 		if (r < 0)
 			t_failed = 1;
@@ -682,13 +687,14 @@ static long f_ms(long f)
 /* how the sound kept up, for the log: the first gap and the least lead */
 const char *play_keep_up(void)
 {
-	static char b[200];
+	static char b[260];
 	if (!kind) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
-		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late; the DSP's waits a frame: least %ld, "
-			 "mean %ld; the tick %ld%% of the 68030 (frames made %ld%%, sent %ld%%)", fr, late, wmin,
-			 wavg, play_tick_share(), play_parse_share(), play_push_share());
+		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late, %ld packets broken; the DSP's waits a "
+			 "frame: least %ld, mean %ld; the tick %ld%% of the 68030 (frames made %ld%%, sent %ld%%)", fr,
+			 late, dspmp3_stream_resyncs(), wmin, wavg, play_tick_share(), play_parse_share(),
+			 play_push_share());
 		return b;
 	}
 	if (snd_underruns)
@@ -711,8 +717,6 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
-	if (loading == 2 && dspmp3_reset_step())
-		loading = 1;		/* (drawn, the DSP reset: the tick may load it) */
 	if (!kind && !loading && !s_started && !t_failed) {
 		Supexec(start_stream);	/* loaded: the stream, fed by the tick */
 		s_started = 1;

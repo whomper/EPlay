@@ -16,6 +16,7 @@ enum { DSPMP3_OK, DSPMP3_BUSY, DSPMP3_NONE, DSPMP3_FAILED };
    more is to come, -1 if the DSP stopped answering */
 int dspmp3_open(void);
 int dspmp3_reset_step(void);
+int dspmp3_tick_reset(int after, int wait);	/* the same from the tick: 1 when done */
 int dspmp3_tick_load(void);
 void dspmp3_close(void);	/* unlocked: another program may have it */
 void dspmp3_reset(void);	/* its overlap and filter state cleared (a new file) */
@@ -43,6 +44,7 @@ int dspmp3_tick_asks(void);
 int dspmp3_tick_pushing(void);
 void dspmp3_tick_offer(const unsigned long *pk, int n);
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg);
+long dspmp3_stream_resyncs(void);	/* packets found broken (a word lost or doubled): the stream taken up again */
 int dspmp3_stream_stalled(unsigned long hz);	/* GEM: no frame for 2 s (hz: the 200 Hz clock) */
 void dspmp3_stall_note(char *b, int n);	/* what both sides were doing then, for the log */
 /* where: what 1 sending a packet, 2 reading a frame, 3 loading; the word

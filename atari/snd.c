@@ -311,6 +311,11 @@ void snd_dsp_out(long rate, int ext)
 			if (internal[i] == rate)
 				pre = prescale[i];
 	Buffoper(0);
+	/* one stereo pair out: the matrix's tracks as another program left
+	   them (Cubase Audio leaves 4) put channels past 2 on the DSP port,
+	   heard as a third channel at full scale on Erez's SoundPool Analog 8 */
+	Settracks(0, 0);
+	Setmontracks(0);
 	Devconnect(DSPXMIT, DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
 	Dsptristate(1, 1);
 	Supexec(read_matrix);
