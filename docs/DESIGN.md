@@ -550,6 +550,21 @@ spurious interrupts while playing: 111
   interrupt), and the 68030 gives 16 %. The spurious interrupts are still counted and let go,
   and the log will say whether they come without the DSP's interrupt.
 
+### 0.7 on Erez's Falcon (1 Nov 2026): "It played very well"
+
+```
+the FDI to 44100 Hz: 2: 48025 Hz; 3: 48025 Hz; 0: 44050 Hz
+output: 44100 Hz, the external clock
+stopped at 234527 ms; 0 underruns (8979 frames decoded, 15 granules late; the DSP's waits a
+  frame: least 0, mean 1456; the tick 12% of the 68030 (frames made 3%, sent 4%))
+```
+
+Nearly four minutes at 44.1 kHz on the FDI's input clock, bit for bit, with no spurious
+interrupt (the DSP's host interrupt left alone) and 15 granules late of some 18,000 (0.08 %).
+The DSP had about 1.7 ms to spare a frame on average, and none in the heaviest: some 93 % of it
+busy on this music (VBR, 265 kbit/s). So the faster decoder still matters, for heavier files
+and for a Falcon without the FDI (49,170 Hz, and resampling).
+
 ## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
 
 Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the
