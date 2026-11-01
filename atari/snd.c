@@ -8,6 +8,7 @@
  * at the end, since the XBIOS can't say what they were (the FDI's program
  * sets them at boot).
  */
+#include <stdio.h>
 #include <string.h>
 #include "tos.h"
 #include "snd.h"
@@ -52,6 +53,8 @@ static volatile long wpos, written, played;	/* the next frame to write; totals *
 static long last_ppos;
 static volatile int playing;
 long snd_underruns;
+long snd_first_under = -1;	/* frames played at the first underrun (-1: none) */
+long snd_least_lead = -1;	/* the fewest frames written ahead, past the first second */
 
 /* the matrix, as found: $FF8920 (the DMA's mode), $FF8930-$FF893A */
 static unsigned short keep[8];
@@ -112,10 +115,14 @@ static short ext_pre = 1;	/* the external clock's prescale (snd_open) */
 
 /* the DMA's rate on the external clock at prescale pre: started over
    silence (a short part of the ring, cleared: 64 KB; the rest is played
-   only once written), and how far it gets in 200 ms. 0: it doesn't move */
+   only once written), and how far it gets in 200 ms, its position read
+   all the while and the steps added up: 0.2 read it only at the start
+   and the end, and a clock past 41 MHz (82 kHz at prescale 1: 45.1584
+   MHz is 88.2) went round the 16384 frames in 200 ms and was taken for
+   a slow one. 0: it doesn't move */
 static long measure(short pre)
 {
-	long a, b, t0;
+	long a, b, d, n = 0, t0, t;
 	ext_pre = pre;
 	if (!snd_open(44100, 1))
 		return 0;
@@ -128,21 +135,40 @@ static long measure(short pre)
 		;
 	a = play_pos();
 	t0 = (long)tos_ms();
-	while ((long)tos_ms() - t0 < 200)
-		;
-	b = play_pos();
+	do {
+		t = (long)tos_ms() - t0;
+		b = play_pos();
+		if (a < 0) {
+			a = b;
+			continue;
+		}
+		if (b < 0)
+			continue;
+		d = b - a;
+		if (d < 0)
+			d += ring_n;
+		if (d > ring_n / 2)	/* (a read a little behind: not a step) */
+			continue;
+		n += d;
+		a = b;
+	} while (t < 200);
 	Buffoper(0);
 	snd_close();
-	if (a < 0 || b < 0)
-		return 0;
-	if (b < a)
-		b += ring_n;
-	return (b - a) * 5;		/* frames in 200 ms (16384 is 0.33 s at 49.2 kHz) */
+	return t > 0 ? n * 1000 / t : 0;
 }
 
 long snd_ext_raw;		/* what the first measure found, Hz (for the log) */
 long snd_ext_clock;		/* the clock that makes, Hz */
 int snd_fdi;			/* the FDI's driver answers (Sndstatus $DD02: $4711) */
+int snd_gpio_dir = -1, snd_gpio_data = -1;	/* the DSP port's GPIO ($FF8941, $FF8943) */
+char snd_ext_note[96];		/* what measure_ext tried, for the log */
+
+static long read_gpio(void)
+{
+	snd_gpio_dir = *(volatile unsigned char *)0xffff8941L & 7;
+	snd_gpio_data = *(volatile unsigned char *)0xffff8943L & 7;
+	return 0;
+}
 
 /* the external clock: measured at prescale 1 (rate = clock / 256 / 2),
    its frequency worked out from that, and the prescale that makes 44.1
@@ -154,10 +180,11 @@ static long measure_ext(void)
 {
 	static const long want[2] = { 44100, 48000 };
 	long r = measure(1), clk;
-	int i;
+	int i, k = 0;
 	snd_ext_raw = r;
 	snd_ext_clock = clk = r * 512;
 	ext_pre = 1;
+	snd_ext_note[0] = 0;
 	if (r < 1000)
 		return 0;
 	for (i = 0; i < 2; i++) {
@@ -171,6 +198,10 @@ static long measure_ext(void)
 		if (d > want[i] / 40)		/* (the 200 Hz clock: 2.5 %) */
 			continue;
 		got = p == 1 ? r : measure((short)p);
+		k += snprintf(snd_ext_note + k, sizeof(snd_ext_note) - (size_t)k, "%s%ld Hz at prescale %ld: %ld Hz",
+			      k ? "; " : "", want[i], p, got);
+		if (k >= (int)sizeof(snd_ext_note))
+			k = (int)sizeof(snd_ext_note) - 1;
 		d = got - want[i];
 		if (d < 0)
 			d = -d;
@@ -196,6 +227,7 @@ int snd_init(const char **why)
 	locked = 1;
 	Supexec(keep_regs);
 	snd_fdi = trap14_ww(140, 0xDD02) == 0x4711;	/* Sndstatus: the FDI driver's sign */
+	Supexec(read_gpio);
 	snd_ext_rate = measure_ext();
 	return 1;
 }
@@ -263,6 +295,7 @@ int snd_open(long rate, int ext)
 	last_ppos = 0;
 	playing = 0;
 	snd_underruns = 0;
+	snd_first_under = snd_least_lead = -1;
 	return 1;
 }
 
@@ -328,11 +361,17 @@ void snd_update(void)
 		return;
 	last_ppos = p;
 	if (played + d > written) {	/* past what was written: it played old sound */
-		snd_underruns++;
+		if (!snd_underruns++)
+			snd_first_under = played;
 		written = played + d;
 		wpos = p;
 	}
 	played += d;
+	if (played > ring_n / 2) {		/* (the first second: the start's) */
+		long lead = written - played;
+		if (snd_least_lead < 0 || lead < snd_least_lead)
+			snd_least_lead = lead;
+	}
 }
 
 long snd_played(void)

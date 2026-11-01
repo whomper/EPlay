@@ -554,6 +554,24 @@ long play_ms(void)
 	return rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0;
 }
 
+/* frames at this rate as ms (-1 stays -1) */
+static long f_ms(long f)
+{
+	return f < 0 || !rate ? -1 : (f / rate) * 1000 + (f % rate) * 1000 / rate;
+}
+
+/* how the sound kept up, for the log: the first gap and the least lead */
+const char *play_keep_up(void)
+{
+	static char b[96];
+	if (snd_underruns)
+		snprintf(b, sizeof(b), "the first at %ld ms; the least lead %ld ms", f_ms(snd_first_under),
+			 f_ms(snd_least_lead));
+	else
+		snprintf(b, sizeof(b), "the least lead %ld ms", f_ms(snd_least_lead));
+	return b;
+}
+
 long play_len_ms(void)
 {
 	return len_ms;
@@ -574,6 +592,7 @@ int play_step(int ms)
 		elog("the DSP stopped answering %s word %ld of %ld (host status $%02X), frame %ld; %ld ms played, "
 		     "%ld underruns", what == 1 ? "sending" : what == 2 ? "reading" : "loading", at, of, hisr,
 		     t_frames, play_ms(), snd_underruns);
+		elog("the sound: %s", play_keep_up());
 		play_stop();
 		elog_save();
 		snprintf(play_out, sizeof(play_out), "The DSP stopped answering.");
@@ -586,8 +605,8 @@ int play_step(int ms)
 		char l[60];
 		snprintf(l, sizeof(l), "EPLAY ended: %ld underruns\n", snd_underruns);
 		nf_debug(l);			/* (the rigs; nothing on the Atari) */
-		elog("played to the end: %ld ms, %ld frames to the DSP, %ld underruns", play_ms(), t_frames,
-		     snd_underruns);
+		elog("played to the end: %ld ms, %ld frames to the DSP, %ld underruns (%s)", play_ms(), t_frames,
+		     snd_underruns, play_keep_up());
 		play_stop();
 		elog_save();
 		return 1;

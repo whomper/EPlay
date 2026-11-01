@@ -21,6 +21,8 @@ extern long snd_ext_rate;
 extern long snd_ext_raw;	/* the DMA's rate on it at prescale 1, as measured (0: no clock) */
 extern long snd_ext_clock;	/* the clock's frequency from that, Hz */
 extern int snd_fdi;		/* the FDI's driver is there */
+extern int snd_gpio_dir, snd_gpio_data;	/* the DSP port's GPIO at the start (the FDI's) */
+extern char snd_ext_note[];	/* what was tried after the first measure, for the log */
 
 /* the rate to play a file of rate Hz at: exactly, through the external
    clock or the Falcon's own (49170, 32780, 24585... Hz), else the
@@ -39,6 +41,8 @@ void snd_play(void);		/* the DMA started (after the first frames) */
 long snd_played(void);		/* frames played since snd_open */
 void snd_update(void);		/* snd_played brought up to date: from the tick only */
 extern long snd_underruns;	/* times the DMA came past what was written */
+extern long snd_first_under;	/* frames played at the first (-1: none) */
+extern long snd_least_lead;	/* the fewest frames written ahead after the first second (-1: none yet) */
 long snd_written(void);
 long snd_ring_frames(void);
 int snd_playing(void);

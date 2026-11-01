@@ -239,7 +239,7 @@ static void command(int c)
 		break;
 	case C_STOP:
 		if (play_state() == PS_PLAYING) {
-			elog("stopped at %ld ms; %ld underruns", play_ms(), snd_underruns);
+			elog("stopped at %ld ms; %ld underruns (%s)", play_ms(), snd_underruns, play_keep_up());
 			play_stop();
 			elog_save();
 			status("Stopped.");
@@ -378,6 +378,8 @@ int app_main(void)
 	     snd_fdi ? "answers ($4711)" : "doesn't answer");
 	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz); taken as %ld Hz",
 	     snd_ext_raw, snd_ext_clock, snd_ext_rate);
+	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
+	     snd_ext_note[0] ? "; tried " : "", snd_ext_note);
 	if (snd_ext_rate)
 		status(snd_ext_rate == 44100 ? "An external clock at 44.1 kHz (the FDI)." :
 					       "An external clock at 48 kHz (the FDI).");

@@ -313,7 +313,7 @@ and the frequency inversion moved into the filter's butterfly to make room.
 **So: a stock Falcon plays 128 to 192 kbit/s with 20 to 35 % to spare, 320 kbit/s at 86 %, and
 music with many short blocks at high bit rates only just or not.**
 
-## Phase 1: the sound core in a minimal window (31 Oct 2026; releases 0.1 and 0.2)
+## Phase 1: the sound core in a minimal window (31 Oct 2026; releases 0.1 to 0.3)
 
 The phases are named by what they bring (the hub, 31 Oct 2026): 1 first sound; 2 every Falcon,
 with output and volume settings; 3 the player window; 4 playlists and folders; 5 the small player,
@@ -390,6 +390,26 @@ so Play's stretch stays within its time (50 ms on `Falcon-4`; 75 when the load r
 draw). The test files
 now include LAME's header frames (VBR and CBR) and CRC-protected frames, and the play rig a VBR
 file (its length checked).
+
+### 0.2 on Erez's Falcon (1 Nov 2026), and what 0.3 changes
+
+Erez's try of an MP3 with the FDI on: still "49 kHz" where it should be 44.1, so faster than the
+file, and after a second severe crackles that bring the playing down.
+
+1. **The FDI's clock still wasn't found.** One cause is certain, in 0.2's measure: it read the
+   DMA's position only at the start and the end of 200 ms, over a ring of 16384 frames. A clock
+   past 41.9 MHz (more than 82 kHz at prescale 1; 45.1584 MHz makes 88.2) goes round the ring in
+   that time and was taken for a slow one, so the 45.1584 MHz case 0.2 said it knew could never be
+   seen. Now the position is read all the while and the steps added up: any clock is measured.
+   Whether the FDI's clock is that one, `EPLAY.LOG` will say.
+2. **The crackles.** With the Falcon's own clock going to the FDI, whose S/PDIF runs on its own,
+   the sound can't be right; and at 49,170 Hz the DSP has a ninth more to decode than at 44.1 kHz,
+   near its budget on a real DSP (Hatari's runs faster). The log now tells the two apart: when the
+   first gap came, and the least lead the decoder kept over the DMA after the first second
+   (gaps with a good lead: the clocks; a lead running down to none: the DSP).
+
+The log also has the DSP port's GPIO as EPlay found it (the FDI's program leaves it at direction 7,
+data 2) and each prescale tried with its measure.
 
 ## The order of the work
 

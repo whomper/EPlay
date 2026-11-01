@@ -17,7 +17,7 @@ window. Written in C and DSP56001 assembly for GEM.
   S/PDIF), files at that rate play at their own rate, bit for bit.
 - **Shares the DSP:** EPlay holds the DSP only while an MP3 plays.
 
-*Phase 1 (releases 0.1 and 0.2) is the first try on a real Falcon: the sound core and a minimal
+*Phase 1 (releases 0.1 to 0.3) is the first try on a real Falcon: the sound core and a minimal
 window. The playlist, the small player, the guide and resampling (files at 44.1 kHz with no
 external clock) come in the next phases, named by what they bring: phase 2, every Falcon with
 output and volume settings; 3, the player window; 4, playlists and folders; 5, the small player,
