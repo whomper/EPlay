@@ -658,3 +658,42 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 	}
 	return nch;
 }
+
+/* ---- resampling (mp3dsp.h) */
+void mp3rs_set(MP3RS *r, long rin, long rout)
+{
+	memset(r, 0, sizeof(*r));
+	r->si = (unsigned long)(rin / rout);
+	r->sf = (unsigned long)(((unsigned long long)(rin % rout) << 23) / (unsigned long long)rout);
+	r->down = rin > rout;
+}
+
+int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
+{
+	const unsigned long *tab = r->down ? t_rsdn : t_rsup;
+	int b, ch, j, k = 0;
+	for (b = 0; b < ns; b += 32) {
+		dw x[2][39];		/* the last 7, then the block */
+		for (ch = 0; ch < nch; ch++) {
+			memcpy(x[ch], r->hist[ch], sizeof(r->hist[ch]));
+			memcpy(x[ch] + 7, &pcm[ch][b], 32 * sizeof(dw));
+			memcpy(r->hist[ch], x[ch] + 32, sizeof(r->hist[ch]));
+		}
+		while (r->n <= 27) {	/* (its taps up to n + 4, in the block) */
+			const unsigned long *h = &tab[8 * (r->f >> 18)];
+			for (ch = 0; ch < nch; ch++) {
+				da a = 0;
+				for (j = 0; j < 8; j++)
+					a += d_mpy(x[ch][r->n + 4 + j], sx(h[j]));
+				out[ch][k] = d_a2w_out(d_rnd(a));
+			}
+			k++;
+			r->f += r->sf;
+			r->n += (int)r->si + (int)(r->f >> 23);
+			r->f &= 0x7fffff;
+		}
+		r->n -= 32;
+	}
+	return k;
+}
+

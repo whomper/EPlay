@@ -28,6 +28,29 @@ void mp3dsp_reset(MP3DSP *d);
  * MPEG-2 and 2.5); gives the channels */
 int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
 
+/* ---- resampling, when the output's clock isn't the file's: the DSP's
+ * stage between the synthesis filter and the SSI. A position runs through
+ * the input a step (input samples an output) at a time; each output is 8
+ * taps of a windowed sinc around it, of 32 phases (t_rsup, or t_rsdn when
+ * it goes down). The input comes in blocks of 32 (the filter's slots), and
+ * a block gives the outputs whose taps it holds */
+#define MP3RS_MAX 1300		/* a frame's outputs at most (x 1.115) */
+
+typedef struct {
+	unsigned long si, sf;	/* the step: si + sf / 2^23 input samples */
+	unsigned long f;	/* the position: its fraction (Q23) */
+	int n;			/* and its sample, from the block's first */
+	int down;		/* t_rsdn */
+	dw hist[2][7];		/* each channel's last 7 inputs */
+} MP3RS;
+
+/* from rate rin to rout; the step as the 68030 works it out for the DSP */
+void mp3rs_set(MP3RS *r, long rin, long rout);
+
+/* ns samples of nch channels in (a multiple of 32), the outputs into out;
+ * gives how many */
+int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX]);
+
 #ifdef MP3DSP_HUFF_HOOK
 /* the tests' look at each granule's Huffman part: its side information,
  * the main data, where its codes start and end, and the values they gave */

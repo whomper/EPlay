@@ -143,6 +143,33 @@ for i, v in enumerate(d):
         D[512 - i] = v if i % 64 == 0 else -v
 add("t_dwin", [q23(v / 65536 / 2) for v in D], "the synthesis window D[0..511], halved")
 
+# ---- resampling, for an output clock other than the file's (mp3dsp.c's
+# mp3rs): a windowed sinc, 8 taps (input samples n - 3 .. n + 4 around a
+# position n + f) by 32 phases (f's top 5 bits, each made for its middle).
+# Each phase sums to exactly 1 (the middle taps take the rounding), so
+# silence and a constant stay as they are. Up: the input's band to 0.9 of
+# its Nyquist; down (48 to 44.1 kHz): to 0.9 of the output's
+def rs_table(fc):
+    out = []
+    for p in range(32):
+        f = (p + 0.5) / 32
+        h = []
+        for k in range(8):
+            t = k - 3 - f
+            w = 0.5 * (1 + math.cos(math.pi * t / 4)) if abs(t) < 4 else 0.0
+            h.append(fc * (math.sin(math.pi * fc * t) / (math.pi * fc * t) if t else 1.0) * w)
+        sm = sum(h)
+        q = [q23(v / sm) for v in h]
+        err = Q - sum(q)
+        q[3 if f < 0.5 else 4] += err  # the nearer middle tap takes it
+        assert sum(q) == Q and all(-Q <= v < Q for v in q), (p, q)
+        out += q
+    return out
+
+
+add("t_rsup", rs_table(0.9), "resampling up: 8 taps (n - 3 .. n + 4) for each of 32 phases")
+add("t_rsdn", rs_table(0.9 * 44100 / 48000), "resampling down (48 to 44.1 kHz): the same")
+
 # ---- dequantising
 mant, expo = [], []
 for n in range(1024):
