@@ -144,6 +144,9 @@ V_RSTB	equ	$9f		; its taps' middle (RSUP or RSDN + 16), 0: none
 V_RSI	equ	$a0		; the step: input samples an output (si, then sf
 V_RSS	equ	$a1		; as A0), and 28, read in turn (r3, modulo 3)
 V_RS28	equ	$a2
+V_WS	equ	$fe		; resampled, streaming: where the granule's outputs began
+RSZ	equ	2576		; the ring, resampled (PCM's words)
+RSREG	equ	1290		; a granule's outputs at most, and some (words)
 V_PKN	equ	$a3		; its words expected (-1: the count not yet)
 V_PKI	equ	$a4		; its words in
 V_IDLE	equ	$a5		; waits this frame (the decoder ahead of the sound)
@@ -759,9 +762,16 @@ dmz
 ; wanted
 stream	clr	a
 	move	#>PCM,r0
-	do	#2304,stc
+	move	#>2304,x0		; the ring: a frame, or resampled RSZ
+	move	x:V_RSTB,b
+	tst	b
+	jeq	stc0
+	move	#>RSZ,x0
+stc0	do	x0,stc
 	move	a,y:(r0)+
 stc
+	move	#>PCM,x0
+	move	x0,x:V_OUT
 	move	a,x:V_SF
 	move	a,x:V_IDLE
 	move	a,x:V_LATE
@@ -770,6 +780,11 @@ stc
 	bset	#0,x:V_SF		; streaming
 	move	#>PCM,r7
 	movec	#2303,m7
+	move	x:V_RSTB,b
+	tst	b
+	jeq	stc1
+	movec	#RSZ-1,m7
+stc1
 	movep	#$1f8,x:PCC		; port C: the SSI
 	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
 	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
@@ -1306,8 +1321,15 @@ dgo	jsr	gout			; reorder, alias reduction, the transform
 	jlt	dgo
 	jsr	gsyn			; the synthesis filter, both channels
 	jclr	#0,x:V_SF,dgl
+	move	x:V_RSTB,b
+	tst	b
+	jne	dgr2
 	jsr	inhalf			; the SSI came into it before it was done: late
 	jne	dgl
+	jmp	dgr3
+dgr2	jsr	rslate			; resampled: the SSI into its outputs
+	jge	dgl
+dgr3
 	move	x:V_LATE,b
 	move	#>1,x0
 	add	x0,b
@@ -1352,6 +1374,9 @@ mu5
 mu6	jsr	rszero
 mu4	rts
 smute	jsr	pkfree			; (nothing more read from PKT)
+	move	x:V_RSTB,b
+	tst	b
+	jne	smr0
 	move	x:V_NGR,x0
 	do	x0,smu2
 	jsr	waitsyn
@@ -1367,6 +1392,19 @@ smu3
 	bchg	#1,x:V_SF
 	nop
 smu2
+	rts
+smr0	clr	a			; resampled: silence, its last inputs too
+	move	#>RSH,r0
+	do	#14,smr1
+	move	a,y:(r0)+
+smr1
+	move	x:V_NGR,x0
+	do	x0,smr2
+	jsr	waitrs
+	move	#>18,x0
+	jsr	rszero
+	nop
+smr2
 	rts
 
 ; ---- a granule of a channel: its side information, scalefactors,
@@ -2678,7 +2716,11 @@ gs1	jclr	#0,x:V_SF,gs2		; streaming: the SSI out of this half first
 	move	x:V_SVA,a
 gs2	move	a1,x:V_OUT
 	jmp	gs4
-gsr	move	#>RSH,r4
+gsr	jclr	#0,x:V_SF,gsr1		; streaming: the SSI out of the region
+	jsr	waitrs			; the outputs go to
+	move	x:V_OUT,x0
+	move	x0,x:V_WS
+gsr1	move	#>RSH,r4
 	move	#>T0,r1
 	move	#>T1,r2
 	do	#7,gs5
@@ -2742,6 +2784,7 @@ gs8	rts
 rszero	move	x:V_RSN,a
 	move	x:V_RSF,a0
 	move	x:V_OUT,r5
+	movec	#RSZ-1,m5
 	move	#>V_RSI,r3
 	movec	#2,m3
 	clr	b
@@ -2755,9 +2798,45 @@ rsz1	move	x:(r3)+,x1	b,y:(r5)+
 	sub	x1,a
 rsz3
 	movec	#$ffff,m3
+	movec	#$ffff,m5
 	move	a1,x:V_RSN
 	move	a0,x:V_RSF
 	move	r5,x:V_OUT
+	rts
+
+; resampled, streaming: wait while the SSI is in the RSREG words from
+; V_OUT on (where the granule's outputs go), taking packet words meanwhile
+waitrs	move	x:V_OUT,x0
+	jsr	rsdist
+	move	#>RSREG,x0
+	cmp	x0,a
+	jge	wrs9
+	jsr	pkpoll
+	move	x:V_IDLE,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_IDLE
+	jmp	waitrs
+wrs9	rts
+
+; a = the SSI's distance (r7) on from x0, modulo the ring
+rsdist	move	r7,a
+	sub	x0,a
+	jge	rsd1
+	move	#>RSZ,x0
+	add	x0,a
+rsd1	rts
+
+; the granule late: the SSI in its outputs (from V_WS to V_OUT) now; the
+; flags lt when it is
+rslate	move	x:V_OUT,b
+	move	x:V_WS,x0
+	sub	x0,b
+	jge	rsl1
+	move	#>RSZ,x1
+	add	x1,b
+rsl1	jsr	rsdist
+	cmp	b,a
 	rts
 
 ; a slot resampled (rsl, in internal P) into the ring at V_OUT on; then the
@@ -2771,11 +2850,13 @@ rsslot	move	x:V_RSN,a
 	move	#>V_RSI,r3
 	movec	#2,m3
 	move	x:V_OUT,r5
+	movec	#RSZ-1,m5		; (the ring, modulo its size: from PCM, a
 	move	#>31,n1
 	jset	#0,x:V_FLAGS,rss1
 	move	#>-8,n1			; mono: the left again
-rss1	jsr	rsl
+rss1	jsr	rsl			; multiple of 4096)
 	movec	#$ffff,m3
+	movec	#$ffff,m5
 	move	r5,x:V_OUT
 	move	#>32,x1
 	sub	x1,a

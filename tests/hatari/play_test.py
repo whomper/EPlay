@@ -35,24 +35,25 @@ import machines  # noqa: E402
 REC_RATE = 48000
 
 # name: (file, how sox makes its source, lame's arguments or None, the
-# rate the Falcon plays it at, the left and right tones heard, seconds)
+# rate the Falcon plays it at, the left and right tones heard, seconds).
+# An MP3 the DSP resamples to the Falcon's clock: heard at its own pitch
 CASES = {
     "wav": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
     "aiff": ("TONE.AIF", ["-r", "32780", "-c", "1", "-b", "16"], None, 32780, (1000, 1000), 3),
     "mp3": ("TONE.MP3", ["-r", "32000", "-c", "2", "-b", "16"], ["-b", "128", "-m", "s"], 32780,
-            (1000 * 32780 / 32000, 1500 * 32780 / 32000), 3),
+            (1000, 1500), 3),
     # ten seconds at 320 kbit/s: the ring wraps four times, the file
     # buffer (64 KB) is refilled six times across the bit reservoir
     "mp3long": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
-                (1000 * 49170 / 44100, 1500 * 49170 / 44100), 10),
+                (1000, 1500), 10),
     # the file selector (Control+O) held open 5 s while it plays: GEM
     # gives EPlay no event meanwhile, and the music must go on (the tick)
     # VBR, as music is: LAME's header frame (Xing) gives the length (0.1 took
     # the first frame's bit rate: an 8-minute file said 22:10)
     "vbr": ("VBR.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["XING", "-V", "0"], 49170,
-            (1000 * 49170 / 44100, 1500 * 49170 / 44100), 10),
+            (1000, 1500), 10),
     "fsel": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
-             (1000 * 49170 / 44100, 1500 * 49170 / 44100), 10),
+             (1000, 1500), 10),
 }
 
 
@@ -147,8 +148,9 @@ def analyse(rec, case):
         # measurement), fixed in later Hatari (crossbar.c, "1st frame is
         # left"). The Falcon starts each frame on the left.
         pitch, note = True, " (left and right swapped: Hatari %s's DMA)" % HATARI
-    _, fmt, _, out, _, length = CASES[case]
-    length = length * int(fmt[1]) / out      # (at the Falcon's rate, if not the file's)
+    _, fmt, lame, out, _, length = CASES[case]
+    if not lame:
+        length = length * int(fmt[1]) / out  # (WAV, AIFF: at the Falcon's rate, if not the file's)
     ok = (abs(secs - length) < 0.1 and not gaps and pitch and ql > 0.9 and qr > 0.9
           and max(rms[b + 2:] or [0]) < 50)     # (silence after: past the block the end falls in)
     return ok, ("%.2f s of sound, %d gaps; left %d Hz (%.0f %% of its power), right %d Hz (%.0f %%); "

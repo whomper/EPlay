@@ -30,14 +30,15 @@ void dspmp3_tick_read(short *to, long frames);
 int dspmp3_failed(void);	/* it stopped answering */
 
 /* STREAM: the DSP plays from its SSI (the matrix: DSPXMIT to the DAC and
-   the FDI, on the clock it is given), frames as it asks. From the tick:
+   the FDI, on the clock it is given), frames as it asks; resampled first
+   (RSSET) when the clock isn't the file's rate. From the tick:
    dspmp3_tick_stream once loaded; then each tick dspmp3_tick_status (its
    word after a frame), dspmp3_tick_push (what may go), and when
    dspmp3_tick_asks a packet offered (not copied: kept as it is until
    dspmp3_tick_pushing says it has gone). A packet of count 0 ends it. dspmp3_stream_info: frames
    decoded, granules late (the sound played the one before again), the
    least and the mean of its waits a frame (its time to spare: 0 none) */
-void dspmp3_tick_stream(void);
+void dspmp3_tick_stream(long rin, long rout);	/* from rin to rout Hz: resampled if they differ */
 void dspmp3_tick_status(void);
 void dspmp3_tick_push(void);
 int dspmp3_tick_asks(void);

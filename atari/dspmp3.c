@@ -315,13 +315,21 @@ static long s_frames, s_late, s_wmin, s_wsum, s_rsy;
 static int s_f4, s_l6, s_r4;
 static unsigned long s_last;		/* HZ200 at the last status word */
 
-void dspmp3_tick_stream(void)
+void dspmp3_tick_stream(long rin, long rout)
 {
 	s_have = 0;
 	s_frames = s_late = s_wsum = s_rsy = 0;
 	s_wmin = -1;
 	s_f4 = s_l6 = s_r4 = 0;
 	s_last = HZ200;
+	if (rin != rout && rin > 0 && rout > 0) {
+		/* RSSET (13): the step, rin / rout input samples an output, as
+		   si + sf / 2^24 (mp3dsp.c's mp3rs_set); the taps up, or down */
+		put(13);
+		put((unsigned long)(rin / rout));
+		put((unsigned long)(((unsigned long long)(rin % rout) << 24) / (unsigned long long)rout));
+		put(rin > rout ? 2 : 1);
+	}
 	put(12);			/* STREAM */
 }
 

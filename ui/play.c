@@ -330,7 +330,7 @@ static void tick_body(void);
    Audio doesn't use it either */
 static long start_stream(void)
 {
-	dspmp3_tick_stream();
+	dspmp3_tick_stream(rate, out_rate);
 	return 0;
 }
 
@@ -562,7 +562,7 @@ int play_open(const char *path, char *err, int n)
 	}
 	if (!kind) {
 		/* MP3 from the DSP: the FDI at the file's rate where it can be,
-		   else the nearest rate (phase 2 resamples it) */
+		   else a clock the DSP resamples to (snd_rate_dsp) */
 		char mn[100];
 		spurious_on();		/* (from here: 0.5 met 24 bombs as it began) */
 		snd_mfp_note(mn, sizeof(mn));
@@ -571,7 +571,7 @@ int play_open(const char *path, char *err, int n)
 			ext = 1;
 			out_rate = rate;
 		} else
-			out_rate = snd_rate_for(rate, &ext);
+			out_rate = snd_rate_dsp(rate, &ext);
 		if (snd_fdi_note[0]) {
 			elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 			snd_mfp_note(mn, sizeof(mn));
@@ -586,13 +586,18 @@ int play_open(const char *path, char *err, int n)
 		}
 	}
 	khz(kr, sizeof(kr), out_rate);
-	if (ext)
+	if (!kind && out_rate != rate) {	/* (the DSP resamples) */
+		char fr[16];
+		khz(fr, sizeof(fr), rate);
+		snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr, fr);
+	} else if (ext)
 		snprintf(play_out, sizeof(play_out), "External clock  %s", kr);
 	else if (out_rate == rate)
 		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
 	else
 		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
-	elog("output: %ld Hz, %s; queue %ld bytes", out_rate, ext ? "the external clock" : "the Falcon's clock", q_size);
+	elog("output: %ld Hz, %s%s; queue %ld bytes", out_rate, ext ? "the external clock" : "the Falcon's clock",
+	     !kind && out_rate != rate ? ", resampled on the DSP" : "", q_size);
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;

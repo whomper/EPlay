@@ -35,6 +35,7 @@ extern unsigned short snd_matrix[4];	/* $FF8930-7 after snd_dsp_out */		/* off t
    clock or the Falcon's own (49170, 32780, 24585... Hz), else the
    nearest of them; *ext 1 for the external clock */
 long snd_rate_for(long rate, int *ext);
+long snd_rate_dsp(long rate, int *ext);	/* an MP3 from the DSP: the clock it resamples to */
 
 /* the ring ready at that rate, silent, the DMA stopped: 0 if no ST RAM */
 int snd_open(long rate, int ext);

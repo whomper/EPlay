@@ -381,6 +381,25 @@ long snd_rate_for(long rate, int *ext)
 	return best;
 }
 
+/* the clock an MP3 plays on from the DSP when the FDI can't be put at its
+   rate: the external clock as it is (the FDI's 44.1 or 48 kHz) when the
+   DSP's resampler reaches it (x0.9 to x1.12), else the Falcon's lowest
+   at or above the rate (49170 for 44.1 kHz: x1.115). The DSP resamples */
+long snd_rate_dsp(long rate, int *ext)
+{
+	long best = internal[0];
+	unsigned i;
+	*ext = 0;
+	if (snd_ext_rate && snd_ext_rate * 100 >= rate * 90 && snd_ext_rate * 100 <= rate * 112) {
+		*ext = 1;
+		return snd_ext_rate;
+	}
+	for (i = 0; i < sizeof(internal) / sizeof(internal[0]); i++)
+		if (internal[i] >= rate)
+			best = internal[i];
+	return best;
+}
+
 int snd_open(long rate, int ext)
 {
 	short pre = 1;

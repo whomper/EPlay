@@ -643,6 +643,40 @@ The worst frames gained most: they are the short blocks', which make granules la
 needed: the synthesis filter's 16-point DCT-IV the same way (about 3 %), and its set-up for each
 slot (4 %).
 
+### Resampling on the DSP (1 Nov 2026)
+
+A file at a rate the clock doesn't have was played at the clock's: on a stock Falcon a 44.1 kHz MP3
+came out at 49,170 Hz, 11.5 % fast. Now the DSP resamples, between the synthesis filter and the
+SSI:
+- **Which clock** (`snd_rate_dsp`): the FDI put at the file's rate where it can be (no
+  resampling, bit for bit as before); else the external clock as it is (the FDI's 44.1 or 48
+  kHz) when the ratio is within x0.9 to x1.12; else the Falcon's lowest clock at or above the
+  rate. Every MP3 rate has one within x1.115 (44.1 to 49,170, 48 to 49,170 x1.024, 22.05 to
+  24,585...). The window says it: "Falcon  49.2 kHz (from 44.1 kHz)".
+- **The filter:** 8 taps of a windowed sinc, 32 phases, each phase summing to exactly 1; the band
+  to 0.9 of the input's Nyquist going up, of the output's going down (48 to 44.1). Measured
+  beforehand on tones of 1 to 18 kHz: spurious tones below 16 kHz at -40 dB or less for 10 to
+  16 kHz tones, -50 dB at 5 kHz, -62 dB at 1 kHz, the top end 0.6 to 0.8 dB down at 10 to 14 kHz.
+  More taps gained nothing; the phases' steps set it, and more phases want memory there isn't.
+- **The position** steps through the input, si + sf / 2^24 input samples an output (the 68030
+  works it out, as the model's `mp3rs_set` does: drift under a sample in three minutes). On the
+  DSP it is one accumulator, the sample in A1 and the fraction in A0, the step added as a 48-bit
+  word; the phase is the fraction's top 5 bits, from one multiply.
+- **Both channels at once:** the synthesis runs a slot of each channel in turn (both transformed
+  first, in place over their lines), into temps in internal X, and the resampler takes a slot of
+  both: one position for the two. The output ring is then 2,576 words, two granules' outputs at
+  x1.115, and a granule waits while the SSI is in the 1,290 words its outputs go to (the halves'
+  rule, for outputs that don't come in halves); it is late if the SSI got into them before it
+  was done. A mute frame resamples silence: as many outputs, its last inputs silence too.
+- **Tested** as the decoder is: the model (`mp3rs`) against minimp3's samples through the same
+  taps in double precision, within ISO's limits on every file (0.17 of the rms limit at most);
+  the DSP against the model bit for bit, every file to the Falcon's clock and 48 kHz to 44.1
+  (`make dsptest`, through the frame command: RSSET, command 13).
+- **The cost:** 36 cycles an output pair, 9 to 11 % of the DSP (mix320.mp3 82.9 to 94.0 % at
+  49,170 Hz; mix48.mp3 77.8 to 87.8 % at 44.1 kHz). 320 kbit/s on a stock Falcon without the FDI
+  is near the top; the synthesis filter's 16-point DCT and its slots' set-up are what is left to
+  win back. The FDI at the file's rate costs 1.4 % more than before (the slots' copy).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
