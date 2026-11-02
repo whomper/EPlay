@@ -265,7 +265,7 @@ static void command(int c)
 		break;
 	case C_STOP:
 		if (play_state() == PS_PLAYING) {
-			elog("stopped at %ld ms; %ld underruns (%s)", play_ms(), snd_underruns, play_keep_up());
+			play_log_stop();
 			play_stop();
 			elog_save();
 			status("Stopped.");
@@ -515,6 +515,7 @@ int app_main(void)
 		step(playing);
 	}
 
+	play_log_stop();
 	play_stop();
 	snd_exit();
 	elog("quit");

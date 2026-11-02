@@ -400,11 +400,45 @@ static long start_stream(void)
 	return 0;
 }
 
+/* what the log says of the stream (play_stream_note): the tick's
+   longest gap once the sound runs (interrupts held off, by whom), the
+   matrix as another program may have set it while EPlay played */
+static volatile unsigned long t_gap;	/* (fine_now's steps) */
+static volatile long t_gap_at = -1;	/* t_frames then */
+static volatile long m_changed_at = -1;
+static unsigned short m_now[4];
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* (fixed hardware addresses) */
+static void watch_matrix(void)
+{
+	volatile unsigned short *r = (volatile unsigned short *)0xffff8930L;
+	int i;
+	if (m_changed_at >= 0)
+		return;
+	for (i = 0; i < 4; i++)
+		if (r[i] != snd_matrix[i]) {
+			for (i = 0; i < 4; i++)
+				m_now[i] = r[i];
+			m_changed_at = t_frames;
+			return;
+		}
+}
+#pragma GCC diagnostic pop
+
 static void tick(void)
 {
 	unsigned long a = fine_now();
 	if (!t_t0)
 		t_t0 = a;
+	else if (dsp ? s_started && t_frames > 4 : snd_playing()) {
+		if (a - t_last > t_gap) {
+			t_gap = a - t_last;
+			t_gap_at = dsp ? t_frames : snd_played();	/* (frames: ms for the log) */
+		}
+		if (dsp)
+			watch_matrix();
+	}
 	tick_body();
 	t_last = fine_now();
 	t_busy += t_last - a;
@@ -525,6 +559,7 @@ int play_open(const char *path, char *err, int n)
 	char kr[20];
 	int ext;
 
+	play_log_stop();		/* (another file while one plays: what the first did) */
 	play_stop();
 	if (!fbuf) {
 		fbuf = Mxalloc(FBUF, 3);	/* TT RAM where there is some */
@@ -698,6 +733,8 @@ int play_open(const char *path, char *err, int n)
 	s_spf = 1152;
 	t_busy = t_parse = t_push = 0;
 	t_t0 = t_last = 0;
+	t_gap = 0;
+	t_gap_at = m_changed_at = -1;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
 	last_sec = -1;
@@ -783,6 +820,48 @@ static long f_ms(long f)
 	return f < 0 || !rate ? -1 : (f / rate) * 1000 + (f % rate) * 1000 / rate;
 }
 
+/* MP3 frames (or the DMA's frames) as ms, for the log (-1 stays -1) */
+static long fr_ms(long f)
+{
+	return f < 0 ? -1 : f_ms(dsp ? f * s_spf : f);
+}
+
+/* the stream's events, for the log: the tick's longest gap (what held
+   interrupts off), the first late granule and broken packet, the rate
+   the frames came at (the clock the DSP played on), the matrix if
+   another program changed it */
+const char *play_stream_note(void)
+{
+	static char b[300];
+	long g = (long)(t_gap * 5000UL / 192);	/* (us) */
+	int n = snprintf(b, sizeof(b), "the tick's longest gap %ld.%ld ms, at %ld ms", g / 1000, g % 1000 / 100,
+			 fr_ms(t_gap_at));
+	if (dsp) {
+		long la, ra, fps = dspmp3_stream_fps1000();
+		dspmp3_stream_firsts(&la, &ra);
+		if (la >= 0)
+			n += snprintf(b + n, sizeof(b) - n, "; the first granule late at %ld ms", fr_ms(la));
+		if (ra >= 0)
+			n += snprintf(b + n, sizeof(b) - n, "; the first packet broken at %ld ms", fr_ms(ra));
+		if (fps)
+			n += snprintf(b + n, sizeof(b) - n, "; the file's samples came at %ld Hz", fps * s_spf / 1000);
+		if (m_changed_at >= 0)
+			snprintf(b + n, sizeof(b) - n, "; the matrix changed by %ld ms: $%04X $%04X $%04X $%04X",
+				 fr_ms(m_changed_at), m_now[0], m_now[1], m_now[2], m_now[3]);
+		else
+			snprintf(b + n, sizeof(b) - n, "; the matrix as EPlay set it");
+	}
+	return b;
+}
+
+void play_log_stop(void)
+{
+	if (state == PS_PLAYING) {
+		elog("stopped at %ld ms; %ld underruns (%s)", play_ms(), snd_underruns, play_keep_up());
+		elog("the stream: %s", play_stream_note());
+	}
+}
+
 /* how the sound kept up, for the log: the first gap and the least lead */
 const char *play_keep_up(void)
 {
@@ -826,11 +905,15 @@ int play_step(int ms)
 		int what, hisr;
 		long at, of;
 		dspmp3_fail_info(&what, &at, &of, &hisr);
-		elog("the DSP stopped answering %s word %ld of %ld (host status $%02X), frame %ld; %ld ms played, "
-		     "%ld underruns", what == 1 ? "sending" : what == 2 ? "reading" : what == 4 ? "streaming" : "loading",
-		     at, of, hisr,
-		     t_frames, play_ms(), snd_underruns);
+		if (what == 4)
+			elog("the DSP stopped answering while it played: no frame for 2 s after its frame %ld (host "
+			     "status $%02X), %ld frames sent; %ld ms played", at, hisr, t_frames, play_ms());
+		else
+			elog("the DSP stopped answering %s word %ld of %ld (host status $%02X), frame %ld; %ld ms "
+			     "played, %ld underruns", what == 1 ? "sending" : what == 2 ? "reading" : "loading", at, of,
+			     hisr, t_frames, play_ms(), snd_underruns);
 		elog("the sound: %s", play_keep_up());
+		elog("the stream: %s", play_stream_note());
 		if (what == 4) {
 			char note[160];
 			dspmp3_stall_note(note, sizeof(note));
@@ -850,6 +933,7 @@ int play_step(int ms)
 		snprintf(l, sizeof(l), "EPLAY ended: %ld underruns\n", late);
 		nf_debug(l);			/* (the rigs) */
 		elog("played to the end: %ld ms, %ld frames to the DSP (%s)", play_ms(), t_frames, play_keep_up());
+		elog("the stream: %s", play_stream_note());
 		play_stop();
 		elog_save();
 		return 1;

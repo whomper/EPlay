@@ -314,6 +314,9 @@ static int s_n, s_i, s_have;		/* its words, the next (-1: its count) */
 static long s_frames, s_late, s_wmin, s_wsum, s_rsy;
 static int s_f4, s_l6, s_r4;
 static unsigned long s_last;		/* HZ200 at the last status word */
+static long s_late_at, s_rsy_at;	/* the frames at the first late granule, broken packet (-1: none) */
+static long s_f100;			/* the frames at s_t100, when past 100 (the rate, measured) */
+static unsigned long s_t100;
 
 void dspmp3_tick_stream(long rin, long rout, int pcm)
 {
@@ -321,6 +324,8 @@ void dspmp3_tick_stream(long rin, long rout, int pcm)
 	s_frames = s_late = s_wsum = s_rsy = 0;
 	s_wmin = -1;
 	s_f4 = s_l6 = s_r4 = 0;
+	s_late_at = s_rsy_at = -1;
+	s_f100 = 0;
 	s_last = HZ200;
 	if (rin != rout && rin > 0 && rout > 0) {
 		/* RSSET (13): the step, rin / rout input samples an output, as
@@ -397,6 +402,14 @@ void dspmp3_tick_status(void)
 		s_wsum += waits * df;
 		s_frames += df;
 		s_last = HZ200;
+		if (s_late && s_late_at < 0)
+			s_late_at = s_frames;
+		if (s_rsy && s_rsy_at < 0)
+			s_rsy_at = s_frames;
+		if (!s_f100 && s_frames >= 100) {
+			s_f100 = s_frames;
+			s_t100 = s_last;
+		}
 	}
 }
 
@@ -445,6 +458,22 @@ void dspmp3_stall_note(char *b, int n)
 long dspmp3_stream_resyncs(void)
 {
 	return s_rsy;
+}
+
+void dspmp3_stream_firsts(long *late_at, long *rsy_at)
+{
+	*late_at = s_late_at;
+	*rsy_at = s_rsy_at;
+}
+
+/* the frames a second, x 1000, from the 100th to the last (0: too few) */
+long dspmp3_stream_fps1000(void)
+{
+	unsigned long t = s_last - s_t100;
+	long f = s_frames - s_f100;
+	if (!s_f100 || t < 200 || f <= 0)
+		return 0;
+	return (long)((unsigned long long)f * 200000ULL / t);
 }
 
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg)

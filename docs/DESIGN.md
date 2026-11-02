@@ -722,6 +722,33 @@ step through the file at a time (as the TT's path will: some frames twice), and 
 the same steps, would drop the doubles and resample what is left. It wants the DSP's receive
 interrupt, an address register of its own, and a real Falcon to check the crossbar's timing.
 
+### 0.9 on Erez's Falcon (2 Nov 2026)
+
+Three logs:
+- **Through the FDI at 44.1 kHz**, AUTOMATA.MP3 played 255 s clean: no granule late, no packet
+  broken, the tick 13 % of the 68030. UNCRTNTY.MP3 then stopped at 152 s, while Erez moved the
+  mouse, with AERA's accessories running. By then 45 granules had been late and 22 packets broken,
+  and the DSP had all of its last packet but sent no frame after it. A DSP that waits for its
+  SSI looks like that: one whose clock or matrix changed under it. A word lost or doubled on the
+  host port gives the broken packets. Nothing in EPlay writes the host port but the tick, so
+  the log now says what it needs to find out (below).
+- **Without the FDI's driver and clock**, the DSP resamples to 49,170 Hz: 829 of 2,958
+  granules late, heard as crackles. That is the DSP's budget: mix320.mp3 takes 94 % of it at
+  that rate in the test, and Erez's music more. A late granule costs more than its own time:
+  with a ring of two granules, a DSP that is late finds the SSI in the half it writes, waits for
+  it to pass (13 ms), and a granule plays twice. Hatari's DSP doesn't show it (it runs faster
+  than its cycles), so the cycle counts are the measure. Where the cycles go (mix320.mp3 at
+  49,170 Hz): the resampler 12 %; the synthesis filter's DCT 11 % and its window 10 %;
+  dequantising about 15 %; Huffman about 15 %. Next: the DCT in Lee's form (#14), about 8 %.
+- **The Analog 8's channel 3** is still active: setting one stereo pair (0.8) didn't change it.
+
+What the log says now, after each file:
+- the tick's longest gap while the sound runs (what held the 68030's interrupts off), and where;
+- the first granule late and the first packet broken, as a time in the file;
+- the rate the DSP's frames came at, which is the clock it played on;
+- whether another program changed the matrix while EPlay played, when, and to what;
+- a file stopped by opening another says how it played, as Stop does.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
