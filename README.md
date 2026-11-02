@@ -28,7 +28,7 @@ window. Written in C and DSP56001 assembly for GEM.
 window. Phase 2, from 0.4, plays MP3 three ways, chosen in the settings: on the Falcon's DSP, through
 the FDI as Cubase Audio does (the FDI set to the file's rate), or on a 68030 (TT, or a Falcon
 without its DSP free) at the quality it keeps up with; with resampling and the settings. 0.4 brings
-the first part: the DSP plays MP3 itself, straight to the DAC and the FDI. Then 3, the player
+the first part: the DSP plays MP3 itself, straight to the FDI, or the DAC without one. Then 3, the player
 window; 4, playlists and folders; 5, the small player, keys, MiNT and MagiC; 6, the TT and STE.*
 
 ## Getting started

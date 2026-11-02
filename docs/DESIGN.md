@@ -740,7 +740,11 @@ Three logs:
   than its cycles), so the cycle counts are the measure. Where the cycles go (mix320.mp3 at
   49,170 Hz): the resampler 12 %; the synthesis filter's DCT 11 % and its window 10 %;
   dequantising about 15 %; Huffman about 15 %. Next: the DCT in Lee's form (#14), about 8 %.
-- **The Analog 8's channel 3** is still active: setting one stereo pair (0.8) didn't change it.
+- **The Analog 8's channel 3** played white noise at full volume while the music played on
+  channels 1 and 2, and so did the Falcon's own analog out. Setting one stereo pair (0.8) hadn't
+  changed it. The DAC was joined to the DSP on the FDI's clock, which it doesn't run on. On the
+  external clock the DSP now goes to the FDI alone, as in Cubase Audio, and the Falcon's own
+  output is silent. On the Falcon's clock (no FDI) it goes to the DAC as before.
 
 What the log says now, after each file:
 - the tick's longest gap while the sound runs (what held the 68030's interrupts off), and where;

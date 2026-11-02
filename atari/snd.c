@@ -297,9 +297,11 @@ static long read_matrix(void)
 	return 0;
 }
 
-/* the matrix: the DSP's SSI (DSPXMIT) to the DAC and the FDI (EXTOUT),
-   on the external clock or the Falcon's at the rate's prescale; the DSP
-   joined to the matrix (Dsptristate). Cubase Audio's way */
+/* the matrix: the DSP's SSI (DSPXMIT) to the FDI (EXTOUT), on the
+   external clock, Cubase Audio's way; on the Falcon's clock (at the
+   rate's prescale) to the DAC as well. The DAC on the FDI's clock played
+   white noise on Erez's Falcon (0.9), and so did the Analog 8's channel 3;
+   the DSP joined to the matrix (Dsptristate) */
 void snd_dsp_out(long rate, int ext)
 {
 	short pre = 1;
@@ -316,7 +318,7 @@ void snd_dsp_out(long rate, int ext)
 	   heard as a third channel at full scale on Erez's SoundPool Analog 8 */
 	Settracks(0, 0);
 	Setmontracks(0);
-	Devconnect(DSPXMIT, DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+	Devconnect(DSPXMIT, ext ? EXTOUT : DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
 	Dsptristate(1, 1);
 	Supexec(read_matrix);
 }
