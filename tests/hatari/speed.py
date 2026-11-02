@@ -99,6 +99,10 @@ def session(work, spec, kind):
         r.act("About box opened (playing)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
+        # Settings (^,), as the guidelines' rig opens it, and Esc
+        r.act("Settings opened (playing)", speed.DIALOG, lambda: r.key("ctrl+comma"))
+        r.shot("settings")
+        r.act("Settings closed (Esc)", speed.WINDOW, lambda: r.key("Escape"))
         r.act("Stop: pressed (drawn pressed)", speed.KEY, lambda: r.press(*STOP))
         r.held_shown(STOP[0], STOP[1], "Stop")
         r.act("Stop: let go (stops)", speed.KEY, r.let_go)

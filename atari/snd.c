@@ -429,12 +429,16 @@ void snd_exit(void)
 	}
 }
 
+/* Settings' Output (play.c sets them for each play): DSP leaves the
+   external clock out, FDI takes it at any ratio the resampler reaches */
+int snd_ext_use = 1, snd_ext_only;
+
 long snd_rate_for(long rate, int *ext)
 {
 	long best = internal[0], d, bd = 1L << 30;
 	unsigned i;
 	*ext = 0;
-	if (snd_ext_rate && (rate - snd_ext_rate < snd_ext_rate / 100 && snd_ext_rate - rate < snd_ext_rate / 100)) {
+	if (snd_ext_use && snd_ext_rate && (rate - snd_ext_rate < snd_ext_rate / 100 && snd_ext_rate - rate < snd_ext_rate / 100)) {
 		*ext = 1;
 		return snd_ext_rate;
 	}
@@ -457,7 +461,9 @@ long snd_rate_dsp(long rate, int *ext)
 	long best = internal[0];
 	unsigned i;
 	*ext = 0;
-	if (snd_ext_rate && snd_ext_rate * 100 >= rate * 90 && snd_ext_rate * 100 <= rate * 112) {
+	if (snd_ext_use && snd_ext_rate &&
+	    (snd_ext_only ? snd_ext_rate * 100 >= rate * 50 && snd_ext_rate * 100 <= rate * 200 :
+			    snd_ext_rate * 100 >= rate * 90 && snd_ext_rate * 100 <= rate * 112)) {
 		*ext = 1;
 		return snd_ext_rate;
 	}

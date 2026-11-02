@@ -29,7 +29,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main draw about play snd feed hostirq dspmp3 elog pcm mp3frame
+OWN     := main draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf
 CSRC    := bidi
 CATARI  := libc tos gem crash
 CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click
@@ -118,9 +118,12 @@ $(B)/mp3files/.made: tests/mp3/mkfiles.sh
 	touch $@
 $(B)/test_info: tests/mp3/test_info.c src/mp3/mp3frame.c src/mp3/mp3frame.h
 	$(HOSTCC) $(HCFLAGS) -o $@ tests/mp3/test_info.c src/mp3/mp3frame.c
+$(B)/test_inf: tests/inf/test_inf.c src/inf.c src/inf.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/inf/test_inf.c src/inf.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
-test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info
+test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf
+	./$(B)/test_inf
 	./$(B)/test_mp3 $(B)/mp3files/*.mp3
 	./$(B)/test_info $(B)/mp3files/*.mp3
 	TEST=$(B)/test_pcm sh tests/pcm/run.sh

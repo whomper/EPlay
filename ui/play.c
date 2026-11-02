@@ -37,6 +37,7 @@
 #include "../src/pcm.h"
 #include "mp3frame.h"
 #include "elog.h"
+#include "settings.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -562,6 +563,8 @@ static void fill(unsigned long t0, int ms)
 	}
 }
 
+static int out_set;		/* Settings' Output at this Play */
+
 int play_open(const char *path, char *err, int n)
 {
 	const char *why;
@@ -673,6 +676,12 @@ int play_open(const char *path, char *err, int n)
 		}
 		mp3_reset(&parse);
 	}
+	/* Settings' Output, as it is at this Play (Erez, 2 Nov 2026): Auto and
+	   FDI put the FDI at the file's rate where they can; FDI then plays on
+	   its clock as it is, resampled; DSP leaves the FDI and its clock out */
+	out_set = settings_output();
+	snd_ext_use = out_set != OUT_DSP;
+	snd_ext_only = out_set == OUT_FDI;
 	if (!kind) {
 		/* MP3 from the DSP: the FDI at the file's rate where it can be,
 		   else a clock the DSP resamples to (snd_rate_dsp) */
@@ -680,7 +689,7 @@ int play_open(const char *path, char *err, int n)
 		spurious_on();		/* (from here: 0.5 met 24 bombs as it began) */
 		snd_mfp_note(mn, sizeof(mn));
 		elog("the MFP before: %s", mn);
-		if (snd_fdi_set(rate)) {
+		if (out_set != OUT_DSP && snd_fdi_set(rate)) {
 			ext = 1;
 			out_rate = rate;
 		} else
@@ -699,7 +708,7 @@ int play_open(const char *path, char *err, int n)
 		   took 46 % of it (the About box 330 ms to open), 22.05 kHz
 		   stereo 29 %; an MP3 takes about 15 % */
 		out_rate = snd_rate_for(rate, &ext);
-		if (out_rate != rate && snd_fdi) {
+		if (out_rate != rate && snd_fdi && out_set != OUT_DSP) {
 			spurious_on();
 			if (snd_fdi_set(rate)) {
 				ext = 1;
@@ -734,8 +743,9 @@ int play_open(const char *path, char *err, int n)
 		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
 	else
 		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
-	elog("output: %ld Hz, %s%s; queue %ld bytes", out_rate, ext ? "the external clock" : "the Falcon's clock",
-	     dsp && out_rate != rate ? ", resampled on the DSP" : "", q_size);
+	elog("output: %ld Hz, %s%s; queue %ld bytes (Settings: %s)", out_rate,
+	     ext ? "the external clock" : "the Falcon's clock", dsp && out_rate != rate ? ", resampled on the DSP" : "",
+	     q_size, settings_output_name(out_set));
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;

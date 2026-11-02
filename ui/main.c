@@ -19,6 +19,7 @@
 #include "offdraw.h"
 #include "click.h"
 #include "play.h"
+#include "settings.h"
 #include "elog.h"
 #include "snd.h"
 
@@ -27,7 +28,7 @@ extern const char app_version[];
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
-enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP };
+enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -44,10 +45,15 @@ static const MBAR_ITEM m_play[] = {
 	{ "Stop", 0, C_STOP },
 	{ 0, 0, 0 }
 };
+static const MBAR_ITEM m_options[] = {
+	{ "Settings...", "^,", C_SETTINGS },
+	{ 0, 0, 0 }
+};
 static const MBAR_TITLE bar[] = {
 	{ " EPlay ", m_desk },
 	{ " File ", m_file },
 	{ " Play ", m_play },
+	{ " Options ", m_options },
 	{ 0, 0 }
 };
 
@@ -259,6 +265,9 @@ static void command(int c)
 	case C_QUIT:
 		quit = 1;
 		break;
+	case C_SETTINGS:
+		settings_dialog();
+		break;
 	case C_PLAY:
 		if (play_state() != PS_PLAYING && file[0])
 			play_file(file);
@@ -448,6 +457,7 @@ int app_main(void)
 		appl_exit();
 		return 1;
 	}
+	settings_load();		/* (after snd_init: what the machine has) */
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EPlay: not enough memory.][ Quit ]");
 		snd_exit();
@@ -477,6 +487,7 @@ int app_main(void)
 	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
 	     snd_ext_note[0] ? "; tried " : "", snd_ext_note);
+	elog("Settings: output %s", settings_output_name(settings_output()));
 	if (snd_ext_rate)
 		status(snd_ext_rate == 44100 ? "An external clock at 44.1 kHz (the FDI)." :
 					       "An external clock at 48 kHz (the FDI).");
@@ -508,6 +519,8 @@ int app_main(void)
 					command(C_OPEN);
 				else if (a == 17 || a == 21 || (a | 0x20) == 'q' || (a | 0x20) == 'u')
 					command(C_QUIT);
+				else if (((ev.kreturn >> 8) & 0xff) == 0x33)	/* ^, (the comma's key) */
+					command(C_SETTINGS);
 			}
 		}
 		if ((which & MU_BUTTON) && ev.mbutton == 1) {

@@ -157,7 +157,7 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   (`AP_DRAGDROP`). File > Save playlist… (^S).
 - **Menus**: Desk · File · Edit · View · Play · Options · Help. Play: Play/Pause (Space),
   Stop, Next, Previous, Repeat, Shuffle. The family's shortcuts as the guidelines have them.
-- **Settings** (^,): output (auto, codec, external clock), the ring in seconds, the DAC's volume.
+- **Settings** (^,): Output (Auto, FDI, DSP, 68030; phase 2). Volume is the player's, in its window, not a setting (Erez, 2 Nov 2026).
 - **About**: line 2 is what plays ("Playing 3 of 12  •  44.1 kHz  •  FDI"); line 3 the memory.
 - **BGEM.NG**: "Next: title" as a track starts, where the user has it.
 - **Help**: `docs/GUIDE.md` into `EPLAY.HYP`.
@@ -602,8 +602,15 @@ one the machine has.
 | **FDI** | a Falcon with the FDI | Cubase's way: the FDI set to the file's rate (44.1 or 48 kHz, each measured), the DSP's SSI on its clock, bit for bit |
 
 - **Settings:** Output: Auto (the default: the FDI where its driver answers, else the DSP on a
-  Falcon, else the 68030), or one of the three; only what the machine has is offered. Volume:
-  0 dB, the default. Both in EPLAY.INF.
+  Falcon, else the 68030), or one of the three; only what the machine has is offered. In
+  EPLAY.INF. **As built (Erez, 2 Nov 2026):** Options > Settings... (^,), one page: one sentence
+  on what Output is ("Output: how EPlay plays the music."), then the four choices, Auto, FDI, DSP
+  and 68030, as radio buttons with no notes. A choice the machine hasn't is greyed (the 68030
+  until its decoder is in). A change takes effect at the next Play; what plays goes on as it is.
+  An FDI chosen and its driver not loaded this time plays Auto and stays chosen. **Volume is not
+  a setting** (Erez): it is the player's, a control in its window (phase 3), so 0 dB until then.
+  FDI puts the FDI at the file's rate as Auto does, else plays on its clock as it is,
+  resampled; DSP leaves the FDI and its clock out (the Falcon's clock, resampled).
 - **The 68030's quality follows the machine** (Erez's choice): the highest it keeps up with, full
   on a fast 68030 (a DFB1), half the rate or mono on a stock Falcon or a TT; the window says which
   ("68030, half rate"). The music doesn't break up. An ST or STE has no MP3.

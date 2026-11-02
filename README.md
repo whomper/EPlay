@@ -45,6 +45,9 @@ contains:
 1. Copy `EPLAY.PRG` anywhere, and start it; or drop a `.MP3`, `.WAV` or `.AIF` file on it.
 2. **File > Open…** (Control+O) plays another file; **Play** and **Stop** are in the window and in
    the Play menu.
+3. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
+   answers, else the DSP), FDI or DSP; the 68030 comes with its decoder. A change takes effect at
+   the next Play. `EPLAY.INF`, next to the program, keeps it.
 
 **EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
 found and how it set the FDI, each file's format and length, how playing ended, and how the DSP
