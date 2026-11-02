@@ -129,8 +129,9 @@ static short ext_pre = 1;	/* the external clock's prescale (snd_open) */
    steps on Erez's Falcon (0.11: every clock measured 3 to 4 % fast, the
    FDI's 48 kHz as 49,679 Hz), someone's interrupts holding Timer C's
    off for more than its 5 ms; Timer A's count goes on, and a round is
-   20 ms. Timer A in use by another program (its control not 0): the
-   200 Hz clock, as before */
+   20 ms. Timer A in use by another program (its control not 0, or its
+   interrupt enabled: its handler would be called each round): the 200 Hz
+   clock, as before */
 #define TA_CR	(*(volatile unsigned char *)0xfffffa19L)
 #define TA_DR	(*(volatile unsigned char *)0xfffffa1fL)
 #define TA_HZ	12288L
@@ -141,7 +142,7 @@ static long m_loop(void)
 {
 	long a, b, d, n = 0, t = 0, t0 = 0;
 	unsigned char prev = 0, cur;
-	int ta = TA_CR == 0;
+	int ta = TA_CR == 0 && !(*(volatile unsigned char *)0xfffffa07L & 0x20);	/* (stopped, its interrupt off) */
 	if (ta) {
 		TA_DR = 0;		/* (256) */
 		TA_CR = 7;		/* delay mode, / 200 */
