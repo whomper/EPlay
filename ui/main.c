@@ -461,6 +461,13 @@ int app_main(void)
 	elog("EPlay %s; _MCH $%08lX, _CPU %ld, _SND $%02lX; the FDI's driver %s", app_version,
 	     get_cookie(0x5F4D4348L), get_cookie(0x5F435055L), get_cookie(0x5F534E44L),
 	     snd_fdi ? "answers ($4711)" : "doesn't answer");
+	/* (TT RAM is the DFB1's: Erez's logs of 0.11 had a queue of 1.9 MB,
+	   8 MB with it, and nothing else to say whether it was on) */
+	{
+		long st = (long)Mxalloc(-1L, 0), tt = (long)Mxalloc(-1L, 1);
+		elog("free memory, the largest blocks: ST RAM %ld KB, TT RAM %ld KB", st > 0 ? st / 1024 : 0,
+		     tt > 0 ? tt / 1024 : 0);
+	}
 	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz, timed by %s); taken as %ld Hz",
 	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
