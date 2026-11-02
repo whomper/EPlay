@@ -83,7 +83,7 @@ V_T1	equ	$44
 V_TT2	equ	$45
 V_C1	equ	$46
 V_PCM	equ	$47
-V_SW	equ	$48		; synthesis: 32 in odd ring slots
+V_SW	equ	$48		; (free: slot works it out in r4)
 V_P	equ	$49		; synthesis: the ring slot
 V_RING	equ	$4a
 V_START	equ	$4b
@@ -518,15 +518,18 @@ so2
 ; ---- resampling a slot (mp3dsp.c's mp3rs_run, from rsslot): while the
 ; position (a: its sample n in A1, from the slot's first, and its fraction
 ; in A0) is below 28, an output of each channel, 8 taps of its phase
-; (A0's top 5 bits) over x[n - 3 .. n + 4]: T0 + 4 + n on (r6 = T0 + 4),
+; (A0's top 5 bits) over x[n - 3 .. n + 4]: T0 + 4 + n on (r2 = T0 + 4),
 ; then T1's (n1 = 31 on; mono -8, the left's again); r0 the taps' middle
-; (32 apart, n4), y1 16, r3 the step and 28 (modulo 3), r5 the ring
-rsl	move	a0,x0			; the fraction: its phase, signed (b1 = p, or
-	mpy	x0,y1,b		a1,n6	; p - 32 from 16), the middle's offset
+; (32 apart: n4 and n6, the left's taps r4, the right's r6), y1 16, r3 the
+; step (si, sf: modulo 2), r5 the ring; x0 outputs, as rscount has them
+; (no test an output: a loop of the DSP's)
+rsl	do	x0,rse			; (x0 outputs: rscount's)
+	move	a0,x0			; the fraction: its phase, signed (b1 = p, or
+	mpy	x0,y1,b		a1,n2	; p - 32 from 16), the middle's offset
 	move	b1,n0
-	lua	(r6)+n6,r1		; the left's x[n - 3]
-	lua	(r0)+n0,r4		; the phase's taps
-	nop
+	lua	(r2)+n2,r1		; the left's x[n - 3]
+	lua	(r0)+n0,r4		; the phase's taps, for the left
+	lua	(r0)+n0,r6		; and the right (a dual move has no (r4)-n4)
 	clr	b		x:(r1)+,x0	y:(r4)+n4,y0
 	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
 	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
@@ -537,21 +540,19 @@ rsl	move	a0,x0			; the fraction: its phase, signed (b1 = p, or
 	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
 	macr	x0,y0,b
 	move	x:(r3)+,x1	b,y:(r5)+	; left out; x1 = si
-	lua	(r0)+n0,r4		; (a dual move has no (r4)-n4: the taps
-	move	(r1)+n1			; again from the first) the right's
-	clr	b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
-	mac	x0,y0,b		x:(r1)+,x0	y:(r4)+n4,y0
+	move	(r1)+n1			; the right's
+	clr	b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
+	mac	x0,y0,b		x:(r1)+,x0	y:(r6)+n6,y0
 	macr	x0,y0,b
 	move	x:(r3)+,x0	b,y:(r5)+	; right out; x0 = sf
-	add	x,a		x:(r3)+,x1	; the next position; x1 = 28
-	cmp	x1,a
-	jlt	rsl
+	add	x,a				; the next position
+rse
 	rts
 
 ; ---- a long block's 36 outputs: U, the window at r4 (Y), the overlap at
@@ -973,10 +974,6 @@ slot	move	x:V_P,b
 	move	#>15,x0
 	and	x0,b
 	move	b1,x:V_P
-	clr	a
-	jclr	#0,b1,sl0
-	move	#>32,a
-sl0	move	a1,x:V_SW
 	move	x:V_XR,b		; the butterfly: x[k] = XR + 18 k + t
 	move	x:V_T,x0
 	add	x0,b
@@ -987,99 +984,65 @@ sl0	move	a1,x:V_SW
 	move	#>18,n1
 	move	#>-18,n3
 	jsr	sbfly
-	move	x:V_P,x0		; the slot's start: RING + 64 P
-	move	#>64,y0
-	mpy	x0,y0,b
-	asr	b
-	move	b0,b
-	move	x:V_RING,x0
-	add	x0,b
-	move	b1,x:V_START
-	move	x:V_SW,x0		; X[0..15]: minus, rows 48 + n and 48 - n
-	move	#>48,a
-	add	x0,a
-	move	#>63,x0
-	and	x0,a
-	add	b,a
-	move	a1,r6
-	move	a1,r3
+	move	x:V_P,x0		; r4: the slot's start, RING + 64 P, and 32
+	move	#>64,y0			; on in an odd slot (the window's rows j at
+	mpy	x0,y0,b			; their places, every other slot: synth.a56's
+	asr	b			; SW); each row this slot writes or reads is
+	move	b0,b			; r4 + n4 modulo 64 (m4), the slot's own
+	move	x:V_RING,y0
+	add	y0,b
+	move	#>32,y0
+	jclr	#0,x0,sl0
+	add	y0,b
+sl0	move	b1,r4
+	move	#48,n4			; X[0..15]: minus, rows 48 + n and 48 - n
+	movec	#63,m4
 	movec	#63,m6
 	movec	#63,m3
+	lua	(r4)+n4,r6
+	lua	(r4)+n4,r3
 	move	#>EO,r1
 	movec	#15,m1
 	move	#>EO+16,r2
 	movec	#15,m2
 	move	#>DCT,r5
+	move	#32,n4			; (sdhi's, below)
 	jsr	sdlo
-	move	x:V_START,b		; X[16..31]: row n - 16, and minus row 48 - n
-	move	x:V_SW,x0
-	move	x0,a
-	add	b,a
-	move	a1,r6
-	move	#>32,a
-	add	x0,a
-	move	#>63,x0
-	and	x0,a
-	add	b,a
-	move	a1,r3
+	move	r4,r6			; X[16..31]: row n - 16, and minus row 48 - n
+	lua	(r4)+n4,r3
+	move	#16,n4			; (V[16]'s, below)
 	jsr	sdhi
 	movec	#$ffff,m6
 	movec	#$ffff,m3
-	move	x:V_SW,x0		; V[16] = 0
-	move	#>16,a
-	add	x0,a
-	move	#>63,x0
-	and	x0,a
-	add	b,a
-	move	a1,r2
+	lua	(r4)+n4,r2		; V[16] = 0
 	clr	a
+	nop
 	move	a,x:(r2)
 	movec	#1023,m1		; the window: the ring modulo 1024
 	movec	#1023,m2
 	move	#>-64,n1
 	move	#>64,n2
-	move	x:V_SW,x0		; output 0 (row 0) and 16 (row 16)
-	tfr	b,a
+	move	r4,r1			; output 0 (row 0) and 16 (row 16)
 	move	#>D016,r6
-	add	x0,a
-	move	a1,r1
 	nop
 	jsr	sw1
 	move	(r6)+
 	move	a,x:(r0)
-	move	x:V_SW,x0
-	move	#>16,a
-	add	x0,a
-	move	#>63,x0
-	and	x0,a
-	add	b,a
-	move	a1,r1
+	lua	(r4)+n4,r1
 	nop
 	jsr	sw1
 	move	#>16,n3			; (output 16)
 	move	r0,r3
 	nop
 	move	a,x:(r3+n3)
-	move	x:V_SW,x0		; outputs j and 32 - j, j = 1..15
-	move	#>1,a
-	add	x0,a
-	add	b,a
-	move	a1,r1			; row 1 of this slot
-	move	x:V_SW,x0
-	move	#>31,a
-	add	x0,a
-	move	#>63,x0
-	and	x0,a
-	move	#>64,x0
-	add	x0,a
-	add	b,a
-	move	x:V_RING,x0
-	sub	x0,a
-	move	#>1023,x0
-	and	x0,a
-	move	x:V_RING,x0
-	add	x0,a
-	move	a1,r2			; row 31 of slot P - 15
+	move	#1,n4			; outputs j and 32 - j, j = 1..15
+	movec	#1023,m4
+	nop
+	lua	(r4)+n4,r1		; row 1 of this slot (within it: n4 small)
+	move	#95,n4
+	nop
+	lua	(r4)+n4,r2		; row 31 of slot P - 15 (the next), round the ring
+	movec	#$ffff,m4
 	move	#>DPAIR,r5
 	move	r0,r3
 	move	#1,n0			; j at j, 32 - j at 32 - j
@@ -1157,6 +1120,27 @@ rsset	jsr	rd
 rst1	move	a1,x:V_RSTB
 	move	#>28,x0
 	move	x0,x:V_RS28
+	tst	a
+	jeq	rst4
+	move	x:V_RSI,x1		; rscount's: c, the first k with k S >= 32,
+	move	x:V_RSS,x0		; less 1; c S and (c - 1) S
+	clr	a
+	clr	b
+	move	#>32,y0
+	move	#>1,y1
+rst3	add	x,a
+	add	y1,b
+	cmp	y0,a
+	jlt	rst3
+	sub	x,a
+	move	a1,x:RST+2
+	move	a0,x:RST+3
+	sub	y1,b
+	move	b1,x:RST+4
+	sub	x,a
+	move	a1,x:RST
+	move	a0,x:RST+1
+rst4
 	clr	a
 	move	a,x:V_RSN
 	move	a,x:V_RSF
@@ -2921,20 +2905,58 @@ pcd5	clr	a
 
 ; a slot resampled (rsl, in internal P) into the ring at V_OUT on; then the
 ; position a slot on, and each channel's last 7 inputs to the front
+; the outputs of a slot (x0), as a test after each had them: the first k
+; >= 1 with pos + k S >= 28 (a: pos). From a position at -4 or more (every
+; slot's: the last ended at 28 to 28 + S, less 32) k is c or c + 1 (RST, by
+; rsset: c S < 32 <= (c + 1) S); where pos + (c - 1) S reaches 28 already
+; (a stream's first slot, at 0) they are counted one by one (r4, b, y used)
+rscount	move	x:V_RS28,x1
+	tfr	a,b
+	move	x:RST,y1
+	move	x:RST+1,y0
+	add	y,b			; pos + (c - 1) S
+	cmp	x1,b
+	jge	rsc5
+	tfr	a,b
+	move	x:RST+2,y1
+	move	x:RST+3,y0
+	add	y,b			; pos + c S
+	cmp	x1,b
+	move	x:RST+4,b		; c (a move: the flags stay the cmp's)
+	jge	rsc9
+	move	#>1,y0
+	add	y0,b			; c + 1
+rsc9	move	b1,x0
+	rts
+rsc5	tfr	a,b
+	move	x:V_RSI,y1
+	move	x:V_RSS,y0
+	add	y,b
+	move	#1,r4
+rsc6	cmp	x1,b
+	jge	rsc7
+	add	y,b
+	move	(r4)+
+	jmp	rsc6
+rsc7	move	r4,x0
+	rts
+
 rsslot	move	x:V_RSN,a
 	move	x:V_RSF,a0
+	jsr	rscount			; (first: it takes y, b and r4)
 	move	x:V_RSTB,r0
-	move	#>T0+4,r6
+	move	#>T0+4,r2
 	move	#>16,y1
 	move	#>32,n4
+	move	#>32,n6
 	move	#>V_RSI,r3
-	movec	#2,m3
+	movec	#1,m3
 	move	x:V_OUT,r5
 	movec	#RSZ-1,m5		; (the ring, modulo its size: from PCM, a
-	move	#>31,n1
+	move	#>31,n1			; multiple of 4096)
 	jset	#0,x:V_FLAGS,rss1
 	move	#>-8,n1			; mono: the left again
-rss1	jsr	rsl			; multiple of 4096)
+rss1	jsr	rsl
 	movec	#$ffff,m3
 	movec	#$ffff,m5
 	move	r5,x:V_OUT

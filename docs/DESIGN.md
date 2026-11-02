@@ -815,6 +815,35 @@ bitmaps), taken at the first draw that wanted it, came while the first file play
 its queue, and split the free ST RAM in two. It is taken at the start now. The log also gives the
 largest free ST and TT RAM at the start (TT RAM: the DFB1's).
 
+
+### The DSP's budget without the FDI (2 Nov 2026)
+
+**The fast DCT, dropped.** The synthesis DCT's odd half (a 16-point DCT-IV) was done the fast way
+in the model: pairs' sums and differences, two 8-point DCT-IIIs, a rotation. 88 multiplies for
+256, and within ISO's limits as before (0.19 of the rms limit at most). On the DSP, though, the
+matrix it would replace runs as `rep` multiply-accumulates, one instruction cycle each, about 640
+clocks a slot. The fast form's sums, DCTs and rotation came to about 530: some 1 % of the DSP,
+not worth a bit-exact decoder's risk. Reverted.
+
+**Leaner instead, bit for bit:**
+- **The slot's set-up** (3.3 % of the DSP to 1.8): its rows' places in the V ring are the slot's
+  start, plus 32 in an odd slot, plus a constant, modulo 64 (or 1,024 into the next slot). So
+  r4 holds that start, and `lua` with m4 makes each place, where adds and masks did each one.
+- **The resampler's loop:** both channels' taps pointers made at once (r4 and r6; the input's
+  base in r2), and a DO loop of the DSP's for the outputs, with no test and jump an output.
+  Their number: from a position at -4 or more (every slot's: the last ended at 28 to 28 + S,
+  less 32) it is c or c + 1, c S < 32 <= (c + 1) S (RSSET works c out once). One comparison a
+  slot chooses, and the stream's first slot (at 0) is counted one by one.
+
+| Files (Hatari's DSP, 32 MHz) | Before | Now |
+|---|---|---|
+| mix320.mp3, resampled to 49,170 Hz | 94.2 % | 92.1 % |
+| square.mp3, resampled to 49,170 Hz (the worst) | 109.3 % | 107.2 % |
+| mix48.mp3, resampled to 44.1 kHz | 87.9 % | 85.9 % |
+
+The butterflies' first loop (2.2 %) reads both its inputs from external X while it runs from
+external P, a cycle more each; in internal P there's no room for it.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
