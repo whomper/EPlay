@@ -50,7 +50,7 @@ void elog_save(void)
 {
 	char path[256];
 	long fh;
-	snprintf(path, sizeof(path), "%sEPLAY.LOG", app_dir());
+	snprintf(path, sizeof(path), "%seplay.log", app_dir());
 	fh = Fcreate(path, 0);
 	if (fh < 0)
 		return;

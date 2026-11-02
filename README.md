@@ -33,16 +33,16 @@ window; 4, playlists and folders; 5, the small player, keys, MiNT and MagiC; 6, 
 
 ## Getting started
 
-Download the latest `EPLAY-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It
-contains:
+Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It
+contains (every name in lowercase, as the family's are, so that MiNT finds them on an ext2 drive):
 
 | File | What it is |
 |---|---|
-| `EPLAY.PRG` | the program, for the Falcon |
-| `icons/` | its desktop icon (`EPLAY.RSC`, or `EPLAY.ICN` and `EPLAYMK.ICN` for desktops that take them) |
-| `NOTICES.TXT` | what EPlay includes under other licences |
+| `eplay.prg` | the program, for the Falcon |
+| `icons/` | its desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn` for desktops that take them) |
+| `notices.txt` | what EPlay includes under other licences |
 
-1. Copy `EPLAY.PRG` anywhere, and start it; or drop a `.MP3`, `.WAV` or `.AIF` file on it.
+1. Copy `eplay.prg` anywhere, and start it; or drop a `.MP3`, `.WAV` or `.AIF` file on it.
 2. **File > Open…** (Control+O) plays another file; **Play** and **Stop** are in the window and in
    the Play menu.
 3. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
@@ -72,7 +72,7 @@ It doesn't: EPlay plays files, and needs no network.
 
 ```sh
 sudo apt install gcc-m68k-linux-gnu a56 python3 sox lame   # Debian/Ubuntu; no MiNTLib needed
-make            # binary/EPLAY.PRG, with the DSP's program (a56) built in
+make            # binary/eplay.prg, with the DSP's program (a56) built in
 make test       # the MP3 model against minimp3, WAV and AIFF against sox
 make dsptest    # the DSP's program against the model, bit for bit, on Hatari's DSP core
 make dist       # dist/EPLAY-x.y.zip, as on the Releases page

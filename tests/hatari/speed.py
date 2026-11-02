@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """The speed rig (the guidelines' "Speed: the stock machines set it"):
-build/prof/EPLAY.PRG (make prof: -DAES_PROFILE=20) on a stock Falcon,
+build/prof/eplay.prg (make prof: -DAES_PROFILE=20) on a stock Falcon,
 the longest stretch between event calls of each thing the user does,
 from the AESGAP lines on the emulator's console (common/tests/speed).
 Fails when one is over its time. A button's press (drawn pressed) is
@@ -80,7 +80,7 @@ def session(work, spec, kind):
     # (AERA_WITH_NVDI=1: under Erez's NVDI, as the hub runs it)
     r = Rig(os.path.join(work, kind), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1")
     try:
-        r.put(os.path.join(TOP, "build", "prof", "EPLAY.PRG"))
+        r.put(os.path.join(TOP, "build", "prof", "eplay.prg"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
         src = os.path.join(r.work, "src.wav")
         subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(SECS),

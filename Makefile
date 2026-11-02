@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 # EPlay.
-#   make            binary/EPLAY.PRG (68030 code), with a stock m68k ELF cross
+#   make            binary/eplay.prg (68030 code), with a stock m68k ELF cross
 #                   compiler (apt install gcc-m68k-linux-gnu) and a56 for its
 #                   DSP program: freestanding on common/'s runtime, the
 #                   header written by common/tools/elf2tos.py
@@ -9,10 +9,10 @@
 #                   with sox and lame; WAV and AIFF against sox
 #   make dsptest    dsp/mp3.a56 against the model, bit for bit, on Hatari's
 #                   DSP core, with its cycles
-#   make prof       build/prof/EPLAY.PRG for the speed rig (tests/hatari)
+#   make prof       build/prof/eplay.prg for the speed rig (tests/hatari)
 #   make rig        the Hatari rigs: playing (tests/hatari/play_test.py) and
 #                   the speed rig (tests/hatari/speed.py)
-#   make dist       dist/EPLAY-x.y.zip and its files, as on the Releases page
+#   make dist       dist/eplay-x.y.zip and its files, as on the Releases page
 # Every file is built with -ffunction-sections and linked with
 # --gc-sections, so of common/ only what EPlay calls goes in.
 CROSS   ?= m68k-linux-gnu-
@@ -38,9 +38,9 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
 
-all: binary/EPLAY.PRG
+all: binary/eplay.prg
 
-binary/EPLAY.PRG: $(OBJDIR)/eplay.elf common/tools/elf2tos.py | binary
+binary/eplay.prg: $(OBJDIR)/eplay.elf common/tools/elf2tos.py | binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
 VERSION_STR := $(shell cat VERSION)
@@ -96,13 +96,13 @@ binary:
 
 # the speed rig's build (tests/hatari/speed.py): each stretch between
 # event calls of 20 ms or more on the emulator's console (-DAES_PROFILE,
-# common/atari/gem.c), in build/prof/EPLAY.PRG
+# common/atari/gem.c), in build/prof/eplay.prg
 ifdef PROF
 CFLAGS += -DAES_PROFILE=$(PROF)
 endif
 prof: $(B)/mp3tab.h $(B)/mp3_prog.h
-	$(MAKE) OBJDIR=build/prof PROF=20 build/prof/EPLAY.PRG
-build/prof/EPLAY.PRG: build/prof/eplay.elf common/tools/elf2tos.py
+	$(MAKE) OBJDIR=build/prof PROF=20 build/prof/eplay.prg
+build/prof/eplay.prg: build/prof/eplay.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 
 HOSTCC  := cc
@@ -136,19 +136,22 @@ dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspmp3
 
 # a release's files: each one in dist/, and all of them in
-# dist/EPLAY-x.y.zip (the icons in icons/), for the release workflow. 0.1
+# dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
+# guidelines 6.6), for the release workflow. 0.1
 # has no guide yet (EPLAY.HYP comes with the GEM program's phase); the
 # workflow's HCP is taken and not used until then
 HCP     ?= hcp
-DIST    := binary/EPLAY.PRG NOTICES.TXT
-ICONS   := icons/EPLAY.RSC icons/EPLAYNV.RSC icons/EPLAY.ICN icons/EPLAYMK.ICN
+DIST    := binary/eplay.prg
+ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	cp $(DIST) $(ICONS) dist/
+	cp NOTICES.TXT dist/notices.txt
 	cp $(DIST) dist/zip/
+	cp NOTICES.TXT dist/zip/notices.txt
 	cp $(ICONS) dist/zip/icons/
-	cd dist/zip && zip -q -9 -r ../EPLAY-$(VERSION_STR).zip .
+	cd dist/zip && zip -q -9 -r ../eplay-$(VERSION_STR).zip .
 	rm -rf dist/zip
 
 rig: all prof
@@ -160,5 +163,5 @@ rig: all prof
 
 # the desktop icon and its headers, from common/icons/EPLAY.txt (committed)
 icons:
-	python3 common/tools/appicon.py EPLAY --rsc icons/EPLAY.RSC --rscnv icons/EPLAYNV.RSC \
-		--icn icons/EPLAY.ICN --mask icons/EPLAYMK.ICN --headers ui --docs docs
+	python3 common/tools/appicon.py EPLAY --rsc icons/eplay.rsc --rscnv icons/eplaynv.rsc \
+		--icn icons/eplay.icn --mask icons/eplaymk.icn --headers ui --docs docs

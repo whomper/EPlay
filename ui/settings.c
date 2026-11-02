@@ -6,7 +6,8 @@
  * (Erez, 2 Nov 2026: the choices need no notes). A choice the machine
  * hasn't is greyed: the FDI without its driver, the DSP without a DSP, the
  * 68030 until its decoder is in (phase 2's last part). The INF is written
- * as EPLAY.IN$ first and renamed over EPLAY.INF (the guidelines, 2.3).
+ * as EPLAY.IN$ first and renamed over EPLAY.INF (the guidelines, 2.3), both
+ * named in lowercase, as every file of the family's (6.6: MiNT's ext2).
  */
 #include <string.h>
 #include <stdio.h>
@@ -50,11 +51,11 @@ void settings_load(void)
 	char path[200], v[16];
 	long h;
 	int i;
-	inf_path(path, sizeof(path), "EPLAY.INF");
+	inf_path(path, sizeof(path), "eplay.inf");
 	inf_n = 0;
 	h = Fopen(path, 0);
 	if (h < 0) {
-		inf_path(path, sizeof(path), "EPLAY.IN$");	/* (a save cut short after the old one went) */
+		inf_path(path, sizeof(path), "eplay.in$");	/* (a save cut short after the old one went) */
 		h = Fopen(path, 0);
 	}
 	if (h >= 0) {
@@ -77,8 +78,8 @@ static void save(void)
 	long n = inf_set(inf, inf_n, "OUTPUT", names[output], note, inf2, INF_MAX), h;
 	if (n < 0)
 		return;
-	inf_path(path, sizeof(path), "EPLAY.INF");
-	inf_path(tmp, sizeof(tmp), "EPLAY.IN$");
+	inf_path(path, sizeof(path), "eplay.inf");
+	inf_path(tmp, sizeof(tmp), "eplay.in$");
 	h = Fcreate(tmp, 0);
 	if (h < 0)
 		return;

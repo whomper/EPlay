@@ -6,7 +6,7 @@ on the Falcon (common/tools/machines.py), with Hatari's sound recorded
 and checked: the tone the file holds, at the pitch the Falcon's rate
 gives, in both channels, without a gap, then silence after the end.
 
-C:\\LAUNCH.PRG (make) starts C:\\EPLAY.PRG with the file in its command
+C:\\LAUNCH.PRG (make) starts C:\\eplay.prg with the file in its command
 line, as the desktop does with a file dropped on it; EPlay says what it
 does on the emulator's console (nf_debug), which the rig follows.
 
@@ -179,7 +179,7 @@ def run(work, case, spec):
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(TOP, "binary", "EPLAY.PRG"), hd)
+    shutil.copy(os.path.join(TOP, "binary", "eplay.prg"), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     f = make_file(hd, case)
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:

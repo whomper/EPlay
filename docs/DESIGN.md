@@ -844,6 +844,18 @@ not worth a bit-exact decoder's risk. Reverted.
 The butterflies' first loop (2.2 %) reads both its inputs from external X while it runs from
 external P, a cycle more each; in internal P there's no room for it.
 
+
+### File names in lowercase (Erez, 2 Nov 2026; the guidelines' 6.6)
+
+On MiNT an ext2 drive tells `EPLAY.INF` from `eplay.inf`, and a tester found the family's programs
+missing their own files there. Every name EPlay gives a file is lowercase now: `eplay.inf` (and
+`eplay.in$` while it is saved), `eplay.log`; and in the release `eplay.prg`, `notices.txt`,
+`icons/eplay.rsc`, `eplaynv.rsc`, `eplay.icn`, `eplaymk.icn`, in `eplay-x.y.zip`. Texts the user
+reads (the README, the log's lines, the status line) still write the names in capitals, as Atari
+users do. A file the user chooses or drops is opened by its name as it came. An earlier install on
+an ext2 drive is not looked for under its old names: its folder is deleted and the new release put
+in fresh (the release's notes say so once).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
