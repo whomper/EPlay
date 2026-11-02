@@ -450,14 +450,16 @@ static const signed char map36[36] = {
 	10, 11, 12, 13, 14, 15, 16, 17, 18, 18, 17, 16, 15, 14, 13, 12, 11, 10
 };
 
-static void imdct(GC *c, dw *ov, dw out[32][18])
+static void imdct(GC *c, dw *ov, dw out[32][18], int lim)
 {
 	int sb, i, w;
 	for (sb = 0; sb < 32; sb++) {
 		const dw *x = &c->xr[18 * sb];
 		da z[36];
 		memset(z, 0, sizeof(z));
-		if (c->bt == 2 && !(c->mixed && sb < 2)) {
+		if (sb >= lim) {
+			/* left out (Quality Normal): as all zeros, its overlap out */
+		} else if (c->bt == 2 && !(c->mixed && sb < 2)) {
 			for (w = 0; w < 3; w++) {
 				const dw *l = x + w;	/* its lines, a step of 3 */
 				dw cs[6], cd[3], sd[3];
@@ -640,7 +642,7 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 #ifdef MP3DSP_DEBUG
 			memcpy(mp3dsp_dbg_xr[ch], gc[ch].xr, sizeof(gc[ch].xr));
 #endif
-			imdct(&gc[ch], d->ov[ch], sub);
+			imdct(&gc[ch], d->ov[ch], sub, d->sblim ? d->sblim : 32);
 #ifdef MP3DSP_DEBUG
 			memcpy(mp3dsp_dbg_sub, sub, sizeof(mp3dsp_dbg_sub));
 #endif
@@ -666,6 +668,7 @@ void mp3rs_set(MP3RS *r, long rin, long rout)
 	r->si = (unsigned long)(rin / rout);
 	r->sf = (unsigned long)(((unsigned long long)(rin % rout) << 24) / (unsigned long long)rout);
 	r->down = rin > rout;
+	r->tab = !r->down ? t_rsup : MP3RS_DOWN(rin, rout) == 0 ? t_rsdn : MP3RS_DOWN(rin, rout) == 1 ? t_rsdn441 : t_rsdn48;
 }
 
 void mp3rs_mute(MP3RS *r)
@@ -675,7 +678,7 @@ void mp3rs_mute(MP3RS *r)
 
 int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
 {
-	const unsigned long *tab = r->down ? t_rsdn : t_rsup;
+	const unsigned long *tab = r->tab;
 	int b, ch, j, k = 0;
 	for (b = 0; b < ns; b += 32) {
 		dw x[2][39];		/* the last 7, then the block */

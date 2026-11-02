@@ -33,7 +33,7 @@ typedef struct {
 
 static int ref_run(REFRS *q, const double *in, int ns, int nch, double out[2][MP3RS_MAX])
 {
-	const unsigned long *tab = q->r.down ? t_rsdn : t_rsup;
+	const unsigned long *tab = q->r.tab;
 	int b, ch, j, k = 0;
 	for (b = 0; b < ns; b += 32) {
 		double x[2][39];
@@ -88,11 +88,11 @@ static int one(const char *name, int quiet)
 	static float ref[1152 * 2];
 	static MP3PARSE ps;
 	static MP3DSP d;
-	static MP3RS rs[2];
-	static REFRS rr[2];
+	static MP3RS rs[3];
+	static REFRS rr[3];
 	static dw rout[2][MP3RS_MAX];
 	static double rref[2][MP3RS_MAX];
-	RSCMP rc[2];
+	RSCMP rc[3];
 	int nrs = 0, skip = 1;
 	mp3dec_t dec;
 	mp3dec_frame_info_t info;
@@ -160,6 +160,11 @@ static int one(const char *name, int quiet)
 			if (rin == 48000) {
 				rc[1].rout = 44100;
 				nrs = 2;
+			}
+			if (rin > 32780) {	/* Quality Normal: the Falcon's 32,780 Hz */
+				rc[nrs].rin = rin;
+				rc[nrs].rout = 32780;
+				nrs++;
 			}
 			for (i = 0; i < nrs; i++) {
 				mp3rs_set(&rs[i], rin, rc[i].rout);

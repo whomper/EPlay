@@ -46,8 +46,11 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 2. **File > Open…** (Control+O) plays another file; **Play** and **Stop** are in the window and in
    the Play menu.
 3. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
-   answers, else the DSP), FDI or DSP; the 68030 comes with its decoder. A change takes effect at
-   the next Play. `EPLAY.INF`, next to the program, keeps it.
+   answers, else the DSP), FDI or DSP; the 68030 comes with its decoder. And the **Quality**:
+   High (the default), or Normal, up to about 15 kHz, for a Falcon without the FDI whose DSP
+   can't keep up with resampling dense music to 49,170 Hz (it plays at 32,780 Hz then). Through
+   the FDI the music is always whole. A change takes effect at the next Play. `EPLAY.INF`, next
+   to the program, keeps them.
 
 **EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
 found and how it set the FDI, each file's format and length, how playing ended, and how the DSP

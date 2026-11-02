@@ -40,7 +40,7 @@ int dspmp3_failed(void);	/* it stopped answering */
    least and the mean of its waits a frame (its time to spare: 0 none) */
 /* from rin to rout Hz (resampled if they differ); pcm: PSTREAM, WAV's
    and AIFF's packets (PK_PCM) */
-void dspmp3_tick_stream(long rin, long rout, int pcm);
+void dspmp3_tick_stream(long rin, long rout, int pcm, int sblim);	/* sblim: the subbands kept (32 all: Quality High) */
 void dspmp3_tick_status(void);
 void dspmp3_tick_push(void);
 int dspmp3_tick_asks(void);

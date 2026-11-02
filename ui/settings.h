@@ -10,10 +10,16 @@
 #define EPLAY_SETTINGS_H
 
 enum { OUT_AUTO, OUT_FDI, OUT_DSP, OUT_68030 };
+/* Quality (Erez, 2 Nov 2026): High, the default, or Normal: up to about 15
+   kHz, where the machine can't do more (the DSP on the Falcon's clock,
+   the 68030); with the FDI the music is always whole */
+enum { Q_NORMAL, Q_HIGH };
 
 void settings_load(void);	/* EPLAY.INF, at the start */
 void settings_dialog(void);	/* the dialog; saved on OK when it changed */
 int settings_output(void);	/* OUT_...: as set, or Auto where the machine hasn't it */
 const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
+int settings_quality(void);	/* Q_NORMAL or Q_HIGH */
+const char *settings_quality_name(int q);	/* "Normal", "High" (the log) */
 
 #endif

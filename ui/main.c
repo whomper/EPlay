@@ -487,7 +487,8 @@ int app_main(void)
 	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
 	     snd_ext_note[0] ? "; tried " : "", snd_ext_note);
-	elog("Settings: output %s", settings_output_name(settings_output()));
+	elog("Settings: output %s, quality %s", settings_output_name(settings_output()),
+	     settings_quality_name(settings_quality()));
 	if (snd_ext_rate)
 		status(snd_ext_rate == 44100 ? "An external clock at 44.1 kHz (the FDI)." :
 					       "An external clock at 48 kHz (the FDI).");

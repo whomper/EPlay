@@ -20,7 +20,13 @@ typedef struct {
 	int vpos[2];
 	unsigned char scf[2][22];	/* granule 0's long scalefactors */
 	long sat;		/* values limited on the way (none, in a good file) */
+	int sblim;		/* the subbands transformed (0: all 32); from here, as zeros */
 } MP3DSP;
+
+/* Settings' Quality Normal (Erez, 2 Nov 2026): the subbands up to about 15
+ * kHz (22 of 32 at 44.1 kHz, 20 at 48), the rest left out before the
+ * synthesis, for the Falcon's 32,780 Hz */
+#define MP3_SBLIM(rate) ((int)(15200L * 64 / (rate)))
 
 void mp3dsp_reset(MP3DSP *d);
 
@@ -36,11 +42,18 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
  * a block gives the outputs whose taps it holds */
 #define MP3RS_MAX 1300		/* a frame's outputs at most (x 1.115) */
 
+/* which taps a step down takes, by how far it goes down (rout / rin): to
+ * 0.85 or more t_rsdn (48 to 44.1 kHz), to 0.71 t_rsdn441 (44.1 kHz to
+ * 32,780 Hz), else t_rsdn48 (48 kHz to 32,780 Hz). The 68030 loads the
+ * last two over the DSP's RSDN before a stream that needs them */
+#define MP3RS_DOWN(rin, rout) ((rout) * 100 >= (rin) * 85 ? 0 : (rout) * 100 >= (rin) * 71 ? 1 : 2)
+
 typedef struct {
+	const unsigned long *tab;	/* the taps: t_rsup, t_rsdn, t_rsdn441 or t_rsdn48 */
 	unsigned long si, sf;	/* the step: si + sf / 2^24 input samples */
 	unsigned long f;	/* the position: its fraction (24 bits: the DSP's A0) */
 	int n;			/* and its sample, from the block's first */
-	int down;		/* t_rsdn */
+	int down;		/* (goes down: the DSP's RSDN) */
 	dw hist[2][7];		/* each channel's last 7 inputs */
 } MP3RS;
 

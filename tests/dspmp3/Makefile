@@ -15,6 +15,8 @@ run: $(B)/sim
 	SIMRS=1 ./$(B)/sim $(FILES)
 	@echo "48 kHz resampled to 44.1 (SIMRS=2):"
 	SIMRS=2 ./$(B)/sim $(FILES)
+	@echo "Quality Normal: to 32,780 Hz, the top subbands left out (SIMRS=3):"
+	SIMRS=3 ./$(B)/sim $(FILES)
 	@echo "PCM through the DSP (SIMPCM=1), as is and to the Falcon's clock:"
 	SIMPCM=1 ./$(B)/sim $(FILES)
 	SIMPCM=1 SIMRS=1 ./$(B)/sim $(FILES)

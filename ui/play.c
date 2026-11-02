@@ -38,6 +38,7 @@
 #include "mp3frame.h"
 #include "elog.h"
 #include "settings.h"
+#include "mp3dsp.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -356,6 +357,7 @@ static void make_packet(void)
    packets as it asks for them; at the file's end two frames of silence
    (the ring's two halves), then the count 0, and the end */
 static int s_started, s_end;	/* s_end: 1, 2 silences offered, 3 the end */
+static int s_sblim = 32;	/* the subbands the DSP keeps (Quality Normal: fewer) */
 static unsigned long s_flags, s_mute[1];
 static long s_spf;		/* a frame's samples (1152, or 576 for MPEG-2 and 2.5) */
 
@@ -405,7 +407,7 @@ static void tick_body(void);
    Audio doesn't use it either */
 static long start_stream(void)
 {
-	dspmp3_tick_stream(rate, out_rate, kind != 0);
+	dspmp3_tick_stream(rate, out_rate, kind != 0, s_sblim);
 	return 0;
 }
 
@@ -680,6 +682,7 @@ int play_open(const char *path, char *err, int n)
 	   FDI put the FDI at the file's rate where they can; FDI then plays on
 	   its clock as it is, resampled; DSP leaves the FDI and its clock out */
 	out_set = settings_output();
+	s_sblim = 32;
 	snd_ext_use = out_set != OUT_DSP;
 	snd_ext_only = out_set == OUT_FDI;
 	snd_fdi_note[0] = 0;	/* (only this play's tries in the log: 0.15 repeated the last
@@ -696,6 +699,14 @@ int play_open(const char *path, char *err, int n)
 			out_rate = rate;
 		} else
 			out_rate = snd_rate_dsp(rate, &ext);
+		/* Quality Normal (Erez, 2 Nov 2026), on the Falcon's clock: 32,780
+		   Hz, the subbands above about 15 kHz left out (the DSP's time
+		   that resampling up to 49,170 Hz lacked); the FDI's clock, or a
+		   rate of 32 kHz or less, as High */
+		if (!ext && settings_quality() == Q_NORMAL && rate > 32780) {
+			out_rate = 32780;
+			s_sblim = MP3_SBLIM(rate);
+		}
 		if (snd_fdi_note[0]) {
 			elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 			snd_mfp_note(mn, sizeof(mn));
@@ -745,9 +756,10 @@ int play_open(const char *path, char *err, int n)
 		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
 	else
 		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
-	elog("output: %ld Hz, %s%s; queue %ld bytes (Settings: %s)", out_rate,
+	elog("output: %ld Hz, %s%s%s; queue %ld bytes (Settings: %s, %s)", out_rate,
 	     ext ? "the external clock" : "the Falcon's clock", dsp && out_rate != rate ? ", resampled on the DSP" : "",
-	     q_size, settings_output_name(out_set));
+	     s_sblim < 32 ? ", the subbands above about 15 kHz left out" : "", q_size, settings_output_name(out_set),
+	     settings_quality_name(settings_quality()));
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;

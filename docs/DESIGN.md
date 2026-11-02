@@ -613,7 +613,9 @@ one the machine has.
   resampled; DSP leaves the FDI and its clock out (the Falcon's clock, resampled).
 - **The 68030's quality follows the machine** (Erez's choice): the highest it keeps up with, full
   on a fast 68030 (a DFB1), half the rate or mono on a stock Falcon or a TT; the window says which
-  ("68030, half rate"). The music doesn't break up. An ST or STE has no MP3.
+  ("68030, half rate"). The music doesn't break up. *Since 2 Nov 2026 (Erez): Settings' Quality,
+  Normal (to about 15 kHz) or High, the default, sets it, for the DSP on the Falcon's clock as
+  well (below).* An ST or STE has no MP3.
 - **The order:** the FDI way first (Erez's Falcon, and it removes 0.3's two faults: the clock
   and the DSP's output through the host port), then the DSP way with resampling, then WAV and
   AIFF through the DSP, the settings, and the 68030's decoder last (a new part).
@@ -855,6 +857,37 @@ reads (the README, the log's lines, the status line) still write the names in ca
 users do. A file the user chooses or drops is opened by its name as it came. An earlier install on
 an ext2 drive is not looked for under its old names: its folder is deleted and the new release put
 in fresh (the release's notes say so once).
+
+
+### Quality: Normal and High (Erez, 2 Nov 2026)
+
+Erez's choice for the crackles without the FDI: a Quality setting, **High** (the default) or
+**Normal**, "Normal is 15 kHz", for both the 68030's output and the DSP on the Falcon's own
+clock. Through the FDI the music is always whole. In Settings, under Output, the same way: one
+sentence ("Quality: Normal plays up to 15 kHz, for a slower machine."), then Normal and High.
+`QUALITY=` in eplay.inf.
+
+**Normal on the DSP:** a file above 32,780 Hz plays at the Falcon's 32,780 Hz, and the decoder
+leaves out the subbands above about 15 kHz (22 of 32 at 44.1 kHz, to 15.2 kHz; 20 at 48, to
+15.0: `MP3_SBLIM`), as it leaves out those that are all zeros: no transform, their overlap out
+once. So nothing is left above 32,780 Hz's Nyquist (16.39 kHz) to fold back. The resampler goes
+down with its band at all of that Nyquist. Its taps are made for the step (44.1 and 48 kHz to
+32,780 Hz: `t_rsdn441`, `t_rsdn48`). The 68030 loads them over RSDN before the stream (LOADY),
+and RSSET takes the subbands' limit. With 8 taps, 0.9 of the Nyquist would have been 5 dB down at
+14 kHz, and an 18 kHz tone, had the subbands been there, only 13 dB down, folded to 14.8 kHz.
+The band as built is 3 dB down at 14 kHz.
+
+| Files (Hatari's DSP, 32 MHz) | High, 49,170 Hz | Normal, 32,780 Hz |
+|---|---|---|
+| mix320.mp3 (320 kbit/s) | 92.1 % | 86.4 % |
+| xingvbr.mp3 (VBR -V 0) | — | 81.0 % |
+| mix48.mp3 (48 kHz, 192 kbit/s) | 85.9 % (to 44.1) | 81.7 % |
+| square.mp3 (all short blocks) | 107.2 % | 99.5 % |
+
+Tested as before: the model's resampler against the double-precision one at 32,780 Hz (0.15 of
+ISO's rms limit at most), the DSP against the model bit for bit (`make dsptest`, SIMRS=3), and the
+play rig's `normal` case (eplay.inf with QUALITY=NORMAL: 32,780 Hz, its tones whole). The
+68030's output follows the setting when its decoder is in.
 
 ## The order of the work
 

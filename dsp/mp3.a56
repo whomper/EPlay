@@ -83,7 +83,7 @@ V_T1	equ	$44
 V_TT2	equ	$45
 V_C1	equ	$46
 V_PCM	equ	$47
-V_SW	equ	$48		; (free: slot works it out in r4)
+V_SBLIM	equ	$48		; the subbands transformed (Quality Normal: 22 or 20; else 32)
 V_P	equ	$49		; synthesis: the ring slot
 V_RING	equ	$4a
 V_START	equ	$4b
@@ -709,6 +709,8 @@ ima
 ; (the commands seldom run)
 dreset	clr	a			; no resampling
 	move	a,x:V_RSTB
+	move	#>32,x0			; every subband
+	move	x0,x:V_SBLIM
 	move	#>PKT,x0
 	move	x0,x:V_PKB
 	movec	m0,m1			; all linear (m0 since the start)
@@ -1101,14 +1103,17 @@ ly
 	jmp	cmd
 
 ; ---- RSSET (13): resampling from here on: si, sf (the step: si + sf /
-; 2^24 input samples an output), the taps (0 none, 1 up, 2 down); the
-; position and the last inputs from 0
+; 2^24 input samples an output), the taps (0 none, 1 up, 2 down: RSDN, as
+; the 68030 loaded it), the subbands transformed (32 all; Quality Normal
+; fewer); the position and the last inputs from 0
 rsset	jsr	rd
 	move	x0,x:V_RSI
 	jsr	rd
 	move	x0,x:V_RSS
 	jsr	rd
 	move	x0,b
+	jsr	rd
+	move	x0,x:V_SBLIM
 	clr	a
 	tst	b
 	jeq	rst1
@@ -2670,7 +2675,11 @@ go6	move	#>6,x0			; (tests: 6, after alias reduction)
 go7a	move	#>0,y1			; short: none long, but mixed's 2
 	jclr	#0,x:V_MIX,go7
 	move	#>2,y1
-go7	move	b1,x:V_SBMAX
+go7	move	x:V_SBLIM,x0		; (Quality Normal: the top left out)
+	cmp	x0,b
+	jle	go7b
+	move	x0,b
+go7b	move	b1,x:V_SBMAX
 	move	y1,x:V_NLSB
 	move	x1,x:V_WIN
 	move	#>144,a			; (the signed windows: 144 on)

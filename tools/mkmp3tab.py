@@ -176,6 +176,16 @@ def rs_dsp(t):
 add("t_rsup", rs_dsp(rs_table(0.9)),
     "resampling up: tap j (input n - 3 + j) of phase p at 32 j + (p + 16) mod 32, 8 x 32")
 add("t_rsdn", rs_dsp(rs_table(0.9 * 44100 / 48000)), "resampling down (48 to 44.1 kHz): the same")
+# Settings' Quality Normal (Erez, 2 Nov 2026): the Falcon's 32,780 Hz, from
+# 44.1 and from 48 kHz. The decoder leaves out the subbands above about
+# 15 kHz then (MP3_SBLIM), so nothing above the output's Nyquist (16.39
+# kHz) is there to fold back, and the band goes to all of it: with 8 taps
+# that is 3 dB down at 14 kHz, where 0.9 of it was 5 (and an 18 kHz tone
+# 13 dB down, folded to 14.8 kHz, had the subbands been there). Not in
+# the DSP's map: the 68030 loads the one a stream needs over RSDN
+# (mp3dsp.h's MP3RS_DOWN)
+add("t_rsdn441", rs_dsp(rs_table(32780 / 44100)), "resampling down, 44.1 kHz to 32,780 Hz: the same")
+add("t_rsdn48", rs_dsp(rs_table(32780 / 48000)), "resampling down, 48 kHz to 32,780 Hz: the same")
 
 # ---- dequantising
 mant, expo = [], []

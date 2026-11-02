@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, aiff, wav22, mp3, mp3long, vbr, fsel; all by default. The machines: Falcon (Erez's, with the
+The cases: wav, aiff, wav22, mp3, mp3long, vbr, fsel, normal; all by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -59,7 +59,13 @@ CASES = {
             (1000, 1500), 10),
     "fsel": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
              (1000, 1500), 10),
+    # Settings' Quality Normal (eplay.inf): no external clock, so the
+    # Falcon's 32,780 Hz, the subbands above about 15 kHz left out
+    "normal": ("NORMAL.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "192", "-m", "s"], 32780,
+               (1000, 1500), 6),
 }
+# the cases' eplay.inf
+INFS = {"normal": "QUALITY=NORMAL\r\n\r\n"}
 
 
 def make_file(hd, case):
@@ -184,6 +190,9 @@ def run(work, case, spec):
     f = make_file(hd, case)
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
         fh.write("C:\\%s\r\n" % f)
+    if case in INFS:
+        with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
+            fh.write(INFS[case])
     m = machines.Machine(spec, hd)
     args = m.args()
     rec = os.path.join(w, "rec.wav")

@@ -113,6 +113,7 @@ static void cmpbuf(const char *what, int space, unsigned addr, const dw *m, int 
 #define XR0_ADDR 0x0600
 #define XR1_ADDR 0x2480
 #define OV0_ADDR 0x2b10
+#define RSDN_ADDR 0x3b10
 #define OV1_ADDR 0x2d50
 
 /* the Falcon's clock for a file's rate: the lowest of 49170 / k at or above it */
@@ -135,7 +136,8 @@ int main(int argc, char **argv)
 	int a, i, fail = 0;
 	double worst = 0;
 	/* SIMRS=1: each file resampled to the Falcon's clock above its rate,
-	 * SIMRS=2: a 48 kHz file to 44.1 (the others left out) */
+	 * SIMRS=2: a 48 kHz file to 44.1 (the others left out), SIMRS=3: those
+	 * above 32,780 Hz to it, Quality Normal's (the top subbands left out) */
 	int rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0;
 	/* SIMPCM=1: the model's samples (their top 16 bits) sent back as PCM
 	 * packets (PK_PCM: WAV's way through the DSP), each granule one */
@@ -184,12 +186,25 @@ int main(int argc, char **argv)
 			rate = h.rate;
 			if (rsmode == 2 && rate != 48000)
 				break;
-			if (rsmode && !rs_on) {	/* RSSET */
-				mp3rs_set(&rs, rate, rsmode == 2 ? 44100 : falcon_rate(rate));
+			if (rsmode == 3 && rate <= 32780)
+				break;
+			if (rsmode && !rs_on) {	/* (the taps down over RSDN: LOADY), RSSET */
+				long rout = rsmode == 2 ? 44100 : rsmode == 3 ? 32780 : falcon_rate(rate);
+				mp3rs_set(&rs, rate, rout);
+				if (rs.down) {
+					int k;
+					put(4);
+					put(RSDN_ADDR);
+					put(256);
+					for (k = 0; k < 256; k++)
+						put(rs.tab[k]);
+				}
+				d.sblim = rsmode == 3 ? MP3_SBLIM(rate) : 0;
 				put(13);
 				put(rs.si);
 				put(rs.sf);
 				put(rs.down ? 2 : 1);
+				put(d.sblim ? d.sblim : 32);
 				rs_on = 1;
 			}
 			off += h.length;
