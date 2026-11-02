@@ -753,6 +753,15 @@ What the log says now, after each file:
 - whether another program changed the matrix while EPlay played, when, and to what;
 - a file stopped by opening another says how it played, as Stop does.
 
+### 0.10 on Erez's Falcon (2 Nov 2026)
+
+0.10 played at 48 kHz, resampled, with 279 of 930 granules late. The FDI's own clock lines give
+48 kHz at both 2 and 3 on Erez's Falcon (so since 0.4). 44.1 kHz comes only from 0, the clock
+of what comes into its S/PDIF input. There 0.9 measured 44,100 Hz and 0.10 39,300 Hz: 44.1 kHz
+with its first 25 ms missing, a receiver that locked later than the 200 ms it is given. 0.11
+measures again at 0, up to three times 100 ms apart, while it isn't at rate, and the log gives
+each measure.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts

@@ -224,7 +224,7 @@ static long measure_ext(void)
    at 3 (0.4), with a 44.1 kHz signal into its input. 1 when the clock is
    at rate (snd_ext_rate, ext_pre set); else the lines as they were */
 int snd_fdi_changed;		/* EPlay changed the FDI's lines (put back at the end) */
-char snd_fdi_note[120];
+char snd_fdi_note[160];
 
 static void wait_ms(long ms)
 {
@@ -257,6 +257,20 @@ int snd_fdi_set(long rate)
 			      v[k], snd_ext_raw);
 		if (n >= (int)sizeof(snd_fdi_note))
 			n = (int)sizeof(snd_fdi_note) - 1;
+		/* the input's receiver may lock later than 200 ms: 0.10 measured
+		   39,300 Hz there, 44.1 kHz with its first 25 ms missing; 0.9
+		   44.1 kHz. Measured again, three times at most */
+		if (!v[k]) {
+			int t;
+			for (t = 0; t < 3 && got != rate && snd_ext_raw > 1000; t++) {
+				wait_ms(100);
+				got = measure_ext();
+				n += snprintf(snd_fdi_note + n, sizeof(snd_fdi_note) - (size_t)n, ", %ld Hz",
+					      snd_ext_raw);
+				if (n >= (int)sizeof(snd_fdi_note))
+					n = (int)sizeof(snd_fdi_note) - 1;
+			}
+		}
 		snd_ext_rate = got;
 		if (got == rate)
 			return 1;
