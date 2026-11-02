@@ -752,6 +752,8 @@ What the log says now, after each file:
 - the rate the DSP's frames came at, which is the clock it played on;
 - whether another program changed the matrix while EPlay played, when, and to what;
 - a file stopped by opening another says how it played, as Stop does.
+(The tick's clock, Timer C's count and HZ200, could read 5 ms early while Timer C's interrupt
+waited: the first longest gap, on Hatari, came out as 22,366 ms. The pending bit is now read too.)
 
 ### 0.10 on Erez's Falcon (2 Nov 2026)
 
@@ -760,7 +762,17 @@ What the log says now, after each file:
 of what comes into its S/PDIF input. There 0.9 measured 44,100 Hz and 0.10 39,300 Hz: 44.1 kHz
 with its first 25 ms missing, a receiver that locked later than the 200 ms it is given. 0.11
 measures again at 0, up to three times 100 ms apart, while it isn't at rate, and the log gives
-each measure.
+each measure. Five more tries on 0.10 all came out at 48 kHz, so the signal at the FDI's input
+may not be there; Erez is checking it.
+
+The Falcon's own output was silent with 0.10, as it should be, but the Analog 8's channel 3
+still plays noise at full volume. The DAC wasn't it. What is left: the DSP's two 16-bit words
+may not fill the FDI's frame, so its data line floats in a slot the FDI takes for channel 3. At
+the stream's start the DSP now counts the port's frame for the log: its slots between two
+frame syncs (8 asked, DC 7, the sync starting the count again), and its polls in 256 slots,
+which give the slots' length whatever the frame sync does. Two slots a frame at 44.1 kHz are
+about 360 of the DSP's clocks each; eight, 90. On Hatari the count of slots reads 1 or 2,
+since its frame sync isn't the Falcon's, and the polls a steady 19,063.
 
 ## The order of the work
 

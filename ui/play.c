@@ -208,15 +208,23 @@ static volatile unsigned long t_busy, t_parse, t_push, t_t0, t_last;	/* (the tic
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* (fixed hardware addresses) */
+#define IPRB (*(volatile unsigned char *)0xfffffa0dL)
 static unsigned long fine_now(void)
 {
 	unsigned long h, h2;
-	unsigned c;
+	unsigned c, c2, p;
+	/* Timer C reloaded and its interrupt still pending (the tick runs
+	   at level 5, the MFP's 200 Hz at 6, but it may be waiting): HZ200
+	   a step behind its count, which once made a time 5 ms early */
 	do {
 		h = HZ200;
 		c = TCDR;
+		p = IPRB & 0x20;
+		c2 = TCDR;
 		h2 = HZ200;
-	} while (h != h2);
+	} while (h != h2 || c2 > c);
+	if (p)
+		h++;
 	return h * 192 + (192 - (c ? c : 192));
 }
 #pragma GCC diagnostic pop
@@ -432,8 +440,9 @@ static void tick(void)
 	if (!t_t0)
 		t_t0 = a;
 	else if (dsp ? s_started && t_frames > 4 : snd_playing()) {
-		if (a - t_last > t_gap) {
-			t_gap = a - t_last;
+		long d = (long)(a - t_last);	/* (never less than 0, but guarded) */
+		if (d > 0 && (unsigned long)d > t_gap) {
+			t_gap = (unsigned long)d;
 			t_gap_at = dsp ? t_frames : snd_played();	/* (frames: ms for the log) */
 		}
 		if (dsp)
@@ -832,8 +841,8 @@ static long fr_ms(long f)
    another program changed it */
 const char *play_stream_note(void)
 {
-	static char b[300];
-	long g = (long)(t_gap * 5000UL / 192);	/* (us) */
+	static char b[400];	/* (about 300 at most) */
+	long g = (long)(t_gap / 192 * 5000UL + t_gap % 192 * 5000UL / 192);	/* (us; no overflow) */
 	int n = snprintf(b, sizeof(b), "the tick's longest gap %ld.%ld ms, at %ld ms", g / 1000, g % 1000 / 100,
 			 fr_ms(t_gap_at));
 	if (dsp) {
@@ -845,6 +854,9 @@ const char *play_stream_note(void)
 			n += snprintf(b + n, sizeof(b) - n, "; the first packet broken at %ld ms", fr_ms(ra));
 		if (fps)
 			n += snprintf(b + n, sizeof(b) - n, "; the file's samples came at %ld Hz", fps * s_spf / 1000);
+		if (dspmp3_stream_slots() >= 0)
+			n += snprintf(b + n, sizeof(b) - n, "; the DSP port's frame: %d slots (EPlay fills 2), "
+				      "%ld polls in 256", dspmp3_stream_slots(), dspmp3_stream_polls());
 		if (m_changed_at >= 0)
 			snprintf(b + n, sizeof(b) - n, "; the matrix changed by %ld ms: $%04X $%04X $%04X $%04X",
 				 fr_ms(m_changed_at), m_now[0], m_now[1], m_now[2], m_now[3]);

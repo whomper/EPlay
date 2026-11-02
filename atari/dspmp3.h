@@ -47,6 +47,8 @@ int dspmp3_tick_asks(void);
 int dspmp3_tick_pushing(void);
 void dspmp3_tick_offer(const unsigned long *pk, int n);
 void dspmp3_stream_firsts(long *late_at, long *rsy_at);	/* frames at the first of each, -1 none */
+int dspmp3_stream_slots(void);	/* the DSP port's frame, time slots (0: no frame sync, -1: not told) */
+long dspmp3_stream_polls(void);	/* the DSP's polls in 256 of the port's slots (-1: not told) */
 long dspmp3_stream_fps1000(void);	/* frames a second x 1000, as they came (0: too few yet) */
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg);
 long dspmp3_stream_resyncs(void);	/* packets found broken (a word lost or doubled): the stream taken up again */

@@ -314,6 +314,8 @@ static int s_n, s_i, s_have;		/* its words, the next (-1: its count) */
 static long s_frames, s_late, s_wmin, s_wsum, s_rsy;
 static int s_f4, s_l6, s_r4;
 static unsigned long s_last;		/* HZ200 at the last status word */
+static int s_slots = -1;		/* the DSP port's frame, time slots (-1: not told) */
+static long s_polls = -1;		/* the DSP's polls in 256 slots (their time; -1: not told) */
 static long s_late_at, s_rsy_at;	/* the frames at the first late granule, broken packet (-1: none) */
 static long s_f100;			/* the frames at s_t100, when past 100 (the rate, measured) */
 static unsigned long s_t100;
@@ -325,6 +327,8 @@ void dspmp3_tick_stream(long rin, long rout, int pcm)
 	s_wmin = -1;
 	s_f4 = s_l6 = s_r4 = 0;
 	s_late_at = s_rsy_at = -1;
+	s_slots = -1;
+	s_polls = -1;
 	s_f100 = 0;
 	s_last = HZ200;
 	if (rin != rout && rin > 0 && rout > 0) {
@@ -385,8 +389,13 @@ void dspmp3_tick_status(void)
 		unsigned long w = HTX32 & 0xffffff;
 		long waits = (long)(w & 511) * 32;
 		int f4 = (int)(w >> 19) & 15, r4 = (int)(w >> 15) & 15, l6 = (int)(w >> 9) & 63, df;
-		if (w & 0x800000)
-			continue;		/* (a packet wanted: HF2 says it) */
+		if (w & 0x800000) {
+			if (w & 0x10000)	/* the DSP port's frame: its time slots */
+				s_slots = (int)(w & 0xff);
+			else if (w & 0x20000)	/* the polls in 256 slots */
+				s_polls = (long)(w & 0xffff);
+			continue;		/* (else a packet wanted: HF2 says it) */
+		}
 		/* counts that run on: a word read twice adds nothing, one
 		   missed nothing lost */
 		df = (f4 - s_f4) & 15;
@@ -464,6 +473,16 @@ void dspmp3_stream_firsts(long *late_at, long *rsy_at)
 {
 	*late_at = s_late_at;
 	*rsy_at = s_rsy_at;
+}
+
+int dspmp3_stream_slots(void)
+{
+	return s_slots;
+}
+
+long dspmp3_stream_polls(void)
+{
+	return s_polls;
 }
 
 /* the frames a second, x 1000, from the 100th to the last (0: too few) */
