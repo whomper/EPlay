@@ -433,6 +433,11 @@ int app_main(void)
 	crash_install(app_dir(), "EPlay", app_version);
 	crash_cleanup = crash_quit;
 	av_init("EPLAY");
+	/* the VDI's ST RAM block taken now, not at the first draw that wants
+	   it: Erez's 0.12, DFB1X off, took it while the first file played,
+	   just past that file's queue, and the free ST RAM stayed split in two
+	   (the queues after it 1.28 MB, the first 1.94) */
+	st_ram(1);
 	if (!snd_init(&why)) {
 		nf_debug("EPLAY no sound: ");
 		nf_debug(why);

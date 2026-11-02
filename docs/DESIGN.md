@@ -794,6 +794,20 @@ manual changes them only in the SSI's reset state. 0.12 takes the count out: the
 0.10's again. The count gave its answer first: **8 slots a frame** (2,152 polls in 256 slots, the
 length of eight), so EPlay's two words leave six undriven, and channel 3 is the first of them.
 
+
+### 0.12 on Erez's Falcon (2 Nov 2026; the DFB1X off)
+
+"Sound all good." Four files through the FDI, each opened while the one before played: the
+clocks timed by Timer A (the FDI's 48 kHz at 47,961 and 47,992 Hz, its input's 44.1 kHz at
+44,089), each file at 44.1 kHz on the external clock, no granule late, no packet broken; the
+file's samples at 44,097 to 44,144 Hz; the tick's longest gap 2.3 ms. On the stock 68030 the
+tick is 33 to 36 % of it (the frames made 10 to 15 %, sent 7 to 9 %), three times the DFB1's.
+
+The first queue was 1.94 MB, the others 1.28: the VDI's block of ST RAM (512 bytes, for its
+bitmaps), taken at the first draw that wanted it, came while the first file played, just past
+its queue, and split the free ST RAM in two. It is taken at the start now. The log also gives the
+largest free ST and TT RAM at the start (TT RAM: the DFB1's).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
