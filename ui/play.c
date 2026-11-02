@@ -682,6 +682,8 @@ int play_open(const char *path, char *err, int n)
 	out_set = settings_output();
 	snd_ext_use = out_set != OUT_DSP;
 	snd_ext_only = out_set == OUT_FDI;
+	snd_fdi_note[0] = 0;	/* (only this play's tries in the log: 0.15 repeated the last
+				   play's with Output DSP, where the FDI isn't touched) */
 	if (!kind) {
 		/* MP3 from the DSP: the FDI at the file's rate where it can be,
 		   else a clock the DSP resamples to (snd_rate_dsp) */
