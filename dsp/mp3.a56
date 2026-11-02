@@ -795,7 +795,6 @@ stc
 	movec	#RSZ-1,m7
 stc1
 	movep	#$1f8,x:PCC		; port C: the SSI
-	jsr	slots			; the frame's time slots, for the log
 	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
 	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
 	movep	#$3000,x:IPR		; the SSI at level 2
@@ -852,53 +851,6 @@ stx	ori	#3,mr			; the end: interrupts and the SSI off
 	bclr	#0,x:V_SF
 	bclr	#3,x:HCR
 	jmp	cmd
-
-; the DSP port's frame: its time slots counted (8 a frame asked, DC 7;
-; the frame sync starts the count again, so a shorter frame gives its
-; own), zeros sent, from one slot 0 (TFS) to the next, and sent to the
-; 68030 as $810000 + the count (0: no frame sync seen). The Analog 8's
-; channel 3 played noise on Erez's FDI, a slot EPlay's two words may not
-; fill (b, x0, x1 used; the SSI's interrupt not yet on)
-slots	movep	#$4700,x:CRA
-	movep	#$1800,x:CRB		; transmit, network mode, no interrupt
-	clr	b
-	move	#>1,x1
-	move	#>200,a			; slot 0 within 200 words, else none
-sl1	jclr	#6,x:SSISR,sl1
-	movep	#0,x:TX
-	jset	#2,x:SSISR,sl2
-	sub	x1,a
-	jgt	sl1
-	jmp	sl4
-sl2	move	#>64,a
-sl3	jclr	#6,x:SSISR,sl3
-	movep	#0,x:TX
-	add	x1,b
-	jset	#2,x:SSISR,sl4
-	sub	x1,a
-	jgt	sl3
-	clr	b
-sl4	move	#>$810000,x0
-	or	x0,b
-sl5	jclr	#1,x:HSR,sl5
-	movep	b1,x:HRX
-	clr	a			; and the slots' time, whatever the frame sync
-	move	#>256,b			; does: the polls in 256 slots, sent as
-sl6	add	x1,a			; $820000 + the count (65535 at most)
-	jclr	#6,x:SSISR,sl6
-	movep	#0,x:TX
-	sub	x1,b
-	jgt	sl6
-sl8	movep	#0,x:CRB		; off, then set again as streaming wants it
-	move	#>$ffff,x0
-	cmp	x0,a
-	jle	sl9
-	move	x0,a
-sl9	move	#>$820000,x0
-	or	x0,a
-sl10	jclr	#1,x:HSR,sl10
-	movep	a1,x:HRX
-	rts
 
 ; left and right in step: the SSI's interrupt held a moment, until a
 ; slot begins (TDE; its word written then goes in the slot after it). In

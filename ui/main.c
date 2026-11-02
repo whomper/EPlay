@@ -461,8 +461,8 @@ int app_main(void)
 	elog("EPlay %s; _MCH $%08lX, _CPU %ld, _SND $%02lX; the FDI's driver %s", app_version,
 	     get_cookie(0x5F4D4348L), get_cookie(0x5F435055L), get_cookie(0x5F534E44L),
 	     snd_fdi ? "answers ($4711)" : "doesn't answer");
-	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz); taken as %ld Hz",
-	     snd_ext_raw, snd_ext_clock, snd_ext_rate);
+	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz, timed by %s); taken as %ld Hz",
+	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
 	     snd_ext_note[0] ? "; tried " : "", snd_ext_note);
 	if (snd_ext_rate)

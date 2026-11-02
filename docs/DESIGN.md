@@ -774,6 +774,26 @@ which give the slots' length whatever the frame sync does. Two slots a frame at 
 about 360 of the DSP's clocks each; eight, 90. On Hatari the count of slots reads 1 or 2,
 since its frame sync isn't the Falcon's, and the polls a steady 19,063.
 
+### 0.11 on Erez's Falcon (2 Nov 2026), and 0.12
+
+Every clock 0.11 measured was 3 to 4 % fast, before the DSP had started. The FDI's 48 kHz read
+49,679 and 49,901 Hz; its input's 44.1 kHz read 45,392 to 45,837 Hz, past the 2.5 % allowed; at
+the start, 49,387 Hz. So EPlay found no clock at 44.1 kHz and played on the Falcon's 49,170 Hz,
+resampled. The same log has the queue at 1.9 MB (8 MB before) and the tick at 31 % of the 68030
+(12 to 14 %): another set-up. Most likely the 200 Hz clock lost steps to interrupts held off for
+more than its 5 ms. A measure is now timed by the MFP's Timer A, free while nothing plays, counting
+12,288 a second, 256 a round. Interrupts held off for up to 20 ms lose nothing. If another
+program is using Timer A, the 200 Hz clock times it as before, and the log says which. The
+Falcon's own 49,170 Hz as a reference was tried first: on Hatari the external clock then read
+0 Hz until EPlay started again.
+
+Playing went wrong in 0.11 as well: 704 of 864 granules late, 112 packets broken, and frames
+coming 1.8 times as fast as the file's rate. Its new frame count ran the SSI with 8 slots a frame
+asked (DC 7), then changed its control registers while the port was the SSI's. The DSP56001's
+manual changes them only in the SSI's reset state. 0.12 takes the count out: the DSP program is
+0.10's again. The count gave its answer first: **8 slots a frame** (2,152 polls in 256 slots, the
+length of eight), so EPlay's two words leave six undriven, and channel 3 is the first of them.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts

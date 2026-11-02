@@ -123,23 +123,53 @@ static short ext_pre = 1;	/* the external clock's prescale (snd_open) */
    and the end, and a clock past 41 MHz (82 kHz at prescale 1: 45.1584
    MHz is 88.2) went round the 16384 frames in 200 ms and was taken for
    a slow one. 0: it doesn't move */
-static long measure(short pre)
+/* the time it takes, from the MFP's Timer A (free while nothing plays:
+   feed.c takes it then) counting down at 2,457,600 / 200 = 12,288 Hz,
+   256 counts a round, read as the loop goes: the 200 Hz clock lost its
+   steps on Erez's Falcon (0.11: every clock measured 3 to 4 % fast, the
+   FDI's 48 kHz as 49,679 Hz), someone's interrupts holding Timer C's
+   off for more than its 5 ms; Timer A's count goes on, and a round is
+   20 ms. Timer A in use by another program (its control not 0): the
+   200 Hz clock, as before */
+#define TA_CR	(*(volatile unsigned char *)0xfffffa19L)
+#define TA_DR	(*(volatile unsigned char *)0xfffffa1fL)
+#define TA_HZ	12288L
+static long m_n, m_t;		/* frames counted, Timer A's counts (< 0: the 200 Hz clock's ms) */
+int snd_ta_busy;		/* the last measure timed by the 200 Hz clock: Timer A in use */
+
+static long m_loop(void)
 {
-	long a, b, d, n = 0, t0, t;
-	ext_pre = pre;
-	if (!snd_open(44100, 1))
-		return 0;
-	ring_n = 16384;
-	memset(ring, 0, (size_t)ring_n * 4);
-	x_setbuffer(0, ring, ring + 2 * ring_n);
-	Buffoper(PLAY_ENABLE | PLAY_REPEAT);
-	t0 = (long)tos_ms();
-	while ((long)tos_ms() - t0 < 20)
-		;
+	long a, b, d, n = 0, t = 0, t0 = 0;
+	unsigned char prev = 0, cur;
+	int ta = TA_CR == 0;
+	if (ta) {
+		TA_DR = 0;		/* (256) */
+		TA_CR = 7;		/* delay mode, / 200 */
+		prev = TA_DR;
+	} else
+		t0 = (long)tos_ms();
+	/* 20 ms first, then 200 counted */
+	for (;;) {
+		if (ta) {
+			cur = TA_DR;
+			t += (unsigned char)(prev - cur);
+			prev = cur;
+			if (t >= TA_HZ / 50)
+				break;
+		} else if ((long)tos_ms() - t0 >= 20)
+			break;
+	}
+	t = 0;
+	if (!ta)
+		t0 = (long)tos_ms();
 	a = play_pos();
-	t0 = (long)tos_ms();
 	do {
-		t = (long)tos_ms() - t0;
+		if (ta) {
+			cur = TA_DR;
+			t += (unsigned char)(prev - cur);
+			prev = cur;
+		} else
+			t = (long)tos_ms() - t0;
 		b = play_pos();
 		if (a < 0) {
 			a = b;
@@ -154,10 +184,30 @@ static long measure(short pre)
 			continue;
 		n += d;
 		a = b;
-	} while (t < 200);
+	} while (ta ? t < TA_HZ / 5 : t < 200);
+	if (ta)
+		TA_CR = 0;
+	m_n = n;
+	m_t = ta ? t : -t;
+	snd_ta_busy = !ta;
+	return 0;
+}
+
+static long measure(short pre)
+{
+	ext_pre = pre;
+	if (!snd_open(44100, 1))
+		return 0;
+	ring_n = 16384;
+	memset(ring, 0, (size_t)ring_n * 4);
+	x_setbuffer(0, ring, ring + 2 * ring_n);
+	Buffoper(PLAY_ENABLE | PLAY_REPEAT);
+	Supexec(m_loop);
 	Buffoper(0);
 	snd_close();
-	return t > 0 ? n * 1000 / t : 0;
+	if (m_t > 0)
+		return (long)((long long)m_n * TA_HZ / m_t);
+	return m_t < 0 ? m_n * 1000 / -m_t : 0;
 }
 
 long snd_ext_raw;		/* what the first measure found, Hz (for the log) */
