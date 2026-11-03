@@ -1270,6 +1270,17 @@ typedef struct {
 
 /* 1 decoded, 0 not (why), -1 the DSP stopped answering, -2 it couldn't
    be had */
+/* a turn between the set-up's steps (the Huffman tables, the fast AC tables,
+   the quantisers: 70 ms together on a stock Falcon, before the first MCU's
+   poll; EPlay, 3 Nov 2026); the DSP waits for the host meanwhile */
+#define SETUP_TURN() \
+	do { \
+		if (pic_poll != NULL && !pic_poll()) { \
+			*why = PIC_STOPPED; \
+			goto out; \
+		} \
+	} while (0)
+
 static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 {
 	int grey = dj->grey, direct = dj->direct, k = dj->k;
@@ -1423,9 +1434,11 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		dsp_load(D_LOADX, D_TRM, w, (long) k * k * 3);
 	}
 	dsp_fixed(tmp);
+	SETUP_TURN();
 	for (ci = 0; ci < (grey ? 1 : 3) && !coefs; ci++) {
 		dsp_huff(dj->dcb[ci], dj->dcv[ci], D_HLA + 0x200 * ci, tmp);
 		dsp_huff(dj->acb[ci], dj->acv[ci], D_HLA + 0x100 + 0x200 * ci, tmp);
+		SETUP_TURN();
 	}
 	/* the transform, the quantisers (Q * 2048), the format's constants */
 	dsp_matrix(w, k);
@@ -1438,6 +1451,7 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		}
 	}
 	dsp_load(D_LOADY, D_QT, w, grey ? 64 : 3 * 64);
+	SETUP_TURN();
 	if (shrink) {
 		unsigned long *kt = tmp->a;
 		/* each box's divisor: 65536 / n rounded (the scaler's), x 64; a
