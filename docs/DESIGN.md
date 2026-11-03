@@ -944,6 +944,18 @@ SSI recorded by the DMA into a ring in ST RAM and played from it by the DMA (no 
 little more delay at Play and Pause). If it is noisy with the DMA too, it is the FDI's
 set-up (its channels, from its boot program) or the matrix's tracks (`Settracks`).
 
+**Erez's answer (3 Nov 2026, 0.19):** with a WAV or an AIFF (the sound DMA, one stereo track,
+`Settracks(0, 0)`), all eight of the Analog 8's channels are active. So the DMA drives every slot,
+but it isn't yet known with what: the pair repeated in each of the four slot pairs, or one channel
+in all of them. `lrtest.wav` (44.1 kHz, 16-bit stereo, made with Python's `wave`) tells them apart:
+4 s of a 440 Hz tone on the left alone, 1 s of silence, 4 s of 1,760 Hz on the right alone, 1 s,
+then both. Whatever it shows, the DMA can choose what each slot carries: with four tracks
+(`Settracks(3, 3)`, eight words a frame), tracks 2 to 4 are zeros written once at open, and the
+tick writes only the first pair (the ring four times as large in ST RAM: 1.6 MB for two seconds at
+49,170 Hz, or 0.8 MB for one). The DSP's sound can go the same way (above), which would end the
+noise on channel 3 with Output DSP as well. Whether channels 3 to 8 carry the music or stay silent
+is Erez's call.
+
 ### A 24-bit AIFF on Erez's Falcon (3 Nov 2026), and 0.18
 
 Erez's 24-bit stereo AIFF at 44.1 kHz crackled through the FDI and with Output DSP alike (both
