@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, aiff, wav22, mp3, mp3long, vbr, fsel, normal; all by default. The machines: Falcon (Erez's, with the
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, normal; all by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -40,6 +40,9 @@ REC_RATE = 48000
 # is heard at its own pitch
 CASES = {
     "wav": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
+    # the volume at 8 of 16 (eplay.inf's VOLUME): the Falcon's own output 12 dB
+    # down (the codec's attenuation, 8 steps of 1.5 dB)
+    "wavvol": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
     "aiff": ("TONE.AIF", ["-r", "32780", "-c", "1", "-b", "16"], None, 32780, (1000, 1000), 3),
     # 24 bits, stereo, ten seconds at a rate the DMA plays as it is (Erez's
     # 24-bit AIFF at 44.1 kHz on the FDI's clock, 3 Nov 2026: 330 underruns
@@ -69,7 +72,9 @@ CASES = {
                (1000, 1500), 6),
 }
 # the cases' eplay.inf
-INFS = {"normal": "QUALITY=NORMAL\r\n\r\n"}
+INFS = {"normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n"}
+# the level of the middle (RMS), each case's, for wavvol's against wav's
+LEVEL = {}
 
 
 def make_file(hd, case):
@@ -132,6 +137,7 @@ def tone(x, rate):
 
 
 RESAMPLED = {"wav22"}       # (and every MP3)
+WAV_LEVEL = 0               # (set below once measured: wav's level on Hatari's Falcon)
 
 
 def analyse(rec, case):
@@ -151,6 +157,16 @@ def analyse(rec, case):
     gaps = [i for i in range(a, b + 1) if rms[i] < 1000]
     mid = (a + b) // 2 * blk
     seg = slice(mid - 2400, mid + 2400)
+    level = math.sqrt(sum(v * v for v in left[seg]) / len(left[seg]))
+    LEVEL[case] = level
+    vol_ok, vol_note = True, ""
+    if case == "wavvol":
+        # 12 dB down from wav's (run first), else from what wav has on
+        # Hatari's Falcon at full volume
+        full = LEVEL.get("wav", WAV_LEVEL)
+        db = 20 * math.log10(level / full) if level > 0 and full > 0 else -99
+        vol_ok = abs(db + 12) < 1
+        vol_note = "; the level %.1f dB from full volume (12 dB down wanted)" % db
     fl, ql = tone([v / 32768 for v in left[seg]], rate)
     fr, qr = tone([v / 32768 for v in right[seg]], rate)
     want = CASES[case][4]
@@ -170,11 +186,11 @@ def analyse(rec, case):
     _, fmt, lame, out, _, length = CASES[case]
     if not lame and case not in RESAMPLED:
         length = length * int(fmt[1]) / out  # (the DMA: at the Falcon's rate, if not the file's)
-    ok = (abs(secs - length) < 0.1 and not gaps and pitch and ql > 0.9 and qr > 0.9
+    ok = (vol_ok and abs(secs - length) < 0.1 and not gaps and pitch and ql > 0.9 and qr > 0.9
           and max(rms[b + 2:] or [0]) < 50)     # (silence after: past the block the end falls in)
     return ok, ("%.2f s of sound, %d gaps; left %d Hz (%.0f %% of its power), right %d Hz (%.0f %%); "
-                "wanted %.2f s, %.0f and %.0f Hz%s" % (secs, len(gaps), fl, 100 * ql, fr, 100 * qr, length,
-                                                     want[0], want[1], note))
+                "wanted %.2f s, %.0f and %.0f Hz%s%s; level %.0f" % (secs, len(gaps), fl, 100 * ql, fr, 100 * qr,
+                                                             length, want[0], want[1], note, vol_note, level))
 
 
 HATARI = subprocess.run(["hatari", "--version"], capture_output=True, text=True).stdout.split()[1].lstrip("v")

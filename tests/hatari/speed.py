@@ -34,9 +34,10 @@ _spec.loader.exec_module(speed)
 # where things are on the 640x480 screen (EPlay's window where it opens)
 DESK = (40, 9)
 ABOUT = (60, 27)
-# the bar's round Play/Pause button (design D)
-PLAY = PAUSE = (365, 150)
-POS_MID = (364, 175)		# the position bar's middle
+# the bar's round Play/Pause button (design D at 56 columns: Erez, 3 Nov 2026)
+PLAY = PAUSE = (400, 150)
+POS_MID = (400, 185)		# the position bar's middle
+VOL_Q = (509, 185)		# a quarter of the volume bar: 4 of 16
 SECS = 120	# (long enough not to end before the last action, when the emulator runs fast)
 
 
@@ -133,8 +134,18 @@ def session(work, spec, kind):
         r.act("Position bar: pressed at its middle", speed.KEY, lambda: r.press(*POS_MID))
         r.act("Position bar: let go (goes there)", speed.KEY, r.let_go)
         r.act("%s playing from there, 3 s" % what, speed.KEY, lambda: time.sleep(3))
+        # the volume: pressed at a quarter, then + (two steps up)
+        r.act("Volume: pressed at a quarter", speed.KEY, lambda: r.press(*VOL_Q))
+        r.act("Volume: let go", speed.KEY, r.let_go)
+        r.act("Volume: + (3 dB up)", speed.KEY, lambda: r.key("plus"))
         r.act("Pause again", speed.KEY, lambda: r.click(*PAUSE))
         rc = r.report()
+        vols = [int(l.split()[2]) for l in r.console().split("\n") if l.startswith("EPLAY volume ")]
+        if vols[:2] != [4, 6]:
+            print("FAIL  the volume: %s, not 4 (a quarter of the bar) then 6 (+)" % vols)
+            rc = 1
+        else:
+            print("ok    the volume: 4 at a quarter of the bar, 6 after +")
         if not getattr(r, "held_ok", True):
             rc = 1
         went = [l for l in r.console().split("\n") if l.startswith("EPLAY went to ")]

@@ -1072,6 +1072,40 @@ Falcon (5,800 turns of its loop; a stock Falcon 1,342, Hatari's 32 MHz one 3,312
 every Falcon, is put to Erez: the art unpacked on the DSP (common's `dspjpeg`) before an MP3's
 own program goes in, or while a WAV or AIFF plays on the DMA.
 
+### The window narrower, the volume, the list, the small player (Erez, 3 Nov 2026)
+
+After 0.19 Erez found the window too wide (76 columns, 608 of a VGA screen's 640 pixels) and asked
+for it thinner, for files added in bulk (playlists later), the small player, and the volume
+working. Of two drawings on a 640 x 480 screen (48 columns in two rows; 56 in one) he chose **56
+columns, one row** (448 pixels):
+- the album art 56 x 56; under the title and artist the KBPS and KHZ labels;
+- in the middle Previous, Play/Pause and Next, the position bar under them with the times beside it;
+- at the right the output (FDI, DSP, DMA) over the speaker and the volume;
+- **Shuffle and Repeat** go to the Play menu (greyed until the playlist, phase 4);
+- the list's columns #, Title (20), Artist (11), Album (12), Time.
+
+**The volume** is "like the progress bar, click and drag", and + and - too:
+- 17 places, from 0 (silent) to 16 (full, 0 dB), steps of 1.5 dB; it changes as the pointer
+  moves; + and - go two steps (3 dB). Kept in EPLAY.INF as `VOLUME=`, saved at the end when it
+  changed (not at each step).
+- **On the Falcon's own output:** the codec's attenuation (its steps are 1.5 dB, 0 to 22.5);
+  silent by the DAC's adder off.
+- **On the FDI it is digital, in the same steps.** An MP3's `global_gain` is lowered in each
+  granule's side information as the packet is made (one step of it is 2^(1/4), 1.505 dB). This
+  costs the DSP nothing, and the DSP's arithmetic stays bit for bit; silent is `global_gain` 0.
+  WAV and AIFF are scaled as the tick writes them (Q15).
+- **At 0 dB nothing is touched.**
+
+**Files added in bulk:** files dragged onto the window are added to the list (AP_DRAGDROP under
+MiNT and MagiC, VA_DRAGACCWIND from an AV desktop: common's `dd.c`). The menu's Add item takes
+several files at once where the file selector can give them (Selectric's protocol), and one at a
+time with any other.
+
+**The small player** is the bar alone, the album art 40 x 40 (as above).
+
+The order: the 56 columns and the volume (0.20); the list with the files added (0.21); the small
+player (0.22).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts

@@ -23,7 +23,7 @@
 #include "dialog.h"
 #include "art.h"
 
-int bar_held = BH_NONE, bar_drag = -1;
+int bar_held = BH_NONE, bar_drag = -1, bar_vdrag = -1;
 
 #define POOL_WORDS 1536
 static unsigned short *pool;		/* ST RAM: the masks (bar_colours takes it) */
@@ -111,7 +111,7 @@ static void make_masks(void);
 void bar_size(short *w, short *h)
 {
 	short bh = 4 * ch + 4, rh = ch + 4;
-	*w = 76 * cw;
+	*w = 56 * cw;		/* (Erez, 3 Nov 2026: 56 columns, one row) */
 	*h = bh + (1 + LIST_ROWS) * rh;
 }
 
@@ -125,19 +125,22 @@ static void rect(GRECT *r, short x, short y, short w, short h)
 
 void bar_layout(const GRECT *work)
 {
-	short x, y, art, mid, i, bw, gap;
+	short x, y, art, mid, bw, gap;
 	w_all = *work;
 	bar_h = 4 * ch + 4;
 	row_h = ch + 4;
 	rect(&w_bar, work->x, work->y, work->w, bar_h);
 	art = bar_h - 12;
 	rect(&w_art, work->x + 6, work->y + 6, art, art);
+	/* the title, the artist, and under them the labels: room for both
+	   ("320 KBPS", "44.1 KHZ") */
 	rect(&w_txt, w_art.x + art + 10, work->y + 6, 19 * cw, bar_h - 12);
-	/* the right: the output, the speaker, the volume */
-	rect(&w_out, work->x + work->w - 6 - 16 * cw, work->y, 16 * cw, bar_h);
-	rect(&w_vol, w_out.x + 4 * cw + 26, work->y + bar_h / 2 - 5, 7 * cw, 10);
-	/* the middle: the buttons, the position under them */
-	x = w_txt.x + w_txt.w + 8;
+	/* the right: the output over the speaker and the volume */
+	rect(&w_out, work->x + work->w - 6 - 7 * cw, work->y, 7 * cw, bar_h);
+	rect(&w_vol, w_out.x + 18, work->y + bar_h - 6 - ch / 2 - 5, w_out.w - 18, 10);
+	/* the middle: Previous, Play/Pause, Next, the position under them
+	   (Shuffle and Repeat: the Play menu's) */
+	x = w_txt.x + w_txt.w + 6;
 	rect(&w_ctl, x, work->y, w_out.x - 8 - x, bar_h);
 	rad = (ch * 13 + 8) / 16;		/* the round button's radius: 13 on VGA */
 	bw = (ch * 22 + 8) / 16;
@@ -146,15 +149,14 @@ void bar_layout(const GRECT *work)
 	y = work->y + 6;
 	rect(&b_btn[BH_PLAY - 1], mid - rad, y, 2 * rad, 2 * rad);
 	rect(&b_btn[BH_PREV - 1], mid - rad - gap - bw, y + rad - bw / 2, bw, bw);
-	rect(&b_btn[BH_SHUFFLE - 1], b_btn[BH_PREV - 1].x - gap - bw, y + rad - bw / 2, bw, bw);
 	rect(&b_btn[BH_NEXT - 1], mid + rad + gap, y + rad - bw / 2, bw, bw);
-	rect(&b_btn[BH_REPEAT - 1], b_btn[BH_NEXT - 1].x + bw + gap, y + rad - bw / 2, bw, bw);
-	/* the times, 5 characters each side of the track */
-	y = work->y + 6 + 2 * rad + 4;
+	rect(&b_btn[BH_SHUFFLE - 1], 0, 0, 0, 0);
+	rect(&b_btn[BH_REPEAT - 1], 0, 0, 0, 0);
+	/* the times, 5 characters and a gap each side of the track */
+	y = w_vol.y + 5 - ch / 2;
 	rect(&w_pos, w_ctl.x, y, w_ctl.w, ch);
-	rect(&w_track, w_ctl.x + 6 * cw, y + ch / 2 - 2, w_ctl.w - 12 * cw, 4);
+	rect(&w_track, w_ctl.x + 5 * cw + 4, y + ch / 2 - 2, w_ctl.w - 10 * cw - 8, 4);
 	rect(&w_list, work->x, work->y + bar_h, work->w, work->h - bar_h);
-	(void)i;
 	make_masks();
 }
 
@@ -168,6 +170,11 @@ void bar_area(int parts, GRECT *r)
 		*r = w_list;
 	else if (parts == BP_ART)
 		*r = w_art;
+	else if (parts == BP_VOL) {
+		*r = w_vol;
+		r->x -= 18;
+		r->w += 18;
+	}
 	else if (parts == (BP_TIME | BP_PLAY)) {
 		*r = w_ctl;
 	} else
@@ -193,7 +200,12 @@ int bar_hit(short x, short y)
 	pos.w += 8;
 	if (in(&pos, x, y))
 		return BH_POS;
-	if (in(&w_vol, x, y))
+	pos = w_vol;			/* (a little taller and wider than it looks) */
+	pos.x -= 4;
+	pos.w += 8;
+	pos.y -= 3;
+	pos.h += 6;
+	if (in(&pos, x, y))
 		return BH_VOL;
 	if (in(&w_list, x, y))
 		return BH_LIST;
@@ -462,9 +474,34 @@ static void draw_text(void)
 	}
 }
 
+/* the speaker (its waves as loud as it is) and the volume, drawn as the
+   position bar is (Erez, 3 Nov 2026) */
+static void draw_vol(void)
+{
+	short x = w_vol.x - 18, y = w_vol.y + 5;
+	int v = bar_vdrag >= 0 ? bar_vdrag : play_volume();
+	short fillw = (short)((long)w_vol.w * v / VOL_MAX);
+	box(x, w_vol.y, w_vol.x - x, w_vol.h, p_bar, 0);
+	box(w_vol.x, w_vol.y, w_vol.w, w_vol.h, p_bar, 0);
+	box(x, y - 2, 4, 5, p_txt, 0);
+	mask_draw(&k_spk, x + 3, y - 6, p_txt);
+	if (v > 0)
+		line(x + 10, y - 2, x + 10, y + 2, p_txt);
+	if (v > VOL_MAX / 2)
+		line(x + 13, y - 4, x + 13, y + 4, p_txt);
+	box(w_vol.x, w_vol.y + 4, w_vol.w, 2, p_trk, 0);
+	box(w_vol.x, w_vol.y + 3, fillw, 4, p_acc, 0);
+}
+
+int bar_vol_at(short x)
+{
+	long v = ((long)(x - w_vol.x) * VOL_MAX + w_vol.w / 2) / (w_vol.w > 0 ? w_vol.w : 1);
+	return v < 0 ? 0 : v > VOL_MAX ? VOL_MAX : (int)v;
+}
+
 static void draw_out(void)
 {
-	short x = w_out.x, y = w_out.y + (bar_h - ch) / 2 - 1;
+	short x = w_out.x, y = w_out.y + 8;
 	if (play_via && play_via[0]) {
 		short n = (short)strlen(play_via), w = n * cw + 8;
 		box(x, y, w, 1, p_acc, 0);
@@ -473,16 +510,7 @@ static void draw_out(void)
 		box(x + w - 1, y, 1, ch + 2, p_acc, 0);
 		text(x + 4, y + 1, play_via, n, p_acc);
 	}
-	/* the speaker */
-	x = w_vol.x - 22;
-	y = w_vol.y + 5;
-	box(x, y - 2, 4, 5, p_txt, 0);
-	mask_draw(&k_spk, x + 3, y - 6, p_txt);
-	line(x + 10, y - 2, x + 10, y + 2, p_txt);
-	line(x + 13, y - 4, x + 13, y + 4, p_txt);
-	/* the volume: 0 dB, as it plays (its control: phase 3's part 5) */
-	box(w_vol.x, w_vol.y + 4, w_vol.w, 2, p_trk, 0);
-	box(w_vol.x, w_vol.y + 3, w_vol.w, 4, p_txt, mono);
+	draw_vol();
 }
 
 static void draw_buttons(int parts)
@@ -501,12 +529,12 @@ static void draw_buttons(int parts)
 			mask_draw(&k_ptri, cx - s / 3, cy - s / 2, play_name[0] ? p_bar : p_trk);
 	}
 	if (parts & BP_TEXT) {
-		/* Shuffle, Previous, Next, Repeat: the playlist's (phase 4), dim */
+		/* Previous, Next: the playlist's (phase 4), dim */
 		int i;
 		for (i = 0; i < 5; i++) {
 			GRECT *c = &b_btn[i];
 			short x = c->x + c->w / 2, y = c->y + c->h / 2, h = c->h / 2, ww = h * 3 / 4;
-			if (i == BH_PLAY - 1)
+			if (i == BH_PLAY - 1 || !c->w)
 				continue;
 			gbox(c, p_bar);
 			switch (i + 1) {
@@ -552,8 +580,8 @@ static void draw_time(void)
 		at = len;
 	fmt_time(a, sizeof(a), at);
 	fmt_time(b, sizeof(b), len);
-	text(w_track.x - 1 - (short)strlen(a) * cw - cw / 2, w_pos.y, a, 6, p_dim);
-	text(w_track.x + w_track.w + cw / 2, w_pos.y, b, 6, p_dim);
+	text(w_track.x - 4 - (short)strlen(a) * cw, w_pos.y, a, 6, p_dim);
+	text(w_track.x + w_track.w + 4, w_pos.y, b, 6, p_dim);
 	box(w_track.x, w_track.y + 1, w_track.w, 2, p_trk, 0);
 	fillw = len > 0 ? w_track.w * at / len : 0;
 	box(w_track.x, w_track.y, (short)fillw, 4, p_acc, 0);
@@ -562,8 +590,8 @@ static void draw_time(void)
 static void draw_list(void)
 {
 	short y = w_list.y, x = w_list.x + cw, tw;
-	short c_title = x + 3 * cw, c_time = w_list.x + w_list.w - 6 * cw, c_album = c_time - 17 * cw,
-	      c_artist = c_album - 16 * cw;
+	short c_title = x + 3 * cw, c_time = w_list.x + w_list.w - 6 * cw, c_album = c_time - 13 * cw,
+	      c_artist = c_album - 12 * cw;
 	int r;
 	gbox(&w_list, 0);
 	text(x, y + 2, "#", 2, p_hdr);
@@ -583,8 +611,8 @@ static void draw_list(void)
 			box(w_list.x, ry, w_list.w, row_h, p_bar, 0);
 			text(x, ry + 2, "1", 2, p_acc);
 			text(c_title, ry + 2, title, tw, p_acc);
-			text(c_artist, ry + 2, play_tags.artist, 15, p_acc);
-			text(c_album, ry + 2, play_tags.album, 16, p_acc);
+			text(c_artist, ry + 2, play_tags.artist, 11, p_acc);
+			text(c_album, ry + 2, play_tags.album, 12, p_acc);
 			fmt_time(t, sizeof(t), play_len_ms());
 			text(c_time, ry + 2, t, 5, p_acc);
 		} else if (r & 1)
@@ -610,6 +638,8 @@ void bar_draw(const GRECT *clip, int parts)
 	vsl_type(vdi_h, 1);
 	if (parts == BP_ART)
 		draw_art();
+	if (parts == BP_VOL)
+		draw_vol();
 	if (parts & BP_TEXT) {
 		box(w_bar.x, w_bar.y, w_bar.w, w_bar.h - 1, p_bar, 0);
 		box(w_bar.x, w_bar.y + w_bar.h - 1, w_bar.w, 1, 1, 0);

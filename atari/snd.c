@@ -511,6 +511,28 @@ int snd_open(long rate, int ext)
 	return 1;
 }
 
+/* the Falcon's own output: att steps of 1.5 dB down (0..15), both
+   channels; mute: the DAC's adder off (the matrix's sound no longer to
+   it), on again as it was found. ($FF8938 and $FF893A: put back with the
+   rest of the matrix at the end) */
+#define LTATTEN 0
+#define RTATTEN 1
+#define ADDERIN 4
+static short adder_found = -1;
+void snd_dac_volume(int att, int mute)
+{
+	if (!locked)
+		return;
+	if (adder_found < 0) {
+		adder_found = (short)(Soundcmd(ADDERIN, -1) & 3);
+		if (!adder_found)
+			adder_found = 2;		/* (the matrix) */
+	}
+	Soundcmd(LTATTEN, (att & 15) << 4);
+	Soundcmd(RTATTEN, (att & 15) << 4);
+	Soundcmd(ADDERIN, mute ? 0 : adder_found);
+}
+
 void snd_close(void)
 {
 	if (ring) {

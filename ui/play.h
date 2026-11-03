@@ -48,6 +48,11 @@ const char *play_keep_up(void);	/* the first underrun and the least lead, for th
 const char *play_stream_note(void);	/* the tick's longest gap, the stream's first troubles, for the log */
 const char *play_disk_note(void);	/* how fast the file was read, the queue's least lead, for the log */
 void play_log_stop(void);	/* "stopped at" and how it kept up, into the log, if it plays */
-long play_len_ms(void);		/* how long it is (an MP3's: from its Xing or VBRI frame, else its first frame's bit rate) */
+long play_len_ms(void);
+/* the volume: 0 silent to VOL_MAX (0 dB), steps of 1.5 dB, on what plays
+   now and what plays next */
+#define VOL_MAX 16
+void play_set_volume(int v);
+int play_volume(void);		/* how long it is (an MP3's: from its Xing or VBRI frame, else its first frame's bit rate) */
 
 #endif
