@@ -20,6 +20,8 @@ than on a still screen.
 """
 import importlib.util
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -45,11 +47,20 @@ SECS = 120	# (long enough not to end before the last action, when the emulator r
 
 
 class Rig(speed.Rig):
+    quick = False
+
     def still(self, most=30):
         """while it plays the time changes each second: a few seconds are
-        taken as settled (the stretches are on the console meanwhile)"""
-        time.sleep(3)
+        taken as settled (the stretches are on the console meanwhile); at
+        once for the start of an MP3 whose cover is unpacked first (its wait
+        is a row of its own)"""
+        time.sleep(0.3 if self.quick else 3)
         return True
+
+    def wait_line(self, text, secs=30):
+        end = time.time() + secs
+        while time.time() < end and text not in self.console():
+            time.sleep(0.5)
 
     def press(self, x, y):
         """the button down over x, y (held: the guidelines' 5.8 times the
@@ -120,8 +131,28 @@ def session(work, spec, kind):
             name, what = "LONG.WAV", "a WAV (CD quality)"
             subprocess.run(["sox", src, os.path.join(r.hd, name)], check=True)
         r.write("TAIL.TXT", "C:\\%s\n" % name)
-        r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
-        r.results[-1] = ("started, %s playing" % what, "AESSTART", speed.START)
+        shutil.rmtree(os.path.join(r.hd, "cache"), ignore_errors=True)
+        if kind == "mp3":
+            # the start ends when the window is up; an MP3 with a cover not
+            # in the cache waits for the DSP to unpack it, a row of its own
+            # (the hub, 3 Nov 2026: 3000 ms, and its turns a job's)
+            r.quick = True
+            r.start("C:\\LAUNCH.PRG", ready="EPLAY status: Getting the album art")
+            r.quick = False
+            # (the start: AESSTART and the stretches to the window's first
+            # draw; the rig's own wait after it would add the cover's
+            # unpacking turns, which are the next row's)
+            con = r.console()
+            at = con.find("EPLAY status: Getting the album art")
+            drawn = con.find("WM_REDRAW", at)
+            if at >= 0 and drawn >= 0:
+                r.start_end = con.find("\n", drawn) + 1
+            r.results[-1] = ("started, the window drawn", "AESSTART", speed.START)
+            r.act("an MP3 with an uncached cover: playing starts", 3000,
+                  lambda: r.wait_line("EPLAY playing"), job=True)
+        else:
+            r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
+            r.results[-1] = ("started, %s playing" % what, "AESSTART", speed.START)
         r.act("%s playing, 5 s" % what, speed.KEY, lambda: time.sleep(5))
         r.act("About box opened (playing)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
@@ -175,6 +206,14 @@ def session(work, spec, kind):
                 if os.path.exists(os.path.join(r.hd, n)):
                     log = open(os.path.join(r.hd, n), errors="replace").read()
             art = [l for l in log.split("\n") if l.startswith("album art")]
+            # the job rule while a cover is unpacked (the hub, 3 Nov 2026):
+            # no turn over 50 ms; EPlay logs its longest between the
+            # decoder's polls (the rig's start row can't see them all)
+            gap = re.search(r"the longest between polls (\d+)", log)
+            if gap and int(gap.group(1)) > speed.JOB_030:
+                print("FAIL  the cover's unpacking: %s ms between turns (a job's are %d at most)"
+                      % (gap.group(1), speed.JOB_030))
+                rc = 1
             # (made where the 68030 is fast enough, else left: art.c)
             if not art or not (art[0].startswith("album art: JPEG") or "left for a faster 68030" in art[0]):
                 print("FAIL  the album art: %s" % (art or "not made"))

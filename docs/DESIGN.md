@@ -1072,6 +1072,21 @@ Falcon (5,800 turns of its loop; a stock Falcon 1,342, Hatari's 32 MHz one 3,312
 every Falcon, is put to Erez: the art unpacked on the DSP (common's `dspjpeg`) before an MP3's
 own program goes in, or while a WAV or AIFF plays on the DMA.
 
+**The album art on the DSP, and its cache (Erez, 3 Nov 2026):** "decode on the DSP. Store a cache
+version on file in EPlay cache folder." So an MP3's art is unpacked on the DSP before its own
+program goes in (its music starts that much later, the first time); a WAV's or AIFF's while it
+plays on the DMA. The art made is kept in `cache\` next to the program, as the guidelines' 6.5
+has many small items: one pack (`art.pak`, a record a picture) and its index (`art.idx`), keyed
+by the picture's length and its first 4 KB, so every track of an album with the same cover finds
+it. A picture found there is shown at once, without the DSP.
+
+**As built (art.c):** the picture's bytes read in 32 KB pieces, then unpacked on the DSP by common's
+`pic.c` (TJpgDec with `dspjpeg`, at 1/4: `k = 2`, averaged down to the art's side), GEM given its
+turn at the decoder's next poll after 20 ms of work (with 40 the turns came 60 to 70 ms apart:
+the hub's polls every 8 MCUs and between the set-up's steps come every 15 to 25 ms). On
+Falcon-4 a 500 x 500 cover of 48 KB: read by 95 ms, unpacked in 0.9 s, its turns 35 ms at most,
+shown after 2.0 s; from the cache the next time at once.
+
 ### The window narrower, the volume, the list, the small player (Erez, 3 Nov 2026)
 
 After 0.19 Erez found the window too wide (76 columns, 608 of a VGA screen's 640 pixels) and asked

@@ -162,7 +162,8 @@ static int bar_due;		/* the bar to draw in pieces, a part a turn (3, 2, 1; 0 non
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
 static int status_due;		/* the info line to set the next turn ("Playing 2 of 6 ...") */
 
-static void play_file(const char *f)
+/* the file played: opened (play.c), started; its art the step's (play_file) */
+static void play_now(const char *f)
 {
 	char err[160];
 	if (!play_open(f, err, sizeof(err))) {
@@ -174,7 +175,6 @@ static void play_file(const char *f)
 		return;
 	}
 	play_start();
-	art_begin(f);			/* (its picture made in the steps from now) */
 	{
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
@@ -389,6 +389,23 @@ static void add_names(const char *s, int now)
 		play_index(first);
 	else if (list_count() > before)
 		redraw(0, BP_TEXT);	/* (Next may light) */
+}
+
+/* an MP3 whose album art the DSP unpacks first (Erez, 3 Nov 2026): its
+   music waits for it, the window answering meanwhile (turn()) */
+static char pending_play[320];
+
+static void play_file(const char *f)
+{
+	play_log_stop();		/* (the one playing gives the DSP back) */
+	play_stop();
+	if (art_begin(f) == ART_FIRST) {
+		snprintf(pending_play, sizeof(pending_play), "%s", f);
+		status("Getting the album art...");
+		return;
+	}
+	pending_play[0] = 0;
+	play_now(f);
 }
 
 /* File > Add... (^O): a file, or with none chosen the whole folder; played
@@ -951,11 +968,18 @@ static void turn(int nested)
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
-			    nested || art_pending() || seek_to >= 0 || next_due || open_due || bar_due || status_due ||
+			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || bar_due || status_due ||
 			    rows_from >= 0 ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
-	if (next_due && !nested) {
+	if (pending_play[0] && !nested && !art_needs_dsp()) {
+		/* (the album art unpacked: the MP3 it waited for) */
+		char f[320];
+		snprintf(f, sizeof(f), "%s", pending_play);
+		pending_play[0] = 0;
+		play_now(f);
+		piece = 1;
+	} else if (next_due && !nested) {
 		next_due = 0;
 		play_index(list_cur + 1);
 	} else if (open_due && !nested) {
