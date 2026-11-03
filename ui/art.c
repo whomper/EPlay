@@ -309,12 +309,14 @@ int art_begin(const char *path)
 {
 	unsigned char head[12];
 	long size, k, i, slot;
-	if (busy) {
-		/* (a turn inside the unpacking opened a file: that is given up,
-		   and this one begun once it has returned) */
+	if (path_now[0] && strcmp(path, path_now) && (busy || art_pending())) {
+		/* another file while a picture is made: that job ends first, and
+		   this one is begun after it (a cover is never made twice at
+		   once: the hub, 3 Nov 2026; the same album's comes from the
+		   cache then). Its music waits for that (ART_FIRST: an MP3's
+		   picture may want the DSP; a WAV's plays once it is given back) */
 		snprintf(deferred, sizeof(deferred), "%s", path);
-		abandon = 1;
-		return ART_NOW;
+		return ART_FIRST;
 	}
 	if (path_now[0] && !strcmp(path, path_now))	/* (the same file: what it has, or is making) */
 		return art_needs_dsp() ? ART_FIRST : ART_NOW;
@@ -441,11 +443,11 @@ static void row(void *u, long y, const unsigned short *px, const unsigned char *
 		memcpy(rgb + y * side, px, (size_t)side * 2);
 }
 
-/* ---- the DSP's picture, rw x rh, averaged down to side x side: pic.c's
-   DSP way declines a JPEG it could unpack at 1/8 (k < 2: "at 1/8 the
-   68000's is quick", but the Huffman codes are the cost: 6 s for a 500 x
-   500 cover on a stock Falcon), so it is asked for just more than an eighth
-   and the boxes are averaged here ---- */
+/* ---- the DSP's picture, rw x rh, averaged down to side x side. k = 1 is
+   declined by pic.c on purpose (jpeg.a56 has no 1/8 path: the hub, 3 Nov
+   2026); ask for k = 2 and average. (At 1/8 TJpgDec on the 68030 took a
+   stock Falcon 6.8 s for a 500 x 500 cover: its Huffman codes are the
+   cost, not the transform; the DSP at 1/4 0.9 s) ---- */
 static long rw, rh, oy_at;
 static unsigned long *acc;		/* side x 3 sums, and how many */
 static unsigned long acc_n[REC_SIDE];
@@ -576,17 +578,11 @@ static void decode(void)
 	}
 	pic_poll = 0;
 	busy = 0;
-	if (abandon || deferred[0]) {
-		char next[256];
-		snprintf(next, sizeof(next), "%s", deferred);
-		deferred[0] = 0;
+	if (abandon) {			/* (EPlay quits) */
 		abandon = 0;
 		drop();
 		st = A_NONE;
-		path_now[0] = 0;
-		if (next[0])
-			art_begin(next);	/* (the file a turn opened) */
-		return;			/* (else EPlay quits) */
+		return;
 	}
 	if (rc != 1) {
 		fail(pic_why_text(why));
@@ -703,11 +699,21 @@ int art_step(int (*turn)(void))
 			blit_pen(next_pen++);
 		}
 	}
-	if (st == A_READY || st == A_FAILED) {
+	if (st == A_READY || st == A_FAILED || (st == A_NONE && deferred[0])) {
+		int ready = st == A_READY;
 		if (note[0])
 			elog("%s; shown after %lu ms", note, now_ms() - t_job);
 		note[0] = 0;
-		return st == A_READY;
+		if (deferred[0]) {
+			/* the file opened meanwhile: its own picture now */
+			char next[256];
+			snprintf(next, sizeof(next), "%s", deferred);
+			deferred[0] = 0;
+			path_now[0] = 0;
+			art_begin(next);
+			return 1;	/* (drawn again: the bar shows the new file's) */
+		}
+		return ready;
 	}
 	return 0;
 }
