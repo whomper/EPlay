@@ -23,6 +23,8 @@ int play_wait_ms(void);		/* the GEM loop's timer until the next step */
 int play_state(void);
 
 extern char play_name[64];	/* the file's name */
+#include "tags.h"
+extern TAGS play_tags;		/* what it says it is: title, artist, album, album art */
 extern char play_info[80];	/* "MP3  128 kbit/s  44.1 kHz  stereo" */
 extern char play_out[80];	/* "FDI  44.1 kHz" */
 long play_ms(void);		/* how far it has played */

@@ -29,8 +29,8 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf
-CSRC    := bidi
+OWN     := main draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags
+CSRC    := bidi charset
 CATARI  := libc tos gem crash
 CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
@@ -120,10 +120,15 @@ $(B)/test_info: tests/mp3/test_info.c src/mp3/mp3frame.c src/mp3/mp3frame.h
 	$(HOSTCC) $(HCFLAGS) -o $@ tests/mp3/test_info.c src/mp3/mp3frame.c
 $(B)/test_inf: tests/inf/test_inf.c src/inf.c src/inf.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/inf/test_inf.c src/inf.c
+$(B)/test_tags: tests/tags/test_tags.c src/tags.c src/tags.h common/src/charset.c common/src/bidi.c
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/tags/test_tags.c src/tags.c \
+		common/src/charset.c common/src/bidi.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
-test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf
+test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags
 	./$(B)/test_inf
+	./$(B)/test_tags
+	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh
 	./$(B)/test_mp3 $(B)/mp3files/*.mp3
 	./$(B)/test_info $(B)/mp3files/*.mp3
 	TEST=$(B)/test_pcm sh tests/pcm/run.sh

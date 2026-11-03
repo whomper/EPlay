@@ -39,6 +39,7 @@
 #include "elog.h"
 #include "settings.h"
 #include "mp3dsp.h"
+#include "tags.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -46,6 +47,7 @@
 #define QMAX (8L * 1024 * 1024)
 
 char play_name[64], play_info[80], play_out[80];
+TAGS play_tags;
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
@@ -118,6 +120,13 @@ static const char *base_name(const char *p)
 		if (*s == '\\' || *s == '/' || *s == ':')
 			b = s + 1;
 	return b;
+}
+
+static long tag_read(void *u, long at, unsigned char *buf, long n)
+{
+	if (Fseek(at, fh, 0) != at)
+		return 0;
+	return Fread(fh, n, buf);
 }
 
 static void khz(char *out, int n, long hz)
@@ -592,6 +601,9 @@ int play_open(const char *path, char *err, int n)
 		return 0;
 	}
 	file_size = Fseek(0, fh, 2);
+	/* what the file says it is (a few short reads: frames passed over by
+	   seeking, the album art only found) */
+	tags_read(&play_tags, tag_read, 0, file_size);
 	Fseek(0, fh, 0);
 	fpos = fend = 0;
 	eof = 0;
@@ -600,6 +612,9 @@ int play_open(const char *path, char *err, int n)
 	dsp = 0;
 	pcm_got = 0;
 	elog("open %s (%ld bytes)", path, file_size);
+	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
+		elog("tags: \"%s\", \"%s\", \"%s\"; album art %ld bytes%s", play_tags.title, play_tags.artist,
+		     play_tags.album, play_tags.pic_end - play_tags.pic_at, play_tags.pic_unsync ? " (unsynchronised)" : "");
 	if (pcm_probe(fbuf, fend, &fmt, &why)) {
 		kind = fmt.kind;
 		rate = fmt.rate;

@@ -964,6 +964,48 @@ top row (play/pause, stop, the position bar, clicked or dragged to seek), the vo
 window, the info line as the status, Play/Pause (Space) and Stop in a Play menu, and the About
 box's line 2. The playlist and Next/Previous come with phase 4.
 
+## Phase 3: the player window (Erez, 3 Nov 2026)
+
+Erez started phase 3 ("a very nice and beautiful player UI similar to modern players"), chose
+design D of four (the canvas "EPlay player designs": A Now Playing, B Hi-fi deck, C Studio
+meters, D Compact bar and list), with album art, and with B's small kbps and kHz labels.
+
+**The window, as chosen:** the window's own parts (name, closer, mover, iconifier, fuller,
+sizer, the info line as the status: "Playing 2 of 6 · 44.1 kHz · FDI"). Its work area:
+- **The bar** across the top, 68 pixels high, dark (`#1d2230` in 256 colours; black in 16
+  colours and mono, its text white):
+  - at the left, the **album art**, 56 × 56: the file's own picture (ID3v2's APIC, a JPEG or PNG,
+    through common's `pic.c` at that size, dithered to the screen's pens), else EPlay's;
+  - the **title** and **artist** (ID3 tags, else the file's name), and under them the small
+    labels **320 KBPS** and **44.1 KHZ** (the file's; a VBR file's average);
+  - in the middle, **Shuffle, Previous, Play/Pause** (a round button), **Next, Repeat**, and
+    under them the **position bar** with the time played and the length, clicked or dragged to
+    go to a place;
+  - at the right, the **output** label (FDI, DSP or DMA) and the **volume**: a speaker and a
+    bar.
+- **The list** under it, with its columns (#, Title, Artist, Album, Time), the playing row in
+  the bar's colours, and the AES's own slider column at the right (5.1).
+- **The small player** (phase 5) is the bar alone, the album art 40 × 40.
+
+Every button in the bar works as 5.8 has it (drawn pressed on the press, its action on the
+release over it). In mono and 16 colours every state shows without colour (5.2): Play/Pause by
+its symbol, Shuffle and Repeat with a bar under them when on, the position and the volume by
+their bars' lengths.
+
+**The order** (each a release):
+1. The tags: ID3v2 (2.2 to 2.4) and ID3v1, with host tests; WAV's and AIFF's names where they have
+   them.
+2. The bar: the new window, laid out and drawn (only what changes: the times, the position,
+   Play/Pause), Play/Pause and Stop, the position bar going to a place (MP3: by the Xing or VBRI
+   table, else by the bit rate; WAV, AIFF: by the sample), the labels, the output.
+3. Pause: the sound stopped where it is and the DSP given back (the DSP rule), Play going on
+   from there.
+4. The album art.
+5. The volume (the Falcon's own output by its attenuation; the FDI's on the DSP, so that 0 dB
+   stays bit for bit).
+6. The list, with the one file opened; the playlist, Shuffle, Repeat, Previous and Next are
+   phase 4's.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
