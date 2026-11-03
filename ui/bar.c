@@ -171,7 +171,16 @@ void bar_area(int parts, GRECT *r)
 		*r = w_list;
 	else if (parts == BP_ART)
 		*r = w_art;
-	else if (parts == BP_NAV) {
+	else if (parts == BP_LEFT) {
+		*r = w_bar;
+		r->w = w_ctl.x - w_bar.x;
+		r->h -= 1;
+	} else if (parts == BP_RIGHT) {
+		*r = w_bar;
+		r->x = w_out.x;
+		r->w = w_bar.x + w_bar.w - w_out.x;
+		r->h -= 1;
+	} else if (parts == BP_NAV) {
 		*r = b_btn[BH_PREV - 1];
 		r->w = b_btn[BH_NEXT - 1].x + b_btn[BH_NEXT - 1].w - r->x;
 	} else if (parts == BP_VOL) {
@@ -711,6 +720,15 @@ void bar_draw(const GRECT *clip, int parts)
 		draw_art();
 	if (parts == BP_VOL)
 		draw_vol();
+	if (parts == BP_LEFT) {			/* (another file: a piece a turn) */
+		box(w_bar.x, w_bar.y, w_ctl.x - w_bar.x, w_bar.h - 1, p_bar, 0);
+		draw_art();
+		draw_text();
+	}
+	if (parts == BP_RIGHT) {
+		box(w_out.x, w_bar.y, w_bar.x + w_bar.w - w_out.x, w_bar.h - 1, p_bar, 0);
+		draw_out();
+	}
 	if (parts & BP_TEXT) {
 		box(w_bar.x, w_bar.y, w_bar.w, w_bar.h - 1, p_bar, 0);
 		box(w_bar.x, w_bar.y + w_bar.h - 1, w_bar.w, 1, 1, 0);

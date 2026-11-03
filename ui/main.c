@@ -158,8 +158,9 @@ static void playing_status(char *st, int n)
 		snprintf(st, (size_t)n, "Playing  \xfa  %s", play_out);
 }
 
-static int bar_due;		/* the bar to draw in pieces, a part a turn (2, 1; 0 none) */
+static int bar_due;		/* the bar to draw in pieces, a part a turn (3, 2, 1; 0 none) */
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
+static int status_due;		/* the info line to set the next turn ("Playing 2 of 6 ...") */
 
 static void play_file(const char *f)
 {
@@ -179,11 +180,7 @@ static void play_file(const char *f)
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
 		nf_debug(line);
 	}
-	{
-		char st[100];
-		playing_status(st, sizeof(st));
-		status(st);
-	}
+	status_due = 1;			/* (the info line: the AES draws it, a turn of its own) */
 	{
 		/* the whole window for another file (or the same one elsewhere);
 		   for the one shown, Play/Pause and the time (the speed rig's
@@ -196,7 +193,7 @@ static void play_file(const char *f)
 			   part a turn, as a job's slices: the 50 ms between event
 			   calls) */
 			strcpy(shown, now);
-			bar_due = 2;
+			bar_due = 3;
 		} else
 			redraw(0, BP_PLAY | BP_TIME);
 	}
@@ -206,8 +203,17 @@ static void play_file(const char *f)
    text and art, then Play/Pause with the times; one a turn */
 static void bar_turn(void)
 {
-	if (bar_due == 2)
-		redraw(0, BP_TEXT);
+	if (status_due) {
+		char st[100];
+		status_due = 0;
+		playing_status(st, sizeof(st));
+		status(st);
+		return;
+	}
+	if (bar_due == 3)
+		redraw(0, BP_LEFT);
+	else if (bar_due == 2)
+		redraw(0, BP_RIGHT);
 	else
 		redraw(0, BP_PLAY | BP_TIME);
 	bar_due--;
@@ -944,7 +950,7 @@ static void turn(int nested)
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
-			    nested || art_pending() || seek_to >= 0 || next_due || open_due || bar_due ||
+			    nested || art_pending() || seek_to >= 0 || next_due || open_due || bar_due || status_due ||
 			    rows_from >= 0 ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
@@ -954,7 +960,7 @@ static void turn(int nested)
 	} else if (open_due && !nested) {
 		open_due = 0;
 		play_file(file);
-	} else if (bar_due && !nested)
+	} else if ((bar_due || status_due) && !nested)
 		bar_turn();
 	else if (rows_from >= 0 && !nested)
 		rows_turn();
