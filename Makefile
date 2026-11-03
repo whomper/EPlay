@@ -129,10 +129,13 @@ $(B)/test_inf: tests/inf/test_inf.c src/inf.c src/inf.h
 $(B)/test_tags: tests/tags/test_tags.c src/tags.c src/tags.h common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/tags/test_tags.c src/tags.c \
 		common/src/charset.c common/src/bidi.c
+$(B)/test_gain: tests/pcm/test_gain.c src/pcm.c src/pcm.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_gain.c src/pcm.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
-test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags
+test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain
 	./$(B)/test_inf
+	./$(B)/test_gain
 	./$(B)/test_tags
 	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh
 	./$(B)/test_mp3 $(B)/mp3files/*.mp3

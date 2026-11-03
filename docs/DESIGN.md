@@ -1095,6 +1095,18 @@ columns, one row** (448 pixels):
   costs the DSP nothing, and the DSP's arithmetic stays bit for bit; silent is `global_gain` 0.
   WAV and AIFF are scaled as the tick writes them (Q15).
 - **At 0 dB nothing is touched.**
+- **A change never clicks** (the family's rule for a control on the sound):
+  - MP3 on the FDI: the new global_gain comes in from the next packet (a frame, 26 ms at
+    44.1 kHz). A frame's granules go through the transform's overlap-add with the last
+    granule's half (576 samples), and through the synthesis filter's 512 samples of memory, so
+    the change glides over about 13 ms by the decoder's own arithmetic. There is no edge in the
+    middle of a frame: the step is at a granule's edge, inside that overlap.
+  - WAV and AIFF on the FDI: the gain glides to the new value over 256 frames (5.8 ms at
+    44.1 kHz), a step each frame (`pcm_gain`; `tests/pcm/test_gain`: no jump between two
+    frames over 1/128 of full scale, the new volume exact after the glide, 0 dB bit for bit).
+  - The Falcon's own output: the codec's attenuation changes at once by its own steps (1.5 dB
+    each). A click far along the bar is one step of several dB at once; it can be made to go a
+    step at a time from the tick if it is heard.
 
 **Files added in bulk:** files dragged onto the window are added to the list (AP_DRAGDROP under
 MiNT and MagiC, VA_DRAGACCWIND from an AV desktop: common's `dd.c`). The menu's Add item takes

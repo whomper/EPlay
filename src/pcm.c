@@ -238,3 +238,35 @@ void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n)
 		*dst++ = f->channels == 2 ? sample(f, src + b) : l;
 	}
 }
+
+void pcm_gain_set(PCMGAIN *s, long g)
+{
+	s->g = s->to = g;
+	s->d = s->left = 0;
+}
+
+int pcm_gain_idle(const PCMGAIN *s, long to)
+{
+	return s->g == 32768 && to == 32768 && !s->left;
+}
+
+void pcm_gain(PCMGAIN *s, long to, short *p, long n, int step)
+{
+	long i, g;
+	if (to != s->to) {
+		s->to = to;
+		s->left = PCM_RAMP;
+		s->d = (to - s->g) / PCM_RAMP;	/* (a shift: no division in the tick) */
+	}
+	g = s->g;
+	for (i = 0; i < n; i++, p += step) {
+		if (s->left) {
+			g += s->d;
+			if (!--s->left)
+				g = s->to;
+		}
+		p[0] = (short)((p[0] * g) >> 15);
+		p[1] = (short)((p[1] * g) >> 15);
+	}
+	s->g = g;
+}

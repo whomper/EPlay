@@ -32,4 +32,18 @@ int pcm_probe(const unsigned char *p, long n, PCMFMT *f, const char **why);
    made stereo */
 void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n);
 
+/* the volume on samples (the FDI's, where the codec's attenuation isn't
+   heard): g in Q15, 32768 as they are. A change glides: g moves to the new
+   value over PCM_RAMP frames, a step each frame, so a volume step is never
+   a jump in the wave (the family's rule: a control on the sound never
+   clicks). As they are when g is 32768 and not moving: bit for bit */
+#define PCM_RAMP 256
+typedef struct {
+	long g, to, d, left;
+} PCMGAIN;
+void pcm_gain_set(PCMGAIN *s, long g);	/* at once (a file's start) */
+/* n frames, step shorts apart (each frame's first two), scaled, g going to `to` */
+void pcm_gain(PCMGAIN *s, long to, short *p, long n, int step);
+int pcm_gain_idle(const PCMGAIN *s, long to);	/* 1: nothing to do (as they are) */
+
 #endif
