@@ -141,11 +141,13 @@ def session(work, spec, kind):
         r.act("Pause again", speed.KEY, lambda: r.click(*PAUSE))
         rc = r.report()
         vols = [int(l.split()[2]) for l in r.console().split("\n") if l.startswith("EPLAY volume ")]
-        if vols[:2] != [4, 6]:
-            print("FAIL  the volume: %s, not 4 (a quarter of the bar) then 6 (+)" % vols)
+        # (a quarter is 4 of 16; the pointer lands a pixel or two from where
+        # it is sent, and the bar is 38 pixels: 3 to 5)
+        if len(vols) < 2 or not 3 <= vols[0] <= 5 or vols[1] != vols[0] + 2:
+            print("FAIL  the volume: %s, not about 4 (a quarter of the bar) then two more (+)" % vols)
             rc = 1
         else:
-            print("ok    the volume: 4 at a quarter of the bar, 6 after +")
+            print("ok    the volume: %d at a quarter of the bar, %d after +" % (vols[0], vols[1]))
         if not getattr(r, "held_ok", True):
             rc = 1
         went = [l for l in r.console().split("\n") if l.startswith("EPLAY went to ")]
