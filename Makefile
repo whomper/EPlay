@@ -34,7 +34,7 @@ OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pc
 CSRC    := bidi charset pic png inflate jpegdc
 CTP     := tjpgd
 CATARI  := libc tos gem crash
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \

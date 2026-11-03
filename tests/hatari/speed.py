@@ -35,9 +35,12 @@ _spec.loader.exec_module(speed)
 DESK = (40, 9)
 ABOUT = (60, 27)
 # the bar's round Play/Pause button (design D at 56 columns: Erez, 3 Nov 2026)
-PLAY = PAUSE = (400, 150)
-POS_MID = (400, 185)		# the position bar's middle
-VOL_Q = (509, 185)		# a quarter of the volume bar: 4 of 16
+# (the window 11 pixels to the left of 0.20's: the list's slider at its right)
+PLAY = PAUSE = (389, 150)
+POS_MID = (389, 185)		# the position bar's middle
+VOL_Q = (498, 185)		# a quarter of the volume bar: 4 of 16
+NEXT = (421, 150)
+ROW = [(300, 229 + 20 * i) for i in range(6)]	# the list's rows
 SECS = 120	# (long enough not to end before the last action, when the emulator runs fast)
 
 
@@ -55,6 +58,12 @@ class Rig(speed.Rig):
         self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
         time.sleep(0.4)
         self.xdo("mousedown", "1")
+
+    def dclick(self, x, y):
+        g = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", self.win()).split())
+        self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
+        time.sleep(0.4)
+        self.xdo("click", "--repeat", "2", "--delay", "120", "1")
 
     def let_go(self):
         self.xdo("mouseup", "1")
@@ -105,6 +114,8 @@ def session(work, spec, kind):
             subprocess.run(["lame", "-t", "--quiet", "--noreplaygain", "-b", "320", "-m", "s",
                             "--tt", "Long", "--ta", "The rig", "--ti", cover, src,
                             os.path.join(r.hd, name)], check=True)
+        elif kind == "list":
+            return list_session(r, src)
         else:
             name, what = "LONG.WAV", "a WAV (CD quality)"
             subprocess.run(["sox", src, os.path.join(r.hd, name)], check=True)
@@ -186,10 +197,48 @@ def session(work, spec, kind):
         r.stop()
 
 
+def list_session(r, src):
+    """the list (Erez, 3 Nov 2026: files added in bulk): eight files given
+    at the start (as dropped on the program), their tags and lengths read
+    in the background a file a turn, then a row selected, one played by a
+    double click, Next, the keys"""
+    names = ["T%d.%s" % (i + 1, "MP3" if i % 2 else "WAV") for i in range(8)]
+    short = os.path.join(r.work, "short.wav")      # (30 s each: the rig's disk)
+    subprocess.run(["sox", src, short, "trim", "0", "30"], check=True)
+    src = short
+    for i, n in enumerate(names):
+        if n.endswith("MP3"):
+            subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", "192", "--tt", "Track %d" % (i + 1),
+                            "--ta", "The rig", "--tl", "The list", src, os.path.join(r.hd, n)], check=True)
+        else:
+            subprocess.run(["sox", src, os.path.join(r.hd, n)], check=True)
+    r.write("TAIL.TXT", " ".join("C:\\" + n for n in names) + "\n")
+    r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
+    r.results[-1] = ("started, 8 files given, the first playing", "AESSTART", speed.START)
+    r.act("the list's files read (tags, lengths)", speed.KEY, lambda: time.sleep(6), job=True)
+    r.act("a row selected (clicked)", speed.KEY, lambda: r.click(*ROW[2]))
+    r.act("a row played (double click)", speed.KEY, lambda: r.dclick(*ROW[3]))
+    r.act("Next", speed.KEY, lambda: r.click(*NEXT))
+    r.act("Down", speed.KEY, lambda: r.key("Down"))
+    r.act("Return (plays the selected)", speed.KEY, lambda: r.key("Return"))
+    r.act("Delete (one out of the list)", speed.KEY, lambda: (r.key("Up"), r.key("Delete")))
+    rc = r.report()
+    lines = r.console().split("\n")
+    played = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
+    want = ["T1.WAV", "T4.MP3", "T5.WAV", "T6.MP3"]
+    if played[:4] != want:
+        print("FAIL  played %s, not %s (the first, a double click on row 4, Next, Return on row 6)" %
+              (played, want))
+        rc = 1
+    else:
+        print("ok    played in turn: %s" % " ".join(played[:4]))
+    return rc
+
+
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
-    kinds = sys.argv[3:] or ["mp3", "wav"]
+    kinds = sys.argv[3:] or ["mp3", "wav", "list"]
     return max(session(work, spec, k) for k in kinds)
 
 

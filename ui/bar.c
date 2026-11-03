@@ -171,7 +171,10 @@ void bar_area(int parts, GRECT *r)
 		*r = w_list;
 	else if (parts == BP_ART)
 		*r = w_art;
-	else if (parts == BP_VOL) {
+	else if (parts == BP_NAV) {
+		*r = b_btn[BH_PREV - 1];
+		r->w = b_btn[BH_NEXT - 1].x + b_btn[BH_NEXT - 1].w - r->x;
+	} else if (parts == BP_VOL) {
 		*r = w_vol;
 		r->x -= 18;
 		r->w += 18;
@@ -515,7 +518,7 @@ static void draw_buttons(int parts)
 		} else
 			mask_draw(&k_ptri, cx - s / 3, cy - s / 2, play_name[0] ? p_bar : p_trk);
 	}
-	if (parts & BP_TEXT) {
+	if (parts & (BP_TEXT | BP_NAV)) {
 		/* Previous, Next: the list's, dim where there is none */
 		int i;
 		short pen;
@@ -715,7 +718,7 @@ void bar_draw(const GRECT *clip, int parts)
 		draw_text();
 		draw_out();
 	}
-	if (parts & (BP_PLAY | BP_TEXT))
+	if (parts & (BP_PLAY | BP_TEXT | BP_NAV))
 		draw_buttons(parts);
 	if (parts & (BP_TIME | BP_TEXT))
 		draw_time();

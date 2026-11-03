@@ -21,7 +21,7 @@
 #include "settings.h"
 #include "list.h"
 #include "dd.h"
-#include "click.h"
+#include "popup.h"
 #include "elog.h"
 #include "snd.h"
 #include "bar.h"
@@ -32,17 +32,22 @@ extern const char app_version[];
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
-enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT };
+enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
+       C_REMOVE };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_file[] = {
-	{ "Add...", "^O", C_OPEN },
-	{ "Clear the list", 0, C_CLEAR },
+	{ "Open...", "^O", C_OPEN },
 	{ "-", 0, 0 },
 	{ "Quit", "^Q", C_QUIT },
+	{ 0, 0, 0 }
+};
+static const MBAR_ITEM m_edit[] = {
+	{ "Remove from the list", "Delete", C_REMOVE },
+	{ "Clear the list", 0, C_CLEAR },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_play[] = {
@@ -62,6 +67,7 @@ static const MBAR_ITEM m_options[] = {
 static const MBAR_TITLE bar[] = {
 	{ " EPlay ", m_desk },
 	{ " File ", m_file },
+	{ " Edit ", m_edit },
 	{ " Play ", m_play },
 	{ " Options ", m_options },
 	{ 0, 0 }
@@ -152,6 +158,9 @@ static void playing_status(char *st, int n)
 		snprintf(st, (size_t)n, "Playing  \xfa  %s", play_out);
 }
 
+static int bar_due;		/* the bar to draw in pieces, a part a turn (2, 1; 0 none) */
+static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
+
 static void play_file(const char *f)
 {
 	char err[160];
@@ -183,11 +192,25 @@ static void play_file(const char *f)
 		char now[200];
 		snprintf(now, sizeof(now), "%s|%s|%s|%ld|%ld", play_name, play_tags.title, play_via, play_kbps, play_hz);
 		if (strcmp(now, shown)) {
+			/* (the bar for another file: in the turns after this one, a
+			   part a turn, as a job's slices: the 50 ms between event
+			   calls) */
 			strcpy(shown, now);
-			redraw(&work, BP_ALL);
+			bar_due = 2;
 		} else
 			redraw(0, BP_PLAY | BP_TIME);
 	}
+}
+
+/* the bar drawn again in pieces after another file began (bar_due): its
+   text and art, then Play/Pause with the times; one a turn */
+static void bar_turn(void)
+{
+	if (bar_due == 2)
+		redraw(0, BP_TEXT);
+	else
+		redraw(0, BP_PLAY | BP_TIME);
+	bar_due--;
 }
 
 /* ---- the list (Erez, 3 Nov 2026: files added in bulk) ---- */
@@ -273,8 +296,9 @@ static void play_index(int i)
 	snprintf(file, sizeof(file), "%s", e->path);
 	show_row(i);
 	row_redraw(old);
-	play_file(file);		/* (the window drawn again for a new file) */
 	row_redraw(i);
+	open_due = 1;			/* (opened next turn: the press's answer is the rows) */
+	redraw(0, BP_NAV);
 }
 
 /* MP3, WAV and AIFF by their names' ends (a folder's files: what to add) */
@@ -372,7 +396,7 @@ static void open_file(void)
 	if (!path[0])
 		snprintf(path, sizeof(path), "%s*.*", app_dir());
 	name[0] = 0;
-	if (!fsel_exinput(path, name, &button, "Add a file (none: the folder)") || !button)
+	if (!fsel_exinput(path, name, &button, "Open a file (none: the folder)") || !button)
 		return;
 	e = strrchr(path, '\\');
 	n = e ? e - path + 1 : 0;
@@ -436,6 +460,60 @@ static void sized(short w, short h)
 	sliders();
 }
 
+static int rows_from = -1;	/* the list's rows from this one on to draw again, two a turn */
+
+static void rows_turn(void)
+{
+	int k;
+	for (k = 0; k < 2 && rows_from >= 0; k++) {
+		row_redraw(rows_from);
+		if (++rows_from >= list_top + bar_rows())
+			rows_from = -1;
+	}
+}
+
+/* the selected file out of the list (the one playing stopped first) */
+static void list_remove_sel(void)
+{
+	int i = list_sel;
+	if (i < 0)
+		return;
+	if (i == list_cur) {
+		play_log_stop();
+		play_stop();
+		status("Stopped.");
+	}
+	list_remove(i);
+	list_sel = i < list_count() ? i : list_count() - 1;
+	if (list_top > 0 && list_top + bar_rows() > list_count())
+		scroll_to(list_count() - bar_rows());	/* (the whole list: one draw) */
+	else
+		rows_from = i;		/* the rows from it on, two a turn */
+	sliders();
+	redraw(0, BP_NAV);
+}
+
+static void command(int c);
+
+/* a row's menu (the guidelines' 3.3): its double click's action first, then
+   what the menu bar has for it, with the keys */
+static void row_menu(short x, short y)
+{
+	static const char *const lab[] = { "  Play                  Return ", "-",
+					   "  Remove from the list  Delete ", "  Clear the list " };
+	switch (popup(x, y, lab, 4)) {
+	case 0:
+		play_index(list_sel);
+		break;
+	case 2:
+		command(C_REMOVE);
+		break;
+	case 3:
+		command(C_CLEAR);
+		break;
+	}
+}
+
 /* the list's keys: Up and Down move the selection, Return plays it, Delete
    takes it out of the list. 1 when the key was one of them */
 static int list_keys(short kr)
@@ -457,18 +535,14 @@ static int list_keys(short kr)
 			play_index(list_sel);
 		return 1;
 	case 0x53:			/* Delete */
+		list_remove_sel();
+		return 1;
+	case 0x52:			/* Insert: the selected row's menu (3.3) */
 		if (list_sel >= 0) {
-			int i = list_sel;
-			if (i == list_cur) {
-				play_log_stop();
-				play_stop();
-				status("Stopped.");
-			}
-			list_remove(i);
-			list_sel = i < list_count() ? i : list_count() - 1;
-			scroll_to(list_top);
-			sliders();
-			redraw(0, BP_LIST | BP_TEXT);
+			GRECT r;
+			show_row(list_sel);
+			bar_row_area(list_sel, &r);
+			row_menu(r.x + 4 * bar_row_h(), r.y + r.h);
 		}
 		return 1;
 	}
@@ -482,7 +556,7 @@ static void idle_step(void)
 
 /* a press on the list: the row selected at once; a double click plays it
    (guidelines 5.8: the second press's release) */
-static void list_press(short mx, short my)
+static void list_press(short mx, short my, int right)
 {
 	int i = bar_row_at(my), dbl;
 	GRECT r;
@@ -491,6 +565,10 @@ static void list_press(short mx, short my)
 		return;
 	dbl = press_double((short)i, mx, my);
 	select_row(i);
+	if (right) {			/* (a right press: the row's menu) */
+		row_menu(mx, my);
+		return;
+	}
 	bar_row_area(i, &r);
 	if (press_track(&r, mx, my, idle_step, message, &dx, &dy) == PRESS_IN && dbl)
 		play_index(i);
@@ -513,6 +591,9 @@ static void command(int c)
 		break;
 	case C_CLEAR:
 		list_clear_but_playing();
+		break;
+	case C_REMOVE:
+		list_remove_sel();
 		break;
 	case C_PREV:
 		if (list_cur > 0)
@@ -860,14 +941,23 @@ static void turn(int nested)
 	short msg[8];
 	short which;
 	int playing = play_state() == PS_PLAYING;
-	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1,
-			    nested || art_pending() || seek_to >= 0 || next_due ? 0 :
+	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
+	   row's menu) */
+	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
+			    nested || art_pending() || seek_to >= 0 || next_due || open_due || bar_due ||
+			    rows_from >= 0 ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
 	if (next_due && !nested) {
 		next_due = 0;
 		play_index(list_cur + 1);
-	}
+	} else if (open_due && !nested) {
+		open_due = 0;
+		play_file(file);
+	} else if (bar_due && !nested)
+		bar_turn();
+	else if (rows_from >= 0 && !nested)
+		rows_turn();
 	if (seek_to >= 0 && !nested) {
 		do_seek();
 		step(play_state() == PS_PLAYING);
@@ -895,6 +985,8 @@ static void turn(int nested)
 			nf_debug(line);		/* (the speed rig's) */
 		}
 	}
+	if ((which & MU_BUTTON) && ev.mbutton == 2 && bar_hit(ev.mx, ev.my) == BH_LIST)
+		list_press(ev.mx, ev.my, 1);
 	if ((which & MU_BUTTON) && ev.mbutton == 1) {
 		/* (Play/Pause only where it would act: with a file; the
 		   playlist's controls come with phase 4) */
@@ -910,7 +1002,7 @@ static void turn(int nested)
 		else if (hit == BH_NEXT && list_cur + 1 < list_count() && track(BH_NEXT, BP_TEXT))
 			command(C_NEXT);
 		else if (hit == BH_LIST)
-			list_press(ev.mx, ev.my);
+			list_press(ev.mx, ev.my, 0);
 	}
 	step(playing);
 }

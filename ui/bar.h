@@ -22,6 +22,7 @@ enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_POS, BH_VOL
 #define BP_LIST  8
 #define BP_ART   16		/* the album art alone */
 #define BP_VOL   32		/* the speaker and the volume alone */
+#define BP_NAV   64		/* Previous and Next (and Play/Pause between them) */
 #define BP_ALL   0xff
 
 void bar_colours(void);		/* the pens, from the screen (at the start) */
