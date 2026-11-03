@@ -889,6 +889,26 @@ ISO's rms limit at most), the DSP against the model bit for bit (`make dsptest`,
 play rig's `normal` case (eplay.inf with QUALITY=NORMAL: 32,780 Hz, its tones whole). The
 68030's output follows the setting when its decoder is in.
 
+
+### The 68030's decoder: what a 68030 can do (3 Nov 2026)
+
+Before writing it, its heaviest part measured: the synthesis filter's window, 16
+multiply-adds for each output sample (`tests/bench68`: MULS.W of 16-bit samples by 16-bit
+factors, the samples strided as the filter reads them, in Hatari). 44.1 kHz stereo is 2,756
+slots of 32 a second:
+
+| Machine | Slots a second | 44.1 kHz stereo's window alone |
+|---|---|---|
+| Falcon-4 (stock, 68030 at 16 MHz) | 909 | 303 % of the 68030 |
+| Falcon in Hatari (32 MHz, its most) | 1,833 | 150 % |
+| Erez's DFB1 (50 MHz), scaled from 32 | about 2,860 | about 96 % |
+
+The rest of a decoder (Huffman, dequantising, the transform, the DCT) about doubles it. So no
+68030 plays MP3 at High, nor at Normal's 15 kHz (two thirds of the rate). Half the rate (16
+subbands, about 11 kHz) halves the window: about 50 % of a DFB1 for it, 150 % of a stock
+Falcon. Mono halves it again. Put to Erez as a decision (the capability is his): every
+Falcon has the DSP, which EPlay holds only while it plays.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
