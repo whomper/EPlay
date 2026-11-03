@@ -44,8 +44,9 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 1. Copy `eplay.prg` anywhere, and start it; or drop a `.MP3`, `.WAV` or `.AIF` file on it.
 2. **File > Open…** (Control+O) plays another file. The window's bar shows its title
    and artist (from its tags), its bit rate and rate, and where it plays (FDI, DSP or DMA). The
-   round button, or **Space**, plays and stops (Play and Stop are in the Play menu too); a click
-   or a drag on the position bar goes to that place in the file.
+   round button, or **Space**, plays and pauses (Play/Pause and Stop are in the Play menu too); a
+   click or a drag on the position bar goes to that place in the file. The **volume** at the
+   right is set the same way, or with **+** and **−** (3 dB a press); EPLAY.INF keeps it.
 3. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
    answers, else the DSP), FDI or DSP. And the **Quality**:
    High (the default), or Normal, up to about 15 kHz, for a Falcon without the FDI whose DSP

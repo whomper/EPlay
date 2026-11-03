@@ -21,6 +21,7 @@ enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_POS, BH_VOL
 #define BP_TEXT  4		/* the album art, the title, the labels, the output */
 #define BP_LIST  8
 #define BP_ART   16		/* the album art alone */
+#define BP_VOL   32		/* the speaker and the volume alone */
 #define BP_ALL   0xff
 
 void bar_colours(void);		/* the pens, from the screen (at the start) */
@@ -35,8 +36,10 @@ int bar_hit(short x, short y);	/* BH_... */
 short bar_art_side(void);	/* the album art's side, in pixels */
 /* the position bar: x's place as a share of the file, 0 to 1000 */
 int bar_pos_at(short x);
+int bar_vol_at(short x);	/* the volume bar: x's place, 0 to VOL_MAX */
 
 extern int bar_held;		/* the control drawn pressed (5.8), BH_NONE */
+extern int bar_vdrag;		/* the volume dragged: its place; -1 not */
 extern int bar_drag;		/* the position bar dragged: its place, 0 to 1000; -1 not */
 
 #endif

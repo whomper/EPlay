@@ -53,6 +53,61 @@ const char *play_via = "";
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
+static int s_ext;		/* on the FDI's clock (the volume digital) */
+
+/* the volume (Erez, 3 Nov 2026: a bar like the position's, and + and -):
+   0 silent, VOL_MAX full (0 dB), steps of 1.5 dB. The Falcon's own
+   output by the codec's attenuation (its steps, 0 to 22.5 dB; silent: the
+   DAC's adder off). The FDI's digital, in the same steps: an MP3's
+   global_gain lowered (each is 2^(1/4), 1.505 dB: no DSP time, and the
+   DSP's arithmetic as it is), WAV and AIFF scaled as the tick writes
+   them. At 0 dB nothing is touched: the samples bit for bit */
+static int vol = VOL_MAX;
+static volatile long t_gain = 32768;	/* WAV, AIFF on the FDI: Q15; 32768 as they are */
+static volatile int t_gsub;		/* MP3 on the FDI: off each global_gain */
+static const unsigned short gain_tab[VOL_MAX] = {
+	32768, 27554, 23170, 19484, 16384, 13777, 11585, 9742,
+	8192, 6889, 5793, 4871, 4096, 3444, 2896, 2435
+};
+
+static void apply_volume(void)
+{
+	int a = VOL_MAX - vol;		/* 0..15 steps down, while vol is 1 or more */
+	if (s_ext && play_is_open()) {
+		snd_dac_volume(0, 0);
+		t_gain = vol ? gain_tab[a] : 0;
+		t_gsub = vol ? a : 255;
+	} else {
+		snd_dac_volume(vol ? a : VOL_MAX - 1, !vol);
+		t_gain = 32768;
+		t_gsub = 0;
+	}
+}
+
+void play_set_volume(int v)
+{
+	if (v < 0)
+		v = 0;
+	if (v > VOL_MAX)
+		v = VOL_MAX;
+	vol = v;
+	apply_volume();
+}
+
+int play_volume(void)
+{
+	return vol;
+}
+
+/* n samples scaled by t_gain (the tick's: no division) */
+static void gain_run(short *p, long n, int step)
+{
+	long g = t_gain, i;
+	for (i = 0; i < n; i++, p += step) {
+		p[0] = (short)((p[0] * g) >> 15);
+		p[1] = (short)((p[1] * g) >> 15);
+	}
+}
 static volatile int loading;	/* MP3: the DSP's program still going in (the tick's);
 				   2 while GEM's steps reset the DSP, after Play's draw */
 static PCMFMT fmt;
@@ -230,6 +285,8 @@ static void tick_pcm(void)
 			kb = FR2B(k);
 		}
 		pcm_convert(&fmt, q + q_roff, p, k);
+		if (t_gain != 32768)
+			gain_run(p, k, 2);
 		adv(kb);
 		snd_wrote(k);
 		room -= k;
@@ -326,6 +383,13 @@ static void next_packet(void)
 		{
 			long at = q_base + q_r;	/* (the frame's place, before it is passed) */
 			adv(h.length);
+			if (np > 0 && t_gsub && !(pk[0] & PK_MUTE)) {
+				/* the volume: each granule's and channel's global_gain */
+				int g, n = ((pk[0] & PK_LSF) ? 1 : 2) * ((pk[0] & PK_STEREO) ? 2 : 1);
+				unsigned long *gc = pk + 2 + 2;
+				for (g = 0; g < n; g++, gc += PK_GC)
+					*gc = *gc > (unsigned long)t_gsub ? *gc - t_gsub : 0;
+			}
 			if (np > 0) {
 				pk_n = np;
 				pk_samples = h.samples;
@@ -358,6 +422,8 @@ static void next_pcm_packet(void)
 			kb = FR2B(k);
 		}
 		pcm_convert(&fmt, q + q_roff, pcmbuf + 2 * pcm_got, k);
+		if (t_gain != 32768)
+			gain_run(pcmbuf + 2 * pcm_got, k, 2);
 		adv(kb);
 		pcm_got += k;
 	}
@@ -877,6 +943,8 @@ int play_open(const char *path, char *err, int n)
 	}
 	khz(kr, sizeof(kr), out_rate);
 	play_via = ext ? "FDI" : dsp ? "DSP" : "DMA";
+	s_ext = ext;
+	apply_volume();
 	if (dsp && out_rate != rate) {	/* (the DSP resamples) */
 		char fr[16];
 		khz(fr, sizeof(fr), rate);

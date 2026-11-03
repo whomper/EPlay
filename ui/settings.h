@@ -23,4 +23,11 @@ const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
 int settings_quality(void);	/* Q_NORMAL or Q_HIGH */
 const char *settings_quality_name(int q);	/* "Normal", "High" (the log) */
 
+/* the volume (0 silent to VOL_FULL, steps of 1.5 dB), VOLUME= in the INF,
+   saved by settings_flush at the end when it changed */
+#define VOL_FULL 16
+int settings_volume(void);
+void settings_set_volume(int v);
+void settings_flush(void);
+
 #endif

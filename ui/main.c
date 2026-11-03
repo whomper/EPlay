@@ -29,7 +29,7 @@ extern const char app_version[];
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
-enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS };
+enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -44,6 +44,9 @@ static const MBAR_ITEM m_file[] = {
 static const MBAR_ITEM m_play[] = {
 	{ "Play/Pause", "Space", C_PLAY },
 	{ "Stop", 0, C_STOP },
+	{ "-", 0, 0 },
+	{ "Shuffle", 0, C_SHUFFLE },	/* (the playlist's: out of the bar, 56 columns) */
+	{ "Repeat", 0, C_REPEAT },
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_options[] = {
@@ -365,6 +368,46 @@ static void drag_pos(short mx, short my)
 	redraw(0, BP_TIME);
 }
 
+/* the volume pressed (or dragged): it changes as the pointer moves, as a
+   slider does (Erez, 3 Nov 2026: "like the progress bar"), and is kept */
+static void volume_to(int v)
+{
+	if (v == play_volume())
+		return;
+	play_set_volume(v);
+	settings_set_volume(play_volume());
+	redraw(0, BP_VOL);
+}
+
+static void drag_vol(short mx, short my)
+{
+	short msg[8];
+	AEVENT ev;
+	volume_to(bar_vol_at(mx));
+	while (!quit) {
+		short which;
+		int playing = play_state() == PS_PLAYING;
+		evnt_set_m1(1, mx, my, 1, 1);
+		which = evnt_multi_(MU_MESAG | MU_BUTTON | MU_M1 | MU_TIMER, 1, 1, 0, play_wait_ms(), msg, &ev);
+		turn_t0 = tos_ms();
+		if (which & MU_MESAG)
+			message(msg);
+		if (which & MU_BUTTON)
+			break;
+		if (which & MU_M1) {
+			mx = ev.mx;
+			my = ev.my;
+			volume_to(bar_vol_at(mx));
+		}
+		step(playing);
+	}
+	{
+		char line[40];
+		snprintf(line, sizeof(line), "EPLAY volume %d\n", play_volume());
+		nf_debug(line);			/* (the speed rig's) */
+	}
+}
+
 /* the place the position bar was let go at, gone to (the turn after) */
 static void do_seek(void)
 {
@@ -482,6 +525,13 @@ static void turn(int nested)
 				command(C_SETTINGS);
 		} else if (a == ' ')
 			command(C_PLAY);	/* Play/Pause */
+		else if (a == '+' || a == '-') {
+			/* the volume a step of 3 dB (two of the bar's) */
+			char line[40];
+			volume_to(play_volume() + (a == '+' ? 2 : -2));
+			snprintf(line, sizeof(line), "EPLAY volume %d\n", play_volume());
+			nf_debug(line);		/* (the speed rig's) */
+		}
 	}
 	if ((which & MU_BUTTON) && ev.mbutton == 1) {
 		/* (Play/Pause only where it would act: with a file; the
@@ -491,6 +541,8 @@ static void turn(int nested)
 			command(C_PLAY);	/* Play/Pause */
 		else if (hit == BH_POS && play_name[0] && play_len_ms() > 0)
 			drag_pos(ev.mx, ev.my);
+		else if (hit == BH_VOL)
+			drag_vol(ev.mx, ev.my);
 	}
 	step(playing);
 }
@@ -550,6 +602,7 @@ int app_main(void)
 		return 1;
 	}
 	settings_load();		/* (after snd_init: what the machine has) */
+	play_set_volume(settings_volume());
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EPlay: not enough memory.][ Quit ]");
 		snd_exit();
@@ -557,6 +610,9 @@ int app_main(void)
 		appl_exit();
 		return 1;
 	}
+	/* Shuffle and Repeat: the playlist's (phase 4), grey until then */
+	menu_ienable(mb.tree, mbar_object(&mb, C_SHUFFLE), 0);
+	menu_ienable(mb.tree, mbar_object(&mb, C_REPEAT), 0);
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 	open_window();
@@ -607,6 +663,7 @@ int app_main(void)
 
 	play_log_stop();
 	play_stop();
+	settings_flush();		/* (the volume, if it changed) */
 	snd_exit();
 	elog("quit");
 	elog_save();
