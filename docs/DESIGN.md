@@ -909,6 +909,58 @@ subbands, about 11 kHz) halves the window: about 50 % of a DFB1 for it, 150 % of
 Falcon. Mono halves it again. Put to Erez as a decision (the capability is his): every
 Falcon has the DSP, which EPlay holds only while it plays.
 
+### The Analog 8's channel 3: why the DSP can't fill the frame (3 Nov 2026)
+
+The DSP port's frame is 128 bits, eight 16-bit slots (0.11's count; the Falcon's matrix frames
+four stereo tracks). EPlay's SSI sends two words a frame (network mode, DC 1) and leaves its
+data line undriven in slots 2 to 7, which the FDI takes for channels 3 to 8. Driving them
+means DC 7 and a word in every slot: eight transmit interrupts a frame, 352,800 a second at
+44.1 kHz. The fast interrupt is one fixed instruction, `movep y:(r7)+,x:TX`, so it can only
+read the ring in a straight line:
+- **Zeros in the ring** (eight words a frame, six of them zero) would make the FDI's ring 9,216
+  words, four times 2,304. External Y is full (PCM at $3000, then the resampler's taps and the
+  packet).
+- **A long interrupt** that picks the slot's word (the ring's or a zero) costs some 20 clocks a
+  slot, about 22 % of the DSP: more than Quality High on the FDI has to spare (square.mp3
+  needs about 95 % on its own).
+- **A small frame buffer** read in a circle by the fast interrupt needs its two words refreshed
+  once a frame, and the 56001 has nothing that comes once a frame (no frame sync interrupt, no
+  timer on the frame's clock).
+- **TSR** (the SSI's time slot register) skips a slot by leaving the line undriven, as now.
+
+So it is the matrix's or the FDI's to settle. The test for Erez: a 44.1 kHz WAV through the FDI
+plays on the sound DMA (DMA to EXTOUT on the FDI's clock), not on the DSP. If channel 3 is
+quiet then, the DMA drives all eight slots, and the DSP's sound can go the same way: the DSP's
+SSI recorded by the DMA into a ring in ST RAM and played from it by the DMA (no DSP time, a
+little more delay at Play and Pause). If it is noisy with the DMA too, it is the FDI's
+set-up (its channels, from its boot program) or the matrix's tracks (`Settracks`).
+
+### Phase 2's report (3 Nov 2026)
+
+**Set out to do:** MP3 three ways, chosen in the settings: through the FDI at the file's rate,
+on the DSP on the Falcon's clock (resampled), on the 68030; WAV and AIFF through the DSP; the
+settings in eplay.inf.
+
+**Done** (0.4 to 0.17; 0.11 withdrawn, 0.12 its rollback):
+- The FDI's way, as Cubase's: the FDI put at the file's rate, each clock measured (0.4 to 0.8;
+  timed by Timer A since 0.12). Clean on Erez's Falcon with the DFB1X off (0.12).
+- The DSP's way: the faster decoder, resampling on the DSP, WAV and AIFF through it (0.9); the
+  DAC out on the FDI's clock (0.10); 2 % more room (0.15).
+- The log of a stream's troubles (0.10), the free ST RAM kept whole (0.13).
+- Settings: Output (0.14), Quality (0.17); file names in lowercase (0.16).
+
+**Left:**
+- The 68030's decoder: no 68030 keeps up at High or Normal (above). Erez's decision: drop it,
+  or a half-rate decoder for a DFB1.
+- The Analog 8's channel 3 (above): Erez's test with a 44.1 kHz WAV.
+- Output DSP's crackle in the right channel (0.15's log): whether 0.14 had it, and whether it
+  comes at the same places each time.
+
+**Next, proposed: phase 3, the player window** (The program, above): the transport in the window's
+top row (play/pause, stop, the position bar, clicked or dragged to seek), the volume in the
+window, the info line as the status, Play/Pause (Space) and Stop in a Play menu, and the About
+box's line 2. The playlist and Next/Previous come with phase 4.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
