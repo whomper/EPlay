@@ -1477,12 +1477,21 @@ static int decode_dsp(DSPJ *dj, PIC *p, SCALER *sc, int *why)
 		int rows = (int) (oh - my * mh < mh ? oh - my * mh : mh);
 		/* rows mode: the rows this MCU row makes, from y0 */
 		long y0 = rows_mode ? (shrink ? shr.ya[my] : my * mh) : 0;
-		for (mx = 0; mx < mcols && !pic_dsp_failed; mx++)
+		for (mx = 0; mx < mcols && !pic_dsp_failed; mx++) {
 			if (shrink)
 				dsp_read(rows_mode ? &bp : p, ow, NULL, &src, shr.xa[mx], shr.ya[my] - y0, shr.ce[mx], shr.re[my]);
 			else
 				dsp_read(rows_mode ? &bp : p, ow, band, &src, mx * mw, my * mh - y0,
 					 (int) (ow - mx * mw < mw ? ow - mx * mw : mw), rows);
+			/* a turn every 8 MCUs inside a wide row too (a 500-wide cover at
+			   2/8 left 75 ms between turns on a stock Falcon: EPlay, 3 Nov
+			   2026); the DSP waits for the next scan words meanwhile, as it
+			   does between rows */
+			if (pic_poll != NULL && (mx & 7) == 7 && mx + 1 < mcols && !pic_dsp_failed && !pic_poll()) {
+				*why = PIC_STOPPED;
+				goto out;
+			}
+		}
 		if (rows_mode && !pic_dsp_failed) {
 			int r, n = shrink ? shr.re[my] : rows;
 			for (r = 0; r < n; r++)
