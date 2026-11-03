@@ -943,6 +943,7 @@ static void crash_quit(const char *what)
    all inside the album art's decode: nested), and the music fed */
 static void turn(int nested)
 {
+	int piece = 0;
 	AEVENT ev;
 	short msg[8];
 	short which;
@@ -960,10 +961,14 @@ static void turn(int nested)
 	} else if (open_due && !nested) {
 		open_due = 0;
 		play_file(file);
-	} else if ((bar_due || status_due) && !nested)
+		piece = 1;
+	} else if ((bar_due || status_due) && !nested) {
 		bar_turn();
-	else if (rows_from >= 0 && !nested)
+		piece = 1;
+	} else if (rows_from >= 0 && !nested) {
 		rows_turn();
+		piece = 1;
+	}
 	if (seek_to >= 0 && !nested) {
 		do_seek();
 		step(play_state() == PS_PLAYING);
@@ -1010,7 +1015,10 @@ static void turn(int nested)
 		else if (hit == BH_LIST)
 			list_press(ev.mx, ev.my, 0);
 	}
-	step(playing);
+	/* (a turn that drew a piece of the window reads no more of the file:
+	   a 32 KB read after it went past the 50 ms between event calls; the
+	   queue is filled the turn after) */
+	step(playing && !piece);
 }
 
 const long cpu_need = 30;
