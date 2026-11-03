@@ -41,7 +41,7 @@
 enum { A_NONE, A_READ, A_DECODE, A_DITHER, A_PENS, A_READY, A_FAILED };
 
 #define ART_MAX_BYTES (4L * 1024 * 1024)	/* a bigger picture is left out */
-#define SLICE 40
+#define SLICE 20	/* ms of work, then GEM's turn at the decoder's next poll (a poll comes every 8 MCUs, 15 to 25 ms: with 40 the turns came 60 to 70 ms apart) */
 #define KEY_BYTES 4096
 #define REC_SIDE 64				/* the cache's records: up to 64 x 64 */
 #define REC_HDR 16
