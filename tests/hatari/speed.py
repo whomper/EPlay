@@ -127,6 +127,14 @@ def session(work, spec, kind):
             r.quick = True
             r.start("C:\\LAUNCH.PRG", ready="EPLAY status: Getting the album art")
             r.quick = False
+            # (the start: AESSTART and the stretches to the window's first
+            # draw; the rig's own wait after it would add the cover's
+            # unpacking turns, which are the next row's)
+            con = r.console()
+            at = con.find("EPLAY status: Getting the album art")
+            drawn = con.find("WM_REDRAW", at)
+            if at >= 0 and drawn >= 0:
+                r.start_end = con.find("\n", drawn) + 1
             r.results[-1] = ("started, the window drawn", "AESSTART", speed.START)
             r.act("an MP3 with an uncached cover: playing starts", 3000,
                   lambda: r.wait_line("EPLAY playing"), job=True)
