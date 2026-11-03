@@ -133,7 +133,8 @@ static void open_window(void)
 	bar_layout(&work);
 }
 
-static void play_file(const char *f)
+/* the file played: opened (play.c), started, its art shown */
+static void play_now(const char *f)
 {
 	char err[160];
 	if (!play_open(f, err, sizeof(err))) {
@@ -145,7 +146,6 @@ static void play_file(const char *f)
 		return;
 	}
 	play_start();
-	art_begin(f);			/* (its picture made in the steps from now) */
 	{
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
@@ -169,6 +169,23 @@ static void play_file(const char *f)
 		} else
 			redraw(0, BP_PLAY | BP_TIME);
 	}
+}
+
+/* an MP3 whose album art the DSP unpacks first (Erez, 3 Nov 2026): its
+   music waits for it, the window answering meanwhile (turn()) */
+static char pending_play[320];
+
+static void play_file(const char *f)
+{
+	play_log_stop();		/* (the one playing gives the DSP back) */
+	play_stop();
+	if (art_begin(f) == ART_FIRST) {
+		snprintf(pending_play, sizeof(pending_play), "%s", f);
+		status("Getting the album art...");
+		return;
+	}
+	pending_play[0] = 0;
+	play_now(f);
 }
 
 static void open_file(void)
@@ -463,8 +480,14 @@ static void turn(int nested)
 	short which;
 	int playing = play_state() == PS_PLAYING;
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1,
-			    nested || art_pending() || seek_to >= 0 ? 0 : play_wait_ms(), msg, &ev);
+			    nested || art_pending() || seek_to >= 0 || pending_play[0] ? 0 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
+	if (pending_play[0] && !nested && !art_needs_dsp()) {
+		char f[320];
+		snprintf(f, sizeof(f), "%s", pending_play);
+		pending_play[0] = 0;
+		play_now(f);
+	}
 	if (seek_to >= 0 && !nested) {
 		do_seek();
 		step(play_state() == PS_PLAYING);

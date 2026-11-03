@@ -21,7 +21,8 @@ GCCINC  := $(shell $(CC) -print-file-name=include 2>/dev/null)
 B       := build
 OBJDIR  := build/atari
 INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icommon/ui \
-           -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF
+           -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF \
+           -DPIC_TJPGD_DSP
 CFLAGS  := -m68030 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
            -ffunction-sections -fdata-sections -Wall -Wno-pointer-sign \
@@ -33,7 +34,7 @@ LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
 OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags
 CSRC    := bidi charset pic png inflate jpegdc
 CTP     := tjpgd
-CATARI  := libc tos gem crash
+CATARI  := libc tos gem crash dspjpeg
 CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
