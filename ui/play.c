@@ -229,7 +229,7 @@ static void tick_pcm(void)
 			k = B2FR(hb);
 			kb = FR2B(k);
 		}
-		pcm_convert(&fmt, q + q_roff, p, k);
+		pcm_convert_to(&fmt, q + q_roff, p, k, SND_STEP);
 		adv(kb);
 		snd_wrote(k);
 		room -= k;
@@ -537,7 +537,9 @@ static void tick_body(void)
 			short *p = snd_ptr(&k);
 			if (k > room)
 				k = room;
-			memset(p, 0, (size_t)k * 4);
+			long i;
+			for (i = 0; i < k; i++, p += SND_STEP)
+				*(long *)(void *)p = 0;
 			snd_wrote(k);
 			room -= k;
 		}

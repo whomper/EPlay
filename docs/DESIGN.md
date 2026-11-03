@@ -956,6 +956,17 @@ tick writes only the first pair (the ring four times as large in ST RAM: 1.6 MB 
 noise on channel 3 with Output DSP as well. Whether channels 3 to 8 carry the music or stay silent
 is Erez's call.
 
+**lrtest.wav's answer (Erez, 3 Nov 2026):** channel 1 has the left, channel 2 the right, and
+channels 3 to 8 all have the left again. A stereo player's channels past 2 are silent, so the
+sound DMA now plays four tracks (`Settracks(3, 0)`, the DAC on the first, `Setmontracks(0)`):
+16 bytes a frame, the music in the first four, the other twelve zeros written once when the
+ring is taken (`Mxalloc` mode 0, as before). The tick writes a frame's two words and steps on
+16 bytes (`pcm_convert_to`, its step 8 words; `tests/pcm` checks that the other six words are
+left as they were). The ring is a second long now, 786 KB at 49,170 Hz (two seconds of one
+track were 393 KB): the queue in TT RAM holds the file ahead, the ring only the tick's lead. The
+DSP's own sound (MP3, and a WAV it resamples) still leaves slots 2 to 7 undriven; it goes the
+same way next, through a DMA ring of its own.
+
 ### A 24-bit AIFF on Erez's Falcon (3 Nov 2026), and 0.18
 
 Erez's 24-bit stereo AIFF at 44.1 kHz crackled through the FDI and with Output DSP alike (both

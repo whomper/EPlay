@@ -15,7 +15,7 @@
 int main(int argc, char **argv)
 {
 	static unsigned char buf[8 << 20], raw[8 << 20];
-	static short out[4 << 20];
+	static short out[4 << 20], wide[16 << 20];
 	PCMFMT f;
 	const char *why;
 	FILE *fp;
@@ -47,6 +47,15 @@ int main(int argc, char **argv)
 		short s = (short)(raw[2 * i] | raw[2 * i + 1] << 8);	/* sox: little-endian */
 		if (s != out[i] && !bad++)
 			printf("%s: sample %ld: %d, sox %d\n", argv[1], i, out[i], s);
+	}
+	/* the sound ring's four tracks: the same words, the other six as they were */
+	for (i = 0; i < f.frames * 8; i++)
+		wide[i] = (short)(0x5a5a ^ i);
+	pcm_convert_to(&f, buf + f.data, wide, f.frames, 8);
+	for (i = 0; i < f.frames * 8; i++) {
+		short want = (i & 7) < 2 ? out[i / 8 * 2 + (i & 7)] : (short)(0x5a5a ^ i);
+		if (wide[i] != want && !bad++)
+			printf("%s: four tracks, word %ld: %d, not %d\n", argv[1], i, wide[i], want);
 	}
 	printf("%-24s %s %6ld Hz %d ch %2d bits %6ld frames: %s\n", strrchr(argv[1], '/') + 1,
 	       f.kind == PCM_WAV ? "WAV " : "AIFF", f.rate, f.channels, f.bits, f.frames,
