@@ -20,7 +20,8 @@ CC      := $(CROSS)gcc
 GCCINC  := $(shell $(CC) -print-file-name=include 2>/dev/null)
 B       := build
 OBJDIR  := build/atari
-INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icommon/ui
+INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icommon/ui \
+           -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF
 CFLAGS  := -m68030 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
            -ffunction-sections -fdata-sections -Wall -Wno-pointer-sign \
@@ -29,12 +30,13 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags
-CSRC    := bidi charset
+OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags
+CSRC    := bidi charset pic png inflate jpegdc
+CTP     := tjpgd
 CATARI  := libc tos gem crash
 CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
-           $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CATARI) $(CUI)))
+           $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
 
@@ -76,6 +78,10 @@ $(OBJDIR)/cpucheck.o: common/atari/cpucheck.c | $(OBJDIR)
 	$(CC) $(subst -m68030,-m68000,$(CFLAGS)) -c -o $@ $<
 $(OBJDIR)/%.o: common/src/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
+# the album art's JPEGs (common's pic.c; GIF left out: an album's art
+# never is one)
+$(OBJDIR)/tjpgd.o: common/third_party/tjpgd/tjpgd.c $(wildcard common/third_party/tjpgd/*.h) | $(OBJDIR)
+	$(CC) $(CFLAGS) -Icommon/third_party/tjpgd -c -o $@ $<
 $(OBJDIR)/%.o: common/atari/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: common/ui/%.c $(HDRS) | $(OBJDIR)

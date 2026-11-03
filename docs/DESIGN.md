@@ -1017,12 +1017,48 @@ their bars' lengths.
    Play/Pause), Play/Pause and Stop, the position bar going to a place (MP3: by the Xing or VBRI
    table, else by the bit rate; WAV, AIFF: by the sample), the labels, the output.
 3. Pause: the sound stopped where it is and the DSP given back (the DSP rule), Play going on
-   from there.
+   from there. (Built: below.)
 4. The album art.
 5. The volume (the Falcon's own output by its attenuation; the FDI's on the DSP, so that 0 dB
    stays bit for bit).
 6. The list, with the one file opened; the playlist, Shuffle, Repeat, Previous and Next are
    phase 4's.
+
+**Part 2 as built** (`ui/bar.c`): every shape is the VDI's filled rectangles and lines (a triangle
+or the round button is its rows), so nothing needs a bitmap in ST RAM. Pens 16 to 22 hold the
+bar's colours in 256 colours and more, put back at the end; 16 colours take the nearest of pens 0
+to 15 with the bar black. The times and the position are drawn each second off the screen
+(common's offdraw) and shown in one step. Until Pause (part 3) the round button plays and stops,
+as Space does; Shuffle, Previous, Next and Repeat are drawn dim. The volume shows 0 dB, as it
+plays, until part 5. A press on the position bar shows the time under the pointer while it is
+held; on the release `play_seek` opens the file again there: a WAV or AIFF at the sample frame,
+an MP3 by its Xing frame's table (VBR; `mp3_info_toc`, checked in `tests/mp3/test_info.c` to
+2/256 and a frame) or by its bytes, at the first frame that a second frame header follows. The
+DSP starts it as after any seek: its first frames muted until the bit reservoir is there.
+The release only shows the place; the going there is the next turn's (5.8): together they were 55
+ms on a stock Falcon, apart the seek's turn is 35 (it reads 4 KB at the place to find a frame,
+not 64, and the file's tags aren't read again).
+
+**Part 3, Pause, as built:** the round button and Space are Play/Pause; Stop is in the Play menu
+and goes back to the start. Pause stops the sound and gives the DSP back (the DSP rule): the file
+is closed and its place kept. An MP3's is the frame playing: the tick keeps where each of the last
+32 frames it sent began in the file, and the DSP's count of frames decoded says which plays, so
+a VBR file is taken up exactly, not by its Xing table's per cents; a WAV's or AIFF's is the sample
+frame. Play opens it again there. The position bar while paused or stopped moves the place and
+opens nothing. The speed rig pauses and goes on: the same millisecond, the file opened once.
+
+**Part 4, the album art, as built (`ui/art.c`):** the picture's bytes read in 32 KB steps,
+unpacked at the art's size by common's `pic.c` (TJpgDec a row at a time, PNG whole), each row
+dithered as it comes, then built a pen at a time into a small form in ST RAM taken at the start;
+from then on one copy a redraw. GEM has a whole turn from inside the decoder every 40 ms. But a
+stock Falcon's 68030 unpacks a 500 x 500 cover of 48 KB in 6.8 s, and TJpgDec takes its input
+512 bytes at a time (it can't take less: with 128 its headers don't fit), each 70 to 100 ms there
+and up to 70 on Hatari's 32 MHz Falcon: over the 40 ms GEM may be kept waiting. So the 68030
+unpacks the art only where a 50 ms measure at the start finds it three or four times a stock
+Falcon (5,800 turns of its loop; a stock Falcon 1,342, Hatari's 32 MHz one 3,312, a DFB1 about
+5,200): a 68060's Falcon. Elsewhere EPlay's picture stays, and the log says so. The DSP's way, for
+every Falcon, is put to Erez: the art unpacked on the DSP (common's `dspjpeg`) before an MP3's
+own program goes in, or while a WAV or AIFF plays on the DMA.
 
 ## The order of the work
 

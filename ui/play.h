@@ -14,6 +14,15 @@ enum { PS_IDLE, PS_PLAYING };
    why in err if it can't be played */
 int play_open(const char *path, char *err, int n);
 void play_start(void);
+/* the file open again from ms on (its first whole MP3 frame there), playing
+   on if it played: 0 and why in err if it can't be */
+int play_seek(long ms, char *err, int n);
+/* Pause: the sound stopped where it is and the DSP given back (the DSP
+   rule); play_resume takes it up there (an MP3 at the frame that played).
+   play_paused: 1 between the two */
+void play_pause(void);
+int play_resume(char *err, int n);
+int play_paused(void);
 void play_stop(void);		/* and the file closed, the DSP given back */
 /* work for the GEM loop, at most about ms milliseconds (the file read
    into the queue; the sound itself is fed by the tick): 1 when something
@@ -21,12 +30,18 @@ void play_stop(void);		/* and the file closed, the DSP given back */
 int play_step(int ms);
 int play_wait_ms(void);		/* the GEM loop's timer until the next step */
 int play_state(void);
+int play_is_open(void);
+/* n bytes of the open file from at (the album art), its place for the
+   queue kept: how many, or -1 */
+long play_read_at(long at, void *buf, long n);		/* opened and not stopped: Play goes on from where it is */
 
 extern char play_name[64];	/* the file's name */
 #include "tags.h"
 extern TAGS play_tags;		/* what it says it is: title, artist, album, album art */
 extern char play_info[80];	/* "MP3  128 kbit/s  44.1 kHz  stereo" */
 extern char play_out[80];	/* "FDI  44.1 kHz" */
+extern long play_kbps, play_hz;	/* the file's bit rate (a VBR file's average), its rate */
+extern const char *play_via;	/* "FDI", "DSP" or "DMA": where it plays */
 long play_ms(void);		/* how far it has played */
 long play_tick_share(void);		/* the tick's share of the 68030, % (the log) */
 const char *play_keep_up(void);	/* the first underrun and the least lead, for the log */

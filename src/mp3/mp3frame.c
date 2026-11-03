@@ -278,6 +278,28 @@ static unsigned long be32(const unsigned char *p)
 	return (unsigned long)p[0] << 24 | (unsigned long)p[1] << 16 | (unsigned long)p[2] << 8 | p[3];
 }
 
+int mp3_info_toc(const unsigned char *f, const MP3HDR *h, unsigned char *toc)
+{
+	int side = h->version == 1 ? (h->channels == 2 ? 32 : 17) : (h->channels == 2 ? 17 : 9);
+	int k;
+	for (k = 0; k < 2; k++) {
+		const unsigned char *x = f + 4 + side + (k && h->crc ? 2 : 0);
+		unsigned long fl;
+		long at;
+		if (k && !h->crc)
+			break;
+		if (h->length < (x - f) + 8 || memcmp(x, "Xing", 4))
+			continue;
+		fl = be32(x + 4);
+		at = 8 + ((fl & 1) ? 4 : 0) + ((fl & 2) ? 4 : 0);
+		if (!(fl & 4) || h->length < (x - f) + at + 100)
+			return 0;
+		memcpy(toc, x + at, 100);
+		return 1;
+	}
+	return 0;
+}
+
 long mp3_info_frames(const unsigned char *f, const MP3HDR *h, int *vbr)
 {
 	int side = h->version == 1 ? (h->channels == 2 ? 32 : 17) : (h->channels == 2 ? 17 : 9);

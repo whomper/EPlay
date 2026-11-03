@@ -34,8 +34,10 @@ _spec.loader.exec_module(speed)
 # where things are on the 640x480 screen (EPlay's window where it opens)
 DESK = (40, 9)
 ABOUT = (60, 27)
-OPEN, PLAY, STOP = (170, 258), (288, 258), (400, 258)
-SECS = 40
+# the bar's round Play/Pause button (design D)
+PLAY = PAUSE = (365, 150)
+POS_MID = (364, 175)		# the position bar's middle
+SECS = 120	# (long enough not to end before the last action, when the emulator runs fast)
 
 
 class Rig(speed.Rig):
@@ -60,15 +62,17 @@ class Rig(speed.Rig):
         """a press held still a second, its button seen pressed on the
         screen before the release (guidelines 5.8, AERA-Atari 60d1ea5: TOS's
         AES holds BEG_UPDATE back while the button is held, unseen by
-        AESGAP): the button's inside mostly dark (filled in pen 1)"""
+        AESGAP): the round button's disc no longer white (the accent), on a
+        ring between its symbol and its edge"""
         from PIL import Image
         time.sleep(1)
         img = Image.open(self.shot("held-" + what)).convert("L")
-        box = [img.getpixel((x + dx, y + dy)) for dx in range(-40, 41, 4) for dy in (-4, 0, 4)]
-        dark = sum(1 for v in box if v < 96) / len(box)
-        ok = dark > 0.6
-        print("%s  %s held 1 s: %d %% of the button dark (drawn pressed before the release)"
-              % ("ok  " if ok else "FAIL", what, dark * 100))
+        ring = [(9, 0), (-9, 0), (0, 9), (0, -9), (7, 7), (-7, 7), (7, -7), (-7, -7)]
+        box = [img.getpixel((x + dx, y + dy)) for dx, dy in ring]
+        pressed = sum(1 for v in box if v < 200) / len(box)
+        ok = pressed > 0.6
+        print("%s  %s held 1 s: %d %% of the button in its pressed colour (drawn pressed before the release)"
+              % ("ok  " if ok else "FAIL", what, pressed * 100))
         self.held_ok = getattr(self, "held_ok", True) and ok
 
 
@@ -86,8 +90,19 @@ def session(work, spec, kind):
         subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(SECS),
                         "sine", "1000", "sine", "1500", "gain", "-6"], check=True)
         if kind == "mp3":
+            # with album art as a shop's is: a 500 x 500 JPEG of a photo's
+            # detail (some 100 KB), its steps timed with the rest
+            from PIL import Image, ImageFilter
+            import random
+            random.seed(1)
+            img = Image.new("RGB", (500, 500))
+            img.putdata([(x * 255 // 499, y * 255 // 499, random.randrange(256))
+                         for y in range(500) for x in range(500)])
+            cover = os.path.join(r.work, "cover.jpg")
+            img.filter(ImageFilter.GaussianBlur(1)).save(cover, quality=90)
             name, what = "LONG.MP3", "an MP3 (320 kbit/s)"
-            subprocess.run(["lame", "-t", "--quiet", "--noreplaygain", "-b", "320", "-m", "s", src,
+            subprocess.run(["lame", "-t", "--quiet", "--noreplaygain", "-b", "320", "-m", "s",
+                            "--tt", "Long", "--ta", "The rig", "--ti", cover, src,
                             os.path.join(r.hd, name)], check=True)
         else:
             name, what = "LONG.WAV", "a WAV (CD quality)"
@@ -103,23 +118,55 @@ def session(work, spec, kind):
         r.act("Settings opened (playing)", speed.DIALOG, lambda: r.key("ctrl+comma"))
         r.shot("settings")
         r.act("Settings closed (Esc)", speed.WINDOW, lambda: r.key("Escape"))
-        r.act("Stop: pressed (drawn pressed)", speed.KEY, lambda: r.press(*STOP))
-        r.held_shown(STOP[0], STOP[1], "Stop")
-        r.act("Stop: let go (stops)", speed.KEY, r.let_go)
-        r.act("About box opened (stopped)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
+        r.act("Pause: pressed (drawn pressed)", speed.KEY, lambda: r.press(*PAUSE))
+        r.held_shown(PAUSE[0], PAUSE[1], "Pause")
+        r.act("Pause: let go (pauses)", speed.KEY, r.let_go)
+        r.act("About box opened (paused)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
         r.act("Play: pressed (drawn pressed)", speed.KEY, lambda: r.press(*PLAY))
         r.held_shown(PLAY[0], PLAY[1], "Play")
-        r.act("Play: let go (the file again)", speed.KEY, r.let_go)
+        r.act("Play: let go (goes on)", speed.KEY, r.let_go)
         r.act("%s playing, 5 s more" % what, speed.KEY, lambda: time.sleep(5))
-        r.act("Stop again", speed.KEY, lambda: r.click(*STOP))
+        # the position bar: the time follows the press, the music goes there
+        # on the release (play_seek: the file opened again at its place)
+        r.act("Position bar: pressed at its middle", speed.KEY, lambda: r.press(*POS_MID))
+        r.act("Position bar: let go (goes there)", speed.KEY, r.let_go)
+        r.act("%s playing from there, 3 s" % what, speed.KEY, lambda: time.sleep(3))
+        r.act("Pause again", speed.KEY, lambda: r.click(*PAUSE))
         rc = r.report()
         if not getattr(r, "held_ok", True):
             rc = 1
-        n = sum(1 for l in r.console().split("\n") if l.startswith("EPLAY playing"))
-        if n != 2:
-            print("FAIL  played %d times, not 2" % n)
+        went = [l for l in r.console().split("\n") if l.startswith("EPLAY went to ")]
+        ms = int(went[-1].split()[3]) if went else -1
+        if abs(ms - SECS * 500) > SECS * 50:
+            print("FAIL  the position bar's middle went to %d ms, not about %d" % (ms, SECS * 500))
+            rc = 1
+        else:
+            print("ok    the position bar's middle went to %d ms (of %d)" % (ms, SECS * 1000))
+        lines = r.console().split("\n")
+        if kind == "mp3":
+            log = ""
+            for n in ("eplay.log", "EPLAY.LOG"):
+                if os.path.exists(os.path.join(r.hd, n)):
+                    log = open(os.path.join(r.hd, n), errors="replace").read()
+            art = [l for l in log.split("\n") if l.startswith("album art")]
+            # (made where the 68030 is fast enough, else left: art.c)
+            if not art or not (art[0].startswith("album art: JPEG") or "left for a faster 68030" in art[0]):
+                print("FAIL  the album art: %s" % (art or "not made"))
+                rc = 1
+            else:
+                print("ok    %s" % art[0])
+        paused = [int(l.split()[3]) for l in lines if l.startswith("EPLAY paused at ")]
+        resumed = [int(l.split()[3]) for l in lines if l.startswith("EPLAY resumed at ")]
+        if not paused or not resumed or abs(resumed[0] - paused[0]) > 100:
+            print("FAIL  paused at %s, went on at %s (Play takes it up where Pause was)" % (paused, resumed))
+            rc = 1
+        else:
+            print("ok    paused at %d ms, went on at %d ms" % (paused[0], resumed[0]))
+        n = sum(1 for l in lines if l.startswith("EPLAY playing"))
+        if n != 1:
+            print("FAIL  the file opened %d times, not once (Pause and Play go on in it)" % n)
             rc = 1
         return rc
     finally:
