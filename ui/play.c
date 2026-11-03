@@ -544,6 +544,11 @@ static int take_queue(int unit)
 	return 1;
 }
 
+/* how the disk kept up, for the log (play_disk_note): the bytes read,
+   the time the reads took (the 200 Hz clock's, summed), the queue's
+   least lead once a second has played; -1 before */
+static long rd_bytes, rd_ms, q_least = -1;
+
 /* the file read into the queue, a piece at a time, for about ms */
 static void fill(unsigned long t0, int ms)
 {
@@ -559,7 +564,13 @@ static void fill(unsigned long t0, int ms)
 		   the queue's end are read as they come) */
 		if (n <= 0 || (n < PIECE && n < data_left && at + n < q_size))
 			break;
-		r = Fread(fh, n, q + at);
+		{
+			unsigned long a = ms_now();
+			r = Fread(fh, n, q + at);
+			rd_ms += (long)(ms_now() - a);
+		}
+		if (r > 0)
+			rd_bytes += r;
 		if (r <= 0) {
 			src_done = 1;
 			break;
@@ -783,6 +794,8 @@ int play_open(const char *path, char *err, int n)
 	t_t0 = t_last = 0;
 	t_gap = 0;
 	t_gap_at = m_changed_at = -1;
+	rd_bytes = rd_ms = 0;
+	q_least = -1;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
 	last_sec = -1;
@@ -905,11 +918,26 @@ const char *play_stream_note(void)
 	return b;
 }
 
+const char *play_disk_note(void)
+{
+	static char b[160];
+	long need = kind ? rate * fmt.bytes / 1024 : bitrate * 125 / 1024;	/* KB/s the music takes */
+	char sp[24];
+	if (rd_ms > 0)
+		snprintf(sp, sizeof(sp), "%ld KB/s", rd_bytes / rd_ms * 1000 / 1024);
+	else
+		snprintf(sp, sizeof(sp), "too fast to time");	/* (the 200 Hz clock's 5 ms) */
+	snprintf(b, sizeof(b), "%ld KB read in %ld ms of reads (%s; the music takes %ld KB/s); the queue's least "
+		 "lead %ld ms", rd_bytes / 1024, rd_ms, sp, need, q_least);
+	return b;
+}
+
 void play_log_stop(void)
 {
 	if (state == PS_PLAYING) {
 		elog("stopped at %ld ms; %ld underruns (%s)", play_ms(), snd_underruns, play_keep_up());
 		elog("the stream: %s", play_stream_note());
+		elog("the disk: %s", play_disk_note());
 	}
 }
 
@@ -927,8 +955,8 @@ const char *play_keep_up(void)
 		return b;
 	}
 	if (snd_underruns)
-		snprintf(b, sizeof(b), "the first at %ld ms; the least lead %ld ms", f_ms(snd_first_under),
-			 f_ms(snd_least_lead));
+		snprintf(b, sizeof(b), "the first at %ld ms; the least lead %ld ms; the tick %ld%% of the 68030",
+			 f_ms(snd_first_under), f_ms(snd_least_lead), play_tick_share());
 	else
 		snprintf(b, sizeof(b), "the least lead %ld ms; the tick %ld%% of the 68030", f_ms(snd_least_lead),
 			 play_tick_share());
@@ -977,6 +1005,13 @@ int play_step(int ms)
 		return 1;
 	}
 	fill(t0, ms);
+	if (!src_done && play_ms() > 1000) {
+		long ahead = q_w - q_r, lead;
+		lead = kind ? ahead / fmt.bytes / rate * 1000 + ahead / fmt.bytes % rate * 1000 / rate :
+			      bitrate ? ahead / bitrate * 8 : 0;
+		if (q_least < 0 || lead < q_least)
+			q_least = lead;
+	}
 	if (dsp && t_end) {
 		long fr, late, wmin, wavg;
 		char l[60];
@@ -985,6 +1020,7 @@ int play_step(int ms)
 		nf_debug(l);			/* (the rigs) */
 		elog("played to the end: %ld ms, %ld frames to the DSP (%s)", play_ms(), t_frames, play_keep_up());
 		elog("the stream: %s", play_stream_note());
+		elog("the disk: %s", play_disk_note());
 		play_stop();
 		elog_save();
 		return 1;
@@ -997,6 +1033,7 @@ int play_step(int ms)
 		nf_debug(l);			/* (the rigs; nothing on the Atari) */
 		elog("played to the end: %ld ms, %ld frames to the DSP, %ld underruns (%s)", play_ms(), t_frames,
 		     snd_underruns, play_keep_up());
+		elog("the disk: %s", play_disk_note());
 		play_stop();
 		elog_save();
 		return 1;

@@ -41,6 +41,10 @@ REC_RATE = 48000
 CASES = {
     "wav": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
     "aiff": ("TONE.AIF", ["-r", "32780", "-c", "1", "-b", "16"], None, 32780, (1000, 1000), 3),
+    # 24 bits, stereo, ten seconds at a rate the DMA plays as it is (Erez's
+    # 24-bit AIFF at 44.1 kHz on the FDI's clock, 3 Nov 2026: 330 underruns
+    # in 6 s, the first at 0.86 s)
+    "aiff24": ("T24.AIF", ["-r", "49170", "-c", "2", "-b", "24"], None, 49170, (1000, 1500), 10),
     # a rate the Falcon's clock hasn't, 22.05 kHz mono: through the DSP,
     # resampled to 24585 Hz (CD's stereo stays on the DMA, at 49170: a
     # host-port word a sample would cost a stock Falcon's 68030 too much)

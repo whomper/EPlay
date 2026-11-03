@@ -218,6 +218,20 @@ void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n)
 		}
 		return;
 	}
+	/* 24 bits stereo (a studio's files): its own loop too, as sample()
+	   rounds them, the top 16 bits and one more where the lowest byte is
+	   128 or more. Through sample(), a call each, a 24-bit AIFF at 44.1 kHz
+	   crackled on Erez's Falcon (3 Nov 2026: 330 underruns in 6 s) */
+	if (f->bits == 24 && f->channels == 2) {
+		int hi = f->big ? 0 : 2, lo = f->big ? 2 : 0;
+		for (i = 0; i < n; i++, src += 6) {
+			long l = (long)(signed char)src[hi] * 256 + src[1] + (src[lo] >> 7);
+			long r = (long)(signed char)src[3 + hi] * 256 + src[4] + (src[3 + lo] >> 7);
+			*dst++ = (short)(l > 32767 ? 32767 : l);
+			*dst++ = (short)(r > 32767 ? 32767 : r);
+		}
+		return;
+	}
 	for (i = 0; i < n; i++, src += f->bytes) {
 		short l = sample(f, src);
 		*dst++ = l;

@@ -124,6 +124,11 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   Without the DSP, MP3 files show greyed in the playlist: "MP3 needs a Falcon's DSP."
 - To decide when this is built (the guidelines' Speed): what 44.1 kHz stereo costs an 8 MHz STE
   from its disk, and so which rates it plays from a file and which from memory.
+- **Erez, 3 Nov 2026:** WAV and AIFF of 16 and 24 bits at 44.1 and 48 kHz should play well on the
+  TT and the STE. Phase 6 as planned, after phases 3 to 5. The TT (68030, 32 MHz) converts to
+  50,066 Hz with interpolation and a dither to 8 bits; the STE more simply (the nearest sample at
+  50,066, or 25,033 Hz). **The plain ST is left out:** it has no DMA sound, and samples on its YM
+  chip would be about 4 bits at 10 to 16 kHz, taking nearly all of the 68000.
 
 ## The DSP rule (the hub writes it into the guidelines)
 
@@ -938,6 +943,19 @@ quiet then, the DMA drives all eight slots, and the DSP's sound can go the same 
 SSI recorded by the DMA into a ring in ST RAM and played from it by the DMA (no DSP time, a
 little more delay at Play and Pause). If it is noisy with the DMA too, it is the FDI's
 set-up (its channels, from its boot program) or the matrix's tracks (`Settracks`).
+
+### A 24-bit AIFF on Erez's Falcon (3 Nov 2026), and 0.18
+
+Erez's 24-bit stereo AIFF at 44.1 kHz crackled through the FDI and with Output DSP alike (both
+play it on the sound DMA: stereo at 44.1 kHz is past what the DSP resamples): 330 underruns in 6 s,
+the first at 0.86 s, the ring's lead down to nothing, the tick's longest gap 4.2 ms. The tick made
+each sample through `sample()`, a call and a switch each, where 16 bits have loops of their own.
+On Hatari's stock Falcon a 24-bit stereo AIFF at 49,170 Hz took the tick 67 % of the 68030 that
+way, its ring's lead down to 650 ms; 24 bits stereo now have a loop of their own, rounded as
+`sample()` rounds them (the same samples as sox's: `tests/pcm`): 29 %, the lead 2 s. The play
+rig has the case (`aiff24`, ten seconds). The log now says how the disk kept up as well: the KB
+read, the time the reads took and the rate that makes, against what the music takes (24-bit
+stereo at 44.1 kHz 258 KB/s), and the queue's least lead.
 
 ### Phase 2's report (3 Nov 2026)
 
