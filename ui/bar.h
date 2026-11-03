@@ -33,7 +33,14 @@ void bar_area(int parts, GRECT *r);
 /* the parts that meet clip */
 void bar_draw(const GRECT *clip, int parts);
 int bar_hit(short x, short y);	/* BH_... */
-short bar_art_side(void);	/* the album art's side, in pixels */
+short bar_art_side(void);
+/* the list: the rows it shows, one row drawn again (within clip), its
+   area, the file at y (-1: none), a row's height */
+int bar_rows(void);
+void bar_draw_row(const GRECT *clip, int i);
+void bar_row_area(int i, GRECT *r);
+int bar_row_at(short y);
+short bar_row_h(void);	/* the album art's side, in pixels */
 /* the position bar: x's place as a share of the file, 0 to 1000 */
 int bar_pos_at(short x);
 int bar_vol_at(short x);	/* the volume bar: x's place, 0 to VOL_MAX */

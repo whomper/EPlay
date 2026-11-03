@@ -71,6 +71,11 @@ CASES = {
     "normal": ("NORMAL.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "192", "-m", "s"], 32780,
                (1000, 1500), 6),
 }
+# three files given at the start (as the desktop gives files dropped on the
+# program): the list holds them and plays them one after another (Erez,
+# 3 Nov 2026: files added in bulk). Each a second, A and C WAVs, B an MP3
+LIST = [("A.WAV", None), ("B.MP3", ["-b", "128"]), ("C.WAV", None)]
+CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
 # the cases' eplay.inf
 INFS = {"normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n"}
 # the level of the middle (RMS), each case's, for wavvol's against wav's
@@ -208,8 +213,18 @@ def run(work, case, spec):
     shutil.copy(os.path.join(TOP, "binary", "eplay.prg"), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     f = make_file(hd, case)
+    tail = "C:\\%s" % f
+    if case == "list":
+        src = os.path.join(hd, "A.WAV")
+        for name, lame in LIST[1:]:
+            if lame:
+                subprocess.run(["lame", "--quiet", "--noreplaygain"] + lame + [src, os.path.join(hd, name)],
+                               check=True)
+            else:
+                shutil.copy(src, os.path.join(hd, name))
+        tail = " ".join("C:\\" + n for n, _ in LIST)
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
-        fh.write("C:\\%s\r\n" % f)
+        fh.write(tail + "\r\n")
     if case in INFS:
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
             fh.write(INFS[case])
@@ -242,6 +257,16 @@ def run(work, case, spec):
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(3)
             cmd(fifo, "hatari-event", "keypress", "0x1c")    # Return: no file named, so nothing
+        if case == "list":
+            # the three in turn, then the end: the playing lines in order
+            last = wait_line(log, lambda l: l.startswith("EPLAY playing: " + LIST[-1][0]), 60)
+            time.sleep(1.5)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            end = wait_line(log, lambda l: l.startswith("EPLAY status: Played to the end"), 30) if last else None
+            names = [l.split()[2] for l in open(log, errors="replace") if l.startswith("EPLAY playing: ")]
+            ok = names == [n for n, _ in LIST] and end is not None
+            return ok, m.describe(), "played in turn: %s (wanted %s)%s" % (
+                " ".join(names), " ".join(n for n, _ in LIST), "" if end else "; never ended")
         end = wait_line(log, lambda l: l.startswith("EPLAY status: ") and "Playing" not in l and
                         "clock" not in l, 120)
         time.sleep(1.0)

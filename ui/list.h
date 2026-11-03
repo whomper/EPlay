@@ -1,0 +1,41 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * list.h - the files in EPlay's list (Erez, 3 Nov 2026: files added in
+ * bulk, by dragging them onto the window or several at a time from the
+ * menu; playlists later). Each is shown by its name until its tags and
+ * length are read, one file a step in the background (one open a file, a
+ * few short reads: the guidelines' 6.5).
+ */
+#ifndef EPLAY_LIST_H
+#define EPLAY_LIST_H
+
+#define LIST_MAX 1000
+
+typedef struct {
+	char path[160];
+	char title[40], artist[28], album[28];	/* "" until read (or none) */
+	long len_ms;		/* 0: not known */
+	unsigned char read;	/* its tags and length read */
+	unsigned char bad;	/* not a file EPlay plays */
+} ENTRY;
+
+int list_init(void);		/* its memory (TT RAM where there is some): 0 if none */
+int list_count(void);
+ENTRY *list_at(int i);
+/* a file added at the end: its index, or -1 (the list full, or the
+   memory none); a file already in it isn't added again (its index) */
+int list_add(const char *path);
+void list_remove(int i);
+void list_clear(void);
+int list_find(const char *path);	/* its index, -1 if not in */
+/* one file's tags and length read: the next not read yet. 1 if one was
+   (its row to draw again: *row), 0 when none is left */
+int list_step(int *row);
+const char *list_name(const ENTRY *e);	/* its title, else its file's name */
+
+extern int list_cur;		/* the one playing (or last played), -1 none */
+extern int list_sel;		/* the one selected, -1 none */
+extern int list_top;		/* the first row shown */
+
+#endif
