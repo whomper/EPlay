@@ -48,6 +48,8 @@
 
 char play_name[64], play_info[80], play_out[80];
 TAGS play_tags;
+long play_kbps, play_hz;
+const char *play_via = "";
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
@@ -64,7 +66,19 @@ static unsigned long *pk = pks[0];	/* the next made in the other */
 static unsigned char fr[2048];	/* the tick's: a frame, whole */
 static long last_sec = -1;
 static long data_left;		/* bytes still to read into the queue */
+static char cur_path[256];	/* the file open (play_seek opens it again) */
+static long seek_ms, base_ms;	/* play_seek's place for play_open; where this play began */
+static long seek_byte;		/* MP3: Pause's frame, where Play takes it up (0: by seek_ms) */
+static long q_base;		/* MP3: where the queue's first byte is in the file */
+#define FR_RING 32
+static long fr_at[FR_RING];	/* MP3: the last frames sent, where each is in the file (the tick's) */
+static long fr_sent;		/* (and how many: their index) */
+static int paused;		/* Pause: stopped where it was, Play goes on from there */
+static long pause_ms, pause_byte;
 static long bitrate;		/* MP3: the first frame's, kbit/s */
+static unsigned char xtoc[100];	/* MP3: its Xing frame's table (VBR), if has_toc */
+static int has_toc;
+static long xing_at;		/* MP3: where its frames begin (the Xing frame's, where it has one) */
 
 /* the queue: the file's bytes from its first sample or frame on, as
    they are. q_w is GEM's, q_r the tick's: totals */
@@ -161,6 +175,21 @@ static long find_mp3(MP3HDR *h)
 			first_at = at;
 			return base + at;
 		}
+	}
+	return -1;
+}
+
+/* a frame in fbuf from its start: its header, and the next frame's of the
+   same rate after it (so that a place inside a frame isn't taken for
+   one); its place in fbuf, or -1 */
+static long sync_mp3(int rate_want)
+{
+	long at;
+	for (at = 0; at + 4 <= fend; at++) {
+		MP3HDR h, h2;
+		if (mp3_header(fbuf + at, &h) && h.rate == rate_want && at + h.length + 4 <= fend &&
+		    mp3_header(fbuf + at + h.length, &h2) && h2.rate == rate_want)
+			return at;
 	}
 	return -1;
 }
@@ -294,10 +323,15 @@ static void next_packet(void)
 			np = mp3_packet(&parse, &h, bytes_at(h.length), pk);
 			t_parse += fine_now() - a;
 		}
-		adv(h.length);
-		if (np > 0) {
-			pk_n = np;
-			pk_samples = h.samples;
+		{
+			long at = q_base + q_r;	/* (the frame's place, before it is passed) */
+			adv(h.length);
+			if (np > 0) {
+				pk_n = np;
+				pk_samples = h.samples;
+				fr_at[fr_sent % FR_RING] = at;
+				fr_sent++;
+			}
 		}
 	}
 }
@@ -595,6 +629,9 @@ int play_open(const char *path, char *err, int n)
 
 	play_log_stop();		/* (another file while one plays: what the first did) */
 	play_stop();
+	if (path != cur_path)
+		snprintf(cur_path, sizeof(cur_path), "%s", path);
+	base_ms = 0;
 	if (!fbuf) {
 		fbuf = Mxalloc(FBUF, 3);	/* TT RAM where there is some */
 		if ((long)fbuf <= 0)
@@ -613,8 +650,10 @@ int play_open(const char *path, char *err, int n)
 	}
 	file_size = Fseek(0, fh, 2);
 	/* what the file says it is (a few short reads: frames passed over by
-	   seeking, the album art only found) */
-	tags_read(&play_tags, tag_read, 0, file_size);
+	   seeking, the album art only found); a seek's or Pause's file again
+	   keeps them (the position bar's release on a stock Falcon: 55 ms) */
+	if (path != cur_path)
+		tags_read(&play_tags, tag_read, 0, file_size);
 	Fseek(0, fh, 0);
 	fpos = fend = 0;
 	eof = 0;
@@ -631,13 +670,27 @@ int play_open(const char *path, char *err, int n)
 		rate = fmt.rate;
 		len_ms = fmt.frames / rate * 1000 + fmt.frames % rate * 1000 / rate;	/* (no overflow past 13 minutes) */
 		data_left = fmt.frames > 0 ? fmt.frames * fmt.bytes : file_size - fmt.data;
-		Fseek(fmt.data, fh, 0);		/* the samples read from here into the queue */
+		{
+			/* play_seek's place: whole sample frames on */
+			long skip = 0;
+			if (seek_ms > 0 && len_ms > 0) {
+				skip = seek_ms / 1000 * rate + seek_ms % 1000 * rate / 1000;
+				if (skip > data_left / fmt.bytes)
+					skip = data_left / fmt.bytes;
+				base_ms = seek_ms < len_ms ? seek_ms : len_ms;
+				elog("from %ld ms: sample frame %ld", base_ms, skip);
+			}
+			data_left -= skip * fmt.bytes;
+			Fseek(fmt.data + skip * fmt.bytes, fh, 0);	/* the samples read from here into the queue */
+		}
 		if (!take_queue(fmt.bytes)) {
 			snprintf(err, n, "There isn't the memory to play.");
 			close_file();
 			return 0;
 		}
 		khz(kr, sizeof(kr), rate);
+		play_hz = rate;
+		play_kbps = (rate * fmt.channels * fmt.bits + 500) / 1000;
 		snprintf(play_info, sizeof(play_info), "%s  %d bits  %s  %s", kind == PCM_WAV ? "WAV" : "AIFF",
 			 fmt.bits, kr, fmt.channels == 2 ? "stereo" : "mono");
 		elog("%s: %ld Hz, %d bits, %d ch, %ld frames from %ld; %ld ms", kind == PCM_WAV ? "WAV" : "AIFF",
@@ -663,6 +716,8 @@ int play_open(const char *path, char *err, int n)
 			long bytes = file_size - at;
 			if (nf > 0) {
 				long fs = nf * h.samples;
+				has_toc = mp3_info_toc(fbuf + first_at, &h, xtoc);
+				xing_at = at;
 				at += h.length;
 				bytes -= h.length;
 				len_ms = fs / rate * 1000 + fs % rate * 1000 / rate;
@@ -670,16 +725,65 @@ int play_open(const char *path, char *err, int n)
 					bitrate = bytes / len_ms * 8 + (bytes % len_ms) * 8 / len_ms;
 			} else {
 				vbr = 0;
+				has_toc = 0;
+				xing_at = at;
 				len_ms = h.bitrate ? bytes * 8 / h.bitrate : 0;
 			}
 			khz(kr, sizeof(kr), rate);
+			play_hz = rate;
+			play_kbps = bitrate;
 			snprintf(play_info, sizeof(play_info), "MP3  %s%ld kbit/s  %s  %s", vbr ? "VBR " : "",
 				 bitrate, kr, h.channels == 2 ? "stereo" : "mono");
 			elog("MP3 at %ld: MPEG-%s, %d kbit/s first frame, %d Hz, %d ch, CRC %d; header frames %ld%s; %ld ms",
 			     at, h.version == 1 ? "1" : h.version == 2 ? "2" : "2.5", h.bitrate, h.rate, h.channels,
 			     h.crc, nf, vbr ? " (VBR)" : "", len_ms);
 		}
+		if (seek_byte > 0) {
+			/* Pause's frame: there, as it is (its header checked) */
+			MP3HDR hs;
+			unsigned char b4[4];
+			if (Fseek(seek_byte, fh, 0) == seek_byte && Fread(fh, 4, b4) == 4 && mp3_header(b4, &hs) &&
+			    hs.rate == rate) {
+				at = seek_byte;
+				base_ms = seek_ms;
+				elog("from %ld ms: byte %ld (where Pause was)", seek_ms, at);
+			}
+		} else if (seek_ms > 0 && len_ms > 0) {
+			/* play_seek's place: by the Xing frame's table, else by the
+			   bytes (CBR, or a VBRI file: near enough), then the first
+			   whole frame from there */
+			long ms = seek_ms < len_ms ? seek_ms : len_ms, bytes = file_size - xing_at, to, k;
+			if (has_toc) {
+				long pc = (long)((long long)ms * 100 / len_ms), r = (long)((long long)ms * 100 % len_ms);
+				int fa, fb;
+				if (pc > 99)
+					pc = 99;
+				fa = xtoc[pc];
+				fb = pc < 99 ? xtoc[pc + 1] : 256;
+				to = xing_at + (long)((long long)bytes * (fa * (long long)len_ms + (fb - fa) * (long long)r) /
+						      (256 * (long long)len_ms));
+			} else
+				to = xing_at + (long)((long long)bytes * ms / len_ms);
+			if (to < at)
+				to = at;
+			/* (4 KB: two frames' headers, 1,441 bytes each at most;
+			   refill's 64 KB were half a stock Falcon's seek) */
+			Fseek(to, fh, 0);
+			fpos = 0;
+			fend = Fread(fh, 4096, fbuf);
+			if (fend < 0)
+				fend = 0;
+			eof = 0;
+			k = sync_mp3(rate);
+			if (k >= 0) {
+				at = to + k;
+				base_ms = ms;
+				elog("from %ld ms: byte %ld%s", ms, at, has_toc ? " (the Xing table's)" : "");
+			}
+		}
 		data_left = file_size - at;
+		q_base = at;
+		fr_sent = 0;
 		Fseek(at, fh, 0);		/* the frames read from here into the queue */
 		if (!take_queue(1)) {
 			snprintf(err, n, "There isn't the memory to play.");
@@ -772,6 +876,7 @@ int play_open(const char *path, char *err, int n)
 		}
 	}
 	khz(kr, sizeof(kr), out_rate);
+	play_via = ext ? "FDI" : dsp ? "DSP" : "DMA";
 	if (dsp && out_rate != rate) {	/* (the DSP resamples) */
 		char fr[16];
 		khz(fr, sizeof(fr), rate);
@@ -803,6 +908,72 @@ int play_open(const char *path, char *err, int n)
 }
 
 
+int play_seek(long ms, char *err, int n)
+{
+	int was = state == PS_PLAYING, ok;
+	unsigned long t0 = tos_ms(), t1;
+	if (!cur_path[0])
+		return 0;
+	if (!was) {
+		/* paused or stopped: the place kept for Play, nothing opened (the
+		   DSP is taken only to play) */
+		paused = 1;
+		pause_ms = ms > 0 ? ms : 0;
+		pause_byte = 0;
+		return 1;
+	}
+	paused = 0;
+	seek_ms = ms > 0 ? ms : 0;
+	ok = play_open(cur_path, err, n);
+	seek_ms = 0;
+	t1 = tos_ms();
+	if (ok && was)
+		play_start();
+	elog("the seek: opened again in %lu ms, started in %lu", t1 - t0, tos_ms() - t1);
+	return ok;
+}
+
+void play_pause(void)
+{
+	long fr, late, wmin, wavg, k;
+	if (state != PS_PLAYING)
+		return;
+	pause_ms = play_ms();
+	pause_byte = 0;
+	if (dsp && !kind && s_started) {
+		/* the frame playing: the DSP's count of frames decoded, less the
+		   one it plays (play_ms's), where the tick sent it from */
+		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
+		k = fr > 1 ? fr - 1 : 0;
+		if (k < fr_sent && fr_sent - k <= FR_RING)
+			pause_byte = fr_at[k % FR_RING];
+	}
+	play_log_stop();
+	elog("paused at %ld ms%s", pause_ms, pause_byte ? "" : " (Play takes it up by the time)");
+	play_stop();			/* (and the DSP given back: the DSP rule) */
+	paused = 1;
+}
+
+int play_resume(char *err, int n)
+{
+	int ok;
+	if (!paused || !cur_path[0])
+		return 0;
+	paused = 0;
+	seek_ms = pause_ms;
+	seek_byte = pause_byte;
+	ok = play_open(cur_path, err, n);
+	seek_ms = seek_byte = 0;
+	if (ok)
+		play_start();
+	return ok;
+}
+
+int play_paused(void)
+{
+	return paused;
+}
+
 void play_start(void)
 {
 	if (fh >= 0 && state != PS_PLAYING) {
@@ -820,6 +991,7 @@ void play_start(void)
 
 void play_stop(void)
 {
+	paused = 0;
 	feed_off();			/* first: the tick and the DSP's interrupt no longer run */
 	hostirq_off();
 	if (hirq_spur)
@@ -843,17 +1015,41 @@ int play_state(void)
 	return state;
 }
 
+int play_is_open(void)
+{
+	return fh >= 0;
+}
+
+long play_read_at(long at, void *buf, long n)
+{
+	long here, r;
+	if (fh < 0)
+		return -1;
+	here = Fseek(0, fh, 1);		/* (the queue's reads go on from here) */
+	if (Fseek(at, fh, 0) != at) {
+		Fseek(here, fh, 0);
+		return -1;
+	}
+	r = Fread(fh, n, buf);
+	Fseek(here, fh, 0);
+	return r;
+}
+
 long play_ms(void)
 {
 	long f;
+	if (paused)
+		return pause_ms;
 	if (dsp) {			/* (the file's samples: at its rate, resampled or not) */
 		long fr, late, wmin, wavg;
+		if (!s_started)
+			return base_ms;		/* (the counts are the last stream's until this one's start) */
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
 		f = fr > 1 ? (fr - 1) * s_spf : 0;
-		return rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0;
+		return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 	}
 	f = snd_played();
-	return rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0;
+	return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 }
 
 /* the tick's share of the 68030, % */
@@ -1005,7 +1201,7 @@ int play_step(int ms)
 		return 1;
 	}
 	fill(t0, ms);
-	if (!src_done && play_ms() > 1000) {
+	if (!src_done && play_ms() - base_ms > 1000) {
 		long ahead = q_w - q_r, lead;
 		lead = kind ? ahead / fmt.bytes / rate * 1000 + ahead / fmt.bytes % rate * 1000 / rate :
 			      bitrate ? ahead / bitrate * 8 : 0;

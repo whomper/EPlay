@@ -1,11 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * main.c - EPlay 0.1: a small window to try the player with. The file's
- * name, what it is, where it plays (the FDI's clock or the Falcon's own),
- * the time; Open, Play and Stop. Files come from the file selector, the
- * command line, or the desktop (VA_START). The player's own window, its
- * playlist and keys come in later phases (docs/DESIGN.md).
+ * main.c - EPlay's window (design D, Erez 3 Nov 2026: bar.c draws it),
+ * its menus and keys. Files come from the file selector, the command
+ * line, or the desktop (VA_START). The playlist comes in phase 4
+ * (docs/DESIGN.md).
  */
 #include <string.h>
 #include <stdio.h>
@@ -22,6 +21,8 @@
 #include "settings.h"
 #include "elog.h"
 #include "snd.h"
+#include "bar.h"
+#include "art.h"
 
 extern const char app_version[];
 
@@ -41,7 +42,7 @@ static const MBAR_ITEM m_file[] = {
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_play[] = {
-	{ "Play", 0, C_PLAY },
+	{ "Play/Pause", "Space", C_PLAY },
 	{ "Stop", 0, C_STOP },
 	{ 0, 0, 0 }
 };
@@ -57,8 +58,6 @@ static const MBAR_TITLE bar[] = {
 	{ 0, 0 }
 };
 
-#define COLS 50
-#define ROWS 7
 #define KIND (NAME | CLOSER | MOVER | INFO)
 
 static MBAR mb;
@@ -66,8 +65,6 @@ static short wh = -1;
 static GRECT work;
 static int quit;
 static char path[256], name[64], file[320];	/* the file selector's, and the file */
-static GRECT b_open, b_play, b_stop;
-static GRECT *b_held;		/* the button drawn pressed (guidelines 5.8), or 0 */
 static int press_draw;		/* drawn while the button is held: press_update_begin's lock */
 
 static void status(const char *s)
@@ -81,100 +78,18 @@ static void status(const char *s)
 		wind_set_str(wh, WF_INFO, info);
 }
 
-static void fmt_time(char *out, int n, long ms)
-{
-	long s = ms / 1000;
-	snprintf(out, n, "%ld:%02ld", s / 60, s % 60);
-}
-
-static void layout(void)
-{
-	short y = work.y + 5 * ch + ch / 2, w = 12 * cw;
-	b_open.x = work.x + 8;
-	b_play.x = b_open.x + w + 2 * cw;
-	b_stop.x = b_play.x + w + 2 * cw;
-	b_open.y = b_play.y = b_stop.y = y;
-	b_open.w = b_play.w = b_stop.w = w;
-	b_open.h = b_play.h = b_stop.h = ch + 4;
-}
-
-static void button(GRECT *b, const char *s, int on)
-{
-	short n = (short)strlen(s);
-	int down = b == b_held;
-	fill(b, down ? 1 : 0);
-	frame(b, 1);
-	text_at(b->x + (b->w - n * cw) / 2, b->y + 2, s, n, n, down ? TX_INVERSE : on ? 0 : TX_DIM);
-}
-
-/* the rows 0..3 and the buttons, within area */
-static void draw_rows(GRECT *area, int from, int to)
-{
-	char t[80], a[20], b[20];
-	int r;
-	GRECT box;
-	box.x = work.x;
-	box.w = work.w;
-	box.y = work.y + from * ch + 4;
-	box.h = (to - from + 1) * ch;
-	if (to >= ROWS - 1) {
-		box.y = work.y;
-		box.h = work.h;
-	}
-	if (!rc_intersect(area, &box))
-		return;
-	clip_on(&box);
-	fill(&box, 0);
-	for (r = from; r <= to && r < 4; r++) {
-		short y = work.y + 4 + r * ch;
-		const char *s = "";
-		short fl = 0;
-		switch (r) {
-		case 0:
-			s = play_name[0] ? play_name : "No file: File > Open... (^O)";
-			fl = play_name[0] ? TX_BOLD : 0;
-			break;
-		case 1:
-			s = play_info;
-			break;
-		case 2:
-			s = play_out;
-			break;
-		case 3:
-			if (!play_name[0])
-				break;
-			fmt_time(a, sizeof(a), play_ms());
-			fmt_time(b, sizeof(b), play_len_ms());
-			snprintf(t, sizeof(t), "%s / %s%s", a, b,
-				 play_state() == PS_PLAYING ? "" : "  (stopped)");
-			s = t;
-			break;
-		}
-		text_at(work.x + 8, y, s, (long)strlen(s), COLS - 2, fl);
-	}
-	if (to >= ROWS - 1) {
-		button(&b_open, "Open...", 1);
-		button(&b_play, "Play", play_name[0] && play_state() != PS_PLAYING);
-		button(&b_stop, "Stop", play_state() == PS_PLAYING);
-	}
-	clip_off();
-}
-
-/* rows from..to again, through the AES's rectangles. A row alone (the
-   time, each second) is drawn off the screen and shown in one step
+/* the window's parts again (bar.h's BP_...), through the AES's
+   rectangles, within area (0: the parts' own). A small part (the times,
+   each second; Play/Pause) is drawn off the screen and shown in one step
    (common's offdraw, where it can be: no flicker), else on it */
-static void redraw(GRECT *area, int from, int to)
+static void redraw(GRECT *area, int parts)
 {
 	GRECT r, a;
-	int one = area == 0 && from == to && to < 4, took;
+	int small = area == 0 && !(parts & (BP_TEXT | BP_LIST)), took;
 	if (wh <= 0)
 		return;
 	if (!area) {
-		a = work;
-		if (one) {
-			a.y = work.y + from * ch + 4;
-			a.h = ch;
-		}
+		bar_area(parts, &a);
 		area = &a;
 	}
 	draw_forget();			/* (the About box draws with this handle too) */
@@ -185,13 +100,11 @@ static void redraw(GRECT *area, int from, int to)
 	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w && r.h) {
 		if (rc_intersect(area, &r)) {
-			if (one && off_begin(vdi_h, r.x, r.y, r.w, r.h)) {
-				draw_forget();
-				draw_rows(&r, from, to);
+			if (small && off_begin(vdi_h, r.x, r.y, r.w, r.h)) {
+				bar_draw(&r, parts);
 				off_end();
-				draw_forget();
 			} else
-				draw_rows(&r, from, to);
+				bar_draw(&r, parts);
 		}
 		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
 	}
@@ -204,8 +117,11 @@ static void redraw(GRECT *area, int from, int to)
 
 static void open_window(void)
 {
-	short x, y, w, h;
-	wind_calc(WC_BORDER, KIND, desk_x, desk_y, COLS * cw, ROWS * ch + 8, &x, &y, &w, &h);
+	short x, y, w, h, ww, wh_;
+	bar_size(&ww, &wh_);
+	wind_calc(WC_BORDER, KIND, desk_x, desk_y, ww, wh_, &x, &y, &w, &h);
+	if (w > desk_w)
+		w = desk_w;
 	x = desk_x + (desk_w - w) / 2;
 	y = desk_y + (desk_h - h) / 3;
 	wh = wind_create(KIND, desk_x, desk_y, desk_w, desk_h);
@@ -214,7 +130,7 @@ static void open_window(void)
 	wind_set_str(wh, WF_NAME, " EPlay ");
 	wind_open(wh, x, y, w, h);
 	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
-	layout();
+	bar_layout(&work);
 }
 
 static void play_file(const char *f)
@@ -225,17 +141,34 @@ static void play_file(const char *f)
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
 		nf_debug(line);
 		alert(1, "[1][%s][ OK ]", err);
-		redraw(0, 0, ROWS - 1);
+		redraw(&work, BP_ALL);
 		return;
 	}
 	play_start();
+	art_begin(f);			/* (its picture made in the steps from now) */
 	{
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
 		nf_debug(line);
 	}
-	status("Playing.");
-	redraw(0, 0, ROWS - 1);
+	{
+		char st[100];
+		snprintf(st, sizeof(st), "Playing  \xfa  %s", play_out);
+		status(st);
+	}
+	{
+		/* the whole window for another file (or the same one elsewhere);
+		   for the one shown, Play/Pause and the time (the speed rig's
+		   "Play: let go": 150 ms drawn whole on a stock Falcon) */
+		static char shown[200];
+		char now[200];
+		snprintf(now, sizeof(now), "%s|%s|%s|%ld|%ld", play_name, play_tags.title, play_via, play_kbps, play_hz);
+		if (strcmp(now, shown)) {
+			strcpy(shown, now);
+			redraw(&work, BP_ALL);
+		} else
+			redraw(0, BP_PLAY | BP_TIME);
+	}
 }
 
 static void open_file(void)
@@ -269,7 +202,35 @@ static void command(int c)
 		settings_dialog();
 		break;
 	case C_PLAY:
-		if (play_state() != PS_PLAYING && file[0])
+		if (play_state() == PS_PLAYING) {
+			/* Play/Pause: the sound stopped where it is, the DSP given back */
+			char line[60];
+			play_pause();
+			elog_save();
+			snprintf(line, sizeof(line), "EPLAY paused at %ld ms\n", play_ms());
+			nf_debug(line);			/* (the rigs) */
+			status("Paused.");
+			redraw(0, BP_PLAY | BP_TIME);
+		} else if (play_paused()) {
+			char err[160], st[100];
+			if (!play_resume(err, sizeof(err))) {
+				alert(1, "[1][%s][ OK ]", err);
+				status("Stopped.");
+			} else {
+				snprintf(st, sizeof(st), "Playing  \xfa  %s", play_out);
+				status(st);
+				snprintf(st, sizeof(st), "EPLAY resumed at %ld ms\n", play_ms());
+				nf_debug(st);		/* (the rigs) */
+			}
+			redraw(0, BP_PLAY | BP_TIME);
+		} else if (play_state() != PS_PLAYING && play_is_open()) {
+			/* (opened at a place the position bar went to, stopped) */
+			char st[100];
+			play_start();
+			snprintf(st, sizeof(st), "Playing  \xfa  %s", play_out);
+			status(st);
+			redraw(0, BP_PLAY | BP_TIME);
+		} else if (play_state() != PS_PLAYING && file[0])
 			play_file(file);
 		break;
 	case C_STOP:
@@ -278,7 +239,11 @@ static void command(int c)
 			play_stop();
 			elog_save();
 			status("Stopped.");
-			redraw(0, 0, ROWS - 1);
+			redraw(0, BP_PLAY | BP_TIME);
+		} else if (play_paused()) {
+			play_stop();		/* (paused: the place forgotten, Play from the start) */
+			status("Stopped.");
+			redraw(0, BP_PLAY | BP_TIME);
 		}
 		break;
 	}
@@ -292,59 +257,144 @@ static int inside(const GRECT *b, short x, short y)
 static void message(short *msg);
 
 /* the music fed between events; the window's time or end shown */
+/* the turn's start (after its event): the music's queue is filled with
+   what is left of 20 ms after the turn's action, so that an action and the
+   reading don't add up in one stretch (the position bar's release on a
+   stock Falcon: 25 ms of seek and 20 of reading) */
+static unsigned long turn_t0;
+
 static void step(int playing)
 {
-	if (playing && play_step(20)) {
+	unsigned long used = tos_ms() - turn_t0;
+	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
 		if (play_state() != PS_PLAYING) {
 			status(play_out[0] == 'T' ? play_out : "Played to the end.");
-			redraw(0, 0, ROWS - 1);
-		} else {
-			redraw(0, 3, 3);
+			redraw(0, BP_PLAY | BP_TIME);
+		} else if (bar_drag < 0) {
+			redraw(0, BP_TIME);
 		}
 	}
 }
 
-/* a button pressed (guidelines 5.8): drawn pressed at once, its action
-   on the release over it, nothing if let go elsewhere; drawn pressed
-   again as the pointer comes back, as GEM's dialog buttons are. The
-   music is fed all the while (a loop of its own, not evnt_button's
+/* a button of the bar pressed (guidelines 5.8): drawn pressed at once, its
+   action on the release over it, nothing if let go elsewhere; drawn
+   pressed again as the pointer comes back, as GEM's dialog buttons are.
+   The music is fed all the while (a loop of its own, not evnt_button's
    wait). 1: let go over it */
-static int track(GRECT *b)
+static int track(int hit, int part)
 {
 	short msg[8];
 	AEVENT ev;
+	GRECT b;
 	int in = 1;
-	b_held = b;
+	bar_area(part, &b);
+	bar_held = hit;
 	press_draw = 1;
-	redraw(b, ROWS - 1, ROWS - 1);
+	redraw(0, part);
 	press_draw = 0;
 	while (!quit) {
 		short which;
 		int playing = play_state() == PS_PLAYING;
-		evnt_set_m1(in, b->x, b->y, b->w, b->h);
+		evnt_set_m1(in, b.x, b.y, b.w, b.h);
 		which = evnt_multi_(MU_MESAG | MU_BUTTON | MU_M1 | MU_TIMER, 1, 1, 0, play_wait_ms(), msg, &ev);
+		turn_t0 = tos_ms();
 		if (which & MU_MESAG)
 			message(msg);
 		if (which & MU_BUTTON) {
-			in = inside(b, ev.mx, ev.my);
+			in = inside(&b, ev.mx, ev.my);
 			break;
 		}
 		if (which & MU_M1) {
 			in = !in;
-			b_held = in ? b : 0;
+			bar_held = in ? hit : BH_NONE;
 			press_draw = 1;
-			redraw(b, ROWS - 1, ROWS - 1);
+			redraw(0, part);
 			press_draw = 0;
 		}
 		step(playing);
 	}
-	b_held = 0;
-	/* (Play and Stop redraw the whole window as they act: drawn once,
-	   unless the music ended while Stop was held) */
-	if (!in || quit || !((b == &b_play && play_state() != PS_PLAYING) ||
-			     (b == &b_stop && play_state() == PS_PLAYING)))
-		redraw(b, ROWS - 1, ROWS - 1);
+	bar_held = BH_NONE;
+	/* (Play and Stop draw the button again as they act) */
+	if (!in || quit)
+		redraw(0, part);
 	return in && !quit;
+}
+
+static long seek_to = -1;		/* the position bar let go: where, for the next turn */
+
+/* the position bar pressed (or dragged): the time shown follows the
+   pointer, and on the release the music goes there */
+static void drag_pos(short mx, short my)
+{
+	short msg[8];
+	AEVENT ev;
+	long len = play_len_ms();
+	int at;
+	bar_drag = bar_pos_at(mx);
+	press_draw = 1;
+	redraw(0, BP_TIME);
+	press_draw = 0;
+	while (!quit) {
+		short which;
+		int playing = play_state() == PS_PLAYING;
+		evnt_set_m1(1, mx, my, 1, 1);
+		which = evnt_multi_(MU_MESAG | MU_BUTTON | MU_M1 | MU_TIMER, 1, 1, 0, play_wait_ms(), msg, &ev);
+		turn_t0 = tos_ms();
+		if (which & MU_MESAG)
+			message(msg);
+		if (which & MU_BUTTON)
+			break;
+		if (which & MU_M1) {
+			mx = ev.mx;
+			my = ev.my;
+			if (bar_pos_at(mx) != bar_drag) {
+				bar_drag = bar_pos_at(mx);
+				press_draw = 1;
+				redraw(0, BP_TIME);
+				press_draw = 0;
+			}
+		}
+		step(playing);
+	}
+	at = bar_drag;
+	if (quit)
+		return;
+	/* the release shows where it goes; the going there is the next turn's
+	   (5.8: the action after the release in a stretch of its own) */
+	seek_to = len / 1000 * at + len % 1000 * at / 1000;
+	redraw(0, BP_TIME);
+}
+
+/* the place the position bar was let go at, gone to (the turn after) */
+static void do_seek(void)
+{
+	char err[160];
+	long to = seek_to;
+	seek_to = -1;
+	bar_drag = -1;
+	if (!play_seek(to, err, sizeof(err))) {
+		alert(1, "[1][%s][ OK ]", err);
+		status("Stopped.");
+		redraw(0, BP_PLAY | BP_TIME);
+		return;
+	} else {
+		char line[60];
+		snprintf(line, sizeof(line), "EPLAY went to %ld ms\n", play_ms());
+		nf_debug(line);			/* (the speed rig's) */
+	}
+	/* (no drawing: the time shown since the release is where it went, and
+	   the next second's draws it on; with it the turn was 55 ms on a stock
+	   Falcon) */
+}
+
+static void turn(int nested);
+
+/* a turn for GEM inside the album art's decode (art.c, every 40 ms): the
+   whole of the loop's, but for the art's own step; 0 when EPlay quits */
+static int art_turn(void)
+{
+	turn(1);
+	return !quit;
 }
 
 static void message(short *msg)
@@ -375,7 +425,7 @@ static void message(short *msg)
 		r.y = msg[5];
 		r.w = msg[6];
 		r.h = msg[7];
-		redraw(&r, 0, ROWS - 1);
+		redraw(&r, BP_ALL);
 		break;
 	}
 	case WM_TOPPED:
@@ -387,7 +437,7 @@ static void message(short *msg)
 	case WM_MOVED:
 		wind_set(msg[3], WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 		wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
-		layout();
+		bar_layout(&work);
 		break;
 	case AP_TERM:
 		quit = 1;
@@ -401,6 +451,48 @@ static void crash_quit(const char *what)
 	(void)what;
 	play_stop();
 	snd_exit();
+	bar_colours_back();
+}
+
+/* one turn of the event loop: an event, or none within the timer (none at
+   all inside the album art's decode: nested), and the music fed */
+static void turn(int nested)
+{
+	AEVENT ev;
+	short msg[8];
+	short which;
+	int playing = play_state() == PS_PLAYING;
+	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1,
+			    nested || art_pending() || seek_to >= 0 ? 0 : play_wait_ms(), msg, &ev);
+	turn_t0 = tos_ms();
+	if (seek_to >= 0 && !nested) {
+		do_seek();
+		step(play_state() == PS_PLAYING);
+	}
+	if (which & MU_MESAG)
+		message(msg);
+	if (which & MU_KEYBD) {
+		short a = ev.kreturn & 0xff;
+		if (key_ctrl(ev.kstate, ev.kreturn)) {
+			if (a == 15 || (a | 0x20) == 'o')
+				command(C_OPEN);
+			else if (a == 17 || a == 21 || (a | 0x20) == 'q' || (a | 0x20) == 'u')
+				command(C_QUIT);
+			else if (((ev.kreturn >> 8) & 0xff) == 0x33)	/* ^, (the comma's key) */
+				command(C_SETTINGS);
+		} else if (a == ' ')
+			command(C_PLAY);	/* Play/Pause */
+	}
+	if ((which & MU_BUTTON) && ev.mbutton == 1) {
+		/* (Play/Pause only where it would act: with a file; the
+		   playlist's controls come with phase 4) */
+		int hit = bar_hit(ev.mx, ev.my);
+		if (hit == BH_PLAY && (play_name[0] || file[0]) && track(BH_PLAY, BP_PLAY))
+			command(C_PLAY);	/* Play/Pause */
+		else if (hit == BH_POS && play_name[0] && play_len_ms() > 0)
+			drag_pos(ev.mx, ev.my);
+	}
+	step(playing);
 }
 
 const long cpu_need = 30;
@@ -408,9 +500,8 @@ const char cpu_alert[] = "[3][EPlay needs a Falcon.][ Quit ]";
 int app_main(void);
 int app_main(void)
 {
-	short work_out[57], msg[8], d;
+	short work_out[57], d;
 	const char *why;
-	AEVENT ev;
 
 	ap_id = appl_init();
 	if (ap_id < 0)
@@ -438,6 +529,7 @@ int app_main(void)
 	}
 	vst_alignment(vdi_h, 0, 5);
 	text_font(vdi_h, 1, cw, ch);		/* (the system font: common's fast text) */
+	bar_colours();
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
 	crash_cleanup = crash_quit;
@@ -468,6 +560,7 @@ int app_main(void)
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 	open_window();
+	art_init(bar_art_side());
 	{
 		char line[60];
 		snprintf(line, sizeof(line), "EPLAY external clock: %ld Hz\n", snd_ext_rate);
@@ -507,38 +600,9 @@ int app_main(void)
 	}
 
 	while (!quit) {
-		short which;
-		int playing = play_state() == PS_PLAYING;
-		which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1,
-				    play_wait_ms(), msg, &ev);
-		if (which & MU_MESAG)
-			message(msg);
-		if (which & MU_KEYBD) {
-			short a = ev.kreturn & 0xff;
-			if (key_ctrl(ev.kstate, ev.kreturn)) {
-				if (a == 15 || (a | 0x20) == 'o')
-					command(C_OPEN);
-				else if (a == 17 || a == 21 || (a | 0x20) == 'q' || (a | 0x20) == 'u')
-					command(C_QUIT);
-				else if (((ev.kreturn >> 8) & 0xff) == 0x33)	/* ^, (the comma's key) */
-					command(C_SETTINGS);
-			}
-		}
-		if ((which & MU_BUTTON) && ev.mbutton == 1) {
-			/* (only a button that would act: Play with a file stopped,
-			   Stop while it plays) */
-			if (inside(&b_open, ev.mx, ev.my)) {
-				if (track(&b_open))
-					command(C_OPEN);
-			} else if (inside(&b_play, ev.mx, ev.my) && play_name[0] && play_state() != PS_PLAYING) {
-				if (track(&b_play))
-					command(C_PLAY);
-			} else if (inside(&b_stop, ev.mx, ev.my) && play_state() == PS_PLAYING) {
-				if (track(&b_stop))
-					command(C_STOP);
-			}
-		}
-		step(playing);
+		turn(0);
+		if (art_pending() && art_step(art_turn))
+			redraw(0, BP_ART);	/* (the album art made: shown) */
 	}
 
 	play_log_stop();
@@ -547,6 +611,7 @@ int app_main(void)
 	elog("quit");
 	elog_save();
 	menu_bar(mb.tree, 0);
+	bar_colours_back();
 	if (wh > 0) {
 		wind_close(wh);
 		wind_delete(wh);

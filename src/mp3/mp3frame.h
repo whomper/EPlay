@@ -80,6 +80,10 @@ void mp3_reset(MP3PARSE *ps);
  * none. *vbr 1 for Xing and VBRI. The frame itself holds no sound. */
 long mp3_info_frames(const unsigned char *f, const MP3HDR *h, int *vbr);
 
+/* a Xing frame's table (VBR): toc[i] is where i % of the time begins, in
+   256ths of the file's frames' bytes; 1, or 0 when it has none */
+int mp3_info_toc(const unsigned char *f, const MP3HDR *h, unsigned char *toc);
+
 /* the frame at f, of h->length bytes, as a packet: its words, or -1 if the
  * frame is bad (the reservoir is kept) */
 int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned long *pk);

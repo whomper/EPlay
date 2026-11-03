@@ -9,3 +9,12 @@ EPlay includes or uses, under their own licences (compatible with the GPL):
 - tests/mp3/third_party/minimp3.h: minimp3 by Lion (lieff), CC0 1.0
   (tests/mp3/third_party/LICENSE.minimp3). The tests' reference decoder
   only: it is not part of EPLAY.PRG.
+
+- common/third_party/tjpgd: TJpgDec R0.03, the Tiny JPEG Decompressor,
+  Copyright (C) 2021, ChaN, all right reserved (elm-chan.org/fsw/tjpgd/),
+  as the AERA family changed it (its README.txt). Its licence: "The TJpgDec
+  module is a free software and there is NO WARRANTY. No restriction on use.
+  You can use, modify and redistribute it for personal, non-profit or
+  commercial products UNDER YOUR RESPONSIBILITY. Redistributions of source
+  code must retain the above copyright notice." It decodes the album art's
+  JPEGs (common/src/pic.c), in EPLAY.PRG.
