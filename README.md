@@ -25,11 +25,10 @@ window. Written in C and DSP56001 assembly for GEM.
   it resamples. When another program has it, that WAV plays at the nearest rate instead.
 
 *Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
-window. Phase 2, from 0.4, plays MP3 three ways, chosen in the settings: on the Falcon's DSP, through
-the FDI as Cubase Audio does (the FDI set to the file's rate), or on a 68030 (TT, or a Falcon
-without its DSP free) at the quality it keeps up with; with resampling and the settings. 0.4 brings
-the first part: the DSP plays MP3 itself, straight to the FDI, or the DAC without one. Then 3, the player
-window; 4, playlists and folders; 5, the small player, keys, MiNT and MagiC; 6, the TT and STE.*
+window. Phase 2 (0.4 to 0.17) plays MP3 on the Falcon's DSP or through the FDI as Cubase Audio
+does (the FDI set to the file's rate), chosen in the settings, with resampling on the DSP. (MP3 on
+the 68030 was dropped: no 68030 keeps up with it.) Now phase 3, the player window; then 4,
+playlists and folders; 5, the small player, keys, MiNT and MagiC; 6, the TT and STE.*
 
 ## Getting started
 
@@ -46,7 +45,7 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 2. **File > Open…** (Control+O) plays another file; **Play** and **Stop** are in the window and in
    the Play menu.
 3. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
-   answers, else the DSP), FDI or DSP; the 68030 comes with its decoder. And the **Quality**:
+   answers, else the DSP), FDI or DSP. And the **Quality**:
    High (the default), or Normal, up to about 15 kHz, for a Falcon without the FDI whose DSP
    can't keep up with resampling dense music to 49,170 Hz (it plays at 32,780 Hz then). Through
    the FDI the music is always whole. A change takes effect at the next Play. `EPLAY.INF`, next

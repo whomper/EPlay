@@ -909,6 +909,10 @@ subbands, about 11 kHz) halves the window: about 50 % of a DFB1 for it, 150 % of
 Falcon. Mono halves it again. Put to Erez as a decision (the capability is his): every
 Falcon has the DSP, which EPlay holds only while it plays.
 
+**Dropped (Erez, 3 Nov 2026).** Settings' Output is Auto, FDI or DSP; an eplay.inf that says
+OUTPUT=68030 reads as Auto, and the next save writes what is chosen. Without the DSP free an MP3
+says so, as before; WAV and AIFF play on the sound DMA as ever.
+
 ### The Analog 8's channel 3: why the DSP can't fill the frame (3 Nov 2026)
 
 The DSP port's frame is 128 bits, eight 16-bit slots (0.11's count; the Falcon's matrix frames
@@ -950,8 +954,7 @@ settings in eplay.inf.
 - Settings: Output (0.14), Quality (0.17); file names in lowercase (0.16).
 
 **Left:**
-- The 68030's decoder: no 68030 keeps up at High or Normal (above). Erez's decision: drop it,
-  or a half-rate decoder for a DFB1.
+- The 68030's decoder: no 68030 keeps up at High or Normal (above). Dropped (Erez, 3 Nov).
 - The Analog 8's channel 3 (above): Erez's test with a 44.1 kHz WAV.
 - Output DSP's crackle in the right channel (0.15's log): whether 0.14 had it, and whether it
   comes at the same places each time.

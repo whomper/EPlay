@@ -21,7 +21,7 @@ static void same(const char *what, const char *got, long n, const char *want)
 		printf("ok   %s\n", what);
 }
 
-#define NOTE "; Output: AUTO, FDI, DSP or 68030\r\n"
+#define NOTE "; Output: AUTO, FDI or DSP\r\n"
 
 int main(void)
 {

@@ -3,16 +3,17 @@
 /*
  * settings.h - EPlay's Settings (Options > Settings..., ^,) and EPLAY.INF,
  * next to the program (a PRG-only app: the guidelines' 6.1). Output: how
- * EPlay plays (Erez, 2 Nov 2026): Auto, FDI, DSP or 68030. A change takes
+ * EPlay plays (Erez, 2 Nov 2026): Auto, FDI or DSP (the 68030 dropped: Erez,
+ * 3 Nov 2026). A change takes
  * effect at the next Play; what plays goes on as it is.
  */
 #ifndef EPLAY_SETTINGS_H
 #define EPLAY_SETTINGS_H
 
-enum { OUT_AUTO, OUT_FDI, OUT_DSP, OUT_68030 };
+enum { OUT_AUTO, OUT_FDI, OUT_DSP };
 /* Quality (Erez, 2 Nov 2026): High, the default, or Normal: up to about 15
-   kHz, where the machine can't do more (the DSP on the Falcon's clock,
-   the 68030); with the FDI the music is always whole */
+   kHz, where the machine can't do more (the DSP on the Falcon's clock);
+   with the FDI the music is always whole */
 enum { Q_NORMAL, Q_HIGH };
 
 void settings_load(void);	/* EPLAY.INF, at the start */

@@ -2,11 +2,12 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * settings.c - Settings and EPLAY.INF (settings.h). One page, so no sidebar:
- * a sentence on what Output is, then its four choices as radio buttons
+ * a sentence on what Output is, then its three choices as radio buttons
  * (Erez, 2 Nov 2026: the choices need no notes); a sentence on Quality,
  * then Normal and High (High the default). A choice the machine
- * hasn't is greyed: the FDI without its driver, the DSP without a DSP, the
- * 68030 until its decoder is in (phase 2's last part). The INF is written
+ * hasn't is greyed: the FDI without its driver, the DSP without a DSP.
+ * (The 68030 is no longer a choice: Erez, 3 Nov 2026, as no 68030 keeps up
+ * with MP3; an INF's OUTPUT=68030 reads as Auto.) The INF is written
  * as EPLAY.IN$ first and renamed over EPLAY.INF (the guidelines, 2.3), both
  * named in lowercase, as every file of the family's (6.6: MiNT's ext2).
  */
@@ -21,8 +22,9 @@
 #include "settings.h"
 
 static int output = OUT_AUTO, quality = Q_HIGH;
-static const char *const names[4] = { "AUTO", "FDI", "DSP", "68030" };
-static const char *const labels[4] = { "Auto", "FDI", "DSP", "68030" };
+#define NOUT 3
+static const char *const names[NOUT] = { "AUTO", "FDI", "DSP" };
+static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
 static const char *const qnames[2] = { "NORMAL", "HIGH" };
 static const char *const qlabels[2] = { "Normal", "High" };
 
@@ -43,8 +45,6 @@ static int has(int out)
 		return snd_fdi;
 	case OUT_DSP:
 		return (get_cookie(0x5F534E44L) & 8) != 0;	/* _SND bit 3: the DSP */
-	case OUT_68030:
-		return 0;			/* (its decoder: phase 2's last part) */
 	}
 	return 1;
 }
@@ -67,7 +67,7 @@ void settings_load(void)
 		inf_n = r > 0 ? r : 0;
 	}
 	if (inf_get(inf, inf_n, "OUTPUT", v, sizeof(v)))
-		for (i = 0; i < 4; i++)
+		for (i = 0; i < NOUT; i++)
 			if (!strcmp(v, names[i]))
 				output = i;
 	if (inf_get(inf, inf_n, "QUALITY", v, sizeof(v)))
@@ -80,10 +80,10 @@ static void save(void)
 {
 	static const char note[] =
 	    "; Output: how EPlay plays the music. AUTO (the FDI if its driver answers,\r\n"
-	    "; else the DSP, else the 68030), FDI, DSP or 68030\r\n";
+	    "; else the DSP), FDI or DSP\r\n";
 	static const char qnote[] =
 	    "; Quality: HIGH, or NORMAL: up to about 15 kHz, for a slower machine (the\r\n"
-	    "; DSP on the Falcon's own clock, the 68030); through the FDI always whole\r\n";
+	    "; DSP on the Falcon's own clock); through the FDI always whole\r\n";
 	char path[200], tmp[200];
 	long n = inf_set(inf, inf_n, "OUTPUT", names[output], note, inf2, INF_MAX), h;
 	if (n < 0)
@@ -116,7 +116,7 @@ int settings_output(void)
 
 const char *settings_output_name(int out)
 {
-	return out >= 0 && out < 4 ? labels[out] : "?";
+	return out >= 0 && out < NOUT ? labels[out] : "?";
 }
 
 int settings_quality(void)
@@ -165,7 +165,7 @@ void settings_dialog(void)
 {
 	static const char sentence[] = "Output: how EPlay plays the music.";
 	static const char qsentence[] = "Quality: Normal plays up to 15 kHz, for a slower machine.";
-	short radio[4], qradio[2], ok, cancel, r, g;
+	short radio[NOUT], qradio[2], ok, cancel, r, g;
 	int i, eff = settings_output(), chose = eff, qchose = quality;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
@@ -177,8 +177,8 @@ void settings_dialog(void)
 	tree[0].ob_width = 62;
 	tree[0].ob_height = 12;
 	add(0, G_STRING, 0, 0, (long)sentence, 2, 1, (short)strlen(sentence), 1);
-	g = add(0, G_IBOX, 0, 0, 0L, 2, 3, 38, 1);
-	for (i = 0; i < 4; i++)
+	g = add(0, G_IBOX, 0, 0, 0L, 2, 3, 28, 1);
+	for (i = 0; i < NOUT; i++)
 		radio[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)((i == eff ? SELECTED : 0) |
 									(has(i) ? 0 : DISABLED)),
 			       (long)labels[i], (short)(10 * i), 0, 8, 1);
@@ -195,7 +195,7 @@ void settings_dialog(void)
 	r = dlg_modal(tree, 0, cancel);
 	if (r != ok)
 		return;
-	for (i = 0; i < 4; i++)
+	for (i = 0; i < NOUT; i++)
 		if (tree[radio[i]].ob_state & SELECTED)
 			chose = i;
 	for (i = 0; i < 2; i++)
