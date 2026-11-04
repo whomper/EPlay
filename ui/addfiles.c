@@ -365,6 +365,31 @@ static int in_sight(void)
 }
 
 static int list_due;		/* the list to draw at the next turn (another folder) */
+/* (a measure build, not a release: each picture's time to the rigs'
+   console, from when it is due and from the input, against 0.23's) */
+static unsigned long pic_t0, pic_in, input_ms;
+static const char *pic_name;
+static void pic_begin(const char *n)
+{
+	if (!pic_name) {
+		pic_name = n;
+		pic_t0 = tos_ms();
+		pic_in = input_ms && pic_t0 - input_ms < 2000 ? input_ms : pic_t0;
+	}
+}
+
+static void pic_end(void)
+{
+	if (pic_name) {
+		char b[80];
+		unsigned long now = tos_ms();
+		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms, %lu from the input\n", pic_name, now - pic_t0,
+			 now - pic_in);
+		nf_debug(b);
+		pic_name = 0;
+	}
+}
+
 
 static void folder_shown(void)
 {
@@ -373,6 +398,7 @@ static void folder_shown(void)
 	draw_obj(O_DRIVE);
 	draw_obj(O_PATH);
 	draw_obj(O_INFO);
+	pic_begin("folder");
 	list_due = 1;			/* (a turn of its own: 70 ms with the rest) */
 }
 
@@ -704,10 +730,13 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 		/* (the list drawn in the first turn, after the tree's: on a
 		   stock Falcon the tree is 125 ms of the AES's, the list 20) */
 		dlg_evnt(MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, first || list_due ? 0 : 20, m, &e);
+		if (e.which & (MU_KEYBD | MU_BUTTON))
+			input_ms = tos_ms();
 		place();			/* (the window may have moved) */
 		if (first || list_due) {
 			first = list_due = 0;
 			draw_list();
+			pic_end();
 		}
 		if (e.which & MU_TIMER)
 			idle_turn();

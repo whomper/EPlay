@@ -177,6 +177,31 @@ static void playing_status(char *st, int n)
 }
 
 static int bar_due;		/* the bar to draw in pieces, a part a turn (3, 2, 1; 0 none) */
+/* (a measure build, not a release: each picture's time to the rigs'
+   console, from when it is due and from the input, against 0.23's) */
+static unsigned long pic_t0, pic_in, input_ms;
+static const char *pic_name;
+static void pic_begin(const char *n)
+{
+	if (!pic_name) {
+		pic_name = n;
+		pic_t0 = tos_ms();
+		pic_in = input_ms && pic_t0 - input_ms < 2000 ? input_ms : pic_t0;
+	}
+}
+
+static void pic_end(void)
+{
+	if (pic_name) {
+		char b[80];
+		unsigned long now = tos_ms();
+		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms, %lu from the input\n", pic_name, now - pic_t0,
+			 now - pic_in);
+		nf_debug(b);
+		pic_name = 0;
+	}
+}
+
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
 static int status_due;		/* the info line to set the next turn ("Playing 2 of 6 ...") */
 
@@ -199,6 +224,7 @@ static void play_now(const char *f)
 		nf_debug(line);
 	}
 	status_due = 1;			/* (the info line: the AES draws it, a turn of its own) */
+	pic_begin("start");
 	{
 		/* the whole window for another file (or the same one elsewhere);
 		   for the one shown, Play/Pause and the time (the speed rig's
@@ -226,6 +252,8 @@ static void bar_turn(void)
 		status_due = 0;
 		playing_status(st, sizeof(st));
 		status(st);
+		if (!bar_due)
+			pic_end();
 		return;
 	}
 	if (bar_due == 3)
@@ -235,6 +263,8 @@ static void bar_turn(void)
 	else
 		redraw(0, BP_PLAY | BP_TIME);
 	bar_due--;
+	if (!bar_due && !status_due)
+		pic_end();
 }
 
 /* ---- the list (Erez, 3 Nov 2026: files added in bulk) ---- */
@@ -532,6 +562,8 @@ static void rows_turn(void)
 		if (++rows_from >= list_top + bar_rows())
 			rows_from = -1;
 	}
+	if (rows_from < 0)
+		pic_end();
 }
 
 /* the selected file out of the list (the one playing stopped first) */
@@ -550,7 +582,10 @@ static void list_remove_sel(void)
 	if (list_top > 0 && list_top + bar_rows() > list_count())
 		scroll_to(list_count() - bar_rows());	/* (the whole list: one draw) */
 	else
+	{
+		pic_begin("rows");
 		rows_from = i;		/* the rows from it on, two a turn */
+	}
 	sliders();
 	redraw(0, BP_NAV);
 }
@@ -1045,6 +1080,8 @@ static void turn(int nested)
 			    rows_from >= 0 ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
+	if (which & (MU_KEYBD | MU_BUTTON))
+		input_ms = turn_t0;
 	if (pending_play[0] && !nested && !art_needs_dsp()) {
 		/* (the album art unpacked: the MP3 it waited for) */
 		char f[320];
