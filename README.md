@@ -126,8 +126,11 @@ docs/       the design (DESIGN.md) and the icons
   `Falcon-4` (a stock Falcon), with Hatari's sound recorded and checked: the tone at the right
   pitch in both channels, no gap, the length, silence after the end. A WAV, an AIFF, two MP3s,
   and the file selector held open while an MP3 plays.
+- `tests/hatari/pcm_test.py`: the sound's 68030 loops (16-bit WAV, 24-bit AIFF and WAV) against
+  their C, bit for bit, on Hatari's 68030 (`make` in `tests/hatari` first).
 - `tests/hatari/speed.py`: the family's speed rig, the longest stretch between event calls of
-  each action, on a stock Falcon (`make prof` first). The figures are in `docs/DESIGN.md`.
+  each action, on a stock Falcon (`make prof` first), and each picture's time from when it is due
+  to its last piece ("EPLAY picture"). The figures are in `docs/DESIGN.md`.
 
 ## Licence
 

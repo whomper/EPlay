@@ -197,7 +197,7 @@ void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long 
 	/* 16 bits, the most there is: a loop of its own each, no call a sample
 	   (the Atari's tick converts 49170 frames a second) */
 	if (f->bits == 16) {
-#if defined(__m68k__)
+#if defined(__m68k__) && !defined(PCM_C_ONLY)
 		if (f->channels == 2 && !f->big) {	/* a WAV on the Atari: a frame a long */
 			const unsigned long *s = (const unsigned long *)(const void *)src;
 			unsigned long *d = (unsigned long *)(void *)dst;
@@ -242,6 +242,71 @@ void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long 
 	   crackled on Erez's Falcon (3 Nov 2026: 330 underruns in 6 s) */
 	if (f->bits == 24 && f->channels == 2) {
 		int hi = f->big ? 0 : 2, lo = f->big ? 2 : 0;
+#if defined(__m68k__) && !defined(PCM_C_ONLY)
+		/* (the tick on a stock Falcon, 4 Nov 2026: 57 % of its 68030 for
+		   a 24-bit AIFF through the C loop. A frame is 6 bytes, so each
+		   starts on an even byte: the even half of a sample a word
+		   read. Rounded as the C: the lowest byte's top bit added, the
+		   top kept at 32767) */
+		const unsigned char *s = src;
+		unsigned long *d = (unsigned long *)(void *)dst;
+		long k = n, sb = (long)step * 2;
+		if (f->big) {
+			/* AIFF: Lh Lm Ll Rh Rm Rl */
+			__asm__ volatile("\tmoveq\t#0,%%d3\n"
+					 "\tbra.s\t9f\n"
+					 "1:\tmove.w\t(%0),%%d0\n"		/* Lh Lm */
+					 "\tmove.b\t2(%0),%%d2\n"
+					 "\tadd.b\t%%d2,%%d2\n"			/* X: Ll's top bit */
+					 "\taddx.w\t%%d3,%%d0\n"
+					 "\tbvc.s\t2f\n"
+					 "\tmove.w\t#0x7fff,%%d0\n"
+					 "2:\tswap\t%%d0\n"
+					 "\tmove.b\t3(%0),%%d0\n"		/* Rh */
+					 "\tlsl.w\t#8,%%d0\n"
+					 "\tmove.b\t4(%0),%%d0\n"		/* Rm */
+					 "\tmove.b\t5(%0),%%d2\n"
+					 "\tadd.b\t%%d2,%%d2\n"
+					 "\taddx.w\t%%d3,%%d0\n"
+					 "\tbvc.s\t3f\n"
+					 "\tmove.w\t#0x7fff,%%d0\n"
+					 "3:\tmove.l\t%%d0,(%1)\n"
+					 "\tadd.l\t%3,%1\n"
+					 "\taddq.l\t#6,%0\n"
+					 "9:\tsubq.l\t#1,%2\n"
+					 "\tbpl.s\t1b"
+					 : "+a"(s), "+a"(d), "+d"(k) : "d"(sb) : "d0", "d2", "d3", "cc", "memory");
+		} else {
+			/* WAV: Ll Lm Lh Rl Rm Rh */
+			__asm__ volatile("\tmoveq\t#0,%%d3\n"
+					 "\tbra.s\t9f\n"
+					 "1:\tmove.b\t2(%0),%%d0\n"		/* Lh */
+					 "\tlsl.w\t#8,%%d0\n"
+					 "\tmove.b\t1(%0),%%d0\n"		/* Lm */
+					 "\tmove.b\t(%0),%%d2\n"
+					 "\tadd.b\t%%d2,%%d2\n"			/* X: Ll's top bit */
+					 "\taddx.w\t%%d3,%%d0\n"
+					 "\tbvc.s\t2f\n"
+					 "\tmove.w\t#0x7fff,%%d0\n"
+					 "2:\tswap\t%%d0\n"
+					 "\tmove.w\t4(%0),%%d0\n"		/* Rm Rh */
+					 "\tror.w\t#8,%%d0\n"			/* Rh Rm */
+					 "\tmove.b\t3(%0),%%d2\n"
+					 "\tadd.b\t%%d2,%%d2\n"
+					 "\taddx.w\t%%d3,%%d0\n"
+					 "\tbvc.s\t3f\n"
+					 "\tmove.w\t#0x7fff,%%d0\n"
+					 "3:\tmove.l\t%%d0,(%1)\n"
+					 "\tadd.l\t%3,%1\n"
+					 "\taddq.l\t#6,%0\n"
+					 "9:\tsubq.l\t#1,%2\n"
+					 "\tbpl.s\t1b"
+					 : "+a"(s), "+a"(d), "+d"(k) : "d"(sb) : "d0", "d2", "d3", "cc", "memory");
+		}
+		(void)hi;
+		(void)lo;
+		return;
+#endif
 		for (i = 0; i < n; i++, src += 6, dst += step) {
 			long l = (long)(signed char)src[hi] * 256 + src[1] + (src[lo] >> 7);
 			long r = (long)(signed char)src[3 + hi] * 256 + src[4] + (src[3 + lo] >> 7);

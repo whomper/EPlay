@@ -1211,6 +1211,39 @@ one pop-up button, and a selection with no check boxes.
 - `src/dirlist.c` holds the folder's entries, the sorts, the types, the mask and the selection,
   tested on the host (`tests/dirlist`).
 
+### Drawing whole (Erez, 4 Nov 2026; the guidelines' Speed, 4fd0a96)
+
+"Drawing on screen should be the fastest possible": a picture is drawn from start to end with no
+event call between, and "a rule never costs speed". Four were drawn a piece a turn: another file's
+start (the info line, then the bar's left, its right, Play/Pause with the times), the info line
+after Play from a pause, a removed row's rows (two a turn), and the Add files list (the turn after
+the tree, and after a folder's path). They are drawn whole now: the start and the resume in the
+turn that opens the file, the rows in one redraw clipped to them, the dialog's list with the tree
+on TOS (in a window, the AES's redraw draws both, as before). "EPLAY picture <name> <ms>" on the
+rigs' console is each picture's time from when it is due to its last piece.
+
+| Picture (Falcon-4:16) | In pieces | Whole |
+|---|---|---|
+| another file's start | 90 to 230 ms | 55 to 85 |
+| the info line after Play | 20 to 45 | 15 to 45 |
+| the rows after Delete | 60 | 45 |
+| Add files opened | 150 to 155 | 150 |
+| a folder opened in it | 65 | 65 |
+
+Whole, a picture is one stretch: the speed table's rows that hold one are over its 50 ms (a row
+played 100, Next 90, Return 100, Delete 75; Add files opened 160 of 150, a folder 70), reported to
+the hub as the rule asks, not sliced.
+
+### The 24-bit tick on a stock Falcon (Erez, 4 Nov 2026: the DFB1X off)
+
+"This app should appeal to Falcon users": a 24-bit AIFF at 44.1 kHz on a stock Falcon (no TT RAM:
+code, queue and ring in ST RAM) took 57 % of its 68030 in the tick, and the disk 246 KB/s of the
+295 it needed: 185 underruns. The 24-bit stereo loop is the 68030's own now (a frame of 6 bytes
+starts on an even byte: the even half of a sample a word read; rounded as the C, its top kept):
+the tick on Hatari's Falcon-4 29 % before, 18 % after. `tests/hatari/pcm_test.py` holds the
+loops (16-bit WAV, 24-bit AIFF and WAV) against the C, bit for bit, on Hatari's 68030: the play
+rig can't hear the DMA's cases on Hatari 2.4.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
