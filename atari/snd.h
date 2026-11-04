@@ -43,12 +43,15 @@ long snd_rate_dsp(long rate, int *ext);	/* an MP3 from the DSP: the clock it res
 
 /* the ring ready at that rate, silent, the DMA stopped: 0 if no ST RAM */
 int snd_open(long rate, int ext);
+int snd_open_feed(long rate, int ext);	/* the ring to the DSP's receive (one track): XSTREAM */
 void snd_close(void);		/* stopped, the ring given back */
 
 long snd_room(void);		/* frames that can be written now */
 void snd_write(const short *frames, long n);	/* n stereo frames, at most snd_room() */
 short *snd_ptr(long *n);	/* where the next frames go: n frames there before the ring's end */
-#define SND_STEP 8		/* the ring's words a frame (four tracks, the music in the first two) */
+extern int snd_fw;		/* the ring's words a frame: 8 (four tracks to the DAC, the music in
+				   the first two), or 2 (snd_open_feed: to the DSP) */
+#define SND_STEP snd_fw
 void snd_wrote(long n);		/* n frames put at snd_ptr() */
 void snd_play(void);		/* the DMA started (after the first frames) */
 long snd_played(void);		/* frames played since snd_open */

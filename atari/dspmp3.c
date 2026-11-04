@@ -360,7 +360,7 @@ void dspmp3_tick_stream(long rin, long rout, int pcm, int sblim)
 		put(rin > rout ? 2 : 1);
 		put((unsigned long)(sblim > 0 && sblim < 32 ? sblim : 32));
 	}
-	put(pcm ? 14 : 12);		/* PSTREAM, STREAM */
+	put(pcm == 2 ? 15 : pcm ? 14 : 12);	/* XSTREAM (from the SSI's receive), PSTREAM, STREAM */
 }
 
 int dspmp3_tick_asks(void)

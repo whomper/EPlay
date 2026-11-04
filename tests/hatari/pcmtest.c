@@ -6,7 +6,10 @@
  * (Hatari), bit for bit: random samples, and the edges (32767 with its
  * lowest byte 128 or more, -32768, 0), at the ring's strides (2: the DSP's
  * packet; 8: the DMA's four tracks). The answer goes to the console
- * (NatFeats) as "PCMTEST ok ..." or "PCMTEST FAIL ...".
+ * (NatFeats) as "PCMTEST ok ..." or "PCMTEST FAIL ...". And pcm_spread
+ * (XSTREAM's: the file's frames over the DSP's rate): the 68030's against
+ * the C, at the rates the DSP resamples from, the source running out, the
+ * phase carried from call to call.
  */
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +18,8 @@
 
 /* src/pcm.c built with its C alone, its names prefixed (pcmtest_c.c) */
 void c_pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long n, int step);
+long c_pcm_spread(const short *src, long n, short *dst, long k, int step, long in, long out, long *acc,
+		  long *used);
 
 #define N 1000
 static unsigned char src[N * 6 + 6];
@@ -72,6 +77,36 @@ int main(void)
 				bad++;
 			}
 		}
+	{
+		static const long rates[][2] = { { 44100, 49170 }, { 48000, 49170 }, { 22050, 24585 },
+						 { 32000, 32780 } };
+		static short src2[400 * 2];
+		long r;
+		for (r = 0; r < 4; r++) {
+			long acc1 = 0, acc2 = 0, j, sum = 0;
+			for (j = 0; j < 400 * 2; j++)
+				src2[j] = (short)(rnd() << 8 | rnd());
+			for (j = 0; j < 12; j++) {
+				long k = 37 + j * 41, n = j % 3 ? 400 : 20 + j, u1, u2, w1, w2;
+				memset(a, 0x55, sizeof(a));
+				memset(b, 0x55, sizeof(b));
+				w1 = pcm_spread(src2, n, a, k, j & 1 ? 8 : 2, rates[r][0], rates[r][1], &acc1, &u1);
+				w2 = c_pcm_spread(src2, n, b, k, j & 1 ? 8 : 2, rates[r][0], rates[r][1], &acc2, &u2);
+				runs++;
+				sum += u1;
+				if (w1 != w2 || u1 != u2 || acc1 != acc2 || memcmp(a, b, sizeof(a))) {
+					snprintf(line, sizeof(line),
+						 "PCMTEST FAIL spread %ld from %ld, call %ld: wrote %ld (C %ld), used %ld "
+						 "(C %ld), phase %ld (C %ld)\n", rates[r][1], rates[r][0], j, w1, w2, u1,
+						 u2, acc1, acc2);
+					nf_debug(line);
+					bad++;
+					break;
+				}
+			}
+			(void)sum;
+		}
+	}
 	snprintf(line, sizeof(line), bad ? "PCMTEST FAIL %d of %d\n" : "PCMTEST ok %d runs of %d frames\n",
 		 bad ? bad : runs, bad ? runs : N);
 	nf_debug(line);

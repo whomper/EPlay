@@ -11,4 +11,5 @@
 #define pcm_gain_set c_pcm_gain_set
 #define pcm_gain_idle c_pcm_gain_idle
 #define pcm_gain c_pcm_gain
+#define pcm_spread c_pcm_spread
 #include "../../src/pcm.c"

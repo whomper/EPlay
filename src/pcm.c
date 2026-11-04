@@ -322,6 +322,67 @@ void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long 
 	}
 }
 
+long pcm_spread(const short *src, long n, short *dst, long k, int step, long in, long out, long *acc,
+		long *used)
+{
+	long a = *acc, i, u = 0;
+#if defined(__m68k__) && !defined(PCM_C_ONLY)
+	/* (the tick's, a frame each of 49,170 a second: the C took 40 % of a
+	   stock Falcon's 68030 with a 24-bit AIFF's conversion) */
+	{
+		const short *s0 = src;
+		short *d = dst;
+		long sb = (long)step * 2, left = k, nn = n;
+		__asm__ volatile("\tbra.s\t9f\n"
+				 "1:\tadd.l\t%5,%2\n"		/* a += in */
+				 "\tcmp.l\t%6,%2\n"
+				 "\tblt.s\t3f\n"
+				 "\tsubq.l\t#1,%4\n"		/* a sample: src's left? */
+				 "\tbmi.s\t8f\n"
+				 "\tsub.l\t%6,%2\n"
+				 "\tmove.l\t(%0)+,%%d0\n"
+				 "\tor.l\t#0x00010001,%%d0\n"
+				 "\tmove.l\t%%d0,(%1)\n"
+				 "\tadd.l\t%7,%1\n"
+				 "\tbra.s\t9f\n"
+				 "3:\tclr.l\t(%1)\n"		/* none: zeros */
+				 "\tadd.l\t%7,%1\n"
+				 "9:\tsubq.l\t#1,%3\n"
+				 "\tbpl.s\t1b\n"
+				 "\tbra.s\t7f\n"
+				 "8:\tsub.l\t%5,%2\n"		/* src ran out: this frame not written */
+				 "\taddq.l\t#1,%4\n"
+				 "7:"
+				 : "+a"(s0), "+a"(d), "+d"(a), "+d"(left), "+d"(nn)
+				 : "d"(in), "d"(out), "d"(sb)
+				 : "d0", "cc", "memory");
+		/* (left: -1 when all k were written, else the frames not) */
+		i = k - (left + 1);
+		u = n - nn;
+		*acc = a;
+		*used = u;
+		return i;
+	}
+#endif
+	for (i = 0; i < k; i++, dst += step) {
+		long b = a + in;
+		if (b >= out) {
+			if (u >= n)
+				break;
+			b -= out;
+			dst[0] = (short)(src[0] | 1);
+			dst[1] = (short)(src[1] | 1);
+			src += 2;
+			u++;
+		} else
+			dst[0] = dst[1] = 0;
+		a = b;
+	}
+	*acc = a;
+	*used = u;
+	return i;
+}
+
 void pcm_gain_set(PCMGAIN *s, long g)
 {
 	s->g = s->to = g;

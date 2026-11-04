@@ -34,6 +34,15 @@ void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n);
 /* the same, each frame step shorts after the last (2: packed; the sound
    ring's four tracks: 8, the other six words left as they are) */
 void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long n, int step);
+/* k frames into dst (a frame every step words) at the rate out, from
+   src's frames (2 words each) at the rate in, in < out (the DSP's XSTREAM,
+   which resamples them): a frame with a sample where the step comes to
+   one, its two words' lowest bit set (no such frame is zeros: the DSP
+   tells them apart so, and finds its step again from them), zeros where
+   it doesn't. *acc is the step's phase (0 to out - 1), carried on; *used
+   src's frames taken. The frames written: k, or fewer where src ran out */
+long pcm_spread(const short *src, long n, short *dst, long k, int step, long in, long out, long *acc,
+		long *used);
 
 /* the volume on samples (the FDI's, where the codec's attenuation isn't
    heard): g in Q15, 32768 as they are. A change glides: g moves to the new

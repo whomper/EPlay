@@ -35,6 +35,7 @@ CRA	equ	$ffec
 CRB	equ	$ffed
 SSISR	equ	$ffee
 TX	equ	$ffef
+RX	equ	$ffef		; (the SSI's receive: read at the same address)
 IPR	equ	$ffff
 HRX	equ	$ffeb
 XS	equ	1		; mp3dsp.h's MP3_XS
@@ -157,6 +158,14 @@ V_LATE	equ	$a6		; granules late (the sound played the old one again)
 V_SV3	equ	$a7		; refill: r3 and n3 kept
 V_SVN3	equ	$a8
 V_JUNK	equ	$aa		; (the underrun interrupt's)
+V_RX6	equ	$a9		; XSTREAM's receive interrupt: r6 kept
+; XSTREAM's (external X, over the Huffman tables: a PCM stream doesn't
+; use them, and each Play loads them again): the receive ring, modulo
+; 2048, and its two places
+RXB	equ	$1000
+RXP	equ	$1800		; where the interrupt puts the next word
+RXR	equ	$1801		; where getrx takes the next
+RXE	equ	$1802		; the packet's end
 V_SVA	equ	$ab		; gout: a kept over waitsyn
 V_SVP	equ	$ac		; pkpoll: r3 kept
 V_RSY	equ	$ae		; streaming: packets found broken, the stream taken up again
@@ -176,9 +185,11 @@ start	movep	#1,x:$ffe0		; port B is the host port (P:2-F: the vectors
 	movec	#$ffff,m0		; linear, for the loads (not #-1: a56 makes that
 	jmp	cmd			; 8 bits); the others at RESET
 
-rd	jclr	#0,x:HSR,rd
-	movep	x:HRX,x0
-	rts
+; the SSI's receive (XSTREAM): a long interrupt, the word into the ring
+	org	p:$0c
+	jsr	rxi
+	org	p:$0e			; with an overrun: the status read, then the word
+	jsr	rxe
 
 ; the SSI's transmit, a fast interrupt: the ring (Y, r7 modulo m7) to the
 ; matrix, a word each time slot (left, right). r7 is the SSI's alone: the
@@ -662,7 +673,98 @@ pj
 
 ; ===================================================================
 ; external P: the frame, and what runs once a granule
+; a host word into x0 (here: P:$0B-$0E are the SSI's receive vectors)
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+
 	org	p:$7000
+
+; ---- XSTREAM's receive (P:$0C, P:$0E): each word the SSI takes from the
+; matrix (the sound DMA's ring) into RXB's ring, modulo 2048. r6 is the
+; resampler's: kept; m6 is linear in a PCM stream (the synthesis filter's
+; m6 63 is MP3's)
+rxe	movep	x:SSISR,x:V_JUNK	; (an overrun: the status read, then the word)
+rxi	move	r6,x:V_RX6
+	move	x:RXP,r6
+	movec	#2047,m6
+	nop
+	movep	x:RX,x:(r6)+
+	move	r6,x:RXP
+	movec	#$ffff,m6
+	move	x:V_RX6,r6
+	rti
+
+; the stream's next packet: from the host (getpkt), or for XSTREAM from
+; the SSI's receive (getrx)
+getsrc	jset	#4,x:V_SF,getrx
+	jmp	getpkt
+
+; ---- XSTREAM's packets: 576 frames from the SSI's receive. The 68030
+; writes the DMA's ring at the output's rate, a frame with a sample where
+; the step has one (both words' lowest bit set: bit 8 here, the word's 16
+; bits from the top), zeros where it hasn't; a pair with one zero is a
+; word out of step (the DMA started a word on): its first dropped,
+; counted as a packet broken (V_RSY). Into the packet as the host would
+; have put it ((s + 32768) << 7), its flags first. The end still comes
+; from the host (pkpoll: count 0)
+getrx	move	x:V_PKB,r1
+	move	x:RXR,r0
+	movec	#2047,m0
+	move	x:V_PKB,a
+	move	#>1153,x0
+	add	x0,a
+	move	a1,x:RXE
+	move	#>$501,x0		; PK_PCM | PK_LSF | PK_STEREO
+	move	x0,y:(r1)+
+grx1	move	x:RXP,b			; the words in: (RXP - r0) modulo 2048
+	move	r0,x0
+	sub	x0,b
+	move	#>2047,x0
+	and	x0,b			; (and is B1's alone: B2 keeps the sign)
+	move	b1,b			; (so B1 again, positive)
+	move	#>2,x0
+	cmp	x0,b
+	jge	grx2
+	jsr	pkpoll			; (the host's end word)
+	jset	#3,x:V_SF,grx9
+	move	x:V_IDLE,b		; (a wait: time the DSP had to spare)
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_IDLE
+	jmp	grx1
+grx2	move	x:(r0)+,a
+	move	x:(r0)+,b
+	tst	a
+	jeq	grx3
+	tst	b
+	jeq	grx4			; a sample, then zero: out of step
+	move	#>$400000,x0
+	asr	a
+	add	x0,a
+	asr	b
+	add	x0,b
+	move	a1,y:(r1)+
+	move	b1,y:(r1)+
+	move	r1,b
+	move	x:RXE,x0
+	cmp	x0,b
+	jlt	grx1
+grx9	move	r0,x:RXR
+	movec	#$ffff,m0
+	rts
+grx3	tst	b
+	jeq	grx1			; zeros: no sample in this frame
+grx4	move	(r0)-			; a word out of step: its first dropped
+	jsr	resync
+	jmp	grx1
+
+; ---- XSTREAM (15): PSTREAM, its packets from the SSI's receive (the sound
+; DMA's ring through the matrix) instead of the host port: no host-port word
+; a sample for the 68030 (CD's stereo took 70 % of a stock Falcon's that way)
+xstream	move	#>PKP,x0
+	move	#>1,x1
+	jmp	stm1
 
 wr	jclr	#1,x:HSR,wr
 	movep	x1,x:HRX
@@ -771,7 +873,8 @@ dmz
 stream	move	#>PKT,x0		; MP3's packets
 	jmp	stm0
 pstream	move	#>PKP,x0		; PSTREAM (14): PCM's (PK_PCM), bigger
-stm0	move	x0,x:V_PKB
+stm0	move	#>0,x1			; (x1: 1 for XSTREAM's receive)
+stm1	move	x0,x:V_PKB
 	clr	a
 	move	#>PCM,r0
 	move	#>2304,x0		; the ring: a frame, or resampled RSZ
@@ -790,7 +893,14 @@ stc
 	move	a,x:V_RSY
 	move	a,x:V_FRM
 	bset	#0,x:V_SF		; streaming
-	move	#>PCM,r7
+	move	x1,b
+	tst	b
+	jeq	stc2
+	bset	#4,x:V_SF		; XSTREAM: the receive's ring empty
+	move	#>RXB,x0
+	move	x0,x:RXP
+	move	x0,x:RXR
+stc2	move	#>PCM,r7
 	movec	#2303,m7
 	move	x:V_RSTB,b
 	tst	b
@@ -800,6 +910,9 @@ stc1
 	movep	#$1f8,x:PCC		; port C: the SSI
 	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
 	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
+	jclr	#4,x:V_SF,stc3
+	movep	#$f800,x:CRB		; XSTREAM: receive and its interrupt too
+stc3
 	movep	#$3000,x:IPR		; the SSI at level 2
 	movep	#0,x:TX			; in step with the frame: a word written goes
 smt	jclr	#6,x:SSISR,smt		; out in the next slot; while slot 0 (TFS)
@@ -809,7 +922,7 @@ smt2	jclr	#6,x:SSISR,smt2
 smr	andi	#$fc,mr			; interrupts on: the left first
 	jsr	pkfree
 stl	jsr	salign			; left and right in step, each frame
-	jsr	getpkt			; the whole packet
+	jsr	getsrc			; the whole packet
 	jset	#3,x:V_SF,stx
 	jsr	decode
 	move	x:V_FRM,b		; the frames decoded
@@ -1066,6 +1179,9 @@ cmdx	move	#>1,x1			; the commands (x0), but LOADP
 	move	#>14,x1
 	cmp	x1,a
 	jeq	pstream
+	move	#>15,x1
+	cmp	x1,a
+	jeq	xstream
 	move	#>12,x1
 	cmp	x1,a
 	jeq	stream

@@ -38,6 +38,7 @@ static long x_setbuffer(short reg, void *beg, void *end)
 
 #define DMAPLAY		0
 #define DSPXMIT		1
+#define DSPRECV		2
 #define EXTOUT		4
 #define DAC		8
 #define CLK25M		0
@@ -56,7 +57,13 @@ static int locked;
    the Analog 8's channels 3 to 8 (Erez's lrtest.wav, 0.19). The other
    three are zeros, written once when the ring is taken */
 #define TRACKS		4
-#define FW		(2 * TRACKS)	/* a frame's words */
+#define FW		(2 * TRACKS)	/* a frame's words to the DAC */
+/* the ring's frame now: FW words to the DAC (its four tracks), or 2 to
+   the DSP (snd_open_feed: one track, through the matrix to its receive) */
+int snd_fw = FW;
+static int fw_shift = 4;	/* (bytes a frame, as a shift: 16, or 4) */
+static long dirty;		/* bytes of the ring a feed wrote densely: the DAC's silent
+				   tracks to clear there before it plays four again */
 static short *ring;		/* ST RAM */
 static long ring_n;		/* frames */
 static volatile long wpos, written, played;	/* the next frame to write; totals */
@@ -92,9 +99,9 @@ static long pos_once(void)
 {
 	long p[4];
 	Buffptr(p);
-	if (p[0] < (long)ring || p[0] > (long)(ring + FW * ring_n))
+	if (p[0] < (long)ring || p[0] > (long)(ring + snd_fw * ring_n))
 		return -1;
-	return (p[0] - (long)ring) / (2 * FW) % ring_n;
+	return (p[0] - (long)ring) / (2 * snd_fw) % ring_n;
 }
 
 /* the DMA's counter is read a byte at a time, and a read as it moves on
@@ -208,7 +215,7 @@ static long measure(short pre)
 		return 0;
 	ring_n = 16384;
 	memset(ring, 0, (size_t)ring_n * 2 * FW);
-	x_setbuffer(0, ring, ring + FW * ring_n);
+	x_setbuffer(0, ring, ring + snd_fw * ring_n);
 	Buffoper(PLAY_ENABLE | PLAY_REPEAT);
 	Supexec(m_loop);
 	Buffoper(0);
@@ -480,7 +487,22 @@ long snd_rate_dsp(long rate, int *ext)
 	return best;
 }
 
+static int open_to(long rate, int ext, int feed);
+
 int snd_open(long rate, int ext)
+{
+	return open_to(rate, ext, 0);
+}
+
+/* the ring to the DSP's receive (one track, through the matrix), at the
+   DSP's output rate: a WAV or AIFF it resamples (XSTREAM), no host-port
+   word a sample */
+int snd_open_feed(long rate, int ext)
+{
+	return open_to(rate, ext, 1);
+}
+
+static int open_to(long rate, int ext, int feed)
 {
 	short pre = 1;
 	unsigned i;
@@ -507,11 +529,29 @@ int snd_open(long rate, int ext)
 	ring_n = rate / 2;
 	if (ring_n > RING_MAX)
 		ring_n = RING_MAX;
-	Settracks(TRACKS - 1, 0);
-	Setmontracks(0);		/* (the DAC: the first) */
-	Setmode(STEREO16);
-	Devconnect(DMAPLAY, DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
-	x_setbuffer(0, ring, ring + FW * ring_n);
+	if (feed) {
+		snd_fw = 2;
+		fw_shift = 2;
+		if (dirty < ring_n * 4)
+			dirty = ring_n * 4;
+		Settracks(0, 0);
+		Setmontracks(0);
+		Setmode(STEREO16);
+		Devconnect(DMAPLAY, DSPRECV, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+	} else {
+		snd_fw = FW;
+		fw_shift = 4;
+		if (dirty) {
+			memset(ring, 0, (size_t)dirty);	/* (the silent tracks again: a feed's
+							   frames were 4 bytes) */
+			dirty = 0;
+		}
+		Settracks(TRACKS - 1, 0);
+		Setmontracks(0);	/* (the DAC: the first) */
+		Setmode(STEREO16);
+		Devconnect(DMAPLAY, DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+	}
+	x_setbuffer(0, ring, ring + snd_fw * ring_n);
 	wpos = written = played = 0;
 	last_ppos = 0;
 	playing = 0;
@@ -562,9 +602,9 @@ static long hw_once(void)
 {
 	volatile unsigned char *c = (volatile unsigned char *)0xffff8909L;
 	long a = (long)c[0] << 16 | (long)c[2] << 8 | c[4];
-	if (a < (long)ring || a > (long)(ring + FW * ring_n))
+	if (a < (long)ring || a > (long)(ring + snd_fw * ring_n))
 		return -1;
-	a = (a - (long)ring) >> 4;	/* (FW words, 16 bytes; no division: the tick's) */
+	a = (a - (long)ring) >> fw_shift;	/* (a frame's bytes; no division: the tick's) */
 	return a >= ring_n ? a - ring_n : a;
 }
 
@@ -636,7 +676,7 @@ long snd_room(void)
 short *snd_ptr(long *n)
 {
 	*n = ring_n - wpos;
-	return ring + FW * wpos;
+	return ring + snd_fw * wpos;
 }
 
 void snd_wrote(long n)
@@ -655,7 +695,7 @@ void snd_write(const short *frames, long n)
 		if (k > n)
 			k = n;
 		long i;
-		for (i = 0; i < k; i++, p += FW, frames += 2) {
+		for (i = 0; i < k; i++, p += snd_fw, frames += 2) {
 			p[0] = frames[0];
 			p[1] = frames[1];
 		}

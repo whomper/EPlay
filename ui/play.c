@@ -53,6 +53,16 @@ const char *play_via = "";
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
+/* a WAV or AIFF the DSP resamples (XSTREAM: Erez, 4 Nov 2026, the right
+   pitch at any rate): the ring at the DSP's rate, through the matrix to
+   its receive, a frame with a sample where the step has one (pcm_spread).
+   xs_acc the step's phase; xs_in the file's frames sent; xs_sil the end's
+   silence still to send (frames with samples: the last packets out);
+   xs_end_at the frames written when it was in (-1: not yet) */
+static int xs;
+static long xs_acc, xs_in, xs_sil, xs_end_at = -1;
+#define XS_BUF 1024
+static short xsbuf[XS_BUF * 2];
 static int s_ext;		/* on the FDI's clock (the volume digital) */
 
 /* the volume (Erez, 3 Nov 2026: a bar like the position's, and + and -):
@@ -505,6 +515,75 @@ static void tick_mp3(void)
 					   waits for its words) */
 }
 
+/* XSTREAM: the ring filled at the DSP's rate from the queue, the file's
+   frames spread over it (pcm_spread); at the file's end two packets of
+   silence that has samples (the last packet out, as PSTREAM's two), then
+   zeros, and the end word to the DSP once the DMA has played them */
+static void tick_xs(void)
+{
+	long room = snd_room(), cap = 1024;
+	dspmp3_tick_push();		/* (the end word, going) */
+	while (room > 0 && cap > 0) {
+		long kout, kin, used, need;
+		short *p = snd_ptr(&kout);
+		if (kout > room)
+			kout = room;
+		if (kout > cap)
+			kout = cap;
+		need = (xs_acc + kout * rate) / out_rate;	/* the file's frames those take */
+		if (need > XS_BUF)
+			need = XS_BUF;
+		if (s_end == 0) {
+			long hb = q_w - q_r, tail = q_size - q_roff;
+			if (hb < fmt.bytes) {
+				if (src_done) {
+					s_end = 1;
+					xs_sil = 2 * 576;
+				}
+				break;
+			}
+			if (hb > tail)
+				hb = tail;
+			kin = B2FR(hb);
+			if (kin > need)
+				kin = need;
+			pcm_convert_to(&fmt, q + q_roff, xsbuf, kin, 2);
+			if (!pcm_gain_idle(&gs, t_gain))
+				pcm_gain(&gs, t_gain, xsbuf, kin, 2);
+			kout = pcm_spread(xsbuf, kin, p, kout, SND_STEP, rate, out_rate, &xs_acc, &used);
+			adv(FR2B(used));
+			xs_in += used;
+			t_frames = xs_in / 576;
+		} else if (s_end == 1) {
+			kin = need < xs_sil ? need : xs_sil;
+			memset(xsbuf, 0, (size_t)kin * 4);
+			kout = pcm_spread(xsbuf, kin, p, kout, SND_STEP, rate, out_rate, &xs_acc, &used);
+			xs_sil -= used;
+			if (!xs_sil)
+				s_end = 2;
+		} else {
+			long i;			/* zeros: no sample, the DSP takes none */
+			for (i = 0; i < kout; i++, p += SND_STEP)
+				*(long *)(void *)p = 0;
+		}
+		snd_wrote(kout);
+		if (s_end == 2 && xs_end_at < 0)
+			xs_end_at = snd_written();
+		room -= kout;
+		cap -= kout;
+		if (!kout)
+			break;
+	}
+	if (s_end == 2 && xs_end_at >= 0 && snd_played() >= xs_end_at) {
+		s_mute[0] = PK_PCM | PK_LSF | PK_STEREO;
+		dspmp3_tick_offer(s_mute, 0);	/* the count 0: the end */
+		dspmp3_tick_push();
+		s_end = 3;
+	}
+	if (s_end == 3 && !dspmp3_tick_pushing())
+		t_end = 1;
+}
+
 static void tick_body(void);
 
 /* MP3, once the DSP is loaded: the tick feeds it, polling the host port
@@ -515,7 +594,7 @@ static void tick_body(void);
    Audio doesn't use it either */
 static long start_stream(void)
 {
-	dspmp3_tick_stream(rate, out_rate, kind != 0, s_sblim);
+	dspmp3_tick_stream(rate, out_rate, xs ? 2 : kind != 0, s_sblim);
 	return 0;
 }
 
@@ -566,7 +645,7 @@ static void tick(void)
 
 static void tick_body(void)
 {
-	if (!dsp)
+	if (!dsp || xs)
 		snd_update();
 	if (loading) {			/* the DSP's program first, a piece a tick */
 		int r;
@@ -588,8 +667,12 @@ static void tick_body(void)
 		tick_pcm();
 	if (dsp && s_started) {
 		dspmp3_tick_status();	/* (its words read even at the end) */
-		if (!t_end && !t_failed)
-			tick_mp3();
+		if (!t_end && !t_failed) {
+			if (xs)
+				tick_xs();
+			else
+				tick_mp3();
+		}
 	}
 	if (dsp && dspmp3_failed())
 		t_failed = 1;
@@ -750,7 +833,7 @@ int play_open(const char *path, char *err, int n)
 	eof = 0;
 	refill();
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
-	dsp = 0;
+	dsp = xs = 0;
 	pcm_got = 0;
 	elog("open %s (%ld bytes)", path, file_size);
 	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
@@ -935,12 +1018,11 @@ int play_open(const char *path, char *err, int n)
 		}
 	} else {
 		/* WAV, AIFF: the DMA at the file's rate, the FDI put at it where
-		   it can be; else through the DSP, resampled, when it is free and
-		   its samples are 25,000 a second at most (mono to 25 kHz); else
-		   the DMA at the nearest rate. Each sample is a host-port word,
-		   3 to 4 us of a stock Falcon's 68030 on its bus: CD's stereo
-		   took 46 % of it (the About box 330 ms to open), 22.05 kHz
-		   stereo 29 %; an MP3 takes about 15 % */
+		   it can be; else through the DSP, resampled (XSTREAM: the DMA's
+		   ring to its receive, no host-port word a sample: a word each
+		   was 70 % of a stock Falcon's 68030 for CD's stereo), when it
+		   is free and the file's rate is below its output's (a frame
+		   carries a sample at most); else the DMA at the nearest rate */
 		out_rate = snd_rate_for(rate, &ext);
 		if (out_rate != rate && snd_fdi && out_set != OUT_DSP) {
 			spurious_on();
@@ -951,16 +1033,20 @@ int play_open(const char *path, char *err, int n)
 			if (snd_fdi_note[0])
 				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 		}
-		if (out_rate != rate && rate * fmt.channels <= 25000) {
-			int r = dspmp3_open();
-			if (r == DSPMP3_OK) {
-				dsp = 1;
-				out_rate = snd_rate_dsp(rate, &ext);
+		if (out_rate != rate) {
+			int dext, r;
+			long dr = snd_rate_dsp(rate, &dext);
+			if (dr <= rate)
+				elog("%ld Hz is the DSP's output or above: the DMA at the nearest rate", rate);
+			else if ((r = dspmp3_open()) == DSPMP3_OK) {
+				dsp = xs = 1;
+				out_rate = dr;
+				ext = dext;
 			} else
 				elog("the DSP %s: the DMA at the nearest rate", r == DSPMP3_BUSY ? "in use" :
 				     r == DSPMP3_NONE ? "not there" : "didn't answer");
 		}
-		if (!dsp && !snd_open(out_rate, ext)) {
+		if (xs ? !snd_open_feed(out_rate, ext) : !dsp && !snd_open(out_rate, ext)) {
 			snprintf(err, n, "There isn't the ST RAM to play.");
 			play_stop();
 			return 0;
@@ -987,6 +1073,8 @@ int play_open(const char *path, char *err, int n)
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;
+	xs_acc = xs_in = xs_sil = 0;
+	xs_end_at = -1;
 	s_spf = 1152;
 	t_busy = t_parse = t_push = 0;
 	t_t0 = t_last = 0;
@@ -1077,8 +1165,8 @@ void play_start(void)
 			     snd_matrix[3]);
 		}
 		loading = dsp ? 2 : 0;	/* (the tick loads the DSP first: not waiting for GEM) */
-		feed_on(tick, dsp ? 500 : 250);	/* (the DMA: 1024 frames a tick, 4 times what
-						   plays; the DSP: its next packet at once) */
+		feed_on(tick, dsp && !xs ? 500 : 250);	/* (the DMA: 1024 frames a tick, 4 times what
+						   plays, XSTREAM too; the DSP: its next packet at once) */
 	}
 }
 
@@ -1264,9 +1352,13 @@ int play_step(int ms)
 	if (state != PS_PLAYING)
 		return 0;
 	if (dsp && !loading && !s_started && !t_failed) {
+		if (xs)
+			s_spf = 576;	/* (the DSP's packets, for play_ms) */
 		Supexec(start_stream);	/* loaded: the stream, fed by the tick */
 		s_started = 1;
 	}
+	if (xs && s_started && !snd_playing() && (snd_written() >= out_rate / 8 || s_end))
+		snd_play();		/* (the DSP listening: its first frames not lost) */
 	if (dsp && s_started && dspmp3_stream_stalled(tos_hz200()))
 		t_failed = 1;
 	if (t_failed) {
