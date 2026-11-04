@@ -33,7 +33,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE };
+       C_REMOVE, C_MINI };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -48,6 +48,10 @@ static const MBAR_ITEM m_file[] = {
 static const MBAR_ITEM m_edit[] = {
 	{ "Remove from the list", "Delete", C_REMOVE },
 	{ "Clear the list", 0, C_CLEAR },
+	{ 0, 0, 0 }
+};
+static const MBAR_ITEM m_view[] = {
+	{ "Mini player", 0, C_MINI },	/* (the bar alone: Erez, 3 Nov 2026) */
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_play[] = {
@@ -68,12 +72,15 @@ static const MBAR_TITLE bar[] = {
 	{ " EPlay ", m_desk },
 	{ " File ", m_file },
 	{ " Edit ", m_edit },
+	{ " View ", m_view },
 	{ " Play ", m_play },
 	{ " Options ", m_options },
 	{ 0, 0 }
 };
 
-#define KIND (NAME | CLOSER | MOVER | INFO | SIZER | VSLIDE | UPARROW | DNARROW)
+#define KIND_FULL (NAME | CLOSER | MOVER | INFO | SIZER | VSLIDE | UPARROW | DNARROW)
+#define KIND_MINI (NAME | CLOSER | MOVER)	/* the mini player: the bar alone */
+#define KIND (bar_mini ? KIND_MINI : KIND_FULL)
 
 static MBAR mb;
 static short wh = -1;
@@ -130,6 +137,10 @@ static void redraw(GRECT *area, int parts)
 		wind_update(END_UPDATE);
 }
 
+/* the window: centred, or at (at_x, at_y) when one went before it (the
+   mini player switched: its corner stays where it was) */
+static short at_x = -1, at_y = -1;
+
 static void open_window(void)
 {
 	short x, y, w, h, ww, wh_;
@@ -139,6 +150,10 @@ static void open_window(void)
 		w = desk_w;
 	x = desk_x + (desk_w - w) / 2;
 	y = desk_y + (desk_h - h) / 3;
+	if (at_x >= 0) {
+		x = at_x + w > desk_x + desk_w ? desk_x + desk_w - w : at_x;
+		y = at_y + h > desk_y + desk_h ? desk_y + desk_h - h : at_y;
+	}
 	wh = wind_create(KIND, desk_x, desk_y, desk_w, desk_h);
 	if (wh <= 0)
 		return;
@@ -229,6 +244,8 @@ static void step(int playing);
 static void sliders(void)
 {
 	int n = list_count(), rows = bar_rows();
+	if (bar_mini)
+		return;
 	short size = n > rows ? (short)((long)rows * 1000 / n) : 1000;
 	short pos = n > rows ? (short)((long)list_top * 1000 / (n - rows)) : 0;
 	if (wh <= 0)
@@ -240,6 +257,8 @@ static void sliders(void)
 static void scroll_to(int top)
 {
 	int most = list_count() - bar_rows();
+	if (!bar_rows())
+		return;			/* (the mini player: no list shown) */
 	if (top > most)
 		top = most;
 	if (top < 0)
@@ -253,7 +272,7 @@ static void scroll_to(int top)
 
 static void show_row(int i)
 {
-	if (i < 0)
+	if (i < 0 || !bar_rows())
 		return;
 	if (i < list_top)
 		scroll_to(i);
@@ -597,6 +616,36 @@ static void list_press(short mx, short my, int right)
 		play_index(i);
 }
 
+/* View > Mini player: the window again, the bar alone or with the list,
+   its top left corner where it was */
+static void mini_switch(void)
+{
+	short x, y, w, h;
+	if (wh > 0) {
+		wind_get(wh, WF_CURRXYWH, &x, &y, &w, &h);
+		at_x = x;
+		at_y = y;
+		av_window(wh, 0);
+		wind_close(wh);
+		wind_delete(wh);
+		wh = -1;
+	}
+	bar_mini = !bar_mini;
+	settings_set_mini(bar_mini);
+	menu_icheck(mb.tree, mbar_object(&mb, C_MINI), bar_mini);
+	open_window();
+	if (!bar_mini) {
+		scroll_to(list_top);
+		show_row(list_cur);
+		sliders();
+	}
+	{
+		char line[40];
+		snprintf(line, sizeof(line), "EPLAY mini %d\n", bar_mini);
+		nf_debug(line);			/* (the rigs) */
+	}
+}
+
 static void command(int c)
 {
 	switch (c) {
@@ -617,6 +666,9 @@ static void command(int c)
 		break;
 	case C_REMOVE:
 		list_remove_sel();
+		break;
+	case C_MINI:
+		mini_switch();
 		break;
 	case C_PREV:
 		if (list_cur > 0)
@@ -1111,6 +1163,8 @@ int app_main(void)
 	/* Shuffle and Repeat: the playlist's (phase 4), grey until then */
 	menu_ienable(mb.tree, mbar_object(&mb, C_SHUFFLE), 0);
 	menu_ienable(mb.tree, mbar_object(&mb, C_REPEAT), 0);
+	bar_mini = settings_mini();
+	menu_icheck(mb.tree, mbar_object(&mb, C_MINI), bar_mini);
 	menu_bar(mb.tree, 1);
 	graf_mouse(ARROW, 0);
 	open_window();

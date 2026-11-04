@@ -24,6 +24,7 @@
 
 static int output = OUT_AUTO, quality = Q_HIGH;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
+static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 #define NOUT 3
 static const char *const names[NOUT] = { "AUTO", "FDI", "DSP" };
 static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
@@ -82,6 +83,8 @@ void settings_load(void)
 			volume = VOL_FULL;
 		volume_saved = volume;
 	}
+	if (inf_get(inf, inf_n, "MINI", v, sizeof(v)))
+		mini = mini_saved = v[0] == '1';
 }
 
 static void save(void)
@@ -92,6 +95,7 @@ static void save(void)
 	static const char qnote[] =
 	    "; Quality: HIGH, or NORMAL: up to about 15 kHz, for a slower machine (the\r\n"
 	    "; DSP on the Falcon's own clock); through the FDI always whole\r\n";
+	static const char mnote[] = "; Mini player: 1 for the bar alone (View > Mini player), 0 with the list\r\n";
 	static const char vnote[] =
 	    "; Volume: 0 (silent) to 16 (full), steps of 1.5 dB; as the bar was left\r\n";
 	char path[200], tmp[200], vs[8];
@@ -105,12 +109,15 @@ static void save(void)
 	n = inf_set(inf3, n, "VOLUME", vs, vnote, inf2, INF_MAX);
 	if (n < 0)
 		return;
+	n = inf_set(inf2, n, "MINI", mini ? "1" : "0", mnote, inf3, INF_MAX);
+	if (n < 0)
+		return;
 	inf_path(path, sizeof(path), "eplay.inf");
 	inf_path(tmp, sizeof(tmp), "eplay.in$");
 	h = Fcreate(tmp, 0);
 	if (h < 0)
 		return;
-	if (Fwrite((short)h, n, inf2) != n) {
+	if (Fwrite((short)h, n, inf3) != n) {
 		Fclose((short)h);
 		Fdelete(tmp);
 		return;
@@ -119,9 +126,10 @@ static void save(void)
 	Fdelete(path);			/* (TOS doesn't rename over a file) */
 	if (Frename(tmp, path) < 0)
 		return;
-	memcpy(inf, inf2, (size_t)n);
+	memcpy(inf, inf3, (size_t)n);
 	inf_n = n;
 	volume_saved = volume;
+	mini_saved = mini;
 }
 
 int settings_output(void)
@@ -242,6 +250,16 @@ void settings_set_volume(int v)
    bar: a write each time) */
 void settings_flush(void)
 {
-	if (volume != volume_saved)
+	if (volume != volume_saved || mini != mini_saved)
 		save();
+}
+
+int settings_mini(void)
+{
+	return mini;
+}
+
+void settings_set_mini(int on)
+{
+	mini = on != 0;
 }

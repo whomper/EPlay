@@ -77,7 +77,9 @@ CASES = {
 LIST = [("A.WAV", None), ("B.MP3", ["-b", "128"]), ("C.WAV", None)]
 CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
 # the cases' eplay.inf
-INFS = {"normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n"}
+INFS = {"normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
+# the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
+CASES["mini"] = CASES["mp3"]
 # the level of the middle (RMS), each case's, for wavvol's against wav's
 LEVEL = {}
 

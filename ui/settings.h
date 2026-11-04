@@ -29,5 +29,8 @@ const char *settings_quality_name(int q);	/* "Normal", "High" (the log) */
 int settings_volume(void);
 void settings_set_volume(int v);
 void settings_flush(void);
+/* the mini player (MINI= in the INF), saved by settings_flush too */
+int settings_mini(void);
+void settings_set_mini(int on);
 
 #endif

@@ -109,11 +109,13 @@ static short bar_h, row_h, rad;
 
 static void make_masks(void);
 
+int bar_mini;			/* the mini player: the bar alone */
+
 void bar_size(short *w, short *h)
 {
 	short bh = 4 * ch + 4, rh = ch + 4;
 	*w = 56 * cw;		/* (Erez, 3 Nov 2026: 56 columns, one row) */
-	*h = bh + (1 + LIST_ROWS) * rh;
+	*h = bar_mini ? bh : bh + (1 + LIST_ROWS) * rh;
 }
 
 static void rect(GRECT *r, short x, short y, short w, short h)

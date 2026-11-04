@@ -1151,6 +1151,15 @@ time with any other.
 
 **The small player** is the bar alone, the album art 40 x 40 (as above).
 
+**The mini player, as built (0.22):** View > Mini player (a check mark when on) makes the window
+the bar alone: the art, the title and artist with their labels, Previous, Play/Pause and Next with
+the position, the output and the volume; no list, no info line, no sizer. Its top left corner
+stays where the window's was. EPLAY.INF keeps it (`MINI=1`), so EPlay starts as it was left. The
+list goes on underneath (the next file plays at a file's end). The art is still 56 x 56, the
+bar's: 40 x 40 needs the cover made again at that side (the cache's 64 x 64 records allow it),
+and comes if Erez wants the mini player smaller. On Falcon-4: Pause and Play 25 ms, the switch
+to the whole window 140, back 80 (within 300).
+
 The order: the 56 columns and the volume (0.20); the list with the files added (0.21); the small
 player (0.22).
 
