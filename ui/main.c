@@ -714,8 +714,9 @@ static void command(int c)
 				alert(1, "[1][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
-				playing_status(st, sizeof(st));
-				status(st);
+				/* (the info line the next turn: the file opened
+				   again and the button are this one's) */
+				status_due = 1;
 				snprintf(st, sizeof(st), "EPLAY resumed at %ld ms\n", play_ms());
 				nf_debug(st);		/* (the rigs) */
 			}
