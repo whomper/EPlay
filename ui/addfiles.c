@@ -371,13 +371,14 @@ static int in_sight(void)
 /* a picture's time, from when it is due to its last piece drawn, to the
    rigs' console ("EPLAY picture folder 45 ms"): the guidelines' Speed, "A
    rule never costs speed" */
-static unsigned long pic_t0;
+static unsigned long pic_t0, pic_in, input_ms;	/* input_ms: the dialog's last key or click */
 static const char *pic_name;
 static void pic_begin(const char *n)
 {
 	if (!pic_name) {
 		pic_name = n;
 		pic_t0 = tos_ms();
+		pic_in = input_ms && pic_t0 - input_ms < 2000 ? input_ms : pic_t0;
 	}
 }
 
@@ -385,7 +386,9 @@ static void pic_end(void)
 {
 	if (pic_name) {
 		char b[64];
-		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms\n", pic_name, tos_ms() - pic_t0);
+		unsigned long now = tos_ms();
+		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms, %lu from the input\n", pic_name, now - pic_t0,
+			 now - pic_in);
 		nf_debug(b);
 		pic_name = 0;
 	}
@@ -736,6 +739,8 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 	objc_edit(tree, O_MASK, 0, &idx, ED_INIT);
 	while (!done) {
 		dlg_evnt(MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 20, m, &e);
+		if (e.which & (MU_KEYBD | MU_BUTTON))
+			input_ms = tos_ms();	/* (a picture's time from the input: the rigs') */
 		place();			/* (the window may have moved) */
 		if (e.which & MU_TIMER)
 			idle_turn();
