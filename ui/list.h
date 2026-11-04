@@ -16,6 +16,7 @@
 #define EPLAY_LIST_H
 
 #define LIST_MAX 1024
+#define LIST_RESERVE (40L * 1024)	/* ST RAM left free for the AES, whatever the list */
 
 typedef struct {
 	const char *path;
@@ -40,6 +41,7 @@ int list_step(int *row);
 const char *list_name(const ENTRY *e);	/* its title, else its file's name */
 long list_memory(void);		/* the bytes it takes (the log) */
 
+extern int list_full;		/* a file was left out: no memory but the reserve (cleared by list_clear) */
 extern int list_cur;		/* the one playing (or last played), -1 none */
 extern int list_sel;		/* the one selected, -1 none */
 extern int list_top;		/* the first row shown */
