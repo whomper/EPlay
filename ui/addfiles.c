@@ -722,6 +722,7 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 	info();
 	dlg_name("Add files");
 	dlg_band(O_BAND);
+	pic_begin("add");
 	dlg_open(tree, &x, &y, &w, &h);
 	dlg_more(more);
 	objc_edit(tree, O_MASK, 0, &idx, ED_INIT);
