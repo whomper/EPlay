@@ -45,6 +45,20 @@ NEXT = (421, 150)
 ROW = [(300, 229 + 20 * i) for i in range(6)]	# the list's rows
 SECS = 120	# (long enough not to end before the last action, when the emulator runs fast)
 
+# A redraw row (Erez's rule, 4 Nov 2026, the hub's ruling the same day): a
+# redraw of 300 ms or less is drawn whole, no event call between its pieces,
+# so its stretch is held to WINDOW, and the user's wait, from the key or
+# click to the whole picture (EPlay's "EPLAY picture NAME N ms, M from the
+# input"), may not be later than 0.22's: its figures below (measure/0.22-
+# pictures 016d7c78, Falcon-4:16), with a rig step (5 ms) of give.
+PICTURE_022 = {
+    "EmuTOS": {"a row played (double click)": 175, "Next": 200, "Return (plays the selected)": 155,
+               "Delete (one out of the list)": 65, "MUSIC opened (a double click)": 100},
+    "TOS": {"a row played (double click)": 160, "Next": 180, "Return (plays the selected)": 140,
+            "Delete (one out of the list)": 75, "MUSIC opened (a double click)": 100},
+}
+STEP = 5
+
 
 class Rig(speed.Rig):
     quick = False
@@ -56,6 +70,20 @@ class Rig(speed.Rig):
         is a row of its own)"""
         time.sleep(0.3 if self.quick else 3)
         return True
+
+    def redraw(self, what, picture, do):
+        """a redraw row: its stretch held to WINDOW, and its picture's time
+        from the input to 0.22's (PICTURE_022), a second line in the table"""
+        start = os.path.getsize(self.log)
+        self.act(what, speed.WINDOW, do)
+        with open(self.log, errors="replace") as f:
+            f.seek(start)
+            new = f.read()
+        got = re.findall(r"EPLAY picture %s \d+ ms, (\d+) from the input" % picture, new)
+        tos = "EmuTOS" if "EmuTOS" in self.describe() else "TOS"
+        ref = PICTURE_022[tos][what] + STEP
+        # (no marker: shown as "?", over)
+        self.results.append((what + ": the whole picture", int(got[-1]) if got else None, ref))
 
     def wait_line(self, text, secs=30):
         end = time.time() + secs
@@ -260,11 +288,11 @@ def list_session(r, src):
     r.results[-1] = ("started, 8 files given, the first playing", "AESSTART", speed.START)
     r.act("the list's files read (tags, lengths)", speed.KEY, lambda: time.sleep(6), job=True)
     r.act("a row selected (clicked)", speed.KEY, lambda: r.click(*ROW[2]))
-    r.act("a row played (double click)", speed.KEY, lambda: r.dclick(*ROW[3]))
-    r.act("Next", speed.KEY, lambda: r.click(*NEXT))
+    r.redraw("a row played (double click)", "start", lambda: r.dclick(*ROW[3]))
+    r.redraw("Next", "start", lambda: r.click(*NEXT))
     r.act("Down", speed.KEY, lambda: r.key("Down"))
-    r.act("Return (plays the selected)", speed.KEY, lambda: r.key("Return"))
-    r.act("Delete (one out of the list)", speed.KEY, lambda: (r.key("Up"), r.key("Delete")))
+    r.redraw("Return (plays the selected)", "start", lambda: r.key("Return"))
+    r.redraw("Delete (one out of the list)", "rows", lambda: (r.key("Up"), r.key("Delete")))
     rc = r.report()
     lines = r.console().split("\n")
     played = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
@@ -308,7 +336,7 @@ def add_session(r, src):
         r.click(x, y)
         time.sleep(0.2)
         r.xdo("keyup", "shift")
-    r.act("MUSIC opened (a double click)", speed.KEY, lambda: r.dclick(*row(0)))
+    r.redraw("MUSIC opened (a double click)", "folder", lambda: r.dclick(*row(0)))
     r.act("T1 selected (a click)", speed.KEY, lambda: r.click(*row(0)))
     r.act("T3 added to the selection (Shift-click)", speed.KEY, lambda: shift_click(*row(2)))
     r.act("T5 added to the selection (Shift-click)", speed.KEY, lambda: shift_click(*row(4)))
