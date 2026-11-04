@@ -129,6 +129,8 @@ def session(work, spec, kind):
             return list_session(r, src)
         elif kind == "add":
             return add_session(r, src)
+        elif kind == "mini":
+            return mini_session(r, src)
         else:
             name, what = "LONG.WAV", "a WAV (CD quality)"
             subprocess.run(["sox", src, os.path.join(r.hd, name)], check=True)
@@ -320,10 +322,42 @@ def add_session(r, src):
     return rc
 
 
+MINI_PLAY = (400, 185)		# the mini player's Play/Pause (the bar alone: no slider, lower down)
+VIEW = (190, 28)		# View > Mini player (the title's x, the item's y)
+
+
+def mini_session(r, src):
+    """the mini player (Erez, 3 Nov 2026: the bar alone), from eplay.inf's
+    MINI=1: Pause and Play in it, then View > Mini player to the whole
+    window and back"""
+    short = os.path.join(r.work, "short.wav")
+    subprocess.run(["sox", src, short, "trim", "0", "60"], check=True)
+    subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", "192", "--tt", "Mini", "--ta", "The rig", short,
+                    os.path.join(r.hd, "MINI.MP3")], check=True)
+    r.write("eplay.inf", "MINI=1\r\n")
+    r.write("TAIL.TXT", "C:\\MINI.MP3\n")
+    r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
+    r.results[-1] = ("started in the mini player, playing", "AESSTART", speed.START)
+    r.act("Pause (mini)", speed.KEY, lambda: r.click(*MINI_PLAY))
+    r.act("Play (mini)", speed.KEY, lambda: r.click(*MINI_PLAY))
+    r.act("View > Mini player: the whole window", speed.WINDOW, lambda: r.menu(VIEW[0] - 20, VIEW[1]))
+    r.act("View > Mini player: the bar alone", speed.WINDOW, lambda: r.menu(VIEW[0] - 20, VIEW[1]))
+    rc = r.report()
+    lines = r.console().split("\n")
+    minis = [l.split()[2] for l in lines if l.startswith("EPLAY mini ")]
+    paused = [l for l in lines if l.startswith("EPLAY paused at ")]
+    if minis != ["0", "1"] or not paused:
+        print("FAIL  the mini player: switched %s (wanted 0 then 1), paused %d times" % (minis, len(paused)))
+        rc = 1
+    else:
+        print("ok    the mini player paused and went on; switched to the whole window and back")
+    return rc
+
+
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
-    kinds = sys.argv[3:] or ["mp3", "wav", "list"]
+    kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini"]
     return max(session(work, spec, k) for k in kinds)
 
 
