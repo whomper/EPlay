@@ -22,6 +22,7 @@
 #include "list.h"
 #include "dd.h"
 #include "popup.h"
+#include "addfiles.h"
 #include "elog.h"
 #include "snd.h"
 #include "bar.h"
@@ -79,7 +80,7 @@ static MBAR mb;
 static short wh = -1;
 static GRECT work;
 static int quit;
-static char path[256], name[64], file[320];	/* the file selector's, and the file */
+static char file[320];		/* the file playing */
 static int press_draw;		/* drawn while the button is held: press_update_begin's lock */
 
 static void status(const char *s)
@@ -409,27 +410,31 @@ static void play_file(const char *f)
 
 /* File > Add... (^O): a file, or with none chosen the whole folder; played
    if nothing plays */
+/* File > Open... (^O): the Add files dialog (Erez, 4 Nov 2026: several
+   files at once); the files chosen at the list's end, the first played if
+   nothing plays. The music goes on meanwhile (its queue filled) */
+static int first_added;
+
+static void add_one_file(const char *f)
+{
+	int i = list_add(f);
+	if (i >= 0 && first_added < 0)
+		first_added = i;
+}
+
+static void feed_only(void)
+{
+	/* (no drawing: the dialog is over the window) */
+	if (play_state() == PS_PLAYING)
+		play_step(15);
+}
+
 static void open_file(void)
 {
-	short button = 0;
-	char *e;
-	long n;
-	int i, before = list_count();
-	if (!path[0])
-		snprintf(path, sizeof(path), "%s*.*", app_dir());
-	name[0] = 0;
-	if (!fsel_exinput(path, name, &button, "Open a file (none: the folder)") || !button)
-		return;
-	e = strrchr(path, '\\');
-	n = e ? e - path + 1 : 0;
-	if (name[0]) {
-		snprintf(file, sizeof(file), "%.*s%s", (int)n, path, name);
-		i = list_add(file);
-	} else {
-		char dir[200];
-		snprintf(dir, sizeof(dir), "%.*s", (int)n, path);
-		i = add_folder(dir);
-	}
+	int before = list_count();
+	first_added = -1;
+	addfiles_run(settings_add_dir(), settings_recent(), add_one_file, feed_only);
+	settings_recent_changed();	/* (its folder kept, and the last folders if any were added) */
 	{
 		char line[60];
 		snprintf(line, sizeof(line), "EPLAY list: %d files\n", list_count());
@@ -439,8 +444,8 @@ static void open_file(void)
 		list_unread = 1;
 	sliders();
 	redraw(0, BP_LIST);
-	if (i >= 0 && play_state() != PS_PLAYING && !play_paused())
-		play_index(i);
+	if (first_added >= 0 && play_state() != PS_PLAYING && !play_paused())
+		play_index(first_added);
 	else
 		redraw(0, BP_TEXT);
 }

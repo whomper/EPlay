@@ -24,6 +24,8 @@
 
 static int output = OUT_AUTO, quality = Q_HIGH;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
+static char add_dir[AF_PATH], recent[AF_RECENT][AF_PATH];	/* the Add files dialog's */
+static int recent_dirty;
 #define NOUT 3
 static const char *const names[NOUT] = { "AUTO", "FDI", "DSP" };
 static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
@@ -82,6 +84,12 @@ void settings_load(void)
 			volume = VOL_FULL;
 		volume_saved = volume;
 	}
+	inf_get(inf, inf_n, "ADDDIR", add_dir, sizeof(add_dir));
+	for (i = 0; i < AF_RECENT; i++) {
+		char k[12];
+		snprintf(k, sizeof(k), "FOLDER%d", i + 1);
+		inf_get(inf, inf_n, k, recent[i], AF_PATH);
+	}
 }
 
 static void save_in(void);
@@ -120,6 +128,29 @@ static void save_in(void)
 	n = inf_set(inf3, n, "VOLUME", vs, vnote, inf2, INF_MAX);
 	if (n < 0)
 		return;
+	{
+		/* the Add files dialog's folders, a key at a time between the two
+		   buffers, ending in inf2 */
+		static const char dnote[] = "; Add files: the folder it opens at, and the last folders added from\r\n";
+		char *a = inf2, *b = inf3, *t;
+		int i;
+		for (i = -1; i < AF_RECENT && n >= 0; i++) {
+			char k[12];
+			if (i < 0)
+				n = inf_set(a, n, "ADDDIR", add_dir, dnote, b, INF_MAX);
+			else {
+				snprintf(k, sizeof(k), "FOLDER%d", i + 1);
+				n = inf_set(a, n, k, recent[i], 0, b, INF_MAX);
+			}
+			t = a;
+			a = b;
+			b = t;
+		}
+		if (n < 0)
+			return;
+		if (a != inf2)
+			memcpy(inf2, a, (size_t)n);
+	}
 	inf_path(path, sizeof(path), "eplay.inf");
 	inf_path(tmp, sizeof(tmp), "eplay.in$");
 	h = Fcreate(tmp, 0);
@@ -137,6 +168,7 @@ static void save_in(void)
 	memcpy(inf, inf2, (size_t)n);
 	inf_n = n;
 	volume_saved = volume;
+	recent_dirty = 0;
 }
 
 int settings_output(void)
@@ -257,6 +289,21 @@ void settings_set_volume(int v)
    bar: a write each time) */
 void settings_flush(void)
 {
-	if (volume != volume_saved)
+	if (volume != volume_saved || recent_dirty)
 		save();
+}
+
+char *settings_add_dir(void)
+{
+	return add_dir;
+}
+
+char (*settings_recent(void))[AF_PATH]
+{
+	return recent;
+}
+
+void settings_recent_changed(void)
+{
+	recent_dirty = 1;
 }

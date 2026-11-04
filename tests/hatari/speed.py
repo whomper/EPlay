@@ -127,6 +127,8 @@ def session(work, spec, kind):
                             os.path.join(r.hd, name)], check=True)
         elif kind == "list":
             return list_session(r, src)
+        elif kind == "add":
+            return add_session(r, src)
         else:
             name, what = "LONG.WAV", "a WAV (CD quality)"
             subprocess.run(["sox", src, os.path.join(r.hd, name)], check=True)
@@ -271,6 +273,50 @@ def list_session(r, src):
         rc = 1
     else:
         print("ok    played in turn: %s" % " ".join(played[:4]))
+    return rc
+
+
+def add_session(r, src):
+    """the Add files dialog (Erez, 4 Nov 2026): ^O opens it at the drive's
+    root; MUSIC opened by a double click; three files selected (a click, a
+    Shift-click, another Shift-click) and added"""
+    music = os.path.join(r.hd, "MUSIC")
+    os.makedirs(music)
+    short = os.path.join(r.work, "short.wav")
+    subprocess.run(["sox", src, short, "trim", "0", "20"], check=True)
+    for i in range(6):
+        shutil.copy(short, os.path.join(music, "T%d.WAV" % (i + 1)))
+    r.write("TAIL.TXT", "\n")
+    r.start("C:\\LAUNCH.PRG", ready="EPLAY status:")
+    r.results[-1] = ("started, nothing given", "AESSTART", speed.START)
+    r.act("Add files opened (^O)", speed.DIALOG, lambda: r.key("ctrl+o"))
+    r.shot("add-root")
+    r.act("Add files closed (Esc)", speed.WINDOW, lambda: r.key("Escape"))
+    r.act("Add files opened again", speed.DIALOG, lambda: r.key("ctrl+o"))
+    row = lambda i: (300, 206 + 16 * i)     # the dialog's list rows (Falcon-4's 640 x 480)
+
+    def shift_click(x, y):
+        r.xdo("keydown", "shift")
+        time.sleep(0.2)
+        r.click(x, y)
+        time.sleep(0.2)
+        r.xdo("keyup", "shift")
+    r.act("MUSIC opened (a double click)", speed.KEY, lambda: r.dclick(*row(0)))
+    r.act("T1 selected (a click)", speed.KEY, lambda: r.click(*row(0)))
+    r.act("T3 added to the selection (Shift-click)", speed.KEY, lambda: shift_click(*row(2)))
+    r.act("T5 added to the selection (Shift-click)", speed.KEY, lambda: shift_click(*row(4)))
+    r.shot("add-three")
+    r.act("Add: the three into the list", speed.WINDOW, lambda: r.click(455, 401))
+    time.sleep(3)
+    rc = r.report()
+    lines = r.console().split("\n")
+    listed = [l for l in lines if l.startswith("EPLAY list: ")]
+    played = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
+    if not listed or listed[-1].split()[2] != "3" or played[:1] != ["T1.WAV"]:
+        print("FAIL  added %s, played %s (wanted 3 files, T1.WAV first)" % (listed, played))
+        rc = 1
+    else:
+        print("ok    three files added (T1, T3, T5), T1 playing")
     return rc
 
 

@@ -30,4 +30,11 @@ int settings_volume(void);
 void settings_set_volume(int v);
 void settings_flush(void);
 
+/* the Add files dialog's folder and its last folders (ADDDIR=, FOLDER1=
+   to FOLDER10= in the INF), saved by settings_flush once changed */
+#include "addfiles.h"
+char *settings_add_dir(void);
+char (*settings_recent(void))[AF_PATH];
+void settings_recent_changed(void);
+
 #endif
