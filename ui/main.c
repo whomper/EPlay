@@ -1114,8 +1114,10 @@ static void turn(int nested)
 	}
 	/* (a turn that drew a piece of the window reads no more of the file:
 	   a 32 KB read after it went past the 50 ms between event calls; the
-	   queue is filled the turn after) */
-	step(playing && !piece);
+	   queue is filled the turn after; nor one after which another file
+	   opens: the next turn stops this one, so its frames would be wasted,
+	   and Next's rows would wait for them) */
+	step(playing && !piece && !open_due && !next_due);
 }
 
 const long cpu_need = 30;
