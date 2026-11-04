@@ -48,6 +48,11 @@ CASES = {
     # 24-bit AIFF at 44.1 kHz on the FDI's clock, 3 Nov 2026: 330 underruns
     # in 6 s, the first at 0.86 s)
     "aiff24": ("T24.AIF", ["-r", "49170", "-c", "2", "-b", "24"], None, 49170, (1000, 1500), 10),
+    # Erez's AIFF of 4 Nov 2026: 24 bits, stereo, 44.1 kHz, with Output DSP
+    # (no FDI): the Falcon's clock hasn't the rate, so it is resampled to
+    # 49170 Hz and heard at its own pitch (0.21 played it on the DMA at
+    # 49170 Hz as it was, 11 % fast: crackles, and a crash)
+    "aiff44": ("T44.AIF", ["-r", "44100", "-c", "2", "-b", "24"], None, 49170, (1000, 1500), 10),
     # a rate the Falcon's clock hasn't, 22.05 kHz mono: through the DSP,
     # resampled to 24585 Hz (CD's stereo stays on the DMA, at 49170: a
     # host-port word a sample would cost a stock Falcon's 68030 too much)
@@ -82,7 +87,7 @@ CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (
 CASES["many"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
 NOT_DEFAULT = {"many"}
 # the cases' eplay.inf
-INFS = {"normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
+INFS = {"aiff44": "OUTPUT=DSP\r\n\r\n", "normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
 # the level of the middle (RMS), each case's, for wavvol's against wav's
@@ -148,7 +153,7 @@ def tone(x, rate):
     return best, 2 * bp / n / total
 
 
-RESAMPLED = {"wav22"}       # (and every MP3)
+RESAMPLED = {"wav22", "aiff44"}       # (and every MP3)
 WAV_LEVEL = 0               # (set below once measured: wav's level on Hatari's Falcon)
 
 
