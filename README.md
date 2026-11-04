@@ -48,7 +48,10 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
    Teradesk) or under MiNT and MagiC are added too. A double click or **Return** plays a row,
    **Up** and **Down** choose one, **Delete** takes it out; a right click (or **Insert**) on a
    row opens its menu; **Edit > Clear the list** keeps only the file playing. Previous and Next
-   go through the list. The window can be made taller for more rows. The bar shows the file's
+   go through the list. The window can be made taller for more rows. The list needs memory left
+   over after NVDI and the accessories (a Falcon with TT RAM has plenty; EPlay always leaves
+   40 KB of ST RAM for the AES): where there is none, the info line says "The list is full: no
+   memory for more files." The bar shows the file's
    album art (unpacked on the DSP, then kept in `cache\` next to the program), its title
    and artist (from its tags), its bit rate and rate, and where it plays (FDI, DSP or DMA). The
    round button, or **Space**, plays and pauses (Play/Pause and Stop are in the Play menu too); a
