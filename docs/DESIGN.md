@@ -1217,22 +1217,24 @@ one pop-up button, and a selection with no check boxes.
 event call between, and "a rule never costs speed". Four were drawn a piece a turn: another file's
 start (the info line, then the bar's left, its right, Play/Pause with the times), the info line
 after Play from a pause, a removed row's rows (two a turn), and the Add files list (the turn after
-the tree, and after a folder's path). They are drawn whole now: the start and the resume in the
-turn that opens the file, the rows in one redraw clipped to them, the dialog's list with the tree
+the tree, and after a folder's path). They are drawn whole now: another file's start the turn
+after its open (in the open's own turn the two added up: the uncached cover's start turn 105 ms,
+Next 100), the resume in its click's turn, the rows in one redraw clipped to them, the dialog's list with the tree
 on TOS (in a window, the AES's redraw draws both, as before). "EPLAY picture <name> <ms>" on the
 rigs' console is each picture's time from when it is due to its last piece.
 
 | Picture (Falcon-4:16) | In pieces | Whole |
 |---|---|---|
-| another file's start | 90 to 230 ms | 55 to 85 |
+| another file's start | 90 to 230 ms | 85 to 175 |
 | the info line after Play | 20 to 45 | 15 to 45 |
 | the rows after Delete | 60 | 45 |
 | Add files opened | 150 to 155 | 150 |
 | a folder opened in it | 65 | 65 |
 
 Whole, a picture is one stretch: the speed table's rows that hold one are over its 50 ms (a row
-played 100, Next 90, Return 100, Delete 75; Add files opened 160 of 150, a folder 70), reported to
-the hub as the rule asks, not sliced.
+played 75, Next 75, Return 85, Delete 70, Play after a pause 55; Add files opened 155 to 160 of
+150, a folder 70), reported to the hub as the rule asks, not sliced. The uncached cover's start
+turns: 20 ms.
 
 ### The 24-bit tick on a stock Falcon (Erez, 4 Nov 2026: the DFB1X off)
 
