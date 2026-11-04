@@ -279,11 +279,16 @@ def list_session(r, src):
 
 
 def add_session(r, src):
-    """the Add files dialog (Erez, 4 Nov 2026): ^O opens it at the drive's
-    root; MUSIC opened by a double click; three files selected (a click, a
-    Shift-click, another Shift-click) and added"""
-    music = os.path.join(r.hd, "MUSIC")
+    """the Add files dialog (Erez, 4 Nov 2026): ^O opens it at C:\\RIGADD\\
+    (eplay.inf's ADDDIR), whose one folder is MUSIC: MUSIC opened by a
+    double click on the first row; three files selected (a click, a
+    Shift-click, another Shift-click) and added. (Not at the root: a TOS
+    image's root has folders of its own, AUTO sorting before MUSIC: the
+    hub, 4 Nov 2026. An AUTO folder is made at the root as such a root has.)"""
+    os.makedirs(os.path.join(r.hd, "AUTO"), exist_ok=True)
+    music = os.path.join(r.hd, "RIGADD", "MUSIC")
     os.makedirs(music)
+    r.write("eplay.inf", "ADDDIR=C:\\RIGADD\\\r\n")
     short = os.path.join(r.work, "short.wav")
     subprocess.run(["sox", src, short, "trim", "0", "20"], check=True)
     for i in range(6):
@@ -292,7 +297,7 @@ def add_session(r, src):
     r.start("C:\\LAUNCH.PRG", ready="EPLAY status:")
     r.results[-1] = ("started, nothing given", "AESSTART", speed.START)
     r.act("Add files opened (^O)", speed.DIALOG, lambda: r.key("ctrl+o"))
-    r.shot("add-root")
+    r.shot("add-start")
     r.act("Add files closed (Esc)", speed.WINDOW, lambda: r.key("Escape"))
     r.act("Add files opened again", speed.DIALOG, lambda: r.key("ctrl+o"))
     row = lambda i: (300, 206 + 16 * i)     # the dialog's list rows (Falcon-4's 640 x 480)
