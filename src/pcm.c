@@ -169,12 +169,29 @@ static short sample(const PCMFMT *f, const unsigned char *s)
 
 void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n)
 {
+	pcm_convert_to(f, src, dst, n, 2);
+}
+
+/* each frame's two words at dst, dst + step, ...: the ring of four tracks
+   (step 8) has the music in the first and silence, written once, in the
+   other three (Erez, 3 Nov 2026: with one track the sound DMA put the left
+   channel on the Analog 8's channels 3 to 8 as well) */
+void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long n, int step)
+{
 	int b = f->bits / 8;
 	long i;
 
 	static const unsigned short one = 1;
 	if (f->channels == 2 && f->bits == 16 && f->big && !*(const unsigned char *)&one) {
-		memcpy(dst, src, (size_t)n * 4);	/* (big-endian, as the Atari: as it is) */
+		const unsigned long *s = (const unsigned long *)(const void *)src;
+		unsigned long *d = (unsigned long *)(void *)dst;
+		int ls = step / 2;
+		if (step == 2) {
+			memcpy(dst, src, (size_t)n * 4);	/* (big-endian, as the Atari: as it is) */
+			return;
+		}
+		for (i = 0; i < n; i++, d += ls)
+			*d = *s++;
 		return;
 	}
 	/* 16 bits, the most there is: a loop of its own each, no call a sample
@@ -184,36 +201,37 @@ void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n)
 		if (f->channels == 2 && !f->big) {	/* a WAV on the Atari: a frame a long */
 			const unsigned long *s = (const unsigned long *)(const void *)src;
 			unsigned long *d = (unsigned long *)(void *)dst;
-			long k = n;
+			long k = n, sb = (long)step * 2;
 			__asm__ volatile("\tbra.s\t2f\n"
 					 "1:\tmove.l\t(%0)+,%%d0\n"
 					 "\tror.w\t#8,%%d0\n"	/* right */
 					 "\tswap\t%%d0\n"
 					 "\tror.w\t#8,%%d0\n"	/* left */
 					 "\tswap\t%%d0\n"
-					 "\tmove.l\t%%d0,(%1)+\n"
+					 "\tmove.l\t%%d0,(%1)\n"
+					 "\tadd.l\t%3,%1\n"
 					 "2:\tsubq.l\t#1,%2\n"
 					 "\tbpl.s\t1b"
-					 : "+a"(s), "+a"(d), "+d"(k) : : "d0", "cc", "memory");
+					 : "+a"(s), "+a"(d), "+d"(k) : "d"(sb) : "d0", "cc", "memory");
 			return;
 		}
 #endif
 		if (f->channels == 2 && !f->big) {
-			for (i = 0; i < n; i++, src += 4) {
-				*dst++ = (short)(src[1] << 8 | src[0]);
-				*dst++ = (short)(src[3] << 8 | src[2]);
+			for (i = 0; i < n; i++, src += 4, dst += step) {
+				dst[0] = (short)(src[1] << 8 | src[0]);
+				dst[1] = (short)(src[3] << 8 | src[2]);
 			}
 		} else if (f->channels == 2) {
-			for (i = 0; i < n; i++, src += 4) {
-				*dst++ = (short)(src[0] << 8 | src[1]);
-				*dst++ = (short)(src[2] << 8 | src[3]);
+			for (i = 0; i < n; i++, src += 4, dst += step) {
+				dst[0] = (short)(src[0] << 8 | src[1]);
+				dst[1] = (short)(src[2] << 8 | src[3]);
 			}
 		} else {
 			int lo = !f->big, hi = f->big;
-			for (i = 0; i < n; i++, src += 2) {
+			for (i = 0; i < n; i++, src += 2, dst += step) {
 				short v = (short)(src[lo] << 8 | src[hi]);
-				*dst++ = v;
-				*dst++ = v;
+				dst[0] = v;
+				dst[1] = v;
 			}
 		}
 		return;
@@ -224,18 +242,18 @@ void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n)
 	   crackled on Erez's Falcon (3 Nov 2026: 330 underruns in 6 s) */
 	if (f->bits == 24 && f->channels == 2) {
 		int hi = f->big ? 0 : 2, lo = f->big ? 2 : 0;
-		for (i = 0; i < n; i++, src += 6) {
+		for (i = 0; i < n; i++, src += 6, dst += step) {
 			long l = (long)(signed char)src[hi] * 256 + src[1] + (src[lo] >> 7);
 			long r = (long)(signed char)src[3 + hi] * 256 + src[4] + (src[3 + lo] >> 7);
-			*dst++ = (short)(l > 32767 ? 32767 : l);
-			*dst++ = (short)(r > 32767 ? 32767 : r);
+			dst[0] = (short)(l > 32767 ? 32767 : l);
+			dst[1] = (short)(r > 32767 ? 32767 : r);
 		}
 		return;
 	}
-	for (i = 0; i < n; i++, src += f->bytes) {
+	for (i = 0; i < n; i++, src += f->bytes, dst += step) {
 		short l = sample(f, src);
-		*dst++ = l;
-		*dst++ = f->channels == 2 ? sample(f, src + b) : l;
+		dst[0] = l;
+		dst[1] = f->channels == 2 ? sample(f, src + b) : l;
 	}
 }
 

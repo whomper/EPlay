@@ -46,10 +46,17 @@ static long x_setbuffer(short reg, void *beg, void *end)
 #define STEREO16	1
 #define PLAY_ENABLE	1
 #define PLAY_REPEAT	2
+#define RING_MAX	49170L	/* frames: a second at the Falcon's fastest */
 
 long snd_ext_rate;
 
 static int locked;
+/* four stereo tracks a frame, the music in the first: with one, the DMA
+   put the left channel in the DSP port's other six slots as well, heard on
+   the Analog 8's channels 3 to 8 (Erez's lrtest.wav, 0.19). The other
+   three are zeros, written once when the ring is taken */
+#define TRACKS		4
+#define FW		(2 * TRACKS)	/* a frame's words */
 static short *ring;		/* ST RAM */
 static long ring_n;		/* frames */
 static volatile long wpos, written, played;	/* the next frame to write; totals */
@@ -85,9 +92,9 @@ static long pos_once(void)
 {
 	long p[4];
 	Buffptr(p);
-	if (p[0] < (long)ring || p[0] > (long)(ring + 2 * ring_n))
+	if (p[0] < (long)ring || p[0] > (long)(ring + FW * ring_n))
 		return -1;
-	return (p[0] - (long)ring) / 4 % ring_n;
+	return (p[0] - (long)ring) / (2 * FW) % ring_n;
 }
 
 /* the DMA's counter is read a byte at a time, and a read as it moves on
@@ -200,8 +207,8 @@ static long measure(short pre)
 	if (!snd_open(44100, 1))
 		return 0;
 	ring_n = 16384;
-	memset(ring, 0, (size_t)ring_n * 4);
-	x_setbuffer(0, ring, ring + 2 * ring_n);
+	memset(ring, 0, (size_t)ring_n * 2 * FW);
+	x_setbuffer(0, ring, ring + FW * ring_n);
 	Buffoper(PLAY_ENABLE | PLAY_REPEAT);
 	Supexec(m_loop);
 	Buffoper(0);
@@ -478,10 +485,11 @@ int snd_open(long rate, int ext)
 	short pre = 1;
 	unsigned i;
 	if (!ring) {
-		long n = 2 * 49170L;			/* two seconds at the most */
-		short *p = Mxalloc(n * 4, 0);
+		long n = RING_MAX;
+		short *p = Mxalloc(n * 2 * FW, 0);
 		if ((long)p <= 0)
 			return 0;
+		memset(p, 0, (size_t)n * 2 * FW);	/* (the three silent tracks: once) */
 		ring = p;
 		ring_n = n;
 	}
@@ -494,15 +502,16 @@ int snd_open(long rate, int ext)
 	Buffoper(0);
 	/* (not cleared: the DMA starts once a quarter of a second is
 	   written, and plays only what was) */
-	/* the ring two seconds long at this rate (the DMA's end is the ring's) */
-	ring_n = 2 * rate;
-	if (ring_n > 2 * 49170L)
-		ring_n = 2 * 49170L;
-	Settracks(0, 0);
-	Setmontracks(0);
+	/* the ring a second long at this rate (the DMA's end is the ring's):
+	   the queue in TT RAM holds the file ahead, the ring the tick's */
+	ring_n = rate;
+	if (ring_n > RING_MAX)
+		ring_n = RING_MAX;
+	Settracks(TRACKS - 1, 0);
+	Setmontracks(0);		/* (the DAC: the first) */
 	Setmode(STEREO16);
 	Devconnect(DMAPLAY, DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
-	x_setbuffer(0, ring, ring + 2 * ring_n);
+	x_setbuffer(0, ring, ring + FW * ring_n);
 	wpos = written = played = 0;
 	last_ppos = 0;
 	playing = 0;
@@ -553,9 +562,9 @@ static long hw_once(void)
 {
 	volatile unsigned char *c = (volatile unsigned char *)0xffff8909L;
 	long a = (long)c[0] << 16 | (long)c[2] << 8 | c[4];
-	if (a < (long)ring || a > (long)(ring + 2 * ring_n))
+	if (a < (long)ring || a > (long)(ring + FW * ring_n))
 		return -1;
-	a = (a - (long)ring) >> 2;	/* (no division: the tick's) */
+	a = (a - (long)ring) >> 4;	/* (FW words, 16 bytes; no division: the tick's) */
 	return a >= ring_n ? a - ring_n : a;
 }
 
@@ -627,7 +636,7 @@ long snd_room(void)
 short *snd_ptr(long *n)
 {
 	*n = ring_n - wpos;
-	return ring + 2 * wpos;
+	return ring + FW * wpos;
 }
 
 void snd_wrote(long n)
@@ -645,8 +654,11 @@ void snd_write(const short *frames, long n)
 		short *p = snd_ptr(&k);
 		if (k > n)
 			k = n;
-		memcpy(p, frames, (size_t)k * 4);
-		frames += 2 * k;
+		long i;
+		for (i = 0; i < k; i++, p += FW, frames += 2) {
+			p[0] = frames[0];
+			p[1] = frames[1];
+		}
 		snd_wrote(k);
 		n -= k;
 	}

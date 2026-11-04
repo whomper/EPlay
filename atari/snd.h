@@ -2,7 +2,8 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * snd.h - the Falcon's sound: a ring in ST RAM that the sound DMA plays
- * round and round, 16-bit stereo, and the program writing ahead of it;
+ * round and round, four 16-bit stereo tracks (the music in the first, the
+ * others silent), and the program writing ahead of it;
  * the matrix (the DMA to the DAC and the DSP port, where the FDI is), the
  * clock (the Falcon's own, or an external one on the DSP port), and both
  * put back as they were found when EPlay quits.
@@ -47,6 +48,7 @@ void snd_close(void);		/* stopped, the ring given back */
 long snd_room(void);		/* frames that can be written now */
 void snd_write(const short *frames, long n);	/* n stereo frames, at most snd_room() */
 short *snd_ptr(long *n);	/* where the next frames go: n frames there before the ring's end */
+#define SND_STEP 8		/* the ring's words a frame (four tracks, the music in the first two) */
 void snd_wrote(long n);		/* n frames put at snd_ptr() */
 void snd_play(void);		/* the DMA started (after the first frames) */
 long snd_played(void);		/* frames played since snd_open */

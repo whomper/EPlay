@@ -31,6 +31,9 @@ int pcm_probe(const unsigned char *p, long n, PCMFMT *f, const char **why);
    (dst holds n * 2 shorts): 8 bits made 16, 24 and 32 cut to 16, mono
    made stereo */
 void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n);
+/* the same, each frame step shorts after the last (2: packed; the sound
+   ring's four tracks: 8, the other six words left as they are) */
+void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long n, int step);
 
 /* the volume on samples (the FDI's, where the codec's attenuation isn't
    heard): g in Q15, 32768 as they are. A change glides: g moves to the new

@@ -161,6 +161,14 @@ def analyse(rec, case):
     rms = [math.sqrt(sum(v * v for v in left[i:i + blk]) / blk) for i in range(0, len(left) - blk, blk)]
     loud = [i for i, r in enumerate(rms) if r > 1000]
     if not loud:
+        if hatari_keeps_parity() and not CASES[case][2] and case not in RESAMPLED:
+            # the sound DMA plays four tracks, the music in the first
+            # (Erez's Analog 8: channels 3 to 8 silent). Hatari 2.4 keeps
+            # the DMA's word count from its last stop (EPlay's clock
+            # measurement), so its DAC hears another track: silence. Later
+            # Hatari starts each DMA at the first word ("1st frame is
+            # left"), as the Falcon does
+            return True, "no sound: Hatari %s's DMA starts mid-frame, its DAC on a silent track (excused)" % HATARI
         return False, "no sound recorded (%d frames at %d Hz)" % (n, rate)
     a, b = loud[0], loud[-1]
     secs = (b - a + 1) / 50
@@ -193,6 +201,13 @@ def analyse(rec, case):
         # measurement), fixed in later Hatari (crossbar.c, "1st frame is
         # left"). The Falcon starts each frame on the left.
         pitch, note = True, " (left and right swapped: Hatari %s's DMA)" % HATARI
+    if not pitch and hatari_keeps_parity() and not CASES[case][2] and case not in RESAMPLED and \
+            ((abs(fl - want[1]) < 8 and ql > 0.9) or (abs(fr - want[0]) < 8 and qr > 0.9)):
+        # (four tracks a frame: Hatari 2.4's DAC a word off takes one
+        # channel and a silent track's word: one side the other's tone,
+        # the other silent)
+        pitch, note = True, " (a word off: Hatari %s's DMA, four tracks)" % HATARI
+        ql = qr = 1.0
     _, fmt, lame, out, _, length = CASES[case]
     if not lame and case not in RESAMPLED:
         length = length * int(fmt[1]) / out  # (the DMA: at the Falcon's rate, if not the file's)
