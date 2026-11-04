@@ -145,16 +145,18 @@ int dl_type_ok(int type, const char *name)
 		return ext_is(name, "WAV");
 	case DT_AIFF:
 		return ext_is(name, "AIF") || ext_is(name, "AIFF") || ext_is(name, "AIFC");
+	case DT_M3U:
+		return ext_is(name, "M3U");
 	case DT_ALL:
 		return 1;
 	}
 	return ext_is(name, "MP3") || ext_is(name, "WAV") || ext_is(name, "AIF") || ext_is(name, "AIFF") ||
-	       ext_is(name, "AIFC");
+	       ext_is(name, "AIFC") || ext_is(name, "M3U");
 }
 
 const char *dl_type_name(int type)
 {
-	static const char *const n[DT_N] = { "Music files", "MP3", "WAV", "AIFF", "All files" };
+	static const char *const n[DT_N] = { "Music files", "MP3", "WAV", "AIFF", "Playlists", "All files" };
 	return type >= 0 && type < DT_N ? n[type] : "?";
 }
 
@@ -196,14 +198,14 @@ void dl_select_only(DLIST *d, int row)
 {
 	DENT *e = dl_at(d, row);
 	dl_select_all(d, 0);
-	if (e && !e->dir)
+	if (e)
 		e->sel = 1;
 }
 
 void dl_toggle(DLIST *d, int row)
 {
 	DENT *e = dl_at(d, row);
-	if (e && !e->dir)
+	if (e)
 		e->sel = !e->sel;
 }
 
@@ -218,9 +220,17 @@ void dl_select_range(DLIST *d, int a, int b)
 	dl_select_all(d, 0);
 	for (r = a; r <= b; r++) {
 		DENT *e = dl_at(d, r);
-		if (e && !e->dir)
+		if (e)
 			e->sel = 1;
 	}
+}
+
+int dl_selected_dirs(const DLIST *d)
+{
+	int r, k = 0;
+	for (r = 0; r < d->nview; r++)
+		k += d->e[d->view[r]].sel && d->e[d->view[r]].dir;
+	return k;
 }
 
 int dl_selected(const DLIST *d, long *bytes)
@@ -231,7 +241,8 @@ int dl_selected(const DLIST *d, long *bytes)
 		const DENT *e = &d->e[d->view[r]];
 		if (e->sel) {
 			k++;
-			b += e->size;
+			if (!e->dir)
+				b += e->size;
 		}
 	}
 	if (bytes)

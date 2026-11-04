@@ -91,8 +91,31 @@ CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (
 # Nov 2026: the free ST RAM a menu needs under NVDI). Not by default (slow)
 CASES["many"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
 NOT_DEFAULT = {"many"}
+# phase 4 (Erez, 4 Nov 2026), each a second's files from A.WAV: (the files
+# made, relative to C:\ and lame's arguments or None; what EPlay is given;
+# the files played, in turn; whether it ends then). A playlist with a file
+# in a folder; a folder with its subfolders (in path order); Repeat all
+# (two files: the first again, then stopped by the rig); Shuffle (four
+# files each once, in some order, then the end)
+ORDERED = {
+    "m3u": ([("A.WAV", None), ("SUB\\B.MP3", ["-b", "128"]), ("C.WAV", None),
+             ("LIST.M3U", "#EXTM3U\r\n#EXTINF:1,A\r\nA.WAV\r\nSUB/B.MP3\r\n\r\nC:\\C.WAV\r\n")],
+            "C:\\LIST.M3U", ["A.WAV", "B.MP3", "C.WAV"], True),
+    "tree": ([("TREE\\B\\T2.WAV", None), ("TREE\\A\\T1.WAV", None), ("TREE\\T0.WAV", None),
+              ("TREE\\A\\NOTES.TXT", "not music\r\n")],
+             "C:\\TREE\\", ["T1.WAV", "T2.WAV", "T0.WAV"], True),   # (path order: A\\, B\\, then T0: 'A' < 'T')
+    "repeat": ([("A.WAV", None), ("C.WAV", None)], "C:\\A.WAV C:\\C.WAV", ["A.WAV", "C.WAV", "A.WAV"], False),
+    "shuffle": ([("T1.WAV", None), ("T2.WAV", None), ("T3.WAV", None), ("T4.WAV", None)],
+                "C:\\T1.WAV C:\\T2.WAV C:\\T3.WAV C:\\T4.WAV", None, True),
+}
+for _c in ORDERED:
+    CASES[_c] = CASES["list"]
+# File > Save playlist (^S): two files given, one in a folder; ^S, and the
+# file selector's name as EPlay gives it (PLAYLIST.M3U) taken with Return:
+# the playlist at C:\ with both, relative to it
+CASES["save"] = CASES["list"]
 # the cases' eplay.inf
-INFS = {"aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
+INFS = {"repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
 # the level of the middle (RMS), each case's, for wavvol's against wav's
@@ -255,6 +278,23 @@ def run(work, case, spec):
             else:
                 shutil.copy(src, os.path.join(hd, name))
         tail = " ".join("C:\\" + n for n, _ in LIST)
+    if case == "save":
+        os.makedirs(os.path.join(hd, "SUB"))
+        shutil.copy(os.path.join(hd, "A.WAV"), os.path.join(hd, "SUB", "B.WAV"))
+        tail = "C:\\A.WAV C:\\SUB\\B.WAV"
+    if case in ORDERED:
+        src = os.path.join(hd, "A.WAV")
+        for name, how in ORDERED[case][0]:
+            dst = os.path.join(hd, *name.split("\\"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if isinstance(how, str):
+                with open(dst, "w", newline="") as fh:
+                    fh.write(how)
+            elif how:
+                subprocess.run(["lame", "--quiet", "--noreplaygain"] + how + [src, dst], check=True)
+            elif dst != src:
+                shutil.copy(src, dst)
+        tail = ORDERED[case][1]
     if case == "many":
         many = os.path.join(hd, "MANY")
         os.makedirs(many)
@@ -300,6 +340,35 @@ def run(work, case, spec):
             start = wait_line(log, lambda l: l.startswith("LOG free memory"), 1) or ""
             ok = bool(got) and got.split()[3] == "1000"
             return ok, m.describe(), "%s\n     %s" % (start[4:], got[4:] if got else "the list never read")
+        if case == "save":
+            cmd(fifo, "hatari-event", "keydown", "0x1d")
+            cmd(fifo, "hatari-event", "keypress", "0x1f")     # ^S
+            cmd(fifo, "hatari-event", "keyup", "0x1d")
+            time.sleep(2.5)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            cmd(fifo, "hatari-event", "keypress", "0x1c")     # Return: the name as given
+            saved = wait_line(log, lambda l: l.startswith("EPLAY saved "), 15)
+            pl = os.path.join(hd, "PLAYLIST.M3U")
+            text = open(pl, newline="").read() if os.path.exists(pl) else ""
+            lines = [l for l in text.split("\r\n") if l and not l.startswith("#")]
+            ok = bool(saved) and text.startswith("#EXTM3U\r\n#EXTINF:") and lines == ["A.WAV", "SUB\\B.WAV"]
+            return ok, m.describe(), "%s; PLAYLIST.M3U: %s" % (saved or "never saved", " | ".join(lines) or "none")
+        if case in ORDERED:
+            files, _, want, ends = ORDERED[case]
+            n = len(want) if want else len(files)
+            played = lambda: [l.split()[2] for l in open(log, errors="replace") if l.startswith("EPLAY playing: ")]
+            t_end = time.time() + 40
+            while time.time() < t_end and len(played()) < n:
+                time.sleep(0.5)
+            end = wait_line(log, lambda l: l.startswith("EPLAY status: Played to the end"), 8) if ends else None
+            names = played()
+            if want:
+                ok = names[:n] == want
+            else:               # shuffle: each once
+                ok = sorted(names[:n]) == sorted(f for f, _ in files) and len(names) == n
+            ok = ok and (end is not None) == ends and (ends or len(names) >= n)
+            return ok, m.describe(), "played: %s (wanted %s)%s" % (
+                " ".join(names), " ".join(want) if want else "each once", "; ended" if end else "")
         if case == "list":
             # the three in turn, then the end: the playing lines in order
             last = wait_line(log, lambda l: l.startswith("EPLAY playing: " + LIST[-1][0]), 60)

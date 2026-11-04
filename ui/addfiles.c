@@ -149,19 +149,25 @@ static void show_path(void)
 static void info(void)
 {
 	long bytes;
-	int k = dl_selected(&dl, &bytes), files = 0, r;
-	char sz[12];
+	int k = dl_selected(&dl, &bytes), dirs = dl_selected_dirs(&dl), files = 0, r;
+	char sz[12], fo[24];
 	for (r = 0; r < dl.nview; r++)
 		files += !dl_at(&dl, r)->dir;
+	k -= dirs;			/* (the files selected; the folders said apart) */
+	fo[0] = 0;
+	if (dirs)
+		snprintf(fo, sizeof(fo), " + %d folder%s", dirs, dirs == 1 ? "" : "s");
 	dl_size_text(bytes, sz);
 	if (bytes >= 1024) {		/* "61.1M": "61.1 MB" */
 		size_t n = strlen(sz);
 		char u = sz[n - 1];
 		sz[n - 1] = 0;
-		snprintf(s_info, sizeof(s_info), "%d of %d selected, %s %cB", k, files, sz, u);
+		snprintf(s_info, sizeof(s_info), "%d of %d selected%s, %s %cB", k, files, fo, sz, u);
 	} else if (k)
-		snprintf(s_info, sizeof(s_info), "%d of %d selected, %s bytes", k, files, sz);
-	if (!k)
+		snprintf(s_info, sizeof(s_info), "%d of %d selected%s, %s bytes", k, files, fo, sz);
+	else if (dirs)
+		snprintf(s_info, sizeof(s_info), "%d file%s%s selected", files, files == 1 ? "" : "s", fo);
+	if (!k && !dirs)
 		snprintf(s_info, sizeof(s_info), "%d file%s", files, files == 1 ? "" : "s");
 }
 
@@ -747,8 +753,11 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 			else if (scan == 0x50)
 				select_to(cur + 1, shift);
 			else if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
+				/* (a folder at the keys' place, alone or nothing
+				   selected: opened, as before; Add adds it) */
 				DENT *c = dl_at(&dl, cur);
-				if (c && c->dir && !dl_selected(&dl, 0))
+				int k = dl_selected(&dl, 0);
+				if (c && c->dir && (!k || (k == 1 && c->sel)))
 					open_row(cur);
 				else
 					done = 2;
@@ -822,15 +831,16 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 	objc_edit(tree, O_MASK, 0, &idx, ED_END);
 	dlg_close();
 	if (done == 2) {
-		/* the selected files in the list's order; with none, the file
-		   at the keys' place */
+		/* the selected files and folders in the list's order (a folder
+		   with its subfolders: its name ending in '\'); with none, the
+		   file at the keys' place */
 		char p[AF_PATH + 16];
 		int any = dl_selected(&dl, 0);
 		for (i = 0; i < dl.nview; i++) {
 			DENT *f = dl_at(&dl, i);
-			if (f->dir || !(any ? f->sel : i == cur))
+			if (any ? !f->sel : f->dir || i != cur)
 				continue;
-			snprintf(p, sizeof(p), "%s%s", dir_now, f->name);
+			snprintf(p, sizeof(p), "%s%s%s", dir_now, f->name, f->dir ? "\\" : "");
 			add(p);
 			added++;
 		}

@@ -16,6 +16,8 @@
 #define EPLAY_LIST_H
 
 #define LIST_MAX 1024
+#include "order.h"
+extern ORDER list_order;	/* Shuffle's, Repeat's: its size the list's (list.c keeps it) */
 #define LIST_RESERVE (40L * 1024)	/* ST RAM left free for the AES, whatever the list */
 
 typedef struct {

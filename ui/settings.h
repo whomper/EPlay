@@ -28,6 +28,12 @@ const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
 int settings_volume(void);
 void settings_set_volume(int v);
 void settings_flush(void);
+/* Shuffle and Repeat (SHUFFLE=, REPEAT= OFF, ALL or ONE: order.h's REP_),
+   saved by settings_flush too */
+int settings_shuffle(void);
+void settings_set_shuffle(int on);
+int settings_repeat(void);
+void settings_set_repeat(int r);
 /* the mini player (MINI= in the INF), saved by settings_flush too */
 int settings_mini(void);
 void settings_set_mini(int on);

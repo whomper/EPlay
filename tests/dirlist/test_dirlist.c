@@ -76,6 +76,8 @@ int main(void)
 	d.type = DT_MP3;
 	dl_filter(&d);
 	check(!strcmp(names(&d), "BONUS LIVE 01_NIGHT.MP3 09_RAIN.MP3"), "MP3 only (folders always)");
+	check(dl_type_ok(DT_MUSIC, "LIVE.M3U") && dl_type_ok(DT_M3U, "a.m3u") && !dl_type_ok(DT_M3U, "A.MP3"),
+	      "playlists: among the music files, and a type of their own");
 	d.type = DT_MUSIC;
 	strcpy(d.mask, "0?_*");
 	dl_filter(&d);
@@ -93,11 +95,13 @@ int main(void)
 	dl_toggle(&d, 4);
 	check(dl_selected(&d, 0) == 1, "Shift-click again takes it out");
 	dl_select_range(&d, 5, 0);
-	check(dl_selected(&d, 0) == 4 && !dl_at(&d, 0)->sel && !dl_at(&d, 1)->sel,
-	      "a range: its files, not its folders");
+	check(dl_selected(&d, &b) == 6 && dl_selected_dirs(&d) == 2 && dl_at(&d, 0)->sel && dl_at(&d, 1)->sel &&
+	      b == 7100000 + 67108864 + 45000000 + 6000000,
+	      "a range: its folders too (phase 4: added with their subfolders), the files' bytes alone");
 	dl_select_only(&d, 0);
-	check(dl_selected(&d, 0) == 0, "a folder isn't selected");
+	check(dl_selected(&d, 0) == 1 && dl_selected_dirs(&d) == 1, "a folder selected by a click");
 	dl_select_all(&d, 1);
+	check(dl_selected(&d, 0) == 4 && dl_selected_dirs(&d) == 0, "All: the files, not the folders");
 	strcpy(d.mask, "*E*");
 	dl_filter(&d);
 	d.mask[0] = 0;

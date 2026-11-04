@@ -10,6 +10,8 @@
 #include "tags.h"
 #include "probe.h"
 
+ORDER list_order;		/* which plays next: kept in step with the list here */
+
 #define PER 64				/* records a block */
 #define POOL 8192			/* bytes a block of names and tags */
 
@@ -112,6 +114,7 @@ int list_add(const char *path)
 	memset(e, 0, sizeof(*e));
 	e->path = p;
 	e->title = e->artist = e->album = "";
+	order_size(&list_order, n + 1);
 	return n++;
 }
 
@@ -123,6 +126,7 @@ void list_remove(int i)
 	for (k = i; k + 1 < n; k++)
 		*list_at(k) = *list_at(k + 1);
 	n--;
+	order_removed(&list_order, i);
 	if (list_cur == i)
 		list_cur = -1;
 	else if (list_cur > i)
@@ -147,6 +151,7 @@ static void give_back(void)
 			blk[k] = 0;
 		}
 	n = 0;
+	order_size(&list_order, 0);
 }
 
 void list_clear(void)

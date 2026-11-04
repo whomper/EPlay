@@ -132,3 +132,28 @@ const char *order_repeat_name(int repeat)
 {
 	return repeat == REP_ALL ? "Repeat: all" : repeat == REP_ONE ? "Repeat: one" : "Repeat: off";
 }
+
+int order_has_next(const ORDER *o, int cur)
+{
+	if (o->n <= 0)
+		return 0;
+	if (o->repeat != REP_OFF)
+		return 1;
+	if (o->shuffle)
+		return o->left - (cur >= 0 && cur < o->n && !o->played[cur]) > 0;
+	return cur + 1 < o->n;
+}
+
+int order_has_prev(const ORDER *o, int cur)
+{
+	int k;
+	if (o->n <= 0)
+		return 0;
+	if (o->shuffle) {
+		for (k = o->nh - 1; k >= 0; k--)
+			if (o->hist[k] != cur)
+				return 1;
+		return 0;
+	}
+	return cur > 0 || (o->repeat != REP_OFF && o->n > 1);
+}

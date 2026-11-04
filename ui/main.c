@@ -8,6 +8,7 @@
  */
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "ui.h"
 #include "mbar.h"
 #include "alert.h"
@@ -23,6 +24,7 @@
 #include "dd.h"
 #include "popup.h"
 #include "addfiles.h"
+#include "m3u.h"
 #include "elog.h"
 #include "snd.h"
 #include "bar.h"
@@ -34,7 +36,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI };
+       C_REMOVE, C_MINI, C_SAVE };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -42,6 +44,7 @@ static const MBAR_ITEM m_desk[] = {
 };
 static const MBAR_ITEM m_file[] = {
 	{ "Open...", "^O", C_OPEN },
+	{ "Save playlist...", "^S", C_SAVE },
 	{ "-", 0, 0 },
 	{ "Quit", "^Q", C_QUIT },
 	{ 0, 0, 0 }
@@ -61,8 +64,8 @@ static const MBAR_ITEM m_play[] = {
 	{ "Previous", 0, C_PREV },
 	{ "Next", 0, C_NEXT },
 	{ "-", 0, 0 },
-	{ "Shuffle", 0, C_SHUFFLE },	/* (the playlist's: out of the bar, 56 columns) */
-	{ "Repeat", 0, C_REPEAT },
+	{ "Shuffle", 0, C_SHUFFLE },	/* (out of the bar, 56 columns: Erez, 3 Nov 2026) */
+	{ "Repeat: off", 0, C_REPEAT },	/* (its text order_repeat_name's: the same length each) */
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_options[] = {
@@ -84,6 +87,16 @@ static const MBAR_TITLE bar[] = {
 #define KIND (bar_mini ? KIND_MINI : KIND_FULL)
 
 static MBAR mb;
+
+/* the Play menu as Shuffle and Repeat are: Shuffle ticked, Repeat's text
+   ("Repeat: off", "all", "one": the item's own, the same length) */
+static void play_menu_shown(void)
+{
+	short o = mbar_object(&mb, C_REPEAT);
+	menu_icheck(mb.tree, mbar_object(&mb, C_SHUFFLE), list_order.shuffle);
+	if (o > 0)
+		memcpy((char *)mb.tree[o].ob_spec + 2, order_repeat_name(list_order.repeat), 11);
+}
 static short wh = -1;
 static GRECT work;
 static int quit;
@@ -332,6 +345,7 @@ static void play_index(int i)
 {
 	ENTRY *e = list_at(i);
 	int old = list_cur;
+	order_played(&list_order, i);
 	if (!e)
 		return;
 	list_cur = i;
@@ -359,42 +373,114 @@ static int audio_name(const char *n)
 	       !strcmp(e, "aifc");
 }
 
-/* every MP3, WAV and AIFF in folder dir (ending in '\'), in name order:
-   the first added's index, -1 if none */
-static int add_folder(const char *dir)
+static void feed_only(void);
+
+/* every MP3, WAV and AIFF in folder dir (ending in '\\') and its subfolders
+   (Erez, 4 Nov 2026: an album collection added at once), eight deep at
+   most; the music fed meanwhile */
+static void walk(const char *dir, int depth)
 {
 	char mask[200], one[200];
 	DTA *old = Fgetdta(), dta;
-	int first = -1, i, j, before = list_count();
+	int k = 0;
 	snprintf(mask, sizeof(mask), "%s*.*", dir);
 	Fsetdta(&dta);
-	if (Fsfirst(mask, 0) == 0)
+	if (Fsfirst(mask, 0x10) == 0)
 		do {
-			if (audio_name(dta.d_fname)) {
-				int at;
+			if (++k % 16 == 0)
+				feed_only();
+			if (list_full)
+				break;
+			if (dta.d_attrib & 0x10) {
+				if (dta.d_fname[0] != '.' && depth < 8) {
+					snprintf(one, sizeof(one), "%s%s\\", dir, dta.d_fname);
+					walk(one, depth + 1);
+					Fsetdta(&dta);	/* (this folder's search again) */
+				}
+			} else if (audio_name(dta.d_fname)) {
 				snprintf(one, sizeof(one), "%s%s", dir, dta.d_fname);
-				at = list_add(one);
-				if (at >= 0 && first < 0)
-					first = at;
+				list_add(one);
 			}
 		} while (Fsnext() == 0);
 	Fsetdta(old);
-	/* the folder's files in name order (their records swapped: the names
-	   stay where they are; an insertion sort, as a directory comes nearly
-	   sorted) */
-	if (list_count() > before)
-		for (i = before + 1; i < list_count(); i++)
-			for (j = i; j > before && strcmp(list_at(j - 1)->path, list_at(j)->path) > 0; j--) {
-				ENTRY t = *list_at(j);
-				*list_at(j) = *list_at(j - 1);
-				*list_at(j - 1) = t;
-			}
-	return list_count() > before ? before : first;
 }
 
-/* one name: a folder's files, or the file; its (first) index */
+/* rows from to the end in path order: a shell sort, the records swapped
+   (the names stay where they are; a folder's walk comes nearly sorted, a
+   tree of them not: an insertion sort's n squared would be seconds) */
+static void sort_from(int from)
+{
+	static const int gaps[] = { 701, 301, 132, 57, 23, 10, 4, 1 };
+	int n = list_count(), g, i, j;
+	for (g = 0; g < 8; g++) {
+		int h = gaps[g];
+		for (i = from + h; i < n; i++) {
+			ENTRY t = *list_at(i);
+			for (j = i; j >= from + h && strcmp(list_at(j - h)->path, t.path) > 0; j -= h)
+				*list_at(j) = *list_at(j - h);
+			*list_at(j) = t;
+		}
+	}
+}
+
+/* folder dir (ending in '\\') and its subfolders' music, in path order:
+   the first added's index, -1 if none */
+static int add_folder(const char *dir)
+{
+	int before = list_count();
+	walk(dir, 0);
+	if (list_count() > before + 1)
+		sort_from(before);
+	return list_count() > before ? before : -1;
+}
+
+/* .M3U (m3u.h): its files added, in its order; the first's index */
+static int m3u_name(const char *f)
+{
+	const char *d = strrchr(f, '.');
+	return d && (d[1] | 0x20) == 'm' && d[2] == '3' && (d[3] | 0x20) == 'u' && !d[4];
+}
+
+static void m3u_add(const char *path, void *ctx)
+{
+	(void)ctx;
+	list_add(path);
+}
+
+static int add_playlist(const char *f)
+{
+	char dir[200], *e;
+	long h = Fopen(f, 0), n;
+	char *buf;
+	int before = list_count();
+	if (h < 0)
+		return -1;
+	buf = malloc(32768);
+	if (!buf) {
+		Fclose((short)h);
+		return -1;
+	}
+	n = Fread((short)h, 32767, buf);
+	Fclose((short)h);
+	snprintf(dir, sizeof(dir), "%s", f);
+	e = strrchr(dir, '\\');
+	if (e)
+		e[1] = 0;
+	else
+		dir[0] = 0;
+	if (n > 0)
+		m3u_read(buf, n, dir, m3u_add, 0);
+	free(buf);
+	elog("playlist %s: %d files", f, list_count() - before);
+	return list_count() > before ? before : -1;
+}
+
+/* one name: a folder's files (its subfolders' too), a playlist's, or the
+   file; its (first) index */
 static int add_one(const char *f)
 {
+	if (m3u_name(f))
+		return add_playlist(f);
 	long a = Fattrib(f, 0, 0);
 	size_t n = strlen(f);
 	if ((a >= 0 && (a & 0x10)) || (n && f[n - 1] == '\\')) {
@@ -470,7 +556,7 @@ static int first_added;
 
 static void add_one_file(const char *f)
 {
-	int i = list_add(f);
+	int i = add_one(f);	/* (a folder: its subfolders too; a playlist: its files) */
 	if (i >= 0 && first_added < 0)
 		first_added = i;
 }
@@ -688,6 +774,76 @@ static void mini_switch(void)
 	}
 }
 
+/* File > Save playlist... (^S; Erez, 4 Nov 2026): the list as an .M3U,
+   named in the file selector, each file's path relative to the
+   playlist's folder where it is in it (m3u.h) */
+static void save_playlist(void)
+{
+	static char path[200], name[64] = "PLAYLIST.M3U";
+	char full[260], dir[200], *e, buf[4096];
+	short button = 0;
+	long h, n = 0, k;
+	int i, ok = 1;
+	if (!list_count()) {
+		alert(1, "[1][The list is empty: there is|nothing to save.][ OK ]");
+		return;
+	}
+	if (!path[0])
+		snprintf(path, sizeof(path), "%s*.M3U", settings_add_dir()[0] ? settings_add_dir() : app_dir());
+	if (!fsel_exinput(path, name, &button, "Save the list as a playlist") || !button || !name[0])
+		return;
+	snprintf(dir, sizeof(dir), "%s", path);
+	e = strrchr(dir, '\\');
+	if (e)
+		e[1] = 0;
+	else
+		dir[0] = 0;
+	if (!strchr(name, '.'))
+		strncat(name, ".M3U", sizeof(name) - strlen(name) - 1);
+	snprintf(full, sizeof(full), "%s%s", dir, name);
+	if (Fattrib(full, 0, 0) >= 0 &&
+	    alert(2, "[2][%s is there already.|Replace it?][ Replace | Cancel ]", name) != 1)
+		return;
+	h = Fcreate(full, 0);
+	if (h < 0) {
+		alert(1, "[1][The playlist couldn't be saved|(%s).][ OK ]", name);
+		return;
+	}
+	memcpy(buf, M3U_HEAD, sizeof(M3U_HEAD) - 1);
+	n = (long)sizeof(M3U_HEAD) - 1;
+	for (i = 0; i < list_count() && ok; i++) {
+		ENTRY *t = list_at(i);
+		k = m3u_entry(buf + n, (long)sizeof(buf) - n, t->path, dir, t->read ? t->len_ms / 1000 : -1,
+			      t->artist, t->title);
+		if (k < 0) {
+			/* (full: written, and the entry again) */
+			ok = Fwrite((short)h, n, buf) == n;
+			n = 0;
+			k = m3u_entry(buf, (long)sizeof(buf), t->path, dir, t->read ? t->len_ms / 1000 : -1, t->artist,
+				      t->title);
+			if (k < 0)
+				continue;
+		}
+		n += k;
+	}
+	if (ok && n)
+		ok = Fwrite((short)h, n, buf) == n;
+	Fclose((short)h);
+	if (!ok) {
+		Fdelete(full);
+		alert(1, "[1][The playlist couldn't be saved|(%s): the disk is full?][ OK ]", name);
+		return;
+	}
+	{
+		char st[100];
+		snprintf(st, sizeof(st), "Saved %s: %d file%s.", name, list_count(), list_count() == 1 ? "" : "s");
+		status(st);
+		elog("playlist saved: %s, %d files", full, list_count());
+		snprintf(st, sizeof(st), "EPLAY saved %d\n", list_count());
+		nf_debug(st);		/* (the rigs) */
+	}
+}
+
 static void command(int c)
 {
 	switch (c) {
@@ -709,16 +865,38 @@ static void command(int c)
 	case C_REMOVE:
 		list_remove_sel();
 		break;
+	case C_SAVE:
+		save_playlist();
+		break;
 	case C_MINI:
 		mini_switch();
 		break;
-	case C_PREV:
-		if (list_cur > 0)
-			play_index(list_cur - 1);
+	case C_PREV: {
+		int i = order_prev(&list_order, list_cur);
+		if (i >= 0)
+			play_index(i);
 		break;
-	case C_NEXT:
-		if (list_cur + 1 < list_count())
-			play_index(list_cur + 1);
+	}
+	case C_NEXT: {
+		int i = order_next(&list_order, list_cur, 0);
+		if (i >= 0)
+			play_index(i);
+		break;
+	}
+	case C_SHUFFLE:
+		/* a random order from here on: a round begun at the file playing */
+		list_order.shuffle = !list_order.shuffle;
+		settings_set_shuffle(list_order.shuffle);
+		order_clear(&list_order);
+		order_played(&list_order, list_cur);
+		play_menu_shown();
+		redraw(0, BP_NAV);
+		break;
+	case C_REPEAT:
+		list_order.repeat = (list_order.repeat + 1) % 3;	/* off, all, one */
+		settings_set_repeat(list_order.repeat);
+		play_menu_shown();
+		redraw(0, BP_NAV);
 		break;
 	case C_PLAY:
 		if (play_state() == PS_PLAYING) {
@@ -800,7 +978,7 @@ static void step(int playing)
 		if (play_state() != PS_PLAYING) {
 			status(play_out[0] == 'T' ? play_out : "Played to the end.");
 			redraw(0, BP_PLAY | BP_TIME);
-			if (play_out[0] != 'T' && list_cur >= 0 && list_cur + 1 < list_count())
+			if (play_out[0] != 'T' && list_cur >= 0 && order_has_next(&list_order, list_cur))
 				next_due = 1;	/* (the next file: at the loop's turn, not inside a press) */
 		} else if (bar_drag < 0) {
 			redraw(0, BP_TIME);
@@ -1087,7 +1265,11 @@ static void turn(int nested)
 		piece = 1;
 	} else if (next_due && !nested) {
 		next_due = 0;
-		play_index(list_cur + 1);
+		{
+			int i = order_next(&list_order, list_cur, 1);	/* (Repeat one: the same) */
+			if (i >= 0)
+				play_index(i);
+		}
 	} else if (open_due && !nested) {
 		open_due = 0;
 		play_file(file);
@@ -1104,6 +1286,8 @@ static void turn(int nested)
 		if (key_ctrl(ev.kstate, ev.kreturn)) {
 			if (a == 15 || (a | 0x20) == 'o')
 				command(C_OPEN);
+			else if (a == 19 || (a | 0x20) == 's')
+				command(C_SAVE);
 			else if (a == 17 || a == 21 || (a | 0x20) == 'q' || (a | 0x20) == 'u')
 				command(C_QUIT);
 			else if (((ev.kreturn >> 8) & 0xff) == 0x33)	/* ^, (the comma's key) */
@@ -1132,9 +1316,9 @@ static void turn(int nested)
 			drag_pos(ev.mx, ev.my);
 		else if (hit == BH_VOL)
 			drag_vol(ev.mx, ev.my);
-		else if (hit == BH_PREV && list_cur > 0 && track(BH_PREV, BP_TEXT))
+		else if (hit == BH_PREV && order_has_prev(&list_order, list_cur) && track(BH_PREV, BP_TEXT))
 			command(C_PREV);
-		else if (hit == BH_NEXT && list_cur + 1 < list_count() && track(BH_NEXT, BP_TEXT))
+		else if (hit == BH_NEXT && order_has_next(&list_order, list_cur) && track(BH_NEXT, BP_TEXT))
 			command(C_NEXT);
 		else if (hit == BH_LIST)
 			list_press(ev.mx, ev.my, 0);
@@ -1202,6 +1386,9 @@ int app_main(void)
 		return 1;
 	}
 	settings_load();		/* (after snd_init: what the machine has) */
+	order_init(&list_order, tos_ms());
+	list_order.shuffle = settings_shuffle();
+	list_order.repeat = settings_repeat();
 	play_set_volume(settings_volume());
 	if (mbar_build(&mb, bar, gl_wchar, gl_hchar, scr_w, scr_h)) {
 		form_alert(1, "[3][EPlay: not enough memory.][ Quit ]");
@@ -1210,9 +1397,7 @@ int app_main(void)
 		appl_exit();
 		return 1;
 	}
-	/* Shuffle and Repeat: the playlist's (phase 4), grey until then */
-	menu_ienable(mb.tree, mbar_object(&mb, C_SHUFFLE), 0);
-	menu_ienable(mb.tree, mbar_object(&mb, C_REPEAT), 0);
+	play_menu_shown();
 	bar_mini = settings_mini();
 	menu_icheck(mb.tree, mbar_object(&mb, C_MINI), bar_mini);
 	menu_bar(mb.tree, 1);

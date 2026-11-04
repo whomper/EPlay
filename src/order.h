@@ -34,5 +34,7 @@ void order_removed(ORDER *o, int i);	/* row i taken out of the list */
 int order_next(ORDER *o, int cur, int ended);
 int order_prev(ORDER *o, int cur);	/* the file before cur, -1 none */
 const char *order_repeat_name(int repeat);	/* "Repeat: off" ... (the Play menu's) */
+int order_has_next(const ORDER *o, int cur);	/* Next would go somewhere (its button lit) */
+int order_has_prev(const ORDER *o, int cur);
 
 #endif

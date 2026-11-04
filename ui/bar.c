@@ -541,12 +541,12 @@ static void draw_buttons(int parts)
 			gbox(c, p_bar);
 			switch (i + 1) {
 			case BH_PREV:
-				pen = bar_held == BH_PREV ? p_acc : list_cur > 0 ? p_txt : p_dim;
+				pen = bar_held == BH_PREV ? p_acc : order_has_prev(&list_order, list_cur) ? p_txt : p_dim;
 				box(x - ww / 2 - 2, y - h / 2, 2, h, pen, 0);
 				mask_draw(&k_prev, x - ww / 2, y - h / 2, pen);
 				break;
 			case BH_NEXT:
-				pen = bar_held == BH_NEXT ? p_acc : list_cur + 1 < list_count() ? p_txt : p_dim;
+				pen = bar_held == BH_NEXT ? p_acc : order_has_next(&list_order, list_cur) ? p_txt : p_dim;
 				mask_draw(&k_next, x - ww / 2, y - h / 2, pen);
 				box(x + ww / 2 + 1, y - h / 2, 2, h, pen, 0);
 				break;

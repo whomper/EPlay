@@ -29,6 +29,8 @@ static char add_dir[AF_PATH], recent[AF_RECENT][AF_PATH];	/* the Add files dialo
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static int qlate = 3;			/* QLATE=: the rigs' (read, never written) */
+static int shuffle, shuffle_saved, repeat, repeat_saved;	/* the Play menu's, saved at the end */
+static const char *const rnames[3] = { "OFF", "ALL", "ONE" };
 #define NOUT 3
 static const char *const names[NOUT] = { "AUTO", "FDI", "DSP" };
 static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
@@ -91,6 +93,12 @@ void settings_load(void)
 		mini = mini_saved = v[0] == '1';
 	if (inf_get(inf, inf_n, "QLATE", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		qlate = atoi(v);
+	if (inf_get(inf, inf_n, "SHUFFLE", v, sizeof(v)))
+		shuffle = shuffle_saved = v[0] == '1';
+	if (inf_get(inf, inf_n, "REPEAT", v, sizeof(v)))
+		for (i = 0; i < 3; i++)
+			if (!strcmp(v, rnames[i]))
+				repeat = repeat_saved = i;
 }
 
 int settings_qlate(void)
@@ -156,6 +164,16 @@ static void save_in(void)
 	n = inf_set(inf2, n, "MINI", mini ? "1" : "0", mnote, inf3, INF_MAX);
 	if (n < 0)
 		return;
+	{
+		static const char snote[] = "; Shuffle: 1 for a random order (Play > Shuffle), 0 the list's\r\n";
+		static const char rnote[] = "; Repeat: OFF, ALL (the list again) or ONE (the file again)\r\n";
+		n = inf_set(inf3, n, "SHUFFLE", shuffle ? "1" : "0", snote, inf2, INF_MAX);
+		if (n < 0)
+			return;
+		n = inf_set(inf2, n, "REPEAT", rnames[repeat], rnote, inf3, INF_MAX);
+		if (n < 0)
+			return;
+	}
 	inf_path(path, sizeof(path), "eplay.inf");
 	inf_path(tmp, sizeof(tmp), "eplay.in$");
 	h = Fcreate(tmp, 0);
@@ -175,6 +193,8 @@ static void save_in(void)
 	volume_saved = volume;
 	recent_dirty = 0;
 	mini_saved = mini;
+	shuffle_saved = shuffle;
+	repeat_saved = repeat;
 }
 
 int settings_output(void)
@@ -273,7 +293,8 @@ void settings_set_volume(int v)
    bar: a write each time) */
 void settings_flush(void)
 {
-	if (volume != volume_saved || mini != mini_saved || recent_dirty)
+	if (volume != volume_saved || mini != mini_saved || recent_dirty || shuffle != shuffle_saved ||
+	    repeat != repeat_saved)
 		save();
 }
 
@@ -300,4 +321,24 @@ int settings_mini(void)
 void settings_set_mini(int on)
 {
 	mini = on != 0;
+}
+
+int settings_shuffle(void)
+{
+	return shuffle;
+}
+
+void settings_set_shuffle(int on)
+{
+	shuffle = on != 0;
+}
+
+int settings_repeat(void)
+{
+	return repeat;
+}
+
+void settings_set_repeat(int r)
+{
+	repeat = r >= 0 && r < 3 ? r : 0;
 }

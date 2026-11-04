@@ -31,7 +31,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list dirlist addfiles
+OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list dirlist addfiles order m3u
 CSRC    := bidi charset pic png inflate jpegdc
 CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg

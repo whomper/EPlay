@@ -21,7 +21,7 @@ typedef struct {
 	unsigned char sel;	/* selected (files only) */
 } DENT;
 
-enum { DT_MUSIC, DT_MP3, DT_WAV, DT_AIFF, DT_ALL, DT_N };	/* the Type pop-up */
+enum { DT_MUSIC, DT_MP3, DT_WAV, DT_AIFF, DT_M3U, DT_ALL, DT_N };	/* the Type pop-up (Music: playlists too) */
 enum { DS_NAME, DS_DATE, DS_SIZE, DS_TYPE, DS_N };		/* the Sort pop-up */
 
 typedef struct {
@@ -53,8 +53,9 @@ const char *dl_sort_name(int sort);	/* "By name", ... */
 void dl_select_only(DLIST *d, int row);
 void dl_toggle(DLIST *d, int row);
 void dl_select_range(DLIST *d, int a, int b);	/* a to b, and only them */
-void dl_select_all(DLIST *d, int on);
-int dl_selected(const DLIST *d, long *bytes);	/* how many files, their bytes */
+void dl_select_all(DLIST *d, int on);	/* on: every file (not the folders: a drive's all at once) */
+int dl_selected_dirs(const DLIST *d);	/* of those, the folders (added with their subfolders) */
+int dl_selected(const DLIST *d, long *bytes);	/* how many rows (files and folders), the files' bytes */
 
 /* "7.1M", "64M", "512K", "12"; "03.11.26" */
 void dl_size_text(long size, char *out);
