@@ -200,6 +200,9 @@ static void pic_end(void)
 	}
 }
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
+static int shown_due;		/* what plays to draw whole the next turn: 2 the bar, 1 Play/Pause and
+				   the times (the open's turn is the file's: drawing and reading in
+				   turns of their own, each whole) */
 
 /* what plays shown: the info line, and the bar (whole: 1) or Play/Pause
    with the times; drawn from start to end, no event call between (Erez,
@@ -243,10 +246,9 @@ static void play_now(const char *f)
 		pic_begin("start");
 		if (strcmp(now, shown)) {
 			strcpy(shown, now);
-			playing_drawn(1);
+			shown_due = 2;
 		} else
-			playing_drawn(0);
-		pic_end();
+			shown_due = 1;
 	}
 }
 
@@ -1068,7 +1070,7 @@ static void turn(int nested)
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
-			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due ? 0 :
+			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || shown_due ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
 	if (pending_play[0] && !nested && !art_needs_dsp()) {
@@ -1077,6 +1079,11 @@ static void turn(int nested)
 		snprintf(f, sizeof(f), "%s", pending_play);
 		pending_play[0] = 0;
 		play_now(f);
+		piece = 1;
+	} else if (shown_due && !nested) {
+		playing_drawn(shown_due == 2);
+		shown_due = 0;
+		pic_end();
 		piece = 1;
 	} else if (next_due && !nested) {
 		next_due = 0;
