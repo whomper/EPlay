@@ -50,6 +50,7 @@
 #endif
 
 int (*pic_poll)(void);
+int pic_scale_poll_rows = 16;
 
 /* ---------------------------------------------------------------- kinds */
 
@@ -435,7 +436,7 @@ static int sc_row_rgb(SCALER *s, const unsigned char *rgb)
 {
 	long x, w = s->pic->w;
 	unsigned long *q;
-	if (pic_poll != NULL && ++s->polls >= 16) {
+	if (pic_poll != NULL && ++s->polls >= pic_scale_poll_rows) {
 		s->polls = 0;
 		if (!pic_poll())
 			return 0;
@@ -536,7 +537,7 @@ rgba:
 		s->s16 = 0;
 	}
 	s->solid = 0;		/* the sums weigh alpha from now on */
-	if (pic_poll != NULL && ++s->polls >= 16) {
+	if (pic_poll != NULL && ++s->polls >= pic_scale_poll_rows) {
 		s->polls = 0;
 		if (!pic_poll())
 			return 0;
