@@ -176,9 +176,45 @@ static void playing_status(char *st, int n)
 		snprintf(st, (size_t)n, "Playing  \xfa  %s", play_out);
 }
 
-static int bar_due;		/* the bar to draw in pieces, a part a turn (3, 2, 1; 0 none) */
+
+/* a picture's time, from when it is due to its last piece drawn, to the
+   rigs' console ("EPLAY picture start 85 ms"): the guidelines' Speed, "A
+   rule never costs speed", drawing whole against drawing in pieces */
+static unsigned long pic_t0;
+static const char *pic_name;
+static void pic_begin(const char *n)
+{
+	if (!pic_name) {
+		pic_name = n;
+		pic_t0 = tos_ms();
+	}
+}
+
+static void pic_end(void)
+{
+	if (pic_name) {
+		char b[64];
+		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms\n", pic_name, tos_ms() - pic_t0);
+		nf_debug(b);
+		pic_name = 0;
+	}
+}
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
-static int status_due;		/* the info line to set the next turn ("Playing 2 of 6 ...") */
+
+/* what plays shown: the info line, and the bar (whole: 1) or Play/Pause
+   with the times; drawn from start to end, no event call between (Erez,
+   4 Nov 2026: drawing is not a job to slice) */
+static void playing_drawn(int whole)
+{
+	char st[100];
+	playing_status(st, sizeof(st));
+	status(st);
+	if (whole) {
+		redraw(0, BP_LEFT);
+		redraw(0, BP_RIGHT);
+	}
+	redraw(0, BP_PLAY | BP_TIME);
+}
 
 /* the file played: opened (play.c), started; its art the step's (play_file) */
 static void play_now(const char *f)
@@ -198,43 +234,20 @@ static void play_now(const char *f)
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
 		nf_debug(line);
 	}
-	status_due = 1;			/* (the info line: the AES draws it, a turn of its own) */
 	{
 		/* the whole window for another file (or the same one elsewhere);
-		   for the one shown, Play/Pause and the time (the speed rig's
-		   "Play: let go": 150 ms drawn whole on a stock Falcon) */
+		   for the one shown, Play/Pause and the time */
 		static char shown[200];
 		char now[200];
 		snprintf(now, sizeof(now), "%s|%s|%s|%ld|%ld", play_name, play_tags.title, play_via, play_kbps, play_hz);
+		pic_begin("start");
 		if (strcmp(now, shown)) {
-			/* (the bar for another file: in the turns after this one, a
-			   part a turn, as a job's slices: the 50 ms between event
-			   calls) */
 			strcpy(shown, now);
-			bar_due = 3;
+			playing_drawn(1);
 		} else
-			redraw(0, BP_PLAY | BP_TIME);
+			playing_drawn(0);
+		pic_end();
 	}
-}
-
-/* the bar drawn again in pieces after another file began (bar_due): its
-   text and art, then Play/Pause with the times; one a turn */
-static void bar_turn(void)
-{
-	if (status_due) {
-		char st[100];
-		status_due = 0;
-		playing_status(st, sizeof(st));
-		status(st);
-		return;
-	}
-	if (bar_due == 3)
-		redraw(0, BP_LEFT);
-	else if (bar_due == 2)
-		redraw(0, BP_RIGHT);
-	else
-		redraw(0, BP_PLAY | BP_TIME);
-	bar_due--;
 }
 
 /* ---- the list (Erez, 3 Nov 2026: files added in bulk) ---- */
@@ -522,16 +535,19 @@ static void sized(short w, short h)
 	sliders();
 }
 
-static int rows_from = -1;	/* the list's rows from this one on to draw again, two a turn */
-
-static void rows_turn(void)
+/* the list's rows from row i to its last shown, drawn in one go */
+static void rows_redraw(int i)
 {
-	int k;
-	for (k = 0; k < 2 && rows_from >= 0; k++) {
-		row_redraw(rows_from);
-		if (++rows_from >= list_top + bar_rows())
-			rows_from = -1;
-	}
+	GRECT a, b;
+	int last = list_top + bar_rows() - 1;
+	if (i < list_top)
+		i = list_top;
+	if (wh <= 0 || i > last)
+		return;
+	bar_row_area(i, &a);
+	bar_row_area(last, &b);
+	a.h = (short)(b.y + b.h - a.y);
+	redraw(&a, BP_LIST);
 }
 
 /* the selected file out of the list (the one playing stopped first) */
@@ -546,11 +562,15 @@ static void list_remove_sel(void)
 		status("Stopped.");
 	}
 	list_remove(i);
+	pic_begin("rows");
 	list_sel = i < list_count() ? i : list_count() - 1;
-	if (list_top > 0 && list_top + bar_rows() > list_count())
+	if (list_top > 0 && list_top + bar_rows() > list_count()) {
 		scroll_to(list_count() - bar_rows());	/* (the whole list: one draw) */
-	else
-		rows_from = i;		/* the rows from it on, two a turn */
+		pic_end();
+	} else {
+		rows_redraw(i);		/* the rows from it on */
+		pic_end();
+	}
 	sliders();
 	redraw(0, BP_NAV);
 }
@@ -714,11 +734,12 @@ static void command(int c)
 				alert(1, "[1][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
-				/* (the info line the next turn: the file opened
-				   again and the button are this one's) */
-				status_due = 1;
+				pic_begin("resume");
+				playing_drawn(0);
+				pic_end();
 				snprintf(st, sizeof(st), "EPLAY resumed at %ld ms\n", play_ms());
 				nf_debug(st);		/* (the rigs) */
+				break;
 			}
 			redraw(0, BP_PLAY | BP_TIME);
 		} else if (play_state() != PS_PLAYING && play_is_open()) {
@@ -770,10 +791,9 @@ static void step(int playing)
 	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
 		if (play_note_new) {
 			/* (Normal by itself: the rate on the bar and the info
-			   line, in the turns after) */
+			   line) */
 			play_note_new = 0;
-			status_due = 1;
-			bar_due = 3;
+			playing_drawn(1);
 		}
 		if (play_state() != PS_PLAYING) {
 			status(play_out[0] == 'T' ? play_out : "Played to the end.");
@@ -1048,8 +1068,7 @@ static void turn(int nested)
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
-			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || bar_due || status_due ||
-			    rows_from >= 0 ? 0 :
+			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
 	if (pending_play[0] && !nested && !art_needs_dsp()) {
@@ -1065,12 +1084,6 @@ static void turn(int nested)
 	} else if (open_due && !nested) {
 		open_due = 0;
 		play_file(file);
-		piece = 1;
-	} else if ((bar_due || status_due) && !nested) {
-		bar_turn();
-		piece = 1;
-	} else if (rows_from >= 0 && !nested) {
-		rows_turn();
 		piece = 1;
 	}
 	if (seek_to >= 0 && !nested) {

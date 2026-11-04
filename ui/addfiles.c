@@ -334,6 +334,8 @@ static void draw_list(void)
 }
 
 /* the AES asks for a piece again (a dialog window uncovered): the list */
+static void pic_end(void);
+
 static void more(short x, short y, short w, short h)
 {
 	(void)x;
@@ -341,6 +343,7 @@ static void more(short x, short y, short w, short h)
 	(void)w;
 	(void)h;
 	draw_list();
+	pic_end();			/* (in a window: the dialog's first picture) */
 }
 
 static void show_info(void)
@@ -364,16 +367,40 @@ static int in_sight(void)
 	return t != top;
 }
 
-static int list_due;		/* the list to draw at the next turn (another folder) */
+
+/* a picture's time, from when it is due to its last piece drawn, to the
+   rigs' console ("EPLAY picture folder 45 ms"): the guidelines' Speed, "A
+   rule never costs speed" */
+static unsigned long pic_t0;
+static const char *pic_name;
+static void pic_begin(const char *n)
+{
+	if (!pic_name) {
+		pic_name = n;
+		pic_t0 = tos_ms();
+	}
+}
+
+static void pic_end(void)
+{
+	if (pic_name) {
+		char b[64];
+		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms\n", pic_name, tos_ms() - pic_t0);
+		nf_debug(b);
+		pic_name = 0;
+	}
+}
 
 static void folder_shown(void)
 {
+	pic_begin("folder");
 	show_path();
 	info();
 	draw_obj(O_DRIVE);
 	draw_obj(O_PATH);
 	draw_obj(O_INFO);
-	list_due = 1;			/* (a turn of its own: 70 ms with the rest) */
+	draw_list();			/* (whole, no event call between: Erez, 4 Nov 2026) */
+	pic_end();
 }
 
 static void go(const char *d)
@@ -673,7 +700,7 @@ static int button(short o)
 int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const char *path), void (*idle)(void))
 {
 	short x, y, w, h, idx = 0, m[8];
-	int done = 0, added = 0, i, first;
+	int done = 0, added = 0, i;
 	AEVENT e;
 	idle_fn = idle;
 	dl_init(&dl);
@@ -696,19 +723,20 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 	info();
 	dlg_name("Add files");
 	dlg_band(O_BAND);
+	pic_begin("add");
 	dlg_open(tree, &x, &y, &w, &h);
 	dlg_more(more);
+	if (!dlg_in_window()) {
+		/* (TOS: the tree drawn; the list with it, before the first event
+		   call. In a window the AES's redraw draws both: more) */
+		place();
+		draw_list();
+		pic_end();
+	}
 	objc_edit(tree, O_MASK, 0, &idx, ED_INIT);
-	first = 1;
 	while (!done) {
-		/* (the list drawn in the first turn, after the tree's: on a
-		   stock Falcon the tree is 125 ms of the AES's, the list 20) */
-		dlg_evnt(MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, first || list_due ? 0 : 20, m, &e);
+		dlg_evnt(MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 20, m, &e);
 		place();			/* (the window may have moved) */
-		if (first || list_due) {
-			first = list_due = 0;
-			draw_list();
-		}
 		if (e.which & MU_TIMER)
 			idle_turn();
 		if (e.which & MU_KEYBD) {
