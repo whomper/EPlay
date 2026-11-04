@@ -1128,6 +1128,27 @@ MiNT and MagiC, VA_DRAGACCWIND from an AV desktop: common's `dd.c`). The menu's 
 several files at once where the file selector can give them (Selectric's protocol), and one at a
 time with any other.
 
+**The list, as built (0.21, `ui/list.c`, `src/probe.c`):**
+- Up to 1,000 files, in TT RAM where there is some. Each is shown by its name, then by its tags
+  and length once they are read: one file a turn in the background (one open, a few short reads;
+  `probe.c` takes the length from a WAV's or AIFF's header, or an MP3's Xing, Info or VBRI frame,
+  else its bit rate; `tests/probe`).
+- Files come from the command line (the desktop's drop on EPLAY.PRG, several at once), VA_START
+  (the first plays at once), a drop on the window (added; played if nothing plays), and File >
+  Open... (^O, the family's Open): the file chosen, or with none chosen every MP3, WAV and AIFF in
+  the folder, in name order. A folder given or dropped adds its files the same way. Several
+  files picked at once in the file selector wait for Erez's answer on which selector he uses
+  (TOS's can't; Selectric's protocol can).
+- At a file's end the next plays. A double click or Return plays a row; Up and Down select;
+  Delete removes (the one playing stopped first); a right click or Insert opens the row's menu
+  (3.3: Play, Remove from the list, Clear the list), whose commands are in the Edit menu too.
+  Previous and Next go through the list. The window has a sizer and the list a slider.
+- Another file's start is a job (5.x: 50 ms between event calls): the press is answered by its
+  two rows; the next turn opens the file; then the info line, the bar's left (art, text), its
+  right (output, volume) and Play/Pause with the times, a part a turn; a turn that draws reads no
+  file. A row taken out draws the rows under it two a turn. On Falcon-4: a double click 40 ms,
+  Next 45, Return 50, Delete 30.
+
 **The small player** is the bar alone, the album art 40 x 40 (as above).
 
 The order: the 56 columns and the volume (0.20); the list with the files added (0.21); the small

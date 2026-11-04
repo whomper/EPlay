@@ -41,8 +41,15 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 | `icons/` | its desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn` for desktops that take them) |
 | `notices.txt` | what EPlay includes under other licences |
 
-1. Copy `eplay.prg` anywhere, and start it; or drop a `.MP3`, `.WAV` or `.AIF` file on it.
-2. **File > Open…** (Control+O) plays another file. The window's bar shows its title
+1. Copy `eplay.prg` anywhere, and start it; or drop `.MP3`, `.WAV` or `.AIF` files (or a folder)
+   on it: they go into the list, and play one after another.
+2. **File > Open…** (Control+O) adds a file to the list, or, with no file chosen, every MP3, WAV
+   and AIFF in the folder. Files dragged onto the window from an AV desktop (Thing, Jinnee,
+   Teradesk) or under MiNT and MagiC are added too. A double click or **Return** plays a row,
+   **Up** and **Down** choose one, **Delete** takes it out; a right click (or **Insert**) on a
+   row opens its menu; **Edit > Clear the list** keeps only the file playing. Previous and Next
+   go through the list. The window can be made taller for more rows. The bar shows the file's
+   album art (unpacked on the DSP, then kept in `cache\` next to the program), its title
    and artist (from its tags), its bit rate and rate, and where it plays (FDI, DSP or DMA). The
    round button, or **Space**, plays and pauses (Play/Pause and Stop are in the Play menu too); a
    click or a drag on the position bar goes to that place in the file. The **volume** at the
