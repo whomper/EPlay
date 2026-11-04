@@ -76,6 +76,11 @@ CASES = {
 # 3 Nov 2026: files added in bulk). Each a second, A and C WAVs, B an MP3
 LIST = [("A.WAV", None), ("B.MP3", ["-b", "128"]), ("C.WAV", None)]
 CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
+# a folder of 1,000 files given (as dropped on the program): all in the
+# list, their tags and lengths read, and the memory it takes (the hub, 4
+# Nov 2026: the free ST RAM a menu needs under NVDI). Not by default (slow)
+CASES["many"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
+NOT_DEFAULT = {"many"}
 # the cases' eplay.inf
 INFS = {"normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n"}
 # the level of the middle (RMS), each case's, for wavvol's against wav's
@@ -223,6 +228,12 @@ def run(work, case, spec):
             else:
                 shutil.copy(src, os.path.join(hd, name))
         tail = " ".join("C:\\" + n for n, _ in LIST)
+    if case == "many":
+        many = os.path.join(hd, "MANY")
+        os.makedirs(many)
+        for i in range(1000):
+            shutil.copy(os.path.join(hd, "A.WAV"), os.path.join(many, "T%04d.WAV" % i))
+        tail = "C:\\MANY\\"
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
         fh.write(tail + "\r\n")
     if case in INFS:
@@ -257,6 +268,11 @@ def run(work, case, spec):
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(3)
             cmd(fifo, "hatari-event", "keypress", "0x1c")    # Return: no file named, so nothing
+        if case == "many":
+            got = wait_line(log, lambda l: l.startswith("LOG the list: "), 240)
+            start = wait_line(log, lambda l: l.startswith("LOG free memory"), 1) or ""
+            ok = bool(got) and got.split()[3] == "1000"
+            return ok, m.describe(), "%s\n     %s" % (start[4:], got[4:] if got else "the list never read")
         if case == "list":
             # the three in turn, then the end: the playing lines in order
             last = wait_line(log, lambda l: l.startswith("EPLAY playing: " + LIST[-1][0]), 60)
@@ -295,7 +311,7 @@ def run(work, case, spec):
 
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-play")
-    cases = [a for a in sys.argv[2:] if a in CASES] or list(CASES)
+    cases = [a for a in sys.argv[2:] if a in CASES] or [c for c in CASES if c not in NOT_DEFAULT]
     specs = [a for a in sys.argv[2:] if a not in CASES] or ["Falcon", "Falcon-4"]
     failed = 0
     for spec in specs:

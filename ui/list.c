@@ -10,22 +10,42 @@
 #include "tags.h"
 #include "probe.h"
 
-static ENTRY *ent;
+#define PER 64				/* records a block */
+#define POOL 8192			/* bytes a block of names and tags */
+
+static ENTRY *blk[LIST_MAX / PER];	/* the records' blocks, taken as needed */
+static char *pool[64];			/* the names' and tags' blocks */
+static int npool;
+static long pool_left;			/* bytes left in the last of them */
 static int n;
 int list_cur = -1, list_sel = -1, list_top;
 
-int list_init(void)
+/* memory where there is some: TT RAM first (the DMA needs none of it) */
+static void *take(long size)
 {
-	long size = (long)LIST_MAX * sizeof(ENTRY);
-	ent = Mxalloc(size, 3);		/* (TT RAM where there is some: not the DMA's) */
-	if ((long)ent <= 0)
-		ent = Malloc(size);
-	if ((long)ent <= 0) {
-		ent = 0;
-		return 0;
+	void *p = Mxalloc(size, 3);
+	if ((long)p <= 0)
+		p = Malloc(size);
+	return (long)p > 0 ? p : 0;
+}
+
+/* a copy of s in the pool: "" (no memory) if it can't be made */
+static const char *keep(const char *s)
+{
+	long k = (long)strlen(s) + 1;
+	char *p;
+	if (k == 1)
+		return "";
+	if (k > pool_left) {
+		if (npool >= (int)(sizeof(pool) / sizeof(pool[0])) || !(pool[npool] = take(POOL)))
+			return "";
+		npool++;
+		pool_left = POOL;
 	}
-	n = 0;
-	return 1;
+	p = pool[npool - 1] + (POOL - pool_left);
+	memcpy(p, s, (size_t)k);
+	pool_left -= k;
+	return p;
 }
 
 int list_count(void)
@@ -35,7 +55,7 @@ int list_count(void)
 
 ENTRY *list_at(int i)
 {
-	return ent && i >= 0 && i < n ? &ent[i] : 0;
+	return i >= 0 && i < n ? &blk[i / PER][i % PER] : 0;
 }
 
 static int same(const char *a, const char *b)
@@ -57,7 +77,7 @@ int list_find(const char *path)
 {
 	int i;
 	for (i = 0; i < n; i++)
-		if (same(ent[i].path, path))
+		if (same(list_at(i)->path, path))
 			return i;
 	return -1;
 }
@@ -66,21 +86,30 @@ int list_add(const char *path)
 {
 	int i = list_find(path);
 	ENTRY *e;
+	const char *p;
 	if (i >= 0)
 		return i;
-	if (!ent || n >= LIST_MAX || strlen(path) >= sizeof(e->path))
+	if (n >= LIST_MAX)
 		return -1;
-	e = &ent[n];
+	if (!blk[n / PER] && !(blk[n / PER] = take((long)PER * sizeof(ENTRY))))
+		return -1;
+	p = keep(path);
+	if (!*p)
+		return -1;
+	e = &blk[n / PER][n % PER];
 	memset(e, 0, sizeof(*e));
-	strcpy(e->path, path);
+	e->path = p;
+	e->title = e->artist = e->album = "";
 	return n++;
 }
 
 void list_remove(int i)
 {
+	int k;
 	if (i < 0 || i >= n)
 		return;
-	memmove(&ent[i], &ent[i + 1], (size_t)(n - i - 1) * sizeof(ENTRY));
+	for (k = i; k + 1 < n; k++)
+		*list_at(k) = *list_at(k + 1);
 	n--;
 	if (list_cur == i)
 		list_cur = -1;
@@ -92,11 +121,55 @@ void list_remove(int i)
 		list_top = n - 1;
 }
 
+/* everything given back: an empty list takes no memory */
+static void give_back(void)
+{
+	int k;
+	for (k = 0; k < npool; k++)
+		Mfree(pool[k]);
+	npool = 0;
+	pool_left = 0;
+	for (k = 0; k < (int)(sizeof(blk) / sizeof(blk[0])); k++)
+		if (blk[k]) {
+			Mfree(blk[k]);
+			blk[k] = 0;
+		}
+	n = 0;
+}
+
 void list_clear(void)
 {
-	n = 0;
+	give_back();
 	list_cur = list_sel = -1;
 	list_top = 0;
+}
+
+void list_keep_only(int i)
+{
+	char path[200], title[64], artist[64], album[64];
+	ENTRY *e = list_at(i), was;
+	int j;
+	if (!e) {
+		list_clear();
+		return;
+	}
+	was = *e;
+	snprintf(path, sizeof(path), "%s", e->path);
+	snprintf(title, sizeof(title), "%s", e->title);
+	snprintf(artist, sizeof(artist), "%s", e->artist);
+	snprintf(album, sizeof(album), "%s", e->album);
+	list_clear();
+	j = list_add(path);
+	if (j < 0)
+		return;
+	e = list_at(j);
+	e->title = keep(title);
+	e->artist = keep(artist);
+	e->album = keep(album);
+	e->len_ms = was.len_ms;
+	e->read = was.read;
+	e->bad = was.bad;
+	list_cur = list_sel = j;
 }
 
 const char *list_name(const ENTRY *e)
@@ -106,6 +179,16 @@ const char *list_name(const ENTRY *e)
 		return e->title;
 	s = strrchr(e->path, '\\');
 	return s ? s + 1 : e->path;
+}
+
+long list_memory(void)
+{
+	long k = (long)npool * POOL;
+	int b;
+	for (b = 0; b < (int)(sizeof(blk) / sizeof(blk[0])); b++)
+		if (blk[b])
+			k += (long)PER * sizeof(ENTRY);
+	return k;
 }
 
 static long fh_ = -1;
@@ -120,15 +203,14 @@ static long rd(void *u, long at, unsigned char *buf, long k)
 int list_step(int *row)
 {
 	static unsigned char buf[PROBE_BUF];
-	TAGS t;
-	ENTRY *e;
+	static TAGS t;
+	ENTRY *e = 0;
 	long size;
 	int i;
-	for (i = 0; i < n && ent[i].read; i++)
+	for (i = 0; i < n && (e = list_at(i))->read; i++)
 		;
 	if (i >= n)
 		return 0;
-	e = &ent[i];
 	e->read = 1;
 	*row = i;
 	fh_ = Fopen(e->path, 0);
@@ -138,9 +220,11 @@ int list_step(int *row)
 	}
 	size = Fseek(0, (short)fh_, 2);
 	tags_read(&t, rd, 0, size);
-	snprintf(e->title, sizeof(e->title), "%s", t.title);
-	snprintf(e->artist, sizeof(e->artist), "%s", t.artist);
-	snprintf(e->album, sizeof(e->album), "%s", t.album);
+	/* (the list's columns are 20, 11 and 12 characters: 39 bytes kept at most) */
+	t.title[39] = t.artist[39] = t.album[39] = 0;
+	e->title = keep(t.title);
+	e->artist = keep(t.artist);
+	e->album = keep(t.album);
 	e->len_ms = probe_len_ms(rd, 0, size, t.id3_len, buf);
 	if (e->len_ms < 0) {
 		e->bad = 1;

@@ -31,7 +31,7 @@ static const char *const qnames[2] = { "NORMAL", "HIGH" };
 static const char *const qlabels[2] = { "Normal", "High" };
 
 #define INF_MAX 4096
-static char inf[INF_MAX], inf2[INF_MAX], inf3[INF_MAX];
+static char inf[INF_MAX], *inf2, *inf3;	/* (the two a save writes into: taken for it) */
 static long inf_n;
 
 static void inf_path(char *p, int n, const char *file)
@@ -84,7 +84,22 @@ void settings_load(void)
 	}
 }
 
+static void save_in(void);
+
+/* (8 KB less of the program's own memory: a stock Falcon under NVDI keeps
+   the room a menu needs: the hub, 4 Nov 2026) */
 static void save(void)
+{
+	inf2 = malloc(2 * INF_MAX);
+	if (!inf2)
+		return;
+	inf3 = inf2 + INF_MAX;
+	save_in();
+	free(inf2);
+	inf2 = inf3 = 0;
+}
+
+static void save_in(void)
 {
 	static const char note[] =
 	    "; Output: how EPlay plays the music. AUTO (the FDI if its driver answers,\r\n"

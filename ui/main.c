@@ -326,34 +326,33 @@ static int audio_name(const char *n)
    the first added's index, -1 if none */
 static int add_folder(const char *dir)
 {
-	char mask[200], (*names)[14] = 0, one[200];
-	static char found[200][14];
+	char mask[200], one[200];
 	DTA *old = Fgetdta(), dta;
-	int k = 0, i, j, first = -1;
-	names = found;
+	int first = -1, i, j, before = list_count();
 	snprintf(mask, sizeof(mask), "%s*.*", dir);
 	Fsetdta(&dta);
 	if (Fsfirst(mask, 0) == 0)
 		do {
-			if (audio_name(dta.d_fname) && k < 200)
-				snprintf(names[k++], 14, "%s", dta.d_fname);
+			if (audio_name(dta.d_fname)) {
+				int at;
+				snprintf(one, sizeof(one), "%s%s", dir, dta.d_fname);
+				at = list_add(one);
+				if (at >= 0 && first < 0)
+					first = at;
+			}
 		} while (Fsnext() == 0);
 	Fsetdta(old);
-	for (i = 1; i < k; i++)		/* (a few hundred at most: an insertion sort) */
-		for (j = i; j > 0 && strcmp(names[j - 1], names[j]) > 0; j--) {
-			char t[14];
-			memcpy(t, names[j], 14);
-			memcpy(names[j], names[j - 1], 14);
-			memcpy(names[j - 1], t, 14);
-		}
-	for (i = 0; i < k; i++) {
-		int at;
-		snprintf(one, sizeof(one), "%s%s", dir, names[i]);
-		at = list_add(one);
-		if (at >= 0 && first < 0)
-			first = at;
-	}
-	return first;
+	/* the folder's files in name order (their records swapped: the names
+	   stay where they are; an insertion sort, as a directory comes nearly
+	   sorted) */
+	if (list_count() > before)
+		for (i = before + 1; i < list_count(); i++)
+			for (j = i; j > before && strcmp(list_at(j - 1)->path, list_at(j)->path) > 0; j--) {
+				ENTRY t = *list_at(j);
+				*list_at(j) = *list_at(j - 1);
+				*list_at(j - 1) = t;
+			}
+	return list_count() > before ? before : first;
 }
 
 /* one name: a folder's files, or the file; its (first) index */
@@ -449,15 +448,11 @@ static void open_file(void)
 /* File > Clear the list: all but the one playing */
 static void list_clear_but_playing(void)
 {
-	ENTRY keep, *e = list_at(list_cur);
-	int playing = e && (play_state() == PS_PLAYING || play_paused());
-	if (playing)
-		keep = *e;
-	list_clear();
-	if (playing) {
-		list_cur = list_add(keep.path);
-		*list_at(list_cur) = keep;
-	}
+	ENTRY *e = list_at(list_cur);
+	if (e && (play_state() == PS_PLAYING || play_paused()))
+		list_keep_only(list_cur);
+	else
+		list_clear();
 	sliders();
 	redraw(0, BP_LIST | BP_TEXT);
 }
@@ -1115,10 +1110,6 @@ int app_main(void)
 	graf_mouse(ARROW, 0);
 	open_window();
 	art_init(bar_art_side());
-	if (!list_init()) {
-		alert(1, "[3][EPlay: not enough memory.][ Quit ]");
-		quit = 1;
-	}
 	{
 		char line[60];
 		snprintf(line, sizeof(line), "EPLAY external clock: %ld Hz\n", snd_ext_rate);
@@ -1163,8 +1154,12 @@ int app_main(void)
 			int row;
 			if (list_step(&row))
 				row_redraw(row);
-			else
+			else {
+				long st = (long)Mxalloc(-1L, 0);
 				list_unread = 0;
+				elog("the list: %d files read, %ld KB; the largest free ST RAM block %ld KB", list_count(),
+				     (list_memory() + 1023) / 1024, st > 0 ? st / 1024 : 0);
+			}
 		}
 	}
 
