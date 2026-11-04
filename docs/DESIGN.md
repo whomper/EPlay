@@ -1246,6 +1246,44 @@ the tick on Hatari's Falcon-4 29 % before, 18 % after. `tests/hatari/pcm_test.py
 loops (16-bit WAV, 24-bit AIFF and WAV) against the C, bit for bit, on Hatari's 68030: the play
 rig can't hear the DMA's cases on Hatari 2.4.
 
+### WAV and AIFF at any rate on the DSP: XSTREAM (Erez, 4 Nov 2026)
+
+"Resample on the DSP" for a WAV or AIFF the Falcon's clock hasn't the rate of (0.22 played CD's
+stereo on the DMA at 49,170 Hz: 11 % fast, two semitones high). Through the host port, a word a
+sample, CD's stereo took 70 % of a stock Falcon's 68030 (50 % the words, 17 % making them), the
+About box 520 ms, twelve of the WAV session's twenty timings over. So the sound DMA carries the
+samples instead:
+
+- **The ring** (`snd_open_feed`) is one track to the DSP's receive (`Devconnect(DMAPLAY,
+  DSPRECV)`), at the DSP's output rate, the clock the DSP's SSI sends on. The SSI's frame size
+  (CRA's DC) is the transmit's and the receive's both, two words, so a frame can't carry a flag
+  of its own: the tick spreads the file's frames over the ring's (`pcm_spread`, its loop in
+  asm), a frame with a sample where the step (the file's rate in, the DSP's out) has one, both
+  words' lowest bit set; zeros where it hasn't. A sample's lowest bit is the cost: about 90 dB of
+  range, more than the Falcon's codec gives. A file at the DSP's output rate or above (96 kHz)
+  can't be carried a sample a frame: it plays at the nearest rate, as before.
+- **The DSP** (XSTREAM, 15) is PSTREAM with the SSI's receive on (CRB $F800): a long interrupt
+  (P:$0C, P:$0E; `rd` moved to the end of internal P for them) puts each word into a ring of 2,048
+  over the Huffman tables (a PCM stream doesn't use them, and each Play loads them again), r6
+  kept and m6 back to linear (the PCM path's always is). `getrx` makes the 576 frames' packets
+  the host would have sent and hands them to the PCM path as they were: the resampler, its taps
+  and the ring the SSI plays are PSTREAM's. A pair with one zero is a word out of step (the DMA
+  started a word on): its first dropped, counted as a packet broken. The end word still comes
+  from the host: two packets of silence that has samples, zeros, then the count 0 once the DMA
+  has played them.
+- **The four-track ring** the DAC plays has its three silent tracks cleared again after a feed
+  (the bytes a feed wrote: its frames were four bytes).
+
+| Falcon-4:16 (Hatari) | The tick | |
+|---|---|---|
+| aiff44: 24-bit stereo, 44.1 kHz, Output DSP | 24 % | 1000 and 1500 Hz, 10.06 s, no gap |
+| wav22: 16-bit mono, 22.05 kHz | 12 % | 1000 Hz, 3.02 s, no gap |
+
+(The C spread took 40 % with the 24-bit conversion; the asm 34 %; the tick at 250 a second, as
+the DMA's, not the MP3's 500: 24 %.) `pcm_test` holds the spread's asm against the C, the source
+running out among its 48 runs. A first build stalled after its first packet: the ring's count,
+`and` on B1 alone, kept B2's sign when the interrupt's place had wrapped past getrx's.
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
