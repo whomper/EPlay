@@ -11,17 +11,16 @@
 #define EPLAY_SETTINGS_H
 
 enum { OUT_AUTO, OUT_FDI, OUT_DSP };
-/* Quality (Erez, 2 Nov 2026): High, the default, or Normal: up to about 15
-   kHz, where the machine can't do more (the DSP on the Falcon's clock);
-   with the FDI the music is always whole */
-enum { Q_NORMAL, Q_HIGH };
+/* (Quality is no longer a setting: Erez, 4 Nov 2026. An MP3 plays at High
+   and goes to Normal by itself where the DSP falls behind: play.c. An
+   INF's QUALITY= is read no more). The granules late at High that make
+   it Normal: 3, or QLATE= (the play rig's, 0: at once; never written) */
+int settings_qlate(void);
 
 void settings_load(void);	/* EPLAY.INF, at the start */
 void settings_dialog(void);	/* the dialog; saved on OK when it changed */
 int settings_output(void);	/* OUT_...: as set, or Auto where the machine hasn't it */
 const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
-int settings_quality(void);	/* Q_NORMAL or Q_HIGH */
-const char *settings_quality_name(int q);	/* "Normal", "High" (the log) */
 
 /* the volume (0 silent to VOL_FULL, steps of 1.5 dB), VOLUME= in the INF,
    saved by settings_flush at the end when it changed */

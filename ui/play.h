@@ -23,6 +23,7 @@ int play_seek(long ms, char *err, int n);
 void play_pause(void);
 int play_resume(char *err, int n);
 int play_paused(void);
+extern int play_note_new;	/* (main: what plays changed by itself; the bar and info line to draw again) */
 void play_stop(void);		/* and the file closed, the DSP given back */
 /* work for the GEM loop, at most about ms milliseconds (the file read
    into the queue; the sound itself is fed by the tick): 1 when something

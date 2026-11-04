@@ -114,6 +114,13 @@ static unsigned char fr[2048];	/* the tick's: a frame, whole */
 static long last_sec = -1;
 static long data_left;		/* bytes still to read into the queue */
 static char cur_path[256];	/* the file open (play_seek opens it again) */
+/* Quality, by itself (Erez, 4 Nov 2026: no longer a setting): an MP3 on
+   the DSP and the Falcon's clock plays at High (49,170 Hz); one the DSP
+   falls behind with (granules late) goes on at Normal (32,780 Hz, up to
+   about 15 kHz) from where it is, until another file opens (granules
+   late: settings_qlate's 3) */
+static int q_normal;
+int play_note_new;		/* what plays changed by itself (Normal): the bar and info line again */
 static long seek_ms, base_ms;	/* play_seek's place for play_open; where this play began */
 static long seek_byte;		/* MP3: Pause's frame, where Play takes it up (0: by seek_ms) */
 static long q_base;		/* MP3: where the queue's first byte is in the file */
@@ -689,8 +696,10 @@ int play_open(const char *path, char *err, int n)
 
 	play_log_stop();		/* (another file while one plays: what the first did) */
 	play_stop();
-	if (path != cur_path)
+	if (path != cur_path) {
 		snprintf(cur_path, sizeof(cur_path), "%s", path);
+		q_normal = 0;		/* (a file starts at High; a seek or Play keeps its own) */
+	}
 	base_ms = 0;
 	if (!fbuf) {
 		fbuf = Mxalloc(FBUF, 3);	/* TT RAM where there is some */
@@ -889,11 +898,11 @@ int play_open(const char *path, char *err, int n)
 			out_rate = rate;
 		} else
 			out_rate = snd_rate_dsp(rate, &ext);
-		/* Quality Normal (Erez, 2 Nov 2026), on the Falcon's clock: 32,780
-		   Hz, the subbands above about 15 kHz left out (the DSP's time
-		   that resampling up to 49,170 Hz lacked); the FDI's clock, or a
-		   rate of 32 kHz or less, as High */
-		if (!ext && settings_quality() == Q_NORMAL && rate > 32780) {
+		/* Normal (q_normal: the DSP fell behind at High), on the Falcon's
+		   clock: 32,780 Hz, the subbands above about 15 kHz left out (the
+		   DSP's time that resampling up to 49,170 Hz lacked); the FDI's
+		   clock, or a rate of 32 kHz or less, as High */
+		if (!ext && q_normal && rate > 32780) {
 			out_rate = 32780;
 			s_sblim = MP3_SBLIM(rate);
 		}
@@ -950,10 +959,9 @@ int play_open(const char *path, char *err, int n)
 		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
 	else
 		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
-	elog("output: %ld Hz, %s%s%s; queue %ld bytes (Settings: %s, %s)", out_rate,
+	elog("output: %ld Hz, %s%s%s; queue %ld bytes (Settings: %s)", out_rate,
 	     ext ? "the external clock" : "the Falcon's clock", dsp && out_rate != rate ? ", resampled on the DSP" : "",
-	     s_sblim < 32 ? ", the subbands above about 15 kHz left out" : "", q_size, settings_output_name(out_set),
-	     settings_quality_name(settings_quality()));
+	     s_sblim < 32 ? ", the subbands above about 15 kHz left out" : "", q_size, settings_output_name(out_set));
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;
@@ -1264,6 +1272,22 @@ int play_step(int ms)
 		return 1;
 	}
 	fill(t0, ms);
+	if (dsp && !kind && s_started && !s_ext && !q_normal && rate > 32780 && s_sblim == 32) {
+		/* High, and the DSP behind: Normal from here (a moment's break) */
+		long fr, late, wmin, wavg;
+		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
+		if (late >= settings_qlate() && fr >= 8) {	/* (past the start: its first frames) */
+			char err[160];
+			long at = play_ms();
+			q_normal = 1;
+			elog("the DSP behind at 49,170 Hz (%ld granules late by its frame %ld): Normal from %ld ms, "
+			     "32,780 Hz, up to about 15 kHz", late, fr, at);
+			if (!play_seek(at, err, sizeof(err)))
+				elog("%s", err);
+			play_note_new = 1;
+			return 1;
+		}
+	}
 	if (!src_done && play_ms() - base_ms > 1000) {
 		long ahead = q_w - q_r, lead;
 		lead = kind ? ahead / fmt.bytes / rate * 1000 + ahead / fmt.bytes % rate * 1000 / rate :

@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, normal; all by default. The machines: Falcon (Erez's, with the
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, list, mini (and many); all but many by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -71,11 +71,16 @@ CASES = {
             (1000, 1500), 10),
     "fsel": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
              (1000, 1500), 10),
-    # Settings' Quality Normal (eplay.inf): no external clock, so the
-    # Falcon's 32,780 Hz, the subbands above about 15 kHz left out
-    "normal": ("NORMAL.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "192", "-m", "s"], 32780,
-               (1000, 1500), 6),
+    # Quality by itself (Erez, 4 Nov 2026: no longer a setting): where the
+    # DSP falls behind at 49,170 Hz, the file goes on at 32,780 Hz, the
+    # subbands above about 15 kHz left out (Normal), to its end. Hatari's
+    # DSP keeps up with every file now (square waves and noise at 48 kHz,
+    # 320 kbit/s: waits to spare), so eplay.inf's QLATE=0 (the rigs')
+    # makes it go to Normal past its first frames
+    "auto": ("SQUARE.MP3", ["-r", "48000", "-c", "2", "-b", "16"], ["-b", "320"], 32780, (100, 1500), 8),
 }
+# the cases' sounds, where not sine tones
+SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # three files given at the start (as the desktop gives files dropped on the
 # program): the list holds them and plays them one after another (Erez,
 # 3 Nov 2026: files added in bulk). Each a second, A and C WAVs, B an MP3
@@ -87,7 +92,7 @@ CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (
 CASES["many"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
 NOT_DEFAULT = {"many"}
 # the cases' eplay.inf
-INFS = {"aiff44": "OUTPUT=DSP\r\n\r\n", "normal": "QUALITY=NORMAL\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
+INFS = {"aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
 # the level of the middle (RMS), each case's, for wavvol's against wav's
@@ -97,7 +102,7 @@ LEVEL = {}
 def make_file(hd, case):
     f, fmt, lame, _, _, secs = CASES[case]
     src = os.path.join(hd, "..", "src.wav")
-    synth = ["synth", str(secs), "sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else [])
+    synth = ["synth", str(secs)] + SYNTH.get(case, ["sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else []))
     out = os.path.join(hd, f)
     if lame:
         subprocess.run(["sox", "-n"] + fmt + [src] + synth + ["gain", "-6"], check=True)
@@ -312,6 +317,17 @@ def run(work, case, spec):
         time.sleep(0.5)
         if not end:
             return False, m.describe(), played + "; never ended"
+        if case == "auto":
+            # High first; behind, Normal from there; then to the end
+            lines = open(log, errors="replace").read().split("\n")
+            behind = [l for l in lines if l.startswith("LOG the DSP behind at 49,170 Hz")]
+            outs = [l for l in lines if l.startswith("LOG output: ")]
+            ok = (bool(behind) and len(outs) >= 2 and outs[0].startswith("LOG output: 49170 Hz") and
+                  outs[-1].startswith("LOG output: 32780 Hz") and "15 kHz left out" in outs[-1] and
+                  "Played to the end" in end)
+            return ok, m.describe(), "%s\n     %s\n     %s\n     %s" % (
+                played[len("EPLAY playing: "):], end, behind[0][4:] if behind else "never behind at High",
+                " / ".join(o[4:o.index(";")] for o in outs))
         if not os.path.exists(rec):
             return False, m.describe(), "no recording"
         ok, what = analyse(rec, case)

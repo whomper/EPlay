@@ -3,9 +3,10 @@
 /*
  * settings.c - Settings and EPLAY.INF (settings.h). One page, so no sidebar:
  * a sentence on what Output is, then its three choices as radio buttons
- * (Erez, 2 Nov 2026: the choices need no notes); a sentence on Quality,
- * then Normal and High (High the default). A choice the machine
- * hasn't is greyed: the FDI without its driver, the DSP without a DSP.
+ * (Erez, 2 Nov 2026: the choices need no notes). (Quality, Normal and
+ * High, was the second: chosen by itself since 4 Nov 2026, Erez.) A
+ * choice the machine hasn't is greyed: the FDI without its driver, the
+ * DSP without a DSP.
  * (The 68030 is no longer a choice: Erez, 3 Nov 2026, as no 68030 keeps up
  * with MP3; an INF's OUTPUT=68030 reads as Auto.) The INF is written
  * as EPLAY.IN$ first and renamed over EPLAY.INF (the guidelines, 2.3), both
@@ -22,16 +23,15 @@
 #include "elog.h"
 #include "settings.h"
 
-static int output = OUT_AUTO, quality = Q_HIGH;
+static int output = OUT_AUTO;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
 static char add_dir[AF_PATH], recent[AF_RECENT][AF_PATH];	/* the Add files dialog's */
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
+static int qlate = 3;			/* QLATE=: the rigs' (read, never written) */
 #define NOUT 3
 static const char *const names[NOUT] = { "AUTO", "FDI", "DSP" };
 static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
-static const char *const qnames[2] = { "NORMAL", "HIGH" };
-static const char *const qlabels[2] = { "Normal", "High" };
 
 #define INF_MAX 4096
 static char inf[INF_MAX], *inf2, *inf3;	/* (the two a save writes into: taken for it) */
@@ -75,10 +75,6 @@ void settings_load(void)
 		for (i = 0; i < NOUT; i++)
 			if (!strcmp(v, names[i]))
 				output = i;
-	if (inf_get(inf, inf_n, "QUALITY", v, sizeof(v)))
-		for (i = 0; i < 2; i++)
-			if (!strcmp(v, qnames[i]))
-				quality = i;
 	if (inf_get(inf, inf_n, "VOLUME", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9') {
 		volume = atoi(v);
 		if (volume > VOL_FULL)
@@ -93,6 +89,13 @@ void settings_load(void)
 	}
 	if (inf_get(inf, inf_n, "MINI", v, sizeof(v)))
 		mini = mini_saved = v[0] == '1';
+	if (inf_get(inf, inf_n, "QLATE", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
+		qlate = atoi(v);
+}
+
+int settings_qlate(void)
+{
+	return qlate;
 }
 
 static void save_in(void);
@@ -115,9 +118,6 @@ static void save_in(void)
 	static const char note[] =
 	    "; Output: how EPlay plays the music. AUTO (the FDI if its driver answers,\r\n"
 	    "; else the DSP), FDI or DSP\r\n";
-	static const char qnote[] =
-	    "; Quality: HIGH, or NORMAL: up to about 15 kHz, for a slower machine (the\r\n"
-	    "; DSP on the Falcon's own clock); through the FDI always whole\r\n";
 	static const char mnote[] = "; Mini player: 1 for the bar alone (View > Mini player), 0 with the list\r\n";
 	static const char vnote[] =
 	    "; Volume: 0 (silent) to 16 (full), steps of 1.5 dB; as the bar was left\r\n";
@@ -125,13 +125,11 @@ static void save_in(void)
 	long n = inf_set(inf, inf_n, "OUTPUT", names[output], note, inf2, INF_MAX), h;
 	if (n < 0)
 		return;
-	n = inf_set(inf2, n, "QUALITY", qnames[quality], qnote, inf3, INF_MAX);
-	if (n < 0)
-		return;
 	snprintf(vs, sizeof(vs), "%d", volume);
-	n = inf_set(inf3, n, "VOLUME", vs, vnote, inf2, INF_MAX);
+	n = inf_set(inf2, n, "VOLUME", vs, vnote, inf3, INF_MAX);
 	if (n < 0)
 		return;
+	memcpy(inf2, inf3, (size_t)n);	/* (the folders' keys start from inf2) */
 	{
 		/* the Add files dialog's folders, a key at a time between the two
 		   buffers, ending in inf2 */
@@ -189,16 +187,6 @@ const char *settings_output_name(int out)
 	return out >= 0 && out < NOUT ? labels[out] : "?";
 }
 
-int settings_quality(void)
-{
-	return quality;
-}
-
-const char *settings_quality_name(int q)
-{
-	return q >= 0 && q < 2 ? qlabels[q] : "?";
-}
-
 /* ---- the dialog, built in code (as common's Font dialog): each group of
    radio buttons in a box of its own, so that the AES keeps one chosen in
    each ---- */
@@ -234,9 +222,8 @@ static short add(short parent, short type, short flags, short state, long spec, 
 void settings_dialog(void)
 {
 	static const char sentence[] = "Output: how EPlay plays the music.";
-	static const char qsentence[] = "Quality: Normal plays up to 15 kHz, for a slower machine.";
-	short radio[NOUT], qradio[2], ok, cancel, r, g;
-	int i, eff = settings_output(), chose = eff, qchose = quality;
+	short radio[NOUT], ok, cancel, r, g;
+	int i, eff = settings_output(), chose = eff;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
 	tree[0].ob_next = -1;
@@ -245,20 +232,15 @@ void settings_dialog(void)
 	tree[0].ob_state = OUTLINED;
 	tree[0].ob_spec = 0x00021100L;
 	tree[0].ob_width = 62;
-	tree[0].ob_height = 12;
+	tree[0].ob_height = 8;
 	add(0, G_STRING, 0, 0, (long)sentence, 2, 1, (short)strlen(sentence), 1);
 	g = add(0, G_IBOX, 0, 0, 0L, 2, 3, 28, 1);
 	for (i = 0; i < NOUT; i++)
 		radio[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)((i == eff ? SELECTED : 0) |
 									(has(i) ? 0 : DISABLED)),
 			       (long)labels[i], (short)(10 * i), 0, 8, 1);
-	add(0, G_STRING, 0, 0, (long)qsentence, 2, 5, (short)strlen(qsentence), 1);
-	g = add(0, G_IBOX, 0, 0, 0L, 2, 7, 18, 1);
-	for (i = 0; i < 2; i++)
-		qradio[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)(i == quality ? SELECTED : 0),
-				(long)qlabels[i], (short)(10 * i), 0, 8, 1);
-	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 10, 9, 1);
-	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 10, 9, 1);
+	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 6, 9, 1);
+	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 6, 9, 1);
 	tree[nobj - 1].ob_flags |= LASTOB;
 	rsrc_obfix_all(tree, nobj);
 	dlg_name("Settings");
@@ -268,18 +250,12 @@ void settings_dialog(void)
 	for (i = 0; i < NOUT; i++)
 		if (tree[radio[i]].ob_state & SELECTED)
 			chose = i;
-	for (i = 0; i < 2; i++)
-		if (tree[qradio[i]].ob_state & SELECTED)
-			qchose = i;
 	/* (as it was, nothing saved: an FDI chosen and its driver not loaded
 	   this time stays chosen) */
-	if (chose != eff || qchose != quality) {
-		if (chose != eff)
-			output = chose;
-		quality = qchose;
+	if (chose != eff) {
+		output = chose;
 		save();
-		elog("Settings: output %s, quality %s (from the next Play)", labels[settings_output()],
-		     qlabels[quality]);
+		elog("Settings: output %s (from the next Play)", labels[settings_output()]);
 	}
 }
 

@@ -864,7 +864,17 @@ an ext2 drive is not looked for under its old names: its folder is deleted and t
 in fresh (the release's notes say so once).
 
 
-### Quality: Normal and High (Erez, 2 Nov 2026)
+### Quality: Normal and High (Erez, 2 Nov 2026), chosen by itself (4 Nov 2026)
+
+*Since 4 Nov 2026 (Erez): no longer a setting.* An MP3 on the DSP and the Falcon's own clock
+plays at High; where the DSP falls behind (3 granules late, past the file's first 8 frames:
+`settings_qlate`), it goes on at Normal from where it is, as a seek does (a moment's break), until
+another file opens. The log says so ("the DSP behind at 49,170 Hz ..."), and the bar and the
+info line show 32.8 kHz. Settings has Output alone; an INF's `QUALITY=` is read no more.
+`QLATE=` (read, never written) is the play rig's: its `auto` case sets 0, as Hatari's DSP now
+keeps up at High with every file the rig can make (square waves and pink noise at 48 kHz, 320
+kbit/s, all short blocks: 2,080 waits to spare a frame at least). What follows is the setting as
+it was.
 
 Erez's choice for the crackles without the FDI: a Quality setting, **High** (the default) or
 **Normal**, "Normal is 15 kHz", for both the 68030's output and the DSP on the Falcon's own

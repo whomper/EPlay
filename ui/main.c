@@ -768,6 +768,13 @@ static void step(int playing)
 {
 	unsigned long used = tos_ms() - turn_t0;
 	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
+		if (play_note_new) {
+			/* (Normal by itself: the rate on the bar and the info
+			   line, in the turns after) */
+			play_note_new = 0;
+			status_due = 1;
+			bar_due = 3;
+		}
 		if (play_state() != PS_PLAYING) {
 			status(play_out[0] == 'T' ? play_out : "Played to the end.");
 			redraw(0, BP_PLAY | BP_TIME);
@@ -1211,8 +1218,7 @@ int app_main(void)
 	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
 	     snd_ext_note[0] ? "; tried " : "", snd_ext_note);
-	elog("Settings: output %s, quality %s", settings_output_name(settings_output()),
-	     settings_quality_name(settings_quality()));
+	elog("Settings: output %s", settings_output_name(settings_output()));
 	if (snd_ext_rate)
 		status(snd_ext_rate == 44100 ? "An external clock at 44.1 kHz (the FDI)." :
 					       "An external clock at 48 kHz (the FDI).");

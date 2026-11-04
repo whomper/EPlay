@@ -61,11 +61,10 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
    right is set the same way, or with **+** and **−** (3 dB a press); EPLAY.INF keeps it.
 3. **View > Mini player** makes the window the bar alone, and back; EPLAY.INF keeps it.
 4. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
-   answers, else the DSP), FDI or DSP. And the **Quality**:
-   High (the default), or Normal, up to about 15 kHz, for a Falcon without the FDI whose DSP
-   can't keep up with resampling dense music to 49,170 Hz (it plays at 32,780 Hz then). Through
-   the FDI the music is always whole. A change takes effect at the next Play. `EPLAY.INF`, next
-   to the program, keeps them.
+   answers, else the DSP), FDI or DSP. A change takes effect at the next Play. `EPLAY.INF`, next
+   to the program, keeps it. Without the FDI an MP3 plays at 49,170 Hz; one the DSP can't keep
+   up with there goes on by itself at 32,780 Hz, up to about 15 kHz (the info line shows the
+   rate). Through the FDI the music is always whole.
 
 **EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
 found and how it set the FDI, each file's format and length, how playing ended, and how the DSP
