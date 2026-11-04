@@ -21,7 +21,8 @@ GCCINC  := $(shell $(CC) -print-file-name=include 2>/dev/null)
 B       := build
 OBJDIR  := build/atari
 INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icommon/ui \
-           -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF
+           -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF \
+           -DPIC_TJPGD_DSP
 CFLAGS  := -m68030 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
            -ffunction-sections -fdata-sections -Wall -Wno-pointer-sign \
@@ -30,11 +31,11 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags
+OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list
 CSRC    := bidi charset pic png inflate jpegdc
 CTP     := tjpgd
-CATARI  := libc tos gem crash
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click
+CATARI  := libc tos gem crash dspjpeg
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
@@ -131,9 +132,14 @@ $(B)/test_tags: tests/tags/test_tags.c src/tags.c src/tags.h common/src/charset.
 		common/src/charset.c common/src/bidi.c
 $(B)/test_gain: tests/pcm/test_gain.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_gain.c src/pcm.c
+$(B)/test_probe: tests/probe/test_probe.c src/probe.c src/probe.h src/tags.c src/pcm.c src/mp3/mp3frame.c \
+		common/src/charset.c common/src/bidi.c
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Isrc/mp3 -Icommon/src -o $@ tests/probe/test_probe.c \
+		src/probe.c src/tags.c src/pcm.c src/mp3/mp3frame.c common/src/charset.c common/src/bidi.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
-test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain
+test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
+		$(B)/test_probe
 	./$(B)/test_inf
 	./$(B)/test_gain
 	./$(B)/test_tags
@@ -141,6 +147,7 @@ test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_i
 	./$(B)/test_mp3 $(B)/mp3files/*.mp3
 	./$(B)/test_info $(B)/mp3files/*.mp3
 	TEST=$(B)/test_pcm sh tests/pcm/run.sh
+	TEST=$(B)/test_probe D=$(B)/probefiles sh tests/probe/run.sh
 
 $(B) $(OBJDIR):
 	mkdir -p $@

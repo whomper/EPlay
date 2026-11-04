@@ -1072,6 +1072,21 @@ Falcon (5,800 turns of its loop; a stock Falcon 1,342, Hatari's 32 MHz one 3,312
 every Falcon, is put to Erez: the art unpacked on the DSP (common's `dspjpeg`) before an MP3's
 own program goes in, or while a WAV or AIFF plays on the DMA.
 
+**The album art on the DSP, and its cache (Erez, 3 Nov 2026):** "decode on the DSP. Store a cache
+version on file in EPlay cache folder." So an MP3's art is unpacked on the DSP before its own
+program goes in (its music starts that much later, the first time); a WAV's or AIFF's while it
+plays on the DMA. The art made is kept in `cache\` next to the program, as the guidelines' 6.5
+has many small items: one pack (`art.pak`, a record a picture) and its index (`art.idx`), keyed
+by the picture's length and its first 4 KB, so every track of an album with the same cover finds
+it. A picture found there is shown at once, without the DSP.
+
+**As built (art.c):** the picture's bytes read in 32 KB pieces, then unpacked on the DSP by common's
+`pic.c` (TJpgDec with `dspjpeg`, at 1/4: `k = 2`, averaged down to the art's side), GEM given its
+turn at the decoder's next poll after 20 ms of work (with 40 the turns came 60 to 70 ms apart:
+the hub's polls every 8 MCUs and between the set-up's steps come every 15 to 25 ms). On
+Falcon-4 a 500 x 500 cover of 48 KB: read by 95 ms, unpacked in 0.9 s, its turns 35 ms at most,
+shown after 2.0 s; from the cache the next time at once.
+
 ### The window narrower, the volume, the list, the small player (Erez, 3 Nov 2026)
 
 After 0.19 Erez found the window too wide (76 columns, 608 of a VGA screen's 640 pixels) and asked
@@ -1112,6 +1127,27 @@ columns, one row** (448 pixels):
 MiNT and MagiC, VA_DRAGACCWIND from an AV desktop: common's `dd.c`). The menu's Add item takes
 several files at once where the file selector can give them (Selectric's protocol), and one at a
 time with any other.
+
+**The list, as built (0.21, `ui/list.c`, `src/probe.c`):**
+- Up to 1,000 files, in TT RAM where there is some. Each is shown by its name, then by its tags
+  and length once they are read: one file a turn in the background (one open, a few short reads;
+  `probe.c` takes the length from a WAV's or AIFF's header, or an MP3's Xing, Info or VBRI frame,
+  else its bit rate; `tests/probe`).
+- Files come from the command line (the desktop's drop on EPLAY.PRG, several at once), VA_START
+  (the first plays at once), a drop on the window (added; played if nothing plays), and File >
+  Open... (^O, the family's Open): the file chosen, or with none chosen every MP3, WAV and AIFF in
+  the folder, in name order. A folder given or dropped adds its files the same way. Several
+  files picked at once in the file selector wait for Erez's answer on which selector he uses
+  (TOS's can't; Selectric's protocol can).
+- At a file's end the next plays. A double click or Return plays a row; Up and Down select;
+  Delete removes (the one playing stopped first); a right click or Insert opens the row's menu
+  (3.3: Play, Remove from the list, Clear the list), whose commands are in the Edit menu too.
+  Previous and Next go through the list. The window has a sizer and the list a slider.
+- Another file's start is a job (5.x: 50 ms between event calls): the press is answered by its
+  two rows; the next turn opens the file; then the info line, the bar's left (art, text), its
+  right (output, volume) and Play/Pause with the times, a part a turn; a turn that draws reads no
+  file. A row taken out draws the rows under it two a turn. On Falcon-4: a double click 40 ms,
+  Next 45, Return 50, Delete 30.
 
 **The small player** is the bar alone, the album art 40 x 40 (as above).
 

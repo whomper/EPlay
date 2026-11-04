@@ -19,6 +19,9 @@
 #include "click.h"
 #include "play.h"
 #include "settings.h"
+#include "list.h"
+#include "dd.h"
+#include "popup.h"
 #include "elog.h"
 #include "snd.h"
 #include "bar.h"
@@ -29,7 +32,8 @@ extern const char app_version[];
 short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
-enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT };
+enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
+       C_REMOVE };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -41,9 +45,16 @@ static const MBAR_ITEM m_file[] = {
 	{ "Quit", "^Q", C_QUIT },
 	{ 0, 0, 0 }
 };
+static const MBAR_ITEM m_edit[] = {
+	{ "Remove from the list", "Delete", C_REMOVE },
+	{ "Clear the list", 0, C_CLEAR },
+	{ 0, 0, 0 }
+};
 static const MBAR_ITEM m_play[] = {
 	{ "Play/Pause", "Space", C_PLAY },
 	{ "Stop", 0, C_STOP },
+	{ "Previous", 0, C_PREV },
+	{ "Next", 0, C_NEXT },
 	{ "-", 0, 0 },
 	{ "Shuffle", 0, C_SHUFFLE },	/* (the playlist's: out of the bar, 56 columns) */
 	{ "Repeat", 0, C_REPEAT },
@@ -56,12 +67,13 @@ static const MBAR_ITEM m_options[] = {
 static const MBAR_TITLE bar[] = {
 	{ " EPlay ", m_desk },
 	{ " File ", m_file },
+	{ " Edit ", m_edit },
 	{ " Play ", m_play },
 	{ " Options ", m_options },
 	{ 0, 0 }
 };
 
-#define KIND (NAME | CLOSER | MOVER | INFO)
+#define KIND (NAME | CLOSER | MOVER | INFO | SIZER | VSLIDE | UPARROW | DNARROW)
 
 static MBAR mb;
 static short wh = -1;
@@ -134,9 +146,24 @@ static void open_window(void)
 	wind_open(wh, x, y, w, h);
 	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 	bar_layout(&work);
+	av_window(wh, 1);		/* (an AV desktop drops files on it: VA_DRAGACCWIND) */
 }
 
-static void play_file(const char *f)
+/* "Playing 2 of 6 · Falcon 49.1 kHz" (one file alone: no count) */
+static void playing_status(char *st, int n)
+{
+	if (list_cur >= 0 && list_count() > 1)
+		snprintf(st, (size_t)n, "Playing %d of %d  \xfa  %s", list_cur + 1, list_count(), play_out);
+	else
+		snprintf(st, (size_t)n, "Playing  \xfa  %s", play_out);
+}
+
+static int bar_due;		/* the bar to draw in pieces, a part a turn (3, 2, 1; 0 none) */
+static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
+static int status_due;		/* the info line to set the next turn ("Playing 2 of 6 ...") */
+
+/* the file played: opened (play.c), started; its art the step's (play_file) */
+static void play_now(const char *f)
 {
 	char err[160];
 	if (!play_open(f, err, sizeof(err))) {
@@ -148,17 +175,12 @@ static void play_file(const char *f)
 		return;
 	}
 	play_start();
-	art_begin(f);			/* (its picture made in the steps from now) */
 	{
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
 		nf_debug(line);
 	}
-	{
-		char st[100];
-		snprintf(st, sizeof(st), "Playing  \xfa  %s", play_out);
-		status(st);
-	}
+	status_due = 1;			/* (the info line: the AES draws it, a turn of its own) */
 	{
 		/* the whole window for another file (or the same one elsewhere);
 		   for the one shown, Play/Pause and the time (the speed rig's
@@ -167,26 +189,412 @@ static void play_file(const char *f)
 		char now[200];
 		snprintf(now, sizeof(now), "%s|%s|%s|%ld|%ld", play_name, play_tags.title, play_via, play_kbps, play_hz);
 		if (strcmp(now, shown)) {
+			/* (the bar for another file: in the turns after this one, a
+			   part a turn, as a job's slices: the 50 ms between event
+			   calls) */
 			strcpy(shown, now);
-			redraw(&work, BP_ALL);
+			bar_due = 3;
 		} else
 			redraw(0, BP_PLAY | BP_TIME);
 	}
 }
 
+/* the bar drawn again in pieces after another file began (bar_due): its
+   text and art, then Play/Pause with the times; one a turn */
+static void bar_turn(void)
+{
+	if (status_due) {
+		char st[100];
+		status_due = 0;
+		playing_status(st, sizeof(st));
+		status(st);
+		return;
+	}
+	if (bar_due == 3)
+		redraw(0, BP_LEFT);
+	else if (bar_due == 2)
+		redraw(0, BP_RIGHT);
+	else
+		redraw(0, BP_PLAY | BP_TIME);
+	bar_due--;
+}
+
+/* ---- the list (Erez, 3 Nov 2026: files added in bulk) ---- */
+
+static int list_unread;		/* files added whose tags and length aren't read yet */
+static void message(short *msg);
+static void step(int playing);
+
+/* the list's slider as the list and its top are */
+static void sliders(void)
+{
+	int n = list_count(), rows = bar_rows();
+	short size = n > rows ? (short)((long)rows * 1000 / n) : 1000;
+	short pos = n > rows ? (short)((long)list_top * 1000 / (n - rows)) : 0;
+	if (wh <= 0)
+		return;
+	wind_set(wh, WF_VSLSIZE, size, 0, 0, 0);
+	wind_set(wh, WF_VSLIDE, pos, 0, 0, 0);
+}
+
+static void scroll_to(int top)
+{
+	int most = list_count() - bar_rows();
+	if (top > most)
+		top = most;
+	if (top < 0)
+		top = 0;
+	if (top == list_top)
+		return;
+	list_top = top;
+	sliders();
+	redraw(0, BP_LIST);
+}
+
+static void show_row(int i)
+{
+	if (i < 0)
+		return;
+	if (i < list_top)
+		scroll_to(i);
+	else if (i >= list_top + bar_rows())
+		scroll_to(i - bar_rows() + 1);
+}
+
+/* one row drawn again, through the AES's rectangles */
+static void row_redraw(int i)
+{
+	GRECT a, r;
+	if (wh <= 0 || i < list_top || i >= list_top + bar_rows())
+		return;
+	bar_row_area(i, &a);
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w && r.h) {
+		if (rc_intersect(&a, &r))
+			bar_draw_row(&r, i);
+		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+}
+
+static void select_row(int i)
+{
+	int old = list_sel;
+	if (i == old)
+		return;
+	list_sel = i;
+	row_redraw(old);
+	show_row(i);
+	row_redraw(i);
+}
+
+static void play_index(int i)
+{
+	ENTRY *e = list_at(i);
+	int old = list_cur;
+	if (!e)
+		return;
+	list_cur = i;
+	list_sel = i;
+	snprintf(file, sizeof(file), "%s", e->path);
+	show_row(i);
+	row_redraw(old);
+	row_redraw(i);
+	open_due = 1;			/* (opened next turn: the press's answer is the rows) */
+	redraw(0, BP_NAV);
+}
+
+/* MP3, WAV and AIFF by their names' ends (a folder's files: what to add) */
+static int audio_name(const char *n)
+{
+	const char *d = strrchr(n, '.');
+	char e[6];
+	int i;
+	if (!d || strlen(d) > 5)
+		return 0;
+	for (i = 0; d[i + 1] && i < 5; i++)
+		e[i] = (char)(d[i + 1] | 0x20);
+	e[i] = 0;
+	return !strcmp(e, "mp3") || !strcmp(e, "wav") || !strcmp(e, "aif") || !strcmp(e, "aiff") ||
+	       !strcmp(e, "aifc");
+}
+
+/* every MP3, WAV and AIFF in folder dir (ending in '\'), in name order:
+   the first added's index, -1 if none */
+static int add_folder(const char *dir)
+{
+	char mask[200], (*names)[14] = 0, one[200];
+	static char found[200][14];
+	DTA *old = Fgetdta(), dta;
+	int k = 0, i, j, first = -1;
+	names = found;
+	snprintf(mask, sizeof(mask), "%s*.*", dir);
+	Fsetdta(&dta);
+	if (Fsfirst(mask, 0) == 0)
+		do {
+			if (audio_name(dta.d_fname) && k < 200)
+				snprintf(names[k++], 14, "%s", dta.d_fname);
+		} while (Fsnext() == 0);
+	Fsetdta(old);
+	for (i = 1; i < k; i++)		/* (a few hundred at most: an insertion sort) */
+		for (j = i; j > 0 && strcmp(names[j - 1], names[j]) > 0; j--) {
+			char t[14];
+			memcpy(t, names[j], 14);
+			memcpy(names[j], names[j - 1], 14);
+			memcpy(names[j - 1], t, 14);
+		}
+	for (i = 0; i < k; i++) {
+		int at;
+		snprintf(one, sizeof(one), "%s%s", dir, names[i]);
+		at = list_add(one);
+		if (at >= 0 && first < 0)
+			first = at;
+	}
+	return first;
+}
+
+/* one name: a folder's files, or the file; its (first) index */
+static int add_one(const char *f)
+{
+	long a = Fattrib(f, 0, 0);
+	size_t n = strlen(f);
+	if ((a >= 0 && (a & 0x10)) || (n && f[n - 1] == '\\')) {
+		char dir[200];
+		snprintf(dir, sizeof(dir), "%s%s", f, n && f[n - 1] == '\\' ? "" : "\\");
+		return add_folder(dir);
+	}
+	return list_add(f);
+}
+
+/* names as VA_START has them (quoted where they have spaces): added; now 1
+   plays the first of them at once, else it plays only if nothing plays */
+static void add_names(const char *s, int now)
+{
+	char f[256];
+	int first = -1, before = list_count();
+	while ((s = av_arg(s, f, sizeof(f))) != 0) {
+		int i = add_one(f);
+		if (first < 0)
+			first = i;
+	}
+	if (list_count() > before)
+		list_unread = 1;
+	sliders();
+	if (list_count() != before)
+		redraw(0, BP_LIST);
+	if (first >= 0 && (now || (play_state() != PS_PLAYING && !play_paused())))
+		play_index(first);
+	else if (list_count() > before)
+		redraw(0, BP_TEXT);	/* (Next may light) */
+}
+
+/* an MP3 whose album art the DSP unpacks first (Erez, 3 Nov 2026): its
+   music waits for it, the window answering meanwhile (turn()) */
+static char pending_play[320];
+
+static void play_file(const char *f)
+{
+	play_log_stop();		/* (the one playing gives the DSP back) */
+	play_stop();
+	if (art_begin(f) == ART_FIRST) {
+		snprintf(pending_play, sizeof(pending_play), "%s", f);
+		status("Getting the album art...");
+		return;
+	}
+	pending_play[0] = 0;
+	play_now(f);
+}
+
+/* File > Add... (^O): a file, or with none chosen the whole folder; played
+   if nothing plays */
 static void open_file(void)
 {
 	short button = 0;
+	char *e;
+	long n;
+	int i, before = list_count();
 	if (!path[0])
 		snprintf(path, sizeof(path), "%s*.*", app_dir());
-	if (!fsel_exinput(path, name, &button, "Play which file?") || !button || !name[0])
+	name[0] = 0;
+	if (!fsel_exinput(path, name, &button, "Open a file (none: the folder)") || !button)
 		return;
-	{
-		char *e = strrchr(path, '\\');
-		long n = e ? e - path + 1 : 0;
+	e = strrchr(path, '\\');
+	n = e ? e - path + 1 : 0;
+	if (name[0]) {
 		snprintf(file, sizeof(file), "%.*s%s", (int)n, path, name);
+		i = list_add(file);
+	} else {
+		char dir[200];
+		snprintf(dir, sizeof(dir), "%.*s", (int)n, path);
+		i = add_folder(dir);
 	}
-	play_file(file);
+	{
+		char line[60];
+		snprintf(line, sizeof(line), "EPLAY list: %d files\n", list_count());
+		nf_debug(line);			/* (the rigs) */
+	}
+	if (list_count() > before)
+		list_unread = 1;
+	sliders();
+	redraw(0, BP_LIST);
+	if (i >= 0 && play_state() != PS_PLAYING && !play_paused())
+		play_index(i);
+	else
+		redraw(0, BP_TEXT);
+}
+
+/* File > Clear the list: all but the one playing */
+static void list_clear_but_playing(void)
+{
+	ENTRY keep, *e = list_at(list_cur);
+	int playing = e && (play_state() == PS_PLAYING || play_paused());
+	if (playing)
+		keep = *e;
+	list_clear();
+	if (playing) {
+		list_cur = list_add(keep.path);
+		*list_at(list_cur) = keep;
+	}
+	sliders();
+	redraw(0, BP_LIST | BP_TEXT);
+}
+
+/* the window made taller or shorter (its width is the bar's): whole
+   rows of the list, three at the least */
+static void sized(short w, short h)
+{
+	short x, y, ww, hh, bw, bh, rh = bar_row_h(), base, rows, t0, t1, t2, wk;
+	(void)w;
+	wind_get(wh, WF_CURRXYWH, &x, &y, &ww, &hh);
+	bar_size(&bw, &bh);
+	base = bh - 6 * rh;		/* the bar and the list's heading */
+	wind_calc(WC_WORK, KIND, x, y, ww, h, &t0, &t1, &t2, &wk);
+	rows = (short)((wk - base) / rh);
+	if (rows < 3)
+		rows = 3;
+	wind_calc(WC_BORDER, KIND, work.x, work.y, work.w, base + rows * rh, &t0, &t1, &t2, &hh);
+	wind_set(wh, WF_CURRXYWH, x, y, ww, hh);
+	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
+	bar_layout(&work);
+	scroll_to(list_top);
+	sliders();
+}
+
+static int rows_from = -1;	/* the list's rows from this one on to draw again, two a turn */
+
+static void rows_turn(void)
+{
+	int k;
+	for (k = 0; k < 2 && rows_from >= 0; k++) {
+		row_redraw(rows_from);
+		if (++rows_from >= list_top + bar_rows())
+			rows_from = -1;
+	}
+}
+
+/* the selected file out of the list (the one playing stopped first) */
+static void list_remove_sel(void)
+{
+	int i = list_sel;
+	if (i < 0)
+		return;
+	if (i == list_cur) {
+		play_log_stop();
+		play_stop();
+		status("Stopped.");
+	}
+	list_remove(i);
+	list_sel = i < list_count() ? i : list_count() - 1;
+	if (list_top > 0 && list_top + bar_rows() > list_count())
+		scroll_to(list_count() - bar_rows());	/* (the whole list: one draw) */
+	else
+		rows_from = i;		/* the rows from it on, two a turn */
+	sliders();
+	redraw(0, BP_NAV);
+}
+
+static void command(int c);
+
+/* a row's menu (the guidelines' 3.3): its double click's action first, then
+   what the menu bar has for it, with the keys */
+static void row_menu(short x, short y)
+{
+	static const char *const lab[] = { "  Play                  Return ", "-",
+					   "  Remove from the list  Delete ", "  Clear the list " };
+	switch (popup(x, y, lab, 4)) {
+	case 0:
+		play_index(list_sel);
+		break;
+	case 2:
+		command(C_REMOVE);
+		break;
+	case 3:
+		command(C_CLEAR);
+		break;
+	}
+}
+
+/* the list's keys: Up and Down move the selection, Return plays it, Delete
+   takes it out of the list. 1 when the key was one of them */
+static int list_keys(short kr)
+{
+	short scan = (kr >> 8) & 0xff;
+	int n = list_count();
+	if (!n)
+		return 0;
+	switch (scan) {
+	case 0x48:			/* Up */
+		select_row(list_sel > 0 ? list_sel - 1 : 0);
+		return 1;
+	case 0x50:			/* Down */
+		select_row(list_sel + 1 < n ? list_sel + 1 : n - 1);
+		return 1;
+	case 0x1c:			/* Return */
+	case 0x72:			/* Enter */
+		if (list_sel >= 0)
+			play_index(list_sel);
+		return 1;
+	case 0x53:			/* Delete */
+		list_remove_sel();
+		return 1;
+	case 0x52:			/* Insert: the selected row's menu (3.3) */
+		if (list_sel >= 0) {
+			GRECT r;
+			show_row(list_sel);
+			bar_row_area(list_sel, &r);
+			row_menu(r.x + 4 * bar_row_h(), r.y + r.h);
+		}
+		return 1;
+	}
+	return 0;
+}
+
+static void idle_step(void)
+{
+	step(play_state() == PS_PLAYING);
+}
+
+/* a press on the list: the row selected at once; a double click plays it
+   (guidelines 5.8: the second press's release) */
+static void list_press(short mx, short my, int right)
+{
+	int i = bar_row_at(my), dbl;
+	GRECT r;
+	short dx, dy;
+	if (i < 0)
+		return;
+	dbl = press_double((short)i, mx, my);
+	select_row(i);
+	if (right) {			/* (a right press: the row's menu) */
+		row_menu(mx, my);
+		return;
+	}
+	bar_row_area(i, &r);
+	if (press_track(&r, mx, my, idle_step, message, &dx, &dy) == PRESS_IN && dbl)
+		play_index(i);
 }
 
 static void command(int c)
@@ -204,6 +612,20 @@ static void command(int c)
 	case C_SETTINGS:
 		settings_dialog();
 		break;
+	case C_CLEAR:
+		list_clear_but_playing();
+		break;
+	case C_REMOVE:
+		list_remove_sel();
+		break;
+	case C_PREV:
+		if (list_cur > 0)
+			play_index(list_cur - 1);
+		break;
+	case C_NEXT:
+		if (list_cur + 1 < list_count())
+			play_index(list_cur + 1);
+		break;
 	case C_PLAY:
 		if (play_state() == PS_PLAYING) {
 			/* Play/Pause: the sound stopped where it is, the DSP given back */
@@ -220,7 +642,7 @@ static void command(int c)
 				alert(1, "[1][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
-				snprintf(st, sizeof(st), "Playing  \xfa  %s", play_out);
+				playing_status(st, sizeof(st));
 				status(st);
 				snprintf(st, sizeof(st), "EPLAY resumed at %ld ms\n", play_ms());
 				nf_debug(st);		/* (the rigs) */
@@ -230,11 +652,13 @@ static void command(int c)
 			/* (opened at a place the position bar went to, stopped) */
 			char st[100];
 			play_start();
-			snprintf(st, sizeof(st), "Playing  \xfa  %s", play_out);
+			playing_status(st, sizeof(st));
 			status(st);
 			redraw(0, BP_PLAY | BP_TIME);
-		} else if (play_state() != PS_PLAYING && file[0])
-			play_file(file);
+		} else if (play_state() != PS_PLAYING && list_sel >= 0)
+			play_index(list_sel);
+		else if (play_state() != PS_PLAYING && list_count())
+			play_index(list_cur >= 0 ? list_cur : 0);
 		break;
 	case C_STOP:
 		if (play_state() == PS_PLAYING) {
@@ -265,6 +689,7 @@ static void message(short *msg);
    reading don't add up in one stretch (the position bar's release on a
    stock Falcon: 25 ms of seek and 20 of reading) */
 static unsigned long turn_t0;
+static int next_due;		/* a file played to its end: the list's next, next turn */
 
 static void step(int playing)
 {
@@ -273,6 +698,8 @@ static void step(int playing)
 		if (play_state() != PS_PLAYING) {
 			status(play_out[0] == 'T' ? play_out : "Played to the end.");
 			redraw(0, BP_PLAY | BP_TIME);
+			if (play_out[0] != 'T' && list_cur >= 0 && list_cur + 1 < list_count())
+				next_due = 1;	/* (the next file: at the loop's turn, not inside a press) */
 		} else if (bar_drag < 0) {
 			redraw(0, BP_TIME);
 		}
@@ -444,18 +871,28 @@ static void message(short *msg)
 {
 	const char *s;
 	switch (av_message(msg, &s)) {
-	case AV_START: {
-		char f[256];
-		if (av_arg(s, f, sizeof(f))) {
-			snprintf(file, sizeof(file), "%s", f);
-			play_file(file);
-		}
+	case AV_START:
+		/* the desktop's "open": the first played now, the rest added */
+		add_names(s, 1);
 		return;
-	}
 	case AV_NONE:
 		break;
 	default:
 		return;
+	}
+	{
+		DROP d;
+		switch (dd_message(msg, DD_WANT_FILES, &d)) {
+		case DD_FILES:
+			add_names(d.data, 0);	/* (dropped: added; played if nothing plays) */
+			dd_done(&d);
+			return;
+		case DD_NONE:
+			break;
+		default:
+			dd_done(&d);
+			return;
+		}
 	}
 	switch (msg[0]) {
 	case MN_SELECTED:
@@ -482,6 +919,28 @@ static void message(short *msg)
 		wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 		bar_layout(&work);
 		break;
+	case WM_SIZED:
+		sized(msg[6], msg[7]);
+		break;
+	case WM_ARROWED:
+		switch (msg[4]) {
+		case WA_UPPAGE:
+			scroll_to(list_top - bar_rows());
+			break;
+		case WA_DNPAGE:
+			scroll_to(list_top + bar_rows());
+			break;
+		case WA_UPLINE:
+			scroll_to(list_top - 1);
+			break;
+		case WA_DNLINE:
+			scroll_to(list_top + 1);
+			break;
+		}
+		break;
+	case WM_VSLID:
+		scroll_to((int)((long)msg[4] * (list_count() - bar_rows()) / 1000));
+		break;
 	case AP_TERM:
 		quit = 1;
 		break;
@@ -501,13 +960,39 @@ static void crash_quit(const char *what)
    all inside the album art's decode: nested), and the music fed */
 static void turn(int nested)
 {
+	int piece = 0;
 	AEVENT ev;
 	short msg[8];
 	short which;
 	int playing = play_state() == PS_PLAYING;
-	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1,
-			    nested || art_pending() || seek_to >= 0 ? 0 : play_wait_ms(), msg, &ev);
+	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
+	   row's menu) */
+	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
+			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || bar_due || status_due ||
+			    rows_from >= 0 ? 0 :
+			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
+	if (pending_play[0] && !nested && !art_needs_dsp()) {
+		/* (the album art unpacked: the MP3 it waited for) */
+		char f[320];
+		snprintf(f, sizeof(f), "%s", pending_play);
+		pending_play[0] = 0;
+		play_now(f);
+		piece = 1;
+	} else if (next_due && !nested) {
+		next_due = 0;
+		play_index(list_cur + 1);
+	} else if (open_due && !nested) {
+		open_due = 0;
+		play_file(file);
+		piece = 1;
+	} else if ((bar_due || status_due) && !nested) {
+		bar_turn();
+		piece = 1;
+	} else if (rows_from >= 0 && !nested) {
+		rows_turn();
+		piece = 1;
+	}
 	if (seek_to >= 0 && !nested) {
 		do_seek();
 		step(play_state() == PS_PLAYING);
@@ -525,6 +1010,8 @@ static void turn(int nested)
 				command(C_SETTINGS);
 		} else if (a == ' ')
 			command(C_PLAY);	/* Play/Pause */
+		else if (!key_ctrl(ev.kstate, ev.kreturn) && list_keys(ev.kreturn))
+			;
 		else if (a == '+' || a == '-') {
 			/* the volume a step of 3 dB (two of the bar's) */
 			char line[40];
@@ -533,6 +1020,8 @@ static void turn(int nested)
 			nf_debug(line);		/* (the speed rig's) */
 		}
 	}
+	if ((which & MU_BUTTON) && ev.mbutton == 2 && bar_hit(ev.mx, ev.my) == BH_LIST)
+		list_press(ev.mx, ev.my, 1);
 	if ((which & MU_BUTTON) && ev.mbutton == 1) {
 		/* (Play/Pause only where it would act: with a file; the
 		   playlist's controls come with phase 4) */
@@ -543,8 +1032,17 @@ static void turn(int nested)
 			drag_pos(ev.mx, ev.my);
 		else if (hit == BH_VOL)
 			drag_vol(ev.mx, ev.my);
+		else if (hit == BH_PREV && list_cur > 0 && track(BH_PREV, BP_TEXT))
+			command(C_PREV);
+		else if (hit == BH_NEXT && list_cur + 1 < list_count() && track(BH_NEXT, BP_TEXT))
+			command(C_NEXT);
+		else if (hit == BH_LIST)
+			list_press(ev.mx, ev.my, 0);
 	}
-	step(playing);
+	/* (a turn that drew a piece of the window reads no more of the file:
+	   a 32 KB read after it went past the 50 ms between event calls; the
+	   queue is filled the turn after) */
+	step(playing && !piece);
 }
 
 const long cpu_need = 30;
@@ -617,6 +1115,10 @@ int app_main(void)
 	graf_mouse(ARROW, 0);
 	open_window();
 	art_init(bar_art_side());
+	if (!list_init()) {
+		alert(1, "[3][EPlay: not enough memory.][ Quit ]");
+		quit = 1;
+	}
 	{
 		char line[60];
 		snprintf(line, sizeof(line), "EPLAY external clock: %ld Hz\n", snd_ext_rate);
@@ -647,18 +1149,23 @@ int app_main(void)
 		status("No external clock: the Falcon's own rates.");
 	crash_offer("EPlay", "in EPlay's folder");
 	{
-		const char *cmd = av_command();	/* started with a file */
-		char f[256];
-		if (*cmd && av_arg(cmd, f, sizeof(f))) {
-			snprintf(file, sizeof(file), "%s", f);
-			play_file(file);
-		}
+		const char *cmd = av_command();	/* started with files */
+		if (*cmd)
+			add_names(cmd, 1);
 	}
 
 	while (!quit) {
 		turn(0);
 		if (art_pending() && art_step(art_turn))
 			redraw(0, BP_ART);	/* (the album art made: shown) */
+		else if (list_unread) {
+			/* one file's tags and length, then its row */
+			int row;
+			if (list_step(&row))
+				row_redraw(row);
+			else
+				list_unread = 0;
+		}
 	}
 
 	play_log_stop();
@@ -670,6 +1177,7 @@ int app_main(void)
 	menu_bar(mb.tree, 0);
 	bar_colours_back();
 	if (wh > 0) {
+		av_window(wh, 0);
 		wind_close(wh);
 		wind_delete(wh);
 	}

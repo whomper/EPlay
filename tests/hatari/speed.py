@@ -20,6 +20,8 @@ than on a still screen.
 """
 import importlib.util
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -35,18 +37,30 @@ _spec.loader.exec_module(speed)
 DESK = (40, 9)
 ABOUT = (60, 27)
 # the bar's round Play/Pause button (design D at 56 columns: Erez, 3 Nov 2026)
-PLAY = PAUSE = (400, 150)
-POS_MID = (400, 185)		# the position bar's middle
-VOL_Q = (509, 185)		# a quarter of the volume bar: 4 of 16
+# (the window 11 pixels to the left of 0.20's: the list's slider at its right)
+PLAY = PAUSE = (389, 150)
+POS_MID = (389, 185)		# the position bar's middle
+VOL_Q = (498, 185)		# a quarter of the volume bar: 4 of 16
+NEXT = (421, 150)
+ROW = [(300, 229 + 20 * i) for i in range(6)]	# the list's rows
 SECS = 120	# (long enough not to end before the last action, when the emulator runs fast)
 
 
 class Rig(speed.Rig):
+    quick = False
+
     def still(self, most=30):
         """while it plays the time changes each second: a few seconds are
-        taken as settled (the stretches are on the console meanwhile)"""
-        time.sleep(3)
+        taken as settled (the stretches are on the console meanwhile); at
+        once for the start of an MP3 whose cover is unpacked first (its wait
+        is a row of its own)"""
+        time.sleep(0.3 if self.quick else 3)
         return True
+
+    def wait_line(self, text, secs=30):
+        end = time.time() + secs
+        while time.time() < end and text not in self.console():
+            time.sleep(0.5)
 
     def press(self, x, y):
         """the button down over x, y (held: the guidelines' 5.8 times the
@@ -55,6 +69,12 @@ class Rig(speed.Rig):
         self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
         time.sleep(0.4)
         self.xdo("mousedown", "1")
+
+    def dclick(self, x, y):
+        g = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", self.win()).split())
+        self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
+        time.sleep(0.4)
+        self.xdo("click", "--repeat", "2", "--delay", "120", "1")
 
     def let_go(self):
         self.xdo("mouseup", "1")
@@ -105,12 +125,34 @@ def session(work, spec, kind):
             subprocess.run(["lame", "-t", "--quiet", "--noreplaygain", "-b", "320", "-m", "s",
                             "--tt", "Long", "--ta", "The rig", "--ti", cover, src,
                             os.path.join(r.hd, name)], check=True)
+        elif kind == "list":
+            return list_session(r, src)
         else:
             name, what = "LONG.WAV", "a WAV (CD quality)"
             subprocess.run(["sox", src, os.path.join(r.hd, name)], check=True)
         r.write("TAIL.TXT", "C:\\%s\n" % name)
-        r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
-        r.results[-1] = ("started, %s playing" % what, "AESSTART", speed.START)
+        shutil.rmtree(os.path.join(r.hd, "cache"), ignore_errors=True)
+        if kind == "mp3":
+            # the start ends when the window is up; an MP3 with a cover not
+            # in the cache waits for the DSP to unpack it, a row of its own
+            # (the hub, 3 Nov 2026: 3000 ms, and its turns a job's)
+            r.quick = True
+            r.start("C:\\LAUNCH.PRG", ready="EPLAY status: Getting the album art")
+            r.quick = False
+            # (the start: AESSTART and the stretches to the window's first
+            # draw; the rig's own wait after it would add the cover's
+            # unpacking turns, which are the next row's)
+            con = r.console()
+            at = con.find("EPLAY status: Getting the album art")
+            drawn = con.find("WM_REDRAW", at)
+            if at >= 0 and drawn >= 0:
+                r.start_end = con.find("\n", drawn) + 1
+            r.results[-1] = ("started, the window drawn", "AESSTART", speed.START)
+            r.act("an MP3 with an uncached cover: playing starts", 3000,
+                  lambda: r.wait_line("EPLAY playing"), job=True)
+        else:
+            r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
+            r.results[-1] = ("started, %s playing" % what, "AESSTART", speed.START)
         r.act("%s playing, 5 s" % what, speed.KEY, lambda: time.sleep(5))
         r.act("About box opened (playing)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
@@ -164,6 +206,14 @@ def session(work, spec, kind):
                 if os.path.exists(os.path.join(r.hd, n)):
                     log = open(os.path.join(r.hd, n), errors="replace").read()
             art = [l for l in log.split("\n") if l.startswith("album art")]
+            # the job rule while a cover is unpacked (the hub, 3 Nov 2026):
+            # no turn over 50 ms; EPlay logs its longest between the
+            # decoder's polls (the rig's start row can't see them all)
+            gap = re.search(r"the longest between polls (\d+)", log)
+            if gap and int(gap.group(1)) > speed.JOB_030:
+                print("FAIL  the cover's unpacking: %s ms between turns (a job's are %d at most)"
+                      % (gap.group(1), speed.JOB_030))
+                rc = 1
             # (made where the 68030 is fast enough, else left: art.c)
             if not art or not (art[0].startswith("album art: JPEG") or "left for a faster 68030" in art[0]):
                 print("FAIL  the album art: %s" % (art or "not made"))
@@ -186,10 +236,48 @@ def session(work, spec, kind):
         r.stop()
 
 
+def list_session(r, src):
+    """the list (Erez, 3 Nov 2026: files added in bulk): eight files given
+    at the start (as dropped on the program), their tags and lengths read
+    in the background a file a turn, then a row selected, one played by a
+    double click, Next, the keys"""
+    names = ["T%d.%s" % (i + 1, "MP3" if i % 2 else "WAV") for i in range(8)]
+    short = os.path.join(r.work, "short.wav")      # (30 s each: the rig's disk)
+    subprocess.run(["sox", src, short, "trim", "0", "30"], check=True)
+    src = short
+    for i, n in enumerate(names):
+        if n.endswith("MP3"):
+            subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", "192", "--tt", "Track %d" % (i + 1),
+                            "--ta", "The rig", "--tl", "The list", src, os.path.join(r.hd, n)], check=True)
+        else:
+            subprocess.run(["sox", src, os.path.join(r.hd, n)], check=True)
+    r.write("TAIL.TXT", " ".join("C:\\" + n for n in names) + "\n")
+    r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
+    r.results[-1] = ("started, 8 files given, the first playing", "AESSTART", speed.START)
+    r.act("the list's files read (tags, lengths)", speed.KEY, lambda: time.sleep(6), job=True)
+    r.act("a row selected (clicked)", speed.KEY, lambda: r.click(*ROW[2]))
+    r.act("a row played (double click)", speed.KEY, lambda: r.dclick(*ROW[3]))
+    r.act("Next", speed.KEY, lambda: r.click(*NEXT))
+    r.act("Down", speed.KEY, lambda: r.key("Down"))
+    r.act("Return (plays the selected)", speed.KEY, lambda: r.key("Return"))
+    r.act("Delete (one out of the list)", speed.KEY, lambda: (r.key("Up"), r.key("Delete")))
+    rc = r.report()
+    lines = r.console().split("\n")
+    played = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
+    want = ["T1.WAV", "T4.MP3", "T5.WAV", "T6.MP3"]
+    if played[:4] != want:
+        print("FAIL  played %s, not %s (the first, a double click on row 4, Next, Return on row 6)" %
+              (played, want))
+        rc = 1
+    else:
+        print("ok    played in turn: %s" % " ".join(played[:4]))
+    return rc
+
+
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
-    kinds = sys.argv[3:] or ["mp3", "wav"]
+    kinds = sys.argv[3:] or ["mp3", "wav", "list"]
     return max(session(work, spec, k) for k in kinds)
 
 

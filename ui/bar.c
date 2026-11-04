@@ -22,6 +22,7 @@
 #include "text.h"
 #include "dialog.h"
 #include "art.h"
+#include "list.h"
 
 int bar_held = BH_NONE, bar_drag = -1, bar_vdrag = -1;
 
@@ -170,7 +171,19 @@ void bar_area(int parts, GRECT *r)
 		*r = w_list;
 	else if (parts == BP_ART)
 		*r = w_art;
-	else if (parts == BP_VOL) {
+	else if (parts == BP_LEFT) {
+		*r = w_bar;
+		r->w = w_ctl.x - w_bar.x;
+		r->h -= 1;
+	} else if (parts == BP_RIGHT) {
+		*r = w_bar;
+		r->x = w_out.x;
+		r->w = w_bar.x + w_bar.w - w_out.x;
+		r->h -= 1;
+	} else if (parts == BP_NAV) {
+		*r = b_btn[BH_PREV - 1];
+		r->w = b_btn[BH_NEXT - 1].x + b_btn[BH_NEXT - 1].w - r->x;
+	} else if (parts == BP_VOL) {
 		*r = w_vol;
 		r->x -= 18;
 		r->w += 18;
@@ -386,16 +399,6 @@ static void mask_draw(const MASK *m, short x, short y, short pen)
 /* the shapes, made for the layout's sizes */
 static MASK k_art, k_hole, k_spot, k_play, k_ptri, k_prev, k_next, k_spk;
 
-/* every other pixel (mono's grey: a control that doesn't work yet) */
-static void mask_stipple(MASK *m)
-{
-	short y, i;
-	if (m->bits)
-		for (y = 0; y < m->h; y++)
-			for (i = 0; i < m->wpl; i++)
-				m->bits[y * m->wpl + i] &= (y & 1) ? 0x5555 : 0xaaaa;
-}
-
 static void make_masks(void)
 {
 	short s = (short)(rad * 10 / 13), h = b_btn[BH_PREV - 1].h / 2;
@@ -408,10 +411,6 @@ static void make_masks(void)
 	mask_tri(&k_prev, h * 3 / 4 + 1, h, -1);
 	mask_tri(&k_next, h * 3 / 4 + 1, h, 1);
 	mask_tri(&k_spk, 5, 13, -1);
-	if (mono) {
-		mask_stipple(&k_prev);
-		mask_stipple(&k_next);
-	}
 }
 
 static void fmt_time(char *out, int n, long ms)
@@ -528,9 +527,10 @@ static void draw_buttons(int parts)
 		} else
 			mask_draw(&k_ptri, cx - s / 3, cy - s / 2, play_name[0] ? p_bar : p_trk);
 	}
-	if (parts & BP_TEXT) {
-		/* Previous, Next: the playlist's (phase 4), dim */
+	if (parts & (BP_TEXT | BP_NAV)) {
+		/* Previous, Next: the list's, dim where there is none */
 		int i;
+		short pen;
 		for (i = 0; i < 5; i++) {
 			GRECT *c = &b_btn[i];
 			short x = c->x + c->w / 2, y = c->y + c->h / 2, h = c->h / 2, ww = h * 3 / 4;
@@ -539,12 +539,14 @@ static void draw_buttons(int parts)
 			gbox(c, p_bar);
 			switch (i + 1) {
 			case BH_PREV:
-				box(x - ww / 2 - 2, y - h / 2, 2, h, p_dim, mono);
-				mask_draw(&k_prev, x - ww / 2, y - h / 2, p_dim);
+				pen = bar_held == BH_PREV ? p_acc : list_cur > 0 ? p_txt : p_dim;
+				box(x - ww / 2 - 2, y - h / 2, 2, h, pen, 0);
+				mask_draw(&k_prev, x - ww / 2, y - h / 2, pen);
 				break;
 			case BH_NEXT:
-				mask_draw(&k_next, x - ww / 2, y - h / 2, p_dim);
-				box(x + ww / 2 + 1, y - h / 2, 2, h, p_dim, mono);
+				pen = bar_held == BH_NEXT ? p_acc : list_cur + 1 < list_count() ? p_txt : p_dim;
+				mask_draw(&k_next, x - ww / 2, y - h / 2, pen);
+				box(x + ww / 2 + 1, y - h / 2, 2, h, pen, 0);
 				break;
 			case BH_SHUFFLE:
 				line(x - 6, y - 3, x - 3, y - 3, p_dim);
@@ -587,9 +589,46 @@ static void draw_time(void)
 	box(w_track.x, w_track.y, (short)fillw, 4, p_acc, 0);
 }
 
+/* one row of the list: the file i, its ground the playing row's (the
+   bar's colours), the selected one's, or every other one's */
+static void draw_row(int i)
+{
+	short x = w_list.x + cw, ry = w_list.y + (short)(i - list_top + 1) * row_h;
+	short c_title = x + 3 * cw, c_time = w_list.x + w_list.w - 6 * cw, c_album = c_time - 13 * cw,
+	      c_artist = c_album - 12 * cw, tw = (short)((c_artist - c_title) / cw - 1);
+	short fg = 1;
+	ENTRY *e = list_at(i);
+	char t[12];
+	if (i < list_top || ry + row_h > w_list.y + w_list.h)
+		return;
+	if (e && i == list_cur) {
+		box(w_list.x, ry, w_list.w, row_h, p_bar, 0);
+		fg = p_acc;
+	} else if (e && i == list_sel && !mono) {
+		box(w_list.x, ry, w_list.w, row_h, p_dim, 0);
+		fg = p_bar;
+	} else
+		box(w_list.x, ry, w_list.w, row_h, (i - list_top) & 1 ? p_alt : 0, 0);
+	if (!e)
+		return;
+	if (i == list_sel && mono && i != list_cur) {	/* (mono: lines over and under) */
+		box(w_list.x, ry, w_list.w, 1, 1, 0);
+		box(w_list.x, ry + row_h - 1, w_list.w, 1, 1, 0);
+	}
+	snprintf(t, sizeof(t), "%d", i + 1);
+	text(x + (i + 1 < 10 ? cw : 0), ry + 2, t, 3, fg);
+	text(c_title, ry + 2, list_name(e), tw, e->bad && !mono && i != list_cur ? p_dim : fg);
+	text(c_artist, ry + 2, e->artist, 11, fg);
+	text(c_album, ry + 2, e->album, 12, fg);
+	if (e->len_ms > 0) {
+		fmt_time(t, sizeof(t), e->len_ms);
+		text(w_list.x + w_list.w - cw - (short)strlen(t) * cw, ry + 2, t, 6, fg);
+	}
+}
+
 static void draw_list(void)
 {
-	short y = w_list.y, x = w_list.x + cw, tw;
+	short y = w_list.y, x = w_list.x + cw;
 	short c_title = x + 3 * cw, c_time = w_list.x + w_list.w - 6 * cw, c_album = c_time - 13 * cw,
 	      c_artist = c_album - 12 * cw;
 	int r;
@@ -598,26 +637,67 @@ static void draw_list(void)
 	text(c_title, y + 2, "Title", 5, p_hdr);
 	text(c_artist, y + 2, "Artist", 6, p_hdr);
 	text(c_album, y + 2, "Album", 5, p_hdr);
-	text(c_time, y + 2, "Time", 4, p_hdr);
+	text(c_time + cw, y + 2, "Time", 4, p_hdr);
 	box(w_list.x, y + row_h - 1, w_list.w, 1, mono ? 1 : p_dim, 0);
-	tw = (short)((c_artist - c_title) / cw - 1);
-	for (r = 0; r < LIST_ROWS; r++) {
-		short ry = y + (r + 1) * row_h;
-		if (ry + row_h > w_list.y + w_list.h)
-			break;
-		if (r == 0 && play_name[0]) {
-			char t[12];
-			const char *title = play_tags.title[0] ? play_tags.title : play_name;
-			box(w_list.x, ry, w_list.w, row_h, p_bar, 0);
-			text(x, ry + 2, "1", 2, p_acc);
-			text(c_title, ry + 2, title, tw, p_acc);
-			text(c_artist, ry + 2, play_tags.artist, 11, p_acc);
-			text(c_album, ry + 2, play_tags.album, 12, p_acc);
-			fmt_time(t, sizeof(t), play_len_ms());
-			text(c_time, ry + 2, t, 5, p_acc);
-		} else if (r & 1)
-			box(w_list.x, ry, w_list.w, row_h, p_alt, 0);
+	if (!list_count()) {
+		text(c_title, y + row_h + 2, "File > Add... (^O), or drag files here", 40, mono ? 1 : p_dim);
+		return;
 	}
+	for (r = 0; r < bar_rows(); r++)
+		draw_row(list_top + r);
+}
+
+int bar_rows(void)
+{
+	short n = (short)((w_list.h - row_h) / row_h);
+	return n > 0 ? n : 0;
+}
+
+void bar_row_area(int i, GRECT *r)
+{
+	r->x = w_list.x;
+	r->y = w_list.y + (short)(i - list_top + 1) * row_h;
+	r->w = w_list.w;
+	r->h = row_h;
+}
+
+/* one row drawn again, within clip (the redraw's rectangle) */
+void bar_draw_row(const GRECT *clip, int i)
+{
+	GRECT r = *clip, a;
+	short pxy[4];
+	bar_row_area(i, &a);
+	if (i < list_top || i >= list_top + bar_rows() || !rc_intersect(&a, &r))
+		return;
+	draw_forget();
+	cur_fill = cur_pat = cur_line = cur_tcol = cur_fx = -1;
+	clip_r = r;
+	pxy[0] = r.x;
+	pxy[1] = r.y;
+	pxy[2] = r.x + r.w - 1;
+	pxy[3] = r.y + r.h - 1;
+	text_clip(vdi_h, pxy);
+	vswr_mode(vdi_h, 2);
+	draw_row(i);
+	text_noclip(vdi_h);
+	draw_forget();
+}
+
+int bar_row_at(short y)
+{
+	int r;
+	if (y < w_list.y + row_h)
+		return -1;
+	r = (y - w_list.y) / row_h - 1;
+	if (r >= bar_rows())
+		return -1;
+	r += list_top;
+	return r < list_count() ? r : -1;
+}
+
+short bar_row_h(void)
+{
+	return row_h;
 }
 
 void bar_draw(const GRECT *clip, int parts)
@@ -640,6 +720,15 @@ void bar_draw(const GRECT *clip, int parts)
 		draw_art();
 	if (parts == BP_VOL)
 		draw_vol();
+	if (parts == BP_LEFT) {			/* (another file: a piece a turn) */
+		box(w_bar.x, w_bar.y, w_ctl.x - w_bar.x, w_bar.h - 1, p_bar, 0);
+		draw_art();
+		draw_text();
+	}
+	if (parts == BP_RIGHT) {
+		box(w_out.x, w_bar.y, w_bar.x + w_bar.w - w_out.x, w_bar.h - 1, p_bar, 0);
+		draw_out();
+	}
 	if (parts & BP_TEXT) {
 		box(w_bar.x, w_bar.y, w_bar.w, w_bar.h - 1, p_bar, 0);
 		box(w_bar.x, w_bar.y + w_bar.h - 1, w_bar.w, 1, 1, 0);
@@ -647,7 +736,7 @@ void bar_draw(const GRECT *clip, int parts)
 		draw_text();
 		draw_out();
 	}
-	if (parts & (BP_PLAY | BP_TEXT))
+	if (parts & (BP_PLAY | BP_TEXT | BP_NAV))
 		draw_buttons(parts);
 	if (parts & (BP_TIME | BP_TEXT))
 		draw_time();

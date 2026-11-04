@@ -22,6 +22,9 @@ enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_POS, BH_VOL
 #define BP_LIST  8
 #define BP_ART   16		/* the album art alone */
 #define BP_VOL   32		/* the speaker and the volume alone */
+#define BP_NAV   64		/* Previous and Next (and Play/Pause between them) */
+#define BP_LEFT  128		/* the album art, the title, the artist, the labels */
+#define BP_RIGHT 256		/* the output, the speaker and the volume */
 #define BP_ALL   0xff
 
 void bar_colours(void);		/* the pens, from the screen (at the start) */
@@ -33,7 +36,14 @@ void bar_area(int parts, GRECT *r);
 /* the parts that meet clip */
 void bar_draw(const GRECT *clip, int parts);
 int bar_hit(short x, short y);	/* BH_... */
-short bar_art_side(void);	/* the album art's side, in pixels */
+short bar_art_side(void);
+/* the list: the rows it shows, one row drawn again (within clip), its
+   area, the file at y (-1: none), a row's height */
+int bar_rows(void);
+void bar_draw_row(const GRECT *clip, int i);
+void bar_row_area(int i, GRECT *r);
+int bar_row_at(short y);
+short bar_row_h(void);	/* the album art's side, in pixels */
 /* the position bar: x's place as a share of the file, 0 to 1000 */
 int bar_pos_at(short x);
 int bar_vol_at(short x);	/* the volume bar: x's place, 0 to VOL_MAX */
