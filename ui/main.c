@@ -149,11 +149,13 @@ static void open_window(void)
 	av_window(wh, 1);		/* (an AV desktop drops files on it: VA_DRAGACCWIND) */
 }
 
-/* "Playing 2 of 6 · Falcon 49.1 kHz" (one file alone: no count) */
+/* "Playing 2 of 6 · Falcon 49.1 kHz" (one file alone: no count; "of 256,
+   the list full" while files were left out for want of memory) */
 static void playing_status(char *st, int n)
 {
 	if (list_cur >= 0 && list_count() > 1)
-		snprintf(st, (size_t)n, "Playing %d of %d  \xfa  %s", list_cur + 1, list_count(), play_out);
+		snprintf(st, (size_t)n, "Playing %d of %d%s  \xfa  %s", list_cur + 1, list_count(),
+			 list_full ? ", the list full" : "", play_out);
 	else
 		snprintf(st, (size_t)n, "Playing  \xfa  %s", play_out);
 }
@@ -368,6 +370,22 @@ static int add_one(const char *f)
 	return list_add(f);
 }
 
+/* files left out for want of memory (the reserve kept for the AES): said
+   on the info line and in the log, once a time it happens */
+static void full_note(void)
+{
+	static int said;
+	if (list_full && !said) {
+		long st = (long)Mxalloc(-1L, 0);
+		said = 1;
+		status("The list is full: no memory for more files.");
+		elog("the list full at %d files: the largest free ST RAM block %ld KB (%ld kept free for the AES)",
+		     list_count(), st > 0 ? st / 1024 : 0, LIST_RESERVE / 1024);
+	}
+	if (!list_full)
+		said = 0;
+}
+
 /* names as VA_START has them (quoted where they have spaces): added; now 1
    plays the first of them at once, else it plays only if nothing plays */
 static void add_names(const char *s, int now)
@@ -381,6 +399,7 @@ static void add_names(const char *s, int now)
 	}
 	if (list_count() > before)
 		list_unread = 1;
+	full_note();
 	sliders();
 	if (list_count() != before)
 		redraw(0, BP_LIST);
@@ -437,6 +456,7 @@ static void open_file(void)
 	}
 	if (list_count() > before)
 		list_unread = 1;
+	full_note();
 	sliders();
 	redraw(0, BP_LIST);
 	if (i >= 0 && play_state() != PS_PLAYING && !play_paused())

@@ -20,12 +20,24 @@ static long pool_left;			/* bytes left in the last of them */
 static int n;
 int list_cur = -1, list_sel = -1, list_top;
 
-/* memory where there is some: TT RAM first (the DMA needs none of it) */
+/* memory for the list: TT RAM where there is some; ST RAM only while its
+   largest free block keeps LIST_RESERVE after it (a stock Falcon under
+   NVDI with four accessories had 48 KB at the start, and TOS's AES needs
+   room to drop a menu: the hub, 4 Nov 2026) */
+int list_full;			/* a file not added for that: the window says so */
+
 static void *take(long size)
 {
-	void *p = Mxalloc(size, 3);
-	if ((long)p <= 0)
-		p = Malloc(size);
+	void *p = Mxalloc(size, 1);	/* TT RAM alone */
+	long st;
+	if ((long)p > 0)
+		return p;
+	st = (long)Mxalloc(-1L, 0);
+	if (st - size < LIST_RESERVE) {
+		list_full = 1;
+		return 0;
+	}
+	p = Mxalloc(size, 0);
 	return (long)p > 0 ? p : 0;
 }
 
@@ -140,6 +152,7 @@ static void give_back(void)
 void list_clear(void)
 {
 	give_back();
+	list_full = 0;
 	list_cur = list_sel = -1;
 	list_top = 0;
 }
