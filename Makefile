@@ -140,14 +140,17 @@ $(B)/test_dirlist: tests/dirlist/test_dirlist.c src/dirlist.c src/dirlist.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/dirlist/test_dirlist.c src/dirlist.c
 $(B)/test_m3u: tests/m3u/test_m3u.c src/m3u.c src/m3u.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_m3u.c src/m3u.c
+$(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_order.c src/order.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_dirlist $(B)/test_m3u
+		$(B)/test_probe $(B)/test_dirlist $(B)/test_m3u $(B)/test_order
 	./$(B)/test_inf
 	./$(B)/test_gain
 	./$(B)/test_dirlist
 	./$(B)/test_m3u
+	./$(B)/test_order
 	./$(B)/test_tags
 	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh
 	./$(B)/test_mp3 $(B)/mp3files/*.mp3
