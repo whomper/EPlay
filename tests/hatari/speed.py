@@ -357,7 +357,7 @@ def mini_session(r, src):
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
-    kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini"]
+    kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini", "add"]
     return max(session(work, spec, k) for k in kinds)
 
 

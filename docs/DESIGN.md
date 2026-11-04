@@ -1175,6 +1175,32 @@ to the whole window 140, back 80 (within 300).
 The order: the 56 columns and the volume (0.20); the list with the files added (0.21); the small
 player (0.22).
 
+### Add files: several files at once (Erez, 4 Nov 2026)
+
+TOS 4.04's file selector gives one file. Of three ways (EPlay's own dialog, Selectric's
+protocol, both) Erez chose EPlay's own, and set how it looks over four drawings: a dialog box with
+the platform's look (3D where the AES has it), Selectric's width (about 40 columns), the drive in
+one pop-up button, and a selection with no check boxes.
+- **The tree** is the AES's own objects, built at run time (`ui/addfiles.c`) and given the 3D
+  flags by common's `dlg_3d`; it opens in a window under MiNT and MagiC (`dlg_open`). The list in
+  its white well is drawn by EPlay, as the Font dialog's lists are (`dlg_more`, `dlg_cut`).
+- **From Selectric:** the drive pop-up at the folder line's start; Folders, the last ten added
+  from (EPLAY.INF's `FOLDER1=` to `FOLDER10=`, and `ADDDIR=` the folder it opens at); the type
+  (Music files, MP3, WAV, AIFF, All files) and the sort (name, date: the newest first, size: the
+  biggest first, type), folders always first; a name mask (`*` and `?`) that narrows the list as
+  it is typed; each file's size and date; the selected files' count and bytes; any number of
+  entries, as memory holds.
+- **The selection** as the desktop's: a click selects the file alone, Shift-click adds or takes
+  out one, a drag selects the rows it passes; Up and Down move, Shift with them extends; ^A, All
+  and None; a double click opens a folder, or adds the file at once. What a mask hides is no
+  longer selected. Add puts the files at the list's end in the order shown, and plays the first
+  if nothing plays. The music goes on while it is open (its queue fed every 20 ms).
+- **Speed on Falcon-4:** opened 135 ms (the tree 125 by the AES, the list in a turn of its own);
+  a folder opened 45; a click 25; Shift-click 30; Add 130. A click draws only the rows whose
+  selection changed (the whole list was 50).
+- `src/dirlist.c` holds the folder's entries, the sorts, the types, the mask and the selection,
+  tested on the host (`tests/dirlist`).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts

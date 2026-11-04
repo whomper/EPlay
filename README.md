@@ -43,8 +43,10 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 
 1. Copy `eplay.prg` anywhere, and start it; or drop `.MP3`, `.WAV` or `.AIF` files (or a folder)
    on it: they go into the list, and play one after another.
-2. **File > Open…** (Control+O) adds a file to the list, or, with no file chosen, every MP3, WAV
-   and AIFF in the folder. Files dragged onto the window from an AV desktop (Thing, Jinnee,
+2. **File > Open…** (Control+O) opens **Add files**: choose the drive and the folder (or one
+   of the last ten from **Folders**), narrow the list by type and by a name mask (`*` and `?`),
+   sort it, and select files with a click, Shift-click or a drag (**All** for every one). **Add**
+   puts them at the list's end. Files dragged onto the window from an AV desktop (Thing, Jinnee,
    Teradesk) or under MiNT and MagiC are added too. A double click or **Return** plays a row,
    **Up** and **Down** choose one, **Delete** takes it out; a right click (or **Insert**) on a
    row opens its menu; **Edit > Clear the list** keeps only the file playing. Previous and Next
