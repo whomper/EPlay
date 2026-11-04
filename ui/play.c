@@ -648,23 +648,45 @@ static int take_queue(int unit)
 /* how the disk kept up, for the log (play_disk_note): the bytes read,
    the time the reads took (the 200 Hz clock's, summed), the queue's
    least lead once a second has played; -1 before */
-static long rd_bytes, rd_ms, q_least = -1;
+static long rd_bytes, rd_ms, rd_forced, q_least = -1;
 
 /* the file read into the queue, a piece at a time, for about ms */
-static void fill(unsigned long t0, int ms)
+/* the queue's lead: ms of music it holds, at the rate it is played (a
+   WAV the DMA plays at another rate: at that one) */
+static long q_lead_ms(void)
 {
-	while (!src_done && ms_now() - t0 < (unsigned long)ms) {
+	long ahead = q_w - q_r, r = kind && !dsp ? out_rate : rate;
+	if (kind)
+		return r > 0 ? ahead / fmt.bytes / r * 1000 + ahead / fmt.bytes % r * 1000 / r : 0;
+	return bitrate ? ahead / bitrate * 8 : 0;
+}
+
+/* the queue filled from the file for ms, a piece at a time. low (the lead
+   short): a piece read whatever the turn has left, and pieces of half the
+   size, so that a turn stays near its 50 ms (Erez, 4 Nov 2026, a stock
+   Falcon: the turns' 20 ms often spent before the reading, which then
+   came at 246 KB/s, the music 295: the queue ran dry in 4 s) */
+static void fill(unsigned long t0, int ms, int low)
+{
+	long piece = low ? PIECE / 2 : PIECE;
+	int must = low;
+	while (!src_done && (must || ms_now() - t0 < (unsigned long)ms)) {
 		long free = q_size - (q_w - q_r), at = q_woff, n = q_size - at, r;
 		if (n > free)
 			n = free;
-		if (n > PIECE)
-			n = PIECE;
+		if (n > piece)
+			n = piece;
 		if (n > data_left)
 			n = data_left;
 		/* a whole piece, else wait for the room (but the file's end and
 		   the queue's end are read as they come) */
-		if (n <= 0 || (n < PIECE && n < data_left && at + n < q_size))
+		if (n <= 0 || (n < piece && n < data_left && at + n < q_size))
 			break;
+		if (must) {
+			must = 0;
+			if (ms_now() - t0 >= (unsigned long)ms)
+				rd_forced++;	/* (the turn's time gone: read all the same) */
+		}
 		{
 			unsigned long a = ms_now();
 			r = Fread(fh, n, q + at);
@@ -970,7 +992,7 @@ int play_open(const char *path, char *err, int n)
 	t_t0 = t_last = 0;
 	t_gap = 0;
 	t_gap_at = m_changed_at = -1;
-	rd_bytes = rd_ms = 0;
+	rd_bytes = rd_ms = rd_forced = 0;
 	q_least = -1;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
@@ -1187,15 +1209,15 @@ const char *play_stream_note(void)
 
 const char *play_disk_note(void)
 {
-	static char b[160];
-	long need = kind ? rate * fmt.bytes / 1024 : bitrate * 125 / 1024;	/* KB/s the music takes */
+	static char b[220];
+	long need = kind ? (dsp ? rate : out_rate) * fmt.bytes / 1024 : bitrate * 125 / 1024;	/* KB/s the music takes */
 	char sp[24];
 	if (rd_ms > 0)
 		snprintf(sp, sizeof(sp), "%ld KB/s", rd_bytes / rd_ms * 1000 / 1024);
 	else
 		snprintf(sp, sizeof(sp), "too fast to time");	/* (the 200 Hz clock's 5 ms) */
 	snprintf(b, sizeof(b), "%ld KB read in %ld ms of reads (%s; the music takes %ld KB/s); the queue's least "
-		 "lead %ld ms", rd_bytes / 1024, rd_ms, sp, need, q_least);
+		 "lead %ld ms; %ld pieces read past a turn's time", rd_bytes / 1024, rd_ms, sp, need, q_least, rd_forced);
 	return b;
 }
 
@@ -1271,7 +1293,7 @@ int play_step(int ms)
 		snprintf(play_out, sizeof(play_out), "The DSP stopped answering.");
 		return 1;
 	}
-	fill(t0, ms);
+	fill(t0, ms, !src_done && q_lead_ms() < 3000);
 	if (dsp && !kind && s_started && !s_ext && !q_normal && rate > 32780 && s_sblim == 32) {
 		/* High, and the DSP behind: Normal from here (a moment's break) */
 		long fr, late, wmin, wavg;
