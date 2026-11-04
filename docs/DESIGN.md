@@ -962,8 +962,9 @@ sound DMA now plays four tracks (`Settracks(3, 0)`, the DAC on the first, `Setmo
 16 bytes a frame, the music in the first four, the other twelve zeros written once when the
 ring is taken (`Mxalloc` mode 0, as before). The tick writes a frame's two words and steps on
 16 bytes (`pcm_convert_to`, its step 8 words; `tests/pcm` checks that the other six words are
-left as they were). The ring is a second long now, 786 KB at 49,170 Hz (two seconds of one
-track were 393 KB): the queue in TT RAM holds the file ahead, the ring only the tick's lead. The
+left as they were). The ring is half a second long now, 393 KB at 49,170 Hz, the ST RAM one track's two seconds took
+(a second, 786 KB, cost a stock Falcon under NVDI the room a menu needs, and 125 ms more at the
+start to clear): the queue in TT RAM holds the file ahead, the ring only the tick's lead. The
 DSP's own sound (MP3, and a WAV it resamples) still leaves slots 2 to 7 undriven; it goes the
 same way next, through a DMA ring of its own.
 

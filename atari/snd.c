@@ -46,7 +46,7 @@ static long x_setbuffer(short reg, void *beg, void *end)
 #define STEREO16	1
 #define PLAY_ENABLE	1
 #define PLAY_REPEAT	2
-#define RING_MAX	49170L	/* frames: a second at the Falcon's fastest */
+#define RING_MAX	24585L	/* frames: half a second at the Falcon's fastest (393 KB of ST RAM, four tracks: as one track's two seconds were) */
 
 long snd_ext_rate;
 
@@ -502,9 +502,9 @@ int snd_open(long rate, int ext)
 	Buffoper(0);
 	/* (not cleared: the DMA starts once a quarter of a second is
 	   written, and plays only what was) */
-	/* the ring a second long at this rate (the DMA's end is the ring's):
+	/* the ring half a second long at this rate (the DMA's end is the ring's):
 	   the queue in TT RAM holds the file ahead, the ring the tick's */
-	ring_n = rate;
+	ring_n = rate / 2;
 	if (ring_n > RING_MAX)
 		ring_n = RING_MAX;
 	Settracks(TRACKS - 1, 0);
