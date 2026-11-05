@@ -34,6 +34,7 @@ ENTRY *list_at(int i);
    memory); a file already in it isn't added again (its index) */
 int list_add(const char *path);
 void list_remove(int i);
+void list_move(int from, int to);	/* row from to row to, the rows between closing up */
 void list_clear(void);
 void list_keep_only(int i);	/* all but file i out (it stays, as the first) */
 int list_find(const char *path);	/* its index, -1 if not in */

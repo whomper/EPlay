@@ -29,6 +29,8 @@ void order_size(ORDER *o, int n);	/* the list has n files now (added at its end)
 void order_clear(ORDER *o);		/* a new time round: none played */
 void order_played(ORDER *o, int i);	/* file i begins to play */
 void order_removed(ORDER *o, int i);	/* row i taken out of the list */
+void order_moved(ORDER *o, int from, int to);	/* row from moved to row to (the rows between close up) */
+int order_moved_index(int i, int from, int to);	/* where row i is after that move */
 /* the file after cur (-1 none; cur -1: the first). ended: cur came to its
    end by itself (Repeat one plays it again), else Next */
 int order_next(ORDER *o, int cur, int ended);

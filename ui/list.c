@@ -137,6 +137,27 @@ void list_remove(int i)
 		list_top = n - 1;
 }
 
+void list_move(int from, int to)
+{
+	ENTRY e;
+	int k;
+	if (from < 0 || from >= n || to < 0 || to >= n || from == to)
+		return;
+	e = *list_at(from);
+	if (from < to)
+		for (k = from; k < to; k++)
+			*list_at(k) = *list_at(k + 1);
+	else
+		for (k = from; k > to; k--)
+			*list_at(k) = *list_at(k - 1);
+	*list_at(to) = e;
+	order_moved(&list_order, from, to);
+	if (list_cur >= 0)
+		list_cur = order_moved_index(list_cur, from, to);
+	if (list_sel >= 0)
+		list_sel = order_moved_index(list_sel, from, to);
+}
+
 /* everything given back: an empty list takes no memory */
 static void give_back(void)
 {

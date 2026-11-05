@@ -107,7 +107,8 @@ class Rig(speed.Rig):
             new = f.read()
         got = re.findall(r"EPLAY picture %s \d+ ms, (\d+) from the input" % picture, new)
         tos = "EmuTOS" if "EmuTOS" in self.describe() else "TOS"
-        ref = PICTURE_022[tos][what] + STEP
+        # (a row 0.22 hadn't, the drag: held to WINDOW, from the release)
+        ref = PICTURE_022[tos][what] + STEP if what in PICTURE_022[tos] else speed.WINDOW
         # (no marker: shown as "?", over)
         self.results.append((what + ": the whole picture", int(got[-1]) if got else None, ref))
 
@@ -321,10 +322,33 @@ def list_session(r, src):
     r.act("Down", speed.KEY, lambda: r.key("Down"))
     r.redraw("Return (plays the selected)", "start", lambda: r.key("Return"))
     r.redraw("Delete (one out of the list)", "rows", lambda: (r.key("Up"), r.key("Delete")))
+
+    def drag(y1, y2):
+        g = dict(l.split("=") for l in r.xdo("getwindowgeometry", "--shell", r.win()).split())
+        x, y = int(g["X"]), int(g["Y"])
+        r.xdo("mousemove", str(x + 300), str(y + y1))
+        time.sleep(0.4)
+        r.xdo("mousedown", "1")
+        time.sleep(0.3)
+        for k in range(1, 11):	# (in steps, as a hand would)
+            r.xdo("mousemove", str(x + 300), str(y + y1 + (y2 - y1) * k // 10))
+            time.sleep(0.1)
+        time.sleep(0.5)
+        r.xdo("mouseup", "1")
+    # (Erez, 5 Nov 2026: the list reordered by a drag) the first row to
+    # between the fourth and the fifth: the line shown as it moves, the
+    # rows between drawn again when it is let go
+    r.redraw("A row dragged to another place", "rows", lambda: drag(ROW[0][1], ROW[4][1] - 10))
     rc = r.report()
     lines = r.console().split("\n")
     played = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
     want = ["T1.WAV", "T4.MP3", "T5.WAV", "T6.MP3"]
+    moved = [l for l in lines if l.startswith("EPLAY moved ")]
+    if moved != ["EPLAY moved 1 to 4"]:
+        print("FAIL  the drag: %s (wanted EPLAY moved 1 to 4)" % moved)
+        rc = 1
+    else:
+        print("ok    the drag: the first row moved to the fourth")
     if played[:4] != want:
         print("FAIL  played %s, not %s (the first, a double click on row 4, Next, Return on row 6)" %
               (played, want))

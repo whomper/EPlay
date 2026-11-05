@@ -63,6 +63,35 @@ void order_removed(ORDER *o, int i)
 	o->nh = j;
 }
 
+int order_moved_index(int i, int from, int to)
+{
+	if (i == from)
+		return to;
+	if (from < to && i > from && i <= to)
+		return i - 1;
+	if (from > to && i >= to && i < from)
+		return i + 1;
+	return i;
+}
+
+/* a row moved (Erez, 5 Nov 2026: the list reordered by a drag): its
+   played mark goes with it, and the way back keeps naming the same files */
+void order_moved(ORDER *o, int from, int to)
+{
+	unsigned char p;
+	int k;
+	if (from < 0 || from >= o->n || to < 0 || to >= o->n || from == to)
+		return;
+	p = o->played[from];
+	if (from < to)
+		memmove(o->played + from, o->played + from + 1, (size_t)(to - from));
+	else
+		memmove(o->played + to + 1, o->played + to, (size_t)(from - to));
+	o->played[to] = p;
+	for (k = 0; k < o->nh; k++)
+		o->hist[k] = (short)order_moved_index(o->hist[k], from, to);
+}
+
 static unsigned long rnd(ORDER *o)
 {
 	o->seed = o->seed * 1103515245UL + 12345UL;

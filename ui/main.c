@@ -277,6 +277,7 @@ static void play_now(const char *f)
 
 /* ---- the list (Erez, 3 Nov 2026: files added in bulk) ---- */
 
+static unsigned long turn_t0;		/* (the turn's start: its time, the steps') */
 static int list_unread;		/* files added whose tags and length aren't read yet */
 static void message(short *msg);
 static void step(int playing);
@@ -797,6 +798,138 @@ static void idle_step(void)
 	step(play_state() == PS_PLAYING);
 }
 
+/* the list reordered by a drag (Erez, 5 Nov 2026): a row pressed and
+   moved goes where it is let go, a line between the rows showing where;
+   held above or below the rows shown, the list scrolls. The music goes
+   on meanwhile. The line is drawn in XOR, so that taking it away leaves
+   the rows as they were */
+static void drop_line(short y)
+{
+	GRECT a, r;
+	short p[4];
+	if (y < 0 || wh <= 0)
+		return;
+	bar_row_area(list_top, &a);
+	p[0] = a.x;
+	p[2] = a.x + a.w - 1;
+	wind_update(BEG_UPDATE);
+	graf_mouse(M_OFF, 0);
+	vswr_mode(vdi_h, 3);		/* XOR */
+	vsl_color(vdi_h, 1);
+	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
+	while (r.w && r.h) {
+		short c[4];
+		GRECT b = a;
+		b.y = (short)(y - 1);
+		b.h = 2;
+		if (rc_intersect(&r, &b)) {
+			c[0] = b.x;
+			c[1] = b.y;
+			c[2] = b.x + b.w - 1;
+			c[3] = b.y + b.h - 1;
+			vs_clip(vdi_h, 1, c);
+			p[1] = p[3] = (short)(y - 1);
+			v_pline(vdi_h, 2, p);
+			p[1] = p[3] = y;
+			v_pline(vdi_h, 2, p);
+		}
+		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
+	}
+	vs_clip(vdi_h, 0, p);
+	vswr_mode(vdi_h, 1);
+	graf_mouse(M_ON, 0);
+	wind_update(END_UPDATE);
+}
+
+/* the place between rows y points at (0 to the list's count), and the
+   line's height there */
+static int drop_at(short y, short *ly)
+{
+	GRECT a;
+	int n = list_count(), rows = bar_rows(), t;
+	short h = bar_row_h();
+	bar_row_area(list_top, &a);
+	t = y < a.y ? list_top : list_top + (y - a.y + h / 2) / h;
+	if (t > list_top + rows)
+		t = list_top + rows;
+	if (t > n)
+		t = n;
+	*ly = (short)(a.y + (t - list_top) * h);
+	return t;
+}
+
+static void drag_row(int from, short mx, short my)
+{
+	short msg[8], ly = -1, nly;
+	AEVENT ev;
+	GRECT a;
+	int t = -1, to, n = list_count();
+	unsigned long last_scroll = 0;
+	(void)mx;
+	graf_mouse(FLAT_HAND, 0);
+	while (!quit) {
+		short which;
+		int playing = play_state() == PS_PLAYING, rows = bar_rows();
+		int nt = drop_at(my, &nly);
+		if (nt != t || nly != ly) {
+			drop_line(ly);
+			t = nt;
+			ly = nly;
+			drop_line(ly);
+		}
+		bar_row_area(list_top, &a);
+		/* held above or below the rows: the list scrolls, a row each 80 ms */
+		if ((my < a.y && list_top > 0) || (my >= a.y + rows * a.h && list_top + rows < n)) {
+			if (tos_ms() - last_scroll >= 80) {
+				drop_line(ly);
+				ly = -1;
+				scroll_to(list_top + (my < a.y ? -1 : 1));
+				last_scroll = tos_ms();
+				t = -1;
+				continue;
+			}
+		}
+		evnt_set_m1(1, mx = ev.mx, my, 1, 1);
+		which = evnt_multi_(MU_MESAG | MU_BUTTON | MU_M1 | MU_TIMER, 1, 1, 0, 20, msg, &ev);
+		turn_t0 = tos_ms();
+		if (which & MU_MESAG) {
+			drop_line(ly);		/* (a redraw would draw over it) */
+			ly = -1;
+			t = -1;
+			message(msg);
+		}
+		if (which & (MU_M1 | MU_BUTTON | MU_TIMER))
+			my = ev.my;
+		if (which & MU_BUTTON) {
+			input_ms = turn_t0;	/* (the picture's time from the release: the rigs') */
+			break;
+		}
+		step(playing);
+	}
+	drop_line(ly);
+	graf_mouse(ARROW, 0);
+	if (quit || t < 0)
+		return;
+	to = t > from ? t - 1 : t;
+	if (to == from)
+		return;
+	list_move(from, to);
+	pic_begin("rows");
+	rows_redraw(from < to ? from : to);	/* (the rows between, in one go) */
+	pic_end();
+	if (play_state() == PS_PLAYING) {	/* ("Playing 3 of 8": its place moved) */
+		char st[100];
+		playing_status(st, sizeof(st));
+		status(st);
+	}
+	redraw(0, BP_NAV);
+	{
+		char line[48];
+		snprintf(line, sizeof(line), "EPLAY moved %d to %d\n", from + 1, to + 1);
+		nf_debug(line);			/* (the rigs) */
+	}
+}
+
 /* a press on the list: the row selected at once; a double click plays it
    (guidelines 5.8: the second press's release) */
 static void list_press(short mx, short my, int right)
@@ -813,8 +946,15 @@ static void list_press(short mx, short my, int right)
 		return;
 	}
 	bar_row_area(i, &r);
-	if (press_track(&r, mx, my, idle_step, message, &dx, &dy) == PRESS_IN && dbl)
-		play_index(i);
+	switch (press_track(&r, mx, my, idle_step, message, &dx, &dy)) {
+	case PRESS_IN:
+		if (dbl)
+			play_index(i);
+		break;
+	case PRESS_DRAG:
+		drag_row(i, dx, dy);
+		break;
+	}
 }
 
 /* View > Mini player: the window again, the bar alone or with the list,
@@ -1041,7 +1181,6 @@ static void message(short *msg);
    what is left of 20 ms after the turn's action, so that an action and the
    reading don't add up in one stretch (the position bar's release on a
    stock Falcon: 25 ms of seek and 20 of reading) */
-static unsigned long turn_t0;
 static int next_due;		/* a file played to its end: the list's next, next turn */
 
 static void step(int playing)

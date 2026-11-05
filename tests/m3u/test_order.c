@@ -124,5 +124,23 @@ int main(void)
 	check(!strcmp(order_repeat_name(REP_ALL), "Repeat: all"), "the menu's names");
 	order_init(&o, 1);
 	check(order_next(&o, -1, 0) < 0 && order_prev(&o, -1) < 0, "an empty list: none");
+	/* a row moved: its played mark goes with it, the way back names the
+	   same files (Erez, 5 Nov 2026: the list reordered by a drag) */
+	order_init(&o, 3);
+	order_size(&o, 5);
+	o.shuffle = 1;
+	order_played(&o, 1);
+	order_played(&o, 3);
+	order_moved(&o, 3, 0);		/* 0 1 2 3 4 -> 3 0 1 2 4 */
+	check(o.played[0] && o.played[2] && !o.played[1] && !o.played[3] && !o.played[4],
+	      "moved up: the played marks with their files");
+	check(o.nh == 2 && o.hist[0] == 2 && o.hist[1] == 0, "moved up: the way back names the same files");
+	check(order_prev(&o, 0) == 2, "moved up: Previous goes to the file played before");
+	order_moved(&o, 0, 4);		/* back down to the end */
+	/* (Previous went back to file 1: the way back is empty again) */
+	check(o.played[4] && o.played[1] && !o.played[0] && !o.played[2] && !o.played[3],
+	      "moved down: the played marks with their files");
+	check(order_moved_index(2, 0, 4) == 1 && order_moved_index(0, 0, 4) == 4 && order_moved_index(4, 3, 1) == 4,
+	      "moved: the other rows close up");
 	return bad != 0;
 }
