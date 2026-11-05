@@ -222,6 +222,12 @@ static long measure(short pre)
 	Supexec(m_loop);
 	Buffoper(0);
 	snd_close();
+	/* the matrix as EPlay found it again: TOS 4.04 kept the measure's
+	   (the DMA on the external clock, its record input on the DSP's
+	   transmit with the handshake on), and the DSP's first start then
+	   sent no frame for 2 s, until the watchdog's restart put it back
+	   (the hub, 5 Nov 2026, on Erez's TOS; EmuTOS didn't show it) */
+	Supexec(put_regs);
 	if (m_t > 0)
 		return (long)((long long)m_n * TA_HZ / m_t);
 	return m_t < 0 ? m_n * 1000 / -m_t : 0;
