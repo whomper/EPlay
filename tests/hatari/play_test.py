@@ -63,8 +63,8 @@ CASES = {
     # buffer (64 KB) is refilled six times across the bit reservoir
     "mp3long": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
                 (1000, 1500), 10),
-    # the file selector (Control+O) held open 5 s while it plays: GEM
-    # gives EPlay no event meanwhile, and the music must go on (the tick)
+    # Add files (Control+O) held open 5 s while it plays, then closed with
+    # Esc: the music must go on (the tick), nothing added
     # VBR, as music is: LAME's header frame (Xing) gives the length (0.1 took
     # the first frame's bit rate: an 8-minute file said 22:10)
     "vbr": ("VBR.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["XING", "-V", "0"], 49170,
@@ -375,7 +375,12 @@ def run(work, case, spec):
             time.sleep(2)
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(3)
-            cmd(fifo, "hatari-event", "keypress", "0x1c")    # Return: no file named, so nothing
+            # Esc: closed, nothing added (Return adds the highlighted file:
+            # on TOS 4.04 LONG.MP3 again, so it never ended: the hub, 5 Nov)
+            cmd(fifo, "hatari-event", "keypress", "0x01")
+            added = wait_line(log, lambda l: l.startswith("EPLAY list: "), 10) or "EPLAY list: ? files"
+            if added.split()[2] != "1":
+                return False, m.describe(), "Esc in Add files: %s (wanted 1 file, nothing added)" % added
         if case == "settings":
             # (once the music is heard: the DSP's program is sent first, and
             # Control+comma's key click before the music reads as a gap)
