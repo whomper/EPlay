@@ -15,6 +15,7 @@
 #include "av.h"
 #include "crash.h"
 #include "aboutbox.h"
+#include "dialog.h"
 #include "text.h"
 #include "offdraw.h"
 #include "click.h"
@@ -193,13 +194,14 @@ static void playing_status(char *st, int n)
 /* a picture's time, from when it is due to its last piece drawn, to the
    rigs' console ("EPLAY picture start 85 ms"): the guidelines' Speed, "A
    rule never costs speed", drawing whole against drawing in pieces */
-static unsigned long pic_t0;
+static unsigned long pic_t0, pic_in, input_ms;	/* input_ms: the last key or click's turn */
 static const char *pic_name;
 static void pic_begin(const char *n)
 {
 	if (!pic_name) {
 		pic_name = n;
 		pic_t0 = tos_ms();
+		pic_in = input_ms && pic_t0 - input_ms < 2000 ? input_ms : pic_t0;
 	}
 }
 
@@ -207,7 +209,9 @@ static void pic_end(void)
 {
 	if (pic_name) {
 		char b[64];
-		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms\n", pic_name, tos_ms() - pic_t0);
+		unsigned long now = tos_ms();
+		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms, %lu from the input\n", pic_name, now - pic_t0,
+			 now - pic_in);
 		nf_debug(b);
 		pic_name = 0;
 	}
@@ -1245,12 +1249,18 @@ static void turn(int nested)
 	short msg[8];
 	short which;
 	int playing = play_state() == PS_PLAYING;
+	/* a dialog held open (Settings, About) goes on feeding the queue while
+	   the music plays, nothing while it doesn't (common's dlg_idle: the
+	   hub, 4 Nov 2026, from 0.22's underruns with Settings open) */
+	dlg_idle = playing ? feed_only : 0;
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
 			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || shown_due ? 0 :
 			    list_unread ? 20 : play_wait_ms(), msg, &ev);
 	turn_t0 = tos_ms();
+	if (which & (MU_KEYBD | MU_BUTTON))
+		input_ms = turn_t0;	/* (a picture's time from the input: the rigs') */
 	if (pending_play[0] && !nested && !art_needs_dsp()) {
 		/* (the album art unpacked: the MP3 it waited for) */
 		char f[320];
