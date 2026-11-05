@@ -28,7 +28,7 @@ static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), s
 static char add_dir[AF_PATH], recent[AF_RECENT][AF_PATH];	/* the Add files dialog's */
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
-static int qlate = 3;			/* QLATE=: the rigs' (read, never written) */
+static int qlate = 1;			/* QLATE=: the rigs' (read, never written). 1: Normal at the first granule late past the start (3 let a heavy file crackle six times first: Erez, 5 Nov 2026) */
 static int shuffle, shuffle_saved, repeat, repeat_saved;	/* the Play menu's, saved at the end */
 static const char *const rnames[3] = { "OFF", "ALL", "ONE" };
 #define NOUT 3
