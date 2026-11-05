@@ -126,6 +126,8 @@ static void rect(GRECT *r, short x, short y, short w, short h)
 	r->h = h;
 }
 
+static short scw, sch;		/* the badges' small font: its cell */
+
 void bar_layout(const GRECT *work)
 {
 	short x, y, art, mid, bw, gap;
@@ -160,6 +162,15 @@ void bar_layout(const GRECT *work)
 	rect(&w_pos, w_ctl.x, y, w_ctl.w, ch);
 	rect(&w_track, w_ctl.x + 5 * cw + 4, y + ch / 2 - 2, w_ctl.w - 10 * cw - 8, 4);
 	rect(&w_list, work->x, work->y + bar_h, work->w, work->h - bar_h);
+	{
+		short a, b;
+		vst_height(vdi_h, 4, &scw, &sch);	/* (the badges' small font: its cell) */
+		vst_height(vdi_h, ch >= 16 ? 13 : 6, &a, &b);
+		if (scw <= 0 || sch <= 0) {
+			scw = cw;
+			sch = ch;
+		}
+	}
 	make_masks();
 }
 
@@ -440,14 +451,38 @@ static void draw_art(void)
 	mask_draw(&k_spot, cx - 2, cy - 2, p_bar);
 }
 
-static void label(short x, short y, const char *s)
+/* a badge (the bit rate, the rate, where it plays): its text in the
+   system font's small size (6 x 6), a quarter narrower than the window's
+   and half as tall (Erez, 5 Nov 2026: "too big"), in a box a pixel
+   clear of it all round, centred in the row of height rh at y. Its
+   width; draw 0: only measured */
+static short badge(short x, short y, short rh, const char *s, short pen, int draw)
 {
-	short n = (short)strlen(s), w = n * cw + 8;
-	box(x, y, w, 1, p_dim, 0);
-	box(x, y + ch + 1, w, 1, p_dim, 0);
-	box(x, y, 1, ch + 2, p_dim, 0);
-	box(x + w - 1, y, 1, ch + 2, p_dim, 0);
-	text(x + 4, y + 1, s, n, p_dim);
+	short n = (short)strlen(s), w = n * scw + 5, h = sch + 4, by = y + (rh - h) / 2;
+	if (!draw || n <= 0)
+		return w;
+	box(x, by, w, 1, pen, 0);
+	box(x, by + h - 1, w, 1, pen, 0);
+	box(x, by, 1, h, pen, 0);
+	box(x + w - 1, by, 1, h, pen, 0);
+	{
+		short a, b;
+		vst_height(vdi_h, 4, &a, &b);
+		text_font(vdi_h, 1, scw, sch);
+		if (cur_tcol != pen) {
+			vst_color(vdi_h, pen);
+			cur_tcol = pen;
+		}
+		if (cur_fx != 0) {
+			vst_effects(vdi_h, 0);
+			cur_fx = 0;
+		}
+		/* (the glyphs' blank column is their right one: 3 left, 2 right) */
+		text_n(vdi_h, x + 3, by + 2, s, n);
+		vst_height(vdi_h, ch >= 16 ? 13 : 6, &a, &b);
+		text_font(vdi_h, 1, cw, ch);
+	}
+	return w;
 }
 
 static void draw_text(void)
@@ -462,15 +497,14 @@ static void draw_text(void)
 		short y = w_txt.y + 2 * ch + 6;
 		if (play_kbps > 0) {
 			snprintf(t, sizeof(t), "%ld KBPS", play_kbps);
-			label(x, y, t);
-			x += (short)strlen(t) * cw + 8 + 4;
+			x += badge(x, y, ch + 2, t, p_dim, 1) + 4;
 		}
 		if (play_hz > 0) {
 			if (play_hz % 1000)
 				snprintf(t, sizeof(t), "%ld.%ld KHZ", play_hz / 1000, play_hz % 1000 / 100);
 			else
 				snprintf(t, sizeof(t), "%ld KHZ", play_hz / 1000);
-			label(x, y, t);
+			badge(x, y, ch + 2, t, p_dim, 1);
 		}
 	}
 }
@@ -504,12 +538,9 @@ static void draw_out(void)
 {
 	short x = w_out.x, y = w_out.y + 8;
 	if (play_via && play_via[0]) {
-		short n = (short)strlen(play_via), w = n * cw + 8;
-		box(x, y, w, 1, p_acc, 0);
-		box(x, y + ch + 1, w, 1, p_acc, 0);
-		box(x, y, 1, ch + 2, p_acc, 0);
-		box(x + w - 1, y, 1, ch + 2, p_acc, 0);
-		text(x + 4, y + 1, play_via, n, p_acc);
+		/* (over the speaker and the volume, in the middle of them) */
+		short w = badge(0, 0, 0, play_via, p_acc, 0);
+		badge(x + (w_out.w - w) / 2, y, ch + 2, play_via, p_acc, 1);
 	}
 	draw_vol();
 }
