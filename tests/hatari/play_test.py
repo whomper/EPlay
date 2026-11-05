@@ -79,11 +79,13 @@ CASES = {
     # makes it go to Normal past its first frames
     "auto": ("SQUARE.MP3", ["-r", "48000", "-c", "2", "-b", "16"], ["-b", "320"], 32780, (100, 1500), 8),
 }
-# Settings (Control+comma) held open 6 s while a CD-rate WAV plays: the
-# dialog's wait goes on feeding the queue (common's dlg_idle: the hub, 4
-# Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
+# Settings (Control+comma) held open 6 s while a CD WAV plays (44.1 kHz,
+# resampled on the DSP: the 68030's heaviest WAV, and one Hatari 2.4
+# records, where its DMA's four tracks may leave the DAC on a silent one):
+# the dialog's wait goes on feeding the queue (common's dlg_idle: the hub,
+# 4 Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
 # queue's lead (3 s) never runs out
-CASES["settings"] = ("CD.WAV", ["-r", "49170", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 10)
+CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 10)
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # three files given at the start (as the desktop gives files dropped on the
@@ -163,7 +165,7 @@ def tone(x, rate):
     return best, 2 * bp / n / total
 
 
-RESAMPLED = {"wav22", "aiff44"}       # (and every MP3)
+RESAMPLED = {"wav22", "aiff44", "settings"}       # (and every MP3)
 WAV_LEVEL = 0               # (set below once measured: wav's level on Hatari's Falcon)
 
 
