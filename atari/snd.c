@@ -151,12 +151,13 @@ static short ext_pre = 1;	/* the external clock's prescale (snd_open) */
 #define TA_HZ	12288L
 static long m_n, m_t;		/* frames counted, Timer A's counts (< 0: the 200 Hz clock's ms) */
 int snd_ta_busy;		/* the last measure timed by the 200 Hz clock: Timer A in use */
+static int m_by200;		/* 1: timed by the 200 Hz clock all the same (a second opinion, for the log) */
 
 static long m_loop(void)
 {
 	long a, b, d, n = 0, t = 0, t0 = 0;
 	unsigned char prev = 0, cur;
-	int ta = TA_CR == 0 && !(*(volatile unsigned char *)0xfffffa07L & 0x20);	/* (stopped, its interrupt off) */
+	int ta = !m_by200 && TA_CR == 0 && !(*(volatile unsigned char *)0xfffffa07L & 0x20);	/* (stopped, its interrupt off) */
 	if (ta) {
 		TA_DR = 0;		/* (256) */
 		TA_CR = 7;		/* delay mode, / 200 */
@@ -317,6 +318,10 @@ int snd_fdi_set(long rate)
 	v[1] = 5 - v[0];
 	v[2] = 0;
 	snd_fdi_note[0] = 0;
+	/* (Cubase Audio 2.06 resets the sound system first, Sndstatus(1),
+	   each time it sets the FDI's rate or input: read from Erez's copy,
+	   5 Nov 2026. The matrix is put back after each measure) */
+	trap14_ww(140, 1);
 	for (k = 0; k < 3; k++) {
 		long got;
 		Gpio(0, 7);
@@ -335,6 +340,22 @@ int snd_fdi_set(long rate)
 		   44.1 kHz. Measured again, three times at most */
 		if (!v[k]) {
 			int t;
+			if (got != rate && snd_ext_raw > 1000) {
+				/* the input's clock off its rate: timed by the 200 Hz
+				   clock too, so that the log tells a clock at another
+				   rate from a measure thrown off (0.25 and 0.26 read
+				   38,593 Hz there, where 0.12 to 0.17 read 44.1 kHz;
+				   the FDI's 48 kHz read 33,988 once at the start) */
+				long r1 = snd_ext_raw;
+				m_by200 = 1;
+				measure_ext();
+				m_by200 = 0;
+				n += snprintf(snd_fdi_note + n, sizeof(snd_fdi_note) - (size_t)n,
+					      " (by the 200 Hz clock %ld Hz)", snd_ext_raw);
+				if (n >= (int)sizeof(snd_fdi_note))
+					n = (int)sizeof(snd_fdi_note) - 1;
+				snd_ext_raw = r1;
+			}
 			for (t = 0; t < 3 && got != rate && snd_ext_raw > 1000; t++) {
 				wait_ms(100);
 				got = measure_ext();
