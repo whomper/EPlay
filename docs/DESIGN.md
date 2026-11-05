@@ -975,8 +975,15 @@ ring is taken (`Mxalloc` mode 0, as before). The tick writes a frame's two words
 left as they were). The ring is half a second long now, 393 KB at 49,170 Hz, the ST RAM one track's two seconds took
 (a second, 786 KB, cost a stock Falcon under NVDI the room a menu needs, and 125 ms more at the
 start to clear): the queue in TT RAM holds the file ahead, the ring only the tick's lead. The
-DSP's own sound (MP3, and a WAV it resamples) still leaves slots 2 to 7 undriven; it goes the
-same way next, through a DMA ring of its own.
+DSP's own sound (MP3, and a WAV it resamples) still leaves slots 2 to 7 undriven.
+
+**Parked (Erez, 5 Nov 2026: "if it is too much, let's not focus on Analog 8 issues").** With
+Output DSP, the Analog 8's channel 3 is still noise (0.25). The way out found: the DSP's SSI to the
+DAC and to the DMA's record channel, the tick copying each recorded frame into the four-track play
+ring, the DMA playing that to the port, the music in the first track and zeros in the other three
+(some 200 KB/s copied by the 68030, the port about 80 ms behind the DAC). A WAV or AIFF resampled
+on the DSP can't go that way: the play DMA feeds the DSP's receive (XSTREAM). It changes how
+every MP3 plays and only Erez's Falcon can judge it, so it waits until it is asked for again.
 
 ### A 24-bit AIFF on Erez's Falcon (3 Nov 2026), and 0.18
 
