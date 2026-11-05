@@ -232,13 +232,16 @@ static int shown_due;		/* what plays to draw whole the next turn: 2 the bar, 1 P
    4 Nov 2026: drawing is not a job to slice) */
 static void playing_drawn(int whole)
 {
+	static char via_shown[8];
 	char st[100];
 	playing_status(st, sizeof(st));
 	status(st);
 	if (whole) {
 		redraw(0, BP_LEFT);
 		redraw(0, BP_RIGHT);
-	}
+	} else if (strcmp(via_shown, play_via))
+		redraw(0, BP_RIGHT);	/* (where it plays changed: Settings' Output, then Play: Erez, 5 Nov 2026) */
+	snprintf(via_shown, sizeof(via_shown), "%s", play_via);
 	redraw(0, BP_PLAY | BP_TIME);
 }
 
