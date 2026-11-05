@@ -219,7 +219,21 @@ def analyse(rec, case):
     a, b = loud[0], loud[-1]
     secs = (b - a + 1) / 50
     gaps = [i for i in range(a, b + 1) if rms[i] < 1000]
-    mid = (a + b) // 2 * blk
+    # the tone's window (100 ms) at the middle, moved off a key's click
+    # (Hatari records the keyboard's click: Return in fsel's case once fell
+    # in it, the tone 78 % of the power): the nearest blocks whose high
+    # frequencies are the music's alone
+    def hf(i):
+        seg = left[i * blk:(i + 1) * blk]
+        return math.sqrt(sum((seg[k] - seg[k - 1]) ** 2 for k in range(1, len(seg))) / len(seg))
+    c = (a + b) // 2
+    base = sorted(hf(i) for i in range(c - 10, c + 11))[10]
+    for d in range(0, (b - a) // 2 - 3):
+        m = c + (d // 2 + 1 if d % 2 else -(d // 2))
+        if all(hf(i) < base * 1.1 + 50 for i in range(m - 3, m + 4)):
+            c = m
+            break
+    mid = c * blk
     seg = slice(mid - 2400, mid + 2400)
     level = math.sqrt(sum(v * v for v in left[seg]) / len(left[seg]))
     LEVEL[case] = level
