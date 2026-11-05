@@ -14,6 +14,7 @@
 #include "av.h"
 #include "crash.h"
 #include "aboutbox.h"
+#include "dialog.h"
 #include "text.h"
 #include "offdraw.h"
 #include "click.h"
@@ -1070,6 +1071,10 @@ static void turn(int nested)
 	short msg[8];
 	short which;
 	int playing = play_state() == PS_PLAYING;
+	/* a dialog held open (Settings, About) goes on feeding the queue while
+	   the music plays, nothing while it doesn't (common's dlg_idle: the
+	   hub, 4 Nov 2026, from 0.22's underruns with Settings open) */
+	dlg_idle = playing ? feed_only : 0;
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,

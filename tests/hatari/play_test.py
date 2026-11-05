@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, list, mini (and many); all but many by default. The machines: Falcon (Erez's, with the
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, list, mini (and many); all but many by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -79,6 +79,11 @@ CASES = {
     # makes it go to Normal past its first frames
     "auto": ("SQUARE.MP3", ["-r", "48000", "-c", "2", "-b", "16"], ["-b", "320"], 32780, (100, 1500), 8),
 }
+# Settings (Control+comma) held open 6 s while a CD-rate WAV plays: the
+# dialog's wait goes on feeding the queue (common's dlg_idle: the hub, 4
+# Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
+# queue's lead (3 s) never runs out
+CASES["settings"] = ("CD.WAV", ["-r", "49170", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 10)
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # three files given at the start (as the desktop gives files dropped on the
@@ -295,6 +300,14 @@ def run(work, case, spec):
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(3)
             cmd(fifo, "hatari-event", "keypress", "0x1c")    # Return: no file named, so nothing
+        if case == "settings":
+            cmd(fifo, "hatari-event", "keydown", "0x1d")
+            cmd(fifo, "hatari-event", "keypress", "0x33")    # Control+comma: Settings
+            cmd(fifo, "hatari-event", "keyup", "0x1d")
+            time.sleep(2)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            time.sleep(4)
+            cmd(fifo, "hatari-event", "keypress", "0x01")    # Esc: Cancel, nothing changed
         if case == "many":
             got = wait_line(log, lambda l: l.startswith("LOG the list: "), 240)
             start = wait_line(log, lambda l: l.startswith("LOG free memory"), 1) or ""
