@@ -35,7 +35,7 @@ OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pc
 CSRC    := bidi charset pic png inflate jpegdc
 CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
@@ -165,15 +165,25 @@ clean:
 dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspmp3
 
+# eplay.hyp from docs/GUIDE.md with the family's front page (docs/front.json,
+# common/tools/helpfront.py), and eplay.ref, its pages' names for ST-Guide's
+# index (the guidelines, 4.3)
+HCP     ?= hcp
+help: binary/eplay.hyp
+binary/eplay.hyp: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help/WINDOW.IMG \
+                  common/help/EPLAY.IMG common/tools/helpfront.py common/tools/gemimg.py | binary
+	mkdir -p $(B)/help
+	python3 tools/mkhelp.py docs/GUIDE.md VERSION $(B)/help/EPLAY.STG
+	python3 common/tools/helpfront.py page docs/front.json $(B)/help/EPLAY.STG $(B)/help/EPLAY.STG
+	$(HCP) -q -o $@ $(B)/help/EPLAY.STG >/dev/null
+	test -s binary/eplay.ref
+
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
-# guidelines 6.6), for the release workflow. 0.1
-# has no guide yet (EPLAY.HYP comes with the GEM program's phase); the
-# workflow's HCP is taken and not used until then
-HCP     ?= hcp
-DIST    := binary/eplay.prg
+# guidelines 6.6), for the release workflow
+DIST    := binary/eplay.prg binary/eplay.hyp binary/eplay.ref
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
-dist: all
+dist: all help
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	cp $(DIST) $(ICONS) dist/
@@ -189,7 +199,7 @@ rig: all prof
 	python3 tests/hatari/play_test.py $(B)/rig/play
 	python3 tests/hatari/speed.py $(B)/rig/speed
 
-.PHONY: all test dsptest prof rig dist clean icons
+.PHONY: all test dsptest prof rig dist clean icons help
 
 # the desktop icon and its headers, from common/icons/EPLAY.txt (committed)
 icons:

@@ -40,6 +40,7 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 | File | What it is |
 |---|---|
 | `eplay.prg` | the program, for the Falcon |
+| `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it (copy them to `C:\GUIDES\` or beside the program) |
 | `icons/` | its desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn` for desktops that take them) |
 | `notices.txt` | what EPlay includes under other licences |
 
@@ -100,7 +101,8 @@ sudo apt install gcc-m68k-linux-gnu a56 python3 sox lame   # Debian/Ubuntu; no M
 make            # binary/eplay.prg, with the DSP's program (a56) built in
 make test       # the MP3 model against minimp3, WAV and AIFF against sox
 make dsptest    # the DSP's program against the model, bit for bit, on Hatari's DSP core
-make dist       # dist/EPLAY-x.y.zip, as on the Releases page
+make help HCP=/path/to/hcp   # binary/eplay.hyp from docs/GUIDE.md (hcp: common/tools/build-hcp.sh DIR)
+make dist       # dist/eplay-x.y.zip, as on the Releases page (with the guide: HCP as for help)
 make rig        # the Hatari rigs (below)
 ```
 
@@ -121,7 +123,7 @@ common/     the AERA library (from AERA-Atari, by git subtree)
 data/       the standard's tables (Huffman codes, the synthesis window)
 tools/      the table generators, the version bump
 tests/      the model's and the parsers' tests, the DSP's, and the Hatari rigs (tests/hatari)
-docs/       the design (DESIGN.md) and the icons
+docs/       the user guide (GUIDE.md, the source of eplay.hyp), the design (DESIGN.md), the icons
 ```
 
 ## Tests

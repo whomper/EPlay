@@ -16,6 +16,7 @@
 #include "crash.h"
 #include "aboutbox.h"
 #include "dialog.h"
+#include "help.h"
 #include "text.h"
 #include "offdraw.h"
 #include "click.h"
@@ -37,7 +38,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -73,6 +74,10 @@ static const MBAR_ITEM m_options[] = {
 	{ "Settings...", "^,", C_SETTINGS },
 	{ 0, 0, 0 }
 };
+static const MBAR_ITEM m_help[] = {
+	{ "EPlay guide", "Help", C_GUIDE },	/* (eplay.hyp: the guidelines, 4.3) */
+	{ 0, 0, 0 }
+};
 static const MBAR_TITLE bar[] = {
 	{ " EPlay ", m_desk },
 	{ " File ", m_file },
@@ -80,6 +85,7 @@ static const MBAR_TITLE bar[] = {
 	{ " View ", m_view },
 	{ " Play ", m_play },
 	{ " Options ", m_options },
+	{ " Help ", m_help },
 	{ 0, 0 }
 };
 
@@ -759,6 +765,9 @@ static int music_keys(short kr, short ks)
 	int shift = (ks & 3) != 0;
 	long len, at;
 	switch (scan) {
+	case 0x62:			/* Help */
+		command(C_GUIDE);
+		return 1;
 	case 0x47:			/* Clr Home */
 		command(C_STOP);
 		return 1;
@@ -913,6 +922,12 @@ static void command(int c)
 	switch (c) {
 	case C_ABOUT:
 		dlg_about();
+		break;
+	case C_GUIDE:
+		/* eplay.hyp in the viewer that runs, else how to get one, with
+		   About for what EPlay shows itself (the guidelines, 4.3) */
+		if (help_key(app_dir(), "eplay.hyp", 0, "About"))
+			dlg_about();
 		break;
 	case C_OPEN:
 		open_file();
@@ -1457,6 +1472,7 @@ int app_main(void)
 		return 1;
 	}
 	settings_load();		/* (after snd_init: what the machine has) */
+	help_init();
 	order_init(&list_order, tos_ms());
 	list_order.shuffle = settings_shuffle();
 	list_order.repeat = settings_repeat();
