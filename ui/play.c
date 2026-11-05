@@ -59,8 +59,8 @@ static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
    xs_acc the step's phase; xs_in the file's frames sent; xs_sil the end's
    silence still to send (frames with samples: the last packets out);
    xs_end_at the frames written when it was in (-1: not yet) */
-static int xs;
-static long xs_acc, xs_in, xs_sil, xs_end_at = -1;
+static int xs, xs_dry_now;
+static long xs_acc, xs_in, xs_sil, xs_end_at = -1, xs_dry;	/* xs_dry: the queue's dry stretches */
 #define XS_BUF 1024
 static short xsbuf[XS_BUF * 2];
 static int s_ext;		/* on the FDI's clock (the volume digital) */
@@ -539,9 +539,30 @@ static void tick_xs(void)
 				if (src_done) {
 					s_end = 1;
 					xs_sil = 2 * 576;
+					break;
 				}
-				break;
+				/* the queue dry (the disk held up): once the ring's
+				   lead is short, frames without a sample, so that the
+				   DSP waits in silence rather than the DMA playing the
+				   ring's old frames again; each such stretch is an
+				   underrun */
+				if (snd_written() - snd_played() >= out_rate / 20)
+					break;
+				if (!xs_dry_now) {
+					xs_dry_now = 1;
+					xs_dry++;
+				}
+				{
+					long i;
+					for (i = 0; i < kout; i++, p += SND_STEP)
+						*(long *)(void *)p = 0;
+				}
+				snd_wrote(kout);
+				room -= kout;
+				cap -= kout;
+				continue;
 			}
+			xs_dry_now = 0;
 			if (hb > tail)
 				hb = tail;
 			kin = B2FR(hb);
@@ -1073,7 +1094,8 @@ int play_open(const char *path, char *err, int n)
 	t_end = t_dsp = t_failed = 0;
 	t_frames = 0;
 	s_started = s_end = 0;
-	xs_acc = xs_in = xs_sil = 0;
+	xs_acc = xs_in = xs_sil = xs_dry = 0;
+	xs_dry_now = 0;
 	xs_end_at = -1;
 	s_spf = 1152;
 	t_busy = t_parse = t_push = 0;
@@ -1413,11 +1435,15 @@ int play_step(int ms)
 		long fr, late, wmin, wavg;
 		char l[60];
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
+		if (xs)
+			late += xs_dry;	/* (fed by the DMA: the queue's dry stretches too) */
 		snprintf(l, sizeof(l), "EPLAY ended: %ld underruns\n", late);
 		nf_debug(l);			/* (the rigs) */
 		elog("played to the end: %ld ms, %ld frames to the DSP (%s)", play_ms(), t_frames, play_keep_up());
 		elog("the stream: %s", play_stream_note());
 		elog("the disk: %s", play_disk_note());
+		if (xs && xs_dry)
+			elog("the queue ran dry %ld times (the DSP waited for samples: silence)", xs_dry);
 		play_stop();
 		elog_save();
 		return 1;
