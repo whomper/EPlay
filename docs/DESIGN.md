@@ -1284,6 +1284,23 @@ the DMA's, not the MP3's 500: 24 %.) `pcm_test` holds the spread's asm against t
 running out among its 48 runs. A first build stalled after its first packet: the ring's count,
 `and` on B1 alone, kept B2's sign when the interrupt's place had wrapped past getrx's.
 
+### A dialog held open while it plays (the hub, 4 Nov 2026; 0.24)
+
+A modal dialog (Settings, About) waits in common's `dlg_evnt`, not in EPlay's loop, so 0.23 read
+nothing from the disk while one was open: the queue (about 4.4 s of CD's stereo) ran dry after
+that (the speed rig's WAV session: 451 underruns on 0.22, 207 on 0.23). Common's `dlg_idle`
+(AERA-Atari) wakes such a wait every 20 ms and calls the app's work; EPlay sets it to
+`feed_only` (the queue refilled, no drawing) each turn while the music plays, and clears it when
+it doesn't. The Add files dialog has its own timer and idle, as before.
+
+| Falcon-4:16 (Hatari), CD WAV at 44.1 kHz, Settings held 6 s | sound | the queue's least lead |
+|---|---|---|
+| without `dlg_idle` | 15.60 s for 14 s: the DSP waited 1.5 s for samples | 92 ms |
+| with it | 14.04 s, no gap | 4,098 ms |
+
+(Fed by the DMA, a dry queue isn't an underrun: the ring has frames without samples, and the DSP
+waits for them; the time is lost instead. `play_test`'s `settings` case checks the length.)
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
