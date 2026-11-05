@@ -451,29 +451,52 @@ static void m3u_add(const char *path, void *ctx)
 	list_add(path);
 }
 
+/* (read a piece at a time, a line cut by a piece's end carried into the
+   next: a playlist of 1,000 files saved with its #EXTINF lines is about
+   80 KB, more than one piece) */
+#define PL_PIECE 16384L
 static int add_playlist(const char *f)
 {
 	char dir[200], *e;
-	long h = Fopen(f, 0), n;
+	long h = Fopen(f, 0), n, have = 0;
 	char *buf;
 	int before = list_count();
 	if (h < 0)
 		return -1;
-	buf = malloc(32768);
+	buf = malloc(PL_PIECE);
 	if (!buf) {
 		Fclose((short)h);
 		return -1;
 	}
-	n = Fread((short)h, 32767, buf);
-	Fclose((short)h);
 	snprintf(dir, sizeof(dir), "%s", f);
 	e = strrchr(dir, '\\');
 	if (e)
 		e[1] = 0;
 	else
 		dir[0] = 0;
-	if (n > 0)
-		m3u_read(buf, n, dir, m3u_add, 0);
+	for (;;) {
+		long cut;
+		n = Fread((short)h, PL_PIECE - have, buf + have);
+		if (n < 0)
+			n = 0;
+		have += n;
+		if (!n || have < PL_PIECE) {
+			if (have > 0)
+				m3u_read(buf, have, dir, m3u_add, 0);	/* (the end: the last line whole) */
+			break;
+		}
+		for (cut = have; cut > 0 && buf[cut - 1] != '\n'; cut--)
+			;
+		if (!cut)
+			cut = have;		/* (a line longer than a piece: cut) */
+		m3u_read(buf, cut, dir, m3u_add, 0);
+		memmove(buf, buf + cut, (size_t)(have - cut));
+		have -= cut;
+		feed_only();
+		if (list_full)
+			break;
+	}
+	Fclose((short)h);
 	free(buf);
 	elog("playlist %s: %d files", f, list_count() - before);
 	return list_count() > before ? before : -1;

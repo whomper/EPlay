@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, list, mini (and many); all but many by default. The machines: Falcon (Erez's, with the
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, list, m3u, tree, repeat, shuffle, save, mini (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -97,7 +97,11 @@ CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (
 # list, their tags and lengths read, and the memory it takes (the hub, 4
 # Nov 2026: the free ST RAM a menu needs under NVDI). Not by default (slow)
 CASES["many"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
-NOT_DEFAULT = {"many"}
+# phase 4's long lists, as many: a playlist of 1,000 (47 KB, read a piece
+# at a time; ten folders of 100) and a tree of 1,000 (the same ten folders, given whole)
+CASES["manym3u"] = CASES["many"]
+CASES["manytree"] = CASES["many"]
+NOT_DEFAULT = {"many", "manym3u", "manytree"}
 # phase 4 (Erez, 4 Nov 2026), each a second's files from A.WAV: (the files
 # made, relative to C:\ and lame's arguments or None; what EPlay is given;
 # the files played, in turn; whether it ends then). A playlist with a file
@@ -308,6 +312,22 @@ def run(work, case, spec):
         for i in range(1000):
             shutil.copy(os.path.join(hd, "A.WAV"), os.path.join(many, "T%04d.WAV" % i))
         tail = "C:\\MANY\\"
+    if case in ("manym3u", "manytree"):
+        names = ["D%d\\T%04d.WAV" % (i // 100, i) for i in range(1000)]
+        for n in names:
+            dst = os.path.join(hd, "MANY", *n.split("\\"))
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy(os.path.join(hd, "A.WAV"), dst)
+        if case == "manym3u":
+            with open(os.path.join(hd, "MANY", "ALL.M3U"), "w", newline="") as fh:
+                # (as EPlay saves one: an #EXTINF line each; half the paths
+                # whole, half relative: 47 KB, more than a piece of 16 KB)
+                fh.write("#EXTM3U\r\n" + "".join(
+                    "#EXTINF:1,The rig - Track %d\r\n%s\r\n" % (i, ("C:\\MANY\\" + n) if i % 2 else n.replace("\\", "/"))
+                    for i, n in enumerate(names)))
+            tail = "C:\\MANY\\ALL.M3U"
+        else:
+            tail = "C:\\MANY\\"
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
         fh.write(tail + "\r\n")
     if case in INFS:
@@ -353,7 +373,7 @@ def run(work, case, spec):
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(4)
             cmd(fifo, "hatari-event", "keypress", "0x01")    # Esc: Cancel, nothing changed
-        if case == "many":
+        if case in ("many", "manym3u", "manytree"):
             got = wait_line(log, lambda l: l.startswith("LOG the list: "), 240)
             start = wait_line(log, lambda l: l.startswith("LOG free memory"), 1) or ""
             ok = bool(got) and got.split()[3] == "1000"
