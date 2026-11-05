@@ -348,6 +348,10 @@ static void more(short x, short y, short w, short h)
 	(void)y;
 	(void)w;
 	(void)h;
+	place();			/* (the list's place first: in a window the dialog's
+					   first picture is this one, before the loop's place:
+					   0.23 to 0.25 drew it nowhere, the list empty on
+					   XaAES until a key moved it) */
 	draw_list();
 	pic_end();			/* (in a window: the dialog's first picture) */
 }
