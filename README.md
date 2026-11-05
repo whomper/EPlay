@@ -28,8 +28,9 @@ window. Written in C and DSP56001 assembly for GEM.
 *Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
 window. Phase 2 (0.4 to 0.17) plays MP3 on the Falcon's DSP or through the FDI as Cubase Audio
 does (the FDI set to the file's rate), chosen in the settings, with resampling on the DSP. (MP3 on
-the 68030 was dropped: no 68030 keeps up with it.) Now phase 3, the player window; then 4,
-playlists and folders; 5, the small player, keys, MiNT and MagiC; 6, the TT and STE.*
+the 68030 was dropped: no 68030 keeps up with it.) Phase 3 (0.18 to 0.24) is the player window;
+now phase 4, playlists and folders; then 5, the small player, keys, MiNT and MagiC; 6, the TT and
+STE.*
 
 ## Getting started
 
@@ -42,16 +43,22 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 | `icons/` | its desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn` for desktops that take them) |
 | `notices.txt` | what EPlay includes under other licences |
 
-1. Copy `eplay.prg` anywhere, and start it; or drop `.MP3`, `.WAV` or `.AIF` files (or a folder)
-   on it: they go into the list, and play one after another.
+1. Copy `eplay.prg` anywhere, and start it; or drop `.MP3`, `.WAV` or `.AIF` files, a folder
+   (its subfolders too, in path order) or an `.M3U` playlist on it: they go into the list, and
+   play one after another.
 2. **File > Open…** (Control+O) opens **Add files**: choose the drive and the folder (or one
    of the last ten from **Folders**), narrow the list by type and by a name mask (`*` and `?`),
-   sort it, and select files with a click, Shift-click or a drag (**All** for every one). **Add**
-   puts them at the list's end. Files dragged onto the window from an AV desktop (Thing, Jinnee,
+   sort it, and select files and folders with a click, Shift-click or a drag (**All** for every
+   file). **Add** puts them at the list's end: a folder's music with its subfolders', a playlist's
+   files in its order. Files dragged onto the window from an AV desktop (Thing, Jinnee,
    Teradesk) or under MiNT and MagiC are added too. A double click or **Return** plays a row,
    **Up** and **Down** choose one, **Delete** takes it out; a right click (or **Insert**) on a
    row opens its menu; **Edit > Clear the list** keeps only the file playing. Previous and Next
-   go through the list. The window can be made taller for more rows. The list needs memory left
+   go through the list. **File > Save playlist…** (Control+S) writes it as an `.M3U` (paths
+   relative to the playlist's folder where they are in it), which other players read too.
+   **Play > Shuffle** plays the list in a random order, each file once a round, the list left as
+   it is; **Play > Repeat** goes from Off to All (the list again from its start) to One (the file
+   again). EPLAY.INF keeps both. The window can be made taller for more rows. The list needs memory left
    over after NVDI and the accessories (a Falcon with TT RAM has plenty; EPlay always leaves
    40 KB of ST RAM for the AES): where there is none, the info line says "The list is full: no
    memory for more files." The bar shows the file's
@@ -105,7 +112,8 @@ files and the zip on the Releases page. Builds in between are never handed out: 
 ## Source
 
 ```
-src/        WAV and AIFF (pcm.c); the MP3 frame parser and the decoder's C model (src/mp3)
+src/        WAV and AIFF (pcm.c), tags, playlists (m3u.c), the play order (order.c); the MP3 frame
+            parser and the decoder's C model (src/mp3)
 dsp/        the MP3 decoder for the DSP56001 (mp3.a56)
 atari/      the Falcon's sound: the ring and the matrix (snd.c), the tick (feed.c), the DSP (dspmp3.c)
 ui/         GEM: the window, the menus, the player (play.c)
@@ -126,7 +134,9 @@ docs/       the design (DESIGN.md) and the icons
 - `tests/hatari/play_test.py`: EPlay in Hatari on `Falcon` (as Erez's, with the DFB1) and
   `Falcon-4` (a stock Falcon), with Hatari's sound recorded and checked: the tone at the right
   pitch in both channels, no gap, the length, silence after the end. A WAV, an AIFF, two MP3s,
-  and the file selector held open while an MP3 plays.
+  the file selector and Settings held open while it plays; the list, a playlist, a folder tree,
+  Repeat, Shuffle and Save playlist; and (not by default) 1,000 files as a folder, a tree and a
+  playlist.
 - `tests/hatari/pcm_test.py`: the sound's 68030 loops (16-bit WAV, 24-bit AIFF and WAV) against
   their C, bit for bit, on Hatari's 68030 (`make` in `tests/hatari` first).
 - `tests/hatari/speed.py`: the family's speed rig, the longest stretch between event calls of

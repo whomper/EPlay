@@ -1301,6 +1301,36 @@ it doesn't. The Add files dialog has its own timer and idle, as before.
 (Fed by the DMA, a dry queue isn't an underrun: the ring has frames without samples, and the DSP
 waits for them; the time is lost instead. `play_test`'s `settings` case checks the length.)
 
+## Phase 4: playlists and folders (Erez, 4 Nov 2026)
+
+Erez's choices: Repeat Off, All and One, one item in the Play menu that goes round; Shuffle a
+random order with the list left as it is, each file once a round; playlists in through Add files
+(and a drop), out through **File > Save playlist…** (Control+S) and the file selector; a folder
+added with its subfolders.
+
+- **The order** (`src/order.c`, `tests/m3u/test_order.c`): which row plays next. In order, the
+  next row; shuffled, a row not yet played this round, at random (a 1,024-row played mask, the
+  round over when every row has played); Previous goes back through what played (a history of
+  1,024), not the list's row above. Repeat All starts the list (or a new round) again at its
+  end; One plays the file again; Off stops there. The list keeps it in step as rows come and go
+  (a row taken out leaves the history and the mask; rows added aren't played yet). Previous and
+  Next on the bar are lit as the order has one.
+- **Playlists** (`src/m3u.c`, `tests/m3u/test_m3u.c`): M3U, each line a path whole or relative
+  to the playlist's folder (`..` too, `/` or `\`), `#` lines notes, URLs passed over, CR/LF, LF
+  and a UTF-8 BOM taken. Read 16 KB at a time, a line cut by a piece's end carried into the next
+  (a playlist EPlay saves for 1,000 files is about 80 KB), the music fed between pieces. Saved
+  with `#EXTM3U`, each file's `#EXTINF` (its length and tags when they're read) and its path,
+  relative where it is in the playlist's folder; written 4 KB at a time, an existing file
+  replaced only after an alert.
+- **Folders**: Add files selects folders as it does files (Return opens one only when it is
+  alone, or nothing is selected); a folder's music is walked eight folders deep at most, the
+  queue fed every 16 entries, then put in path order with a shell sort of the new rows (a tree's
+  walk isn't sorted, and an insertion sort of 1,000 is seconds on a 68000).
+
+`play_test`'s m3u, tree, repeat, shuffle and save cases; manym3u, manytree and many hold 1,000
+files (46 KB of list; on Falcon-4 the largest ST RAM block 2,297 KB before, 1,444 KB after,
+the queue's ring and the list both taken).
+
 ## The order of the work
 
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
