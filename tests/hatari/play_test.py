@@ -85,7 +85,7 @@ CASES = {
 # the dialog's wait goes on feeding the queue (common's dlg_idle: the hub,
 # 4 Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
 # queue's lead (3 s) never runs out
-CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 10)
+CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 14)
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # three files given at the start (as the desktop gives files dropped on the
@@ -303,6 +303,9 @@ def run(work, case, spec):
             time.sleep(3)
             cmd(fifo, "hatari-event", "keypress", "0x1c")    # Return: no file named, so nothing
         if case == "settings":
+            # (once the music is heard: the DSP's program is sent first, and
+            # Control+comma's key click before the music reads as a gap)
+            time.sleep(2)
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x33")    # Control+comma: Settings
             cmd(fifo, "hatari-event", "keyup", "0x1d")
