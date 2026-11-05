@@ -298,7 +298,7 @@ static long measure_ext(void)
    at 3 (0.4), with a 44.1 kHz signal into its input. 1 when the clock is
    at rate (snd_ext_rate, ext_pre set); else the lines as they were */
 int snd_fdi_changed;		/* EPlay changed the FDI's lines (put back at the end) */
-char snd_fdi_note[160];
+char snd_fdi_note[320];
 
 static void wait_ms(long ms)
 {
@@ -322,24 +322,45 @@ int snd_fdi_set(long rate)
 	   each time it sets the FDI's rate or input: read from Erez's copy,
 	   5 Nov 2026. The matrix is put back after each measure) */
 	trap14_ww(140, 1);
+	/* and then, before the lines, as its routine at $2ACE/$2E16 does:
+	   16-bit stereo, four tracks, the monitor the first */
+	Setmode(STEREO16);
+	Settracks(TRACKS - 1, 0);
+	Setmontracks(0);
 	for (k = 0; k < 3; k++) {
 		long got;
+		int t;
 		Gpio(0, 7);
 		Gpio(2, 4);
 		wait_ms(50);
 		Gpio(2, v[k]);
 		wait_ms(v[k] ? 50 : 200);	/* (the input's clock: its receiver to lock) */
+		/* (Cubase's next: the DSP's transmit to the port and the DAC
+		   on the external clock at prescale 1, through the FDI driver's
+		   Devconnect; it measures nothing after 2 or 3) */
+		Devconnect(DSPXMIT, DAC | EXTOUT, CLKEXT, 1, NO_SHAKE);
 		snd_fdi_changed = 1;
 		got = measure_ext();
 		n += snprintf(snd_fdi_note + n, sizeof(snd_fdi_note) - (size_t)n, "%s%d: %ld Hz", n ? "; " : "",
 			      v[k], snd_ext_raw);
 		if (n >= (int)sizeof(snd_fdi_note))
 			n = (int)sizeof(snd_fdi_note) - 1;
+		/* the FDI's own clock off the rate asked: measured again 200 and
+		   500 ms on, in case it takes longer to change than Cubase's
+		   50 ms (Erez, 5 Nov 2026: Cubase changes it between 44.1 and 48;
+		   EPlay read 48 kHz at 2 and at 3) */
+		for (t = 0; v[k] && got != rate && t < 2; t++) {
+			wait_ms(t ? 300 : 150);
+			got = measure_ext();
+			n += snprintf(snd_fdi_note + n, sizeof(snd_fdi_note) - (size_t)n, ", %ld Hz at %d ms", snd_ext_raw,
+				      t ? 500 : 200);
+			if (n >= (int)sizeof(snd_fdi_note))
+				n = (int)sizeof(snd_fdi_note) - 1;
+		}
 		/* the input's receiver may lock later than 200 ms: 0.10 measured
 		   39,300 Hz there, 44.1 kHz with its first 25 ms missing; 0.9
 		   44.1 kHz. Measured again, three times at most */
 		if (!v[k]) {
-			int t;
 			if (got != rate && snd_ext_raw > 1000) {
 				/* the input's clock off its rate: timed by the 200 Hz
 				   clock too, so that the log tells a clock at another
