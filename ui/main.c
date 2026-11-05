@@ -61,9 +61,9 @@ static const MBAR_ITEM m_view[] = {
 };
 static const MBAR_ITEM m_play[] = {
 	{ "Play/Pause", "Space", C_PLAY },
-	{ "Stop", 0, C_STOP },
-	{ "Previous", 0, C_PREV },
-	{ "Next", 0, C_NEXT },
+	{ "Stop", "ClrHome", C_STOP },
+	{ "Previous", "\x01\x04", C_PREV },
+	{ "Next", "\x01\x03", C_NEXT },
 	{ "-", 0, 0 },
 	{ "Shuffle", 0, C_SHUFFLE },	/* (out of the bar, 56 columns: Erez, 3 Nov 2026) */
 	{ "Repeat: off", 0, C_REPEAT },	/* (its text order_repeat_name's: the same length each) */
@@ -746,6 +746,43 @@ static int list_keys(short kr)
 	return 0;
 }
 
+/* the music's keys (Erez, 5 Nov 2026), the window's and the mini
+   player's alike: Left and Right 10 s back and forward in the file,
+   Shift+Left and Shift+Right the previous and next file, Clr Home Stop.
+   (TOS gives a shifted arrow '4' and '6': the scan code is taken.) 1 when
+   the key was one of them */
+#define SEEK_STEP 10000L
+static long seek_to = -1;		/* the position bar let go: where, for the next turn */
+static int music_keys(short kr, short ks)
+{
+	short scan = (kr >> 8) & 0xff;
+	int shift = (ks & 3) != 0;
+	long len, at;
+	switch (scan) {
+	case 0x47:			/* Clr Home */
+		command(C_STOP);
+		return 1;
+	case 0x4b:			/* Left */
+	case 0x4d:			/* Right */
+		if (shift) {
+			command(scan == 0x4b ? C_PREV : C_NEXT);
+			return 1;
+		}
+		len = play_len_ms();
+		if (!play_is_open() || len <= 0)
+			return 1;
+		at = (seek_to >= 0 ? seek_to : play_ms()) + (scan == 0x4b ? -SEEK_STEP : SEEK_STEP);
+		if (at < 0)
+			at = 0;
+		if (at > len - 1)
+			at = len - 1;
+		seek_to = at;		/* (gone there the next turn, as the position bar's) */
+		redraw(0, BP_TIME);
+		return 1;
+	}
+	return 0;
+}
+
 static void idle_step(void)
 {
 	step(play_state() == PS_PLAYING);
@@ -1057,7 +1094,6 @@ static int track(int hit, int part)
 	return in && !quit;
 }
 
-static long seek_to = -1;		/* the position bar let go: where, for the next turn */
 
 /* the position bar pressed (or dragged): the time shown follows the
    pointer, and on the release the music goes there */
@@ -1327,6 +1363,8 @@ static void turn(int nested)
 				command(C_SETTINGS);
 		} else if (a == ' ')
 			command(C_PLAY);	/* Play/Pause */
+		else if (music_keys(ev.kreturn, ev.kstate))
+			;
 		else if (!key_ctrl(ev.kstate, ev.kreturn) && list_keys(ev.kreturn))
 			;
 		else if (a == '+' || a == '-') {

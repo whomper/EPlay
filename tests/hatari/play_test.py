@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, list, m3u, tree, repeat, shuffle, save, mini (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon (Erez's, with the
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, list, m3u, tree, repeat, shuffle, save, mini (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon (Erez's, with the
 DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -125,6 +125,10 @@ for _c in ORDERED:
 # file selector's name as EPlay gives it (PLAYLIST.M3U) taken with Return:
 # the playlist at C:\ with both, relative to it
 CASES["save"] = CASES["list"]
+# the music's keys (Erez, 5 Nov 2026): three 30 s WAVs given; Right twice
+# (20 s on), Left once (back to about 10 s), Shift+Right (the next file),
+# Shift+Left (back to the first), Clr Home (stopped)
+CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 30)
 # the cases' eplay.inf
 INFS = {"repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
@@ -303,6 +307,10 @@ def run(work, case, spec):
             else:
                 shutil.copy(src, os.path.join(hd, name))
         tail = " ".join("C:\\" + n for n, _ in LIST)
+    if case == "keys":
+        for n in ("K2.WAV", "K3.WAV"):
+            shutil.copy(os.path.join(hd, "K1.WAV"), os.path.join(hd, n))
+        tail = "C:\\K1.WAV C:\\K2.WAV C:\\K3.WAV"
     if case == "save":
         os.makedirs(os.path.join(hd, "SUB"))
         shutil.copy(os.path.join(hd, "A.WAV"), os.path.join(hd, "SUB", "B.WAV"))
@@ -397,6 +405,29 @@ def run(work, case, spec):
             start = wait_line(log, lambda l: l.startswith("LOG free memory"), 1) or ""
             ok = bool(got) and got.split()[3] == "1000"
             return ok, m.describe(), "%s\n     %s" % (start[4:], got[4:] if got else "the list never read")
+        if case == "keys":
+            def key(scan, shift=False):
+                if shift:
+                    cmd(fifo, "hatari-event", "keydown", "0x2a")
+                cmd(fifo, "hatari-event", "keypress", scan)
+                if shift:
+                    cmd(fifo, "hatari-event", "keyup", "0x2a")
+                time.sleep(1.5)
+            for k in ("0x4d", "0x4d", "0x4b"):
+                key(k)
+            key("0x4d", True)
+            key("0x4b", True)
+            key("0x47")
+            time.sleep(1)
+            lines = open(log, errors="replace").read().split("\n")
+            went = [int(l.split()[3]) for l in lines if l.startswith("EPLAY went to ")]
+            names = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
+            stopped = any(l.startswith("EPLAY status: Stopped.") for l in lines)
+            # (each key 1.5 s after the last: the place moves on meanwhile)
+            ok = (len(went) == 3 and 10000 <= went[0] <= 14000 and 20000 <= went[1] <= 25000 and
+                  10000 <= went[2] <= 16000 and names == ["K1.WAV", "K2.WAV", "K1.WAV"] and stopped)
+            return ok, m.describe(), "went to %s ms; played %s; %s" % (
+                went, " ".join(names), "stopped" if stopped else "never stopped")
         if case == "save":
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x1f")     # ^S
