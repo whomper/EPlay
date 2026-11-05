@@ -222,6 +222,47 @@ static void pic_end(void)
 		pic_name = 0;
 	}
 }
+#ifdef AES_PROFILE
+/* the profiled build's: a picture's pieces timed to some 26 us, by the
+   200 Hz count and Timer C's count down within its 5 ms (TOS's: 192 at
+   2457.6 kHz / 64), to the rigs' console as "EPLAY part NAME 12.3 ms"
+   (the hub's speed rig, 5 Nov 2026: which piece of a row's picture grew) */
+static unsigned long part_us_now;
+static long part_read(void)
+{
+	static volatile unsigned long *volatile hz_at = (volatile unsigned long *)0x4baL;	/* (through a variable: */
+	volatile unsigned long *hz = hz_at;				/* GCC's bounds on a low address) */
+	volatile unsigned char *tcdr = (volatile unsigned char *)0xfffffa23L;
+	unsigned long a, b;
+	unsigned char c;
+	do {
+		a = *hz;
+		c = *tcdr;
+		b = *hz;
+	} while (a != b);
+	part_us_now = a * 5000UL + (c && c <= 192 ? (192UL - c) * 5000UL / 192 : 0);
+	return 0;
+}
+static unsigned long part_us(void)
+{
+	Supexec(part_read);
+	return part_us_now;
+}
+static unsigned long part_from;
+#define PART_T0() (part_from = part_us())
+#define PART(n) do { \
+		char pb_[48]; \
+		unsigned long pn_ = part_us(); \
+		snprintf(pb_, sizeof(pb_), "EPLAY part %s %lu.%lu ms\n", (n), (pn_ - part_from) / 1000, \
+			 (pn_ - part_from) / 100 % 10); \
+		nf_debug(pb_); \
+		part_from = part_us(); \
+	} while (0)
+#else
+#define PART_T0() ((void)0)
+#define PART(n) ((void)0)
+#endif
+
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
 static int shown_due;		/* what plays to draw whole the next turn: 2 the bar, 1 Play/Pause and
 				   the times (the open's turn is the file's: drawing and reading in
@@ -234,22 +275,37 @@ static void playing_drawn(int whole)
 {
 	static char via_shown[8];
 	char st[100];
+	PART_T0();
 	playing_status(st, sizeof(st));
 	status(st);
+	PART("info line");
 	if (whole) {
 		redraw(0, BP_LEFT);
+		PART("left");
+	}
+	/* the output's badge and the volume only when where it plays changed
+	   (Settings' Output, then Play: Erez, 5 Nov 2026), not for each file:
+	   nothing there is the file's (the hub's speed rig, 5 Nov 2026: a
+	   row played 10 ms slower on TOS 4.04 than 0.26 with it drawn each
+	   time) */
+	if (strcmp(via_shown, play_via)) {
 		redraw(0, BP_RIGHT);
-	} else if (strcmp(via_shown, play_via))
-		redraw(0, BP_RIGHT);	/* (where it plays changed: Settings' Output, then Play: Erez, 5 Nov 2026) */
+		PART("right");
+	}
 	snprintf(via_shown, sizeof(via_shown), "%s", play_via);
 	redraw(0, BP_PLAY | BP_TIME);
+	PART("play and times");
 }
 
 /* the file played: opened (play.c), started; its art the step's (play_file) */
 static void play_now(const char *f)
 {
 	char err[160];
-	if (!play_open(f, err, sizeof(err))) {
+	int opened;
+	PART_T0();
+	opened = play_open(f, err, sizeof(err));
+	PART("the file opened");
+	if (!opened) {
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
 		nf_debug(line);
@@ -258,6 +314,7 @@ static void play_now(const char *f)
 		return;
 	}
 	play_start();
+	PART("started");
 	{
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s\n", play_name, play_info, play_out);
