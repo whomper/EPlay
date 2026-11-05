@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh run watch *)",
+      "Bash(m68k-linux-gnu-objdump *)",
+      "Bash(m68k-linux-gnu-size *)",
+      "Bash(m68k-linux-gnu-nm *)",
+      "Bash(hatari --version)",
+      "mcp__claude-code-remote__list_sessions",
+      "mcp__claude-code-remote__get_session",
+      "mcp__claude-code-remote__list_repos"
+    ]
+  }
+}
