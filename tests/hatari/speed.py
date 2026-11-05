@@ -71,6 +71,32 @@ class Rig(speed.Rig):
         time.sleep(0.3 if self.quick else 3)
         return True
 
+    def picture_apart(self, start, picture):
+        """a job's turns with the picture's stretch apart: the picture
+        drawn whole (Erez's rule, 4 Nov 2026) is the stretch that comes
+        with its marker, a redraw held to WINDOW, not a job's turn (the
+        start's picture comes in the job's first turns or its later ones,
+        as the DSP's program load falls: 25 or 100 ms in "its turns")"""
+        with open(self.log, errors="replace") as f:
+            f.seek(start)
+            new = f.read()
+        gaps, pic, after = [], None, False
+        for line in new.split("\n"):
+            if line.startswith("EPLAY picture %s " % picture):
+                after = True
+            m = re.match(r"AESGAP (\d+) ms", line)
+            if m:
+                if after and pic is None:
+                    pic, after = int(m.group(1)), False
+                else:
+                    gaps.append(int(m.group(1)))
+        for i, (what, ms, budget) in enumerate(self.results):
+            if what.endswith(": its turns"):
+                self.results[i] = (what, max(gaps[1:]) if len(gaps) > 1 else 0, budget)
+        if pic is not None:
+            self.results.append((self.results[-1][0].replace(": its turns", "") + ": its picture, whole", pic,
+                                 speed.WINDOW))
+
     def redraw(self, what, picture, do):
         """a redraw row: its stretch held to WINDOW, and its picture's time
         from the input to 0.22's (PICTURE_022), a second line in the table"""
@@ -180,8 +206,10 @@ def session(work, spec, kind):
             if at >= 0 and drawn >= 0:
                 r.start_end = con.find("\n", drawn) + 1
             r.results[-1] = ("started, the window drawn", "AESSTART", speed.START)
+            start = os.path.getsize(r.log)
             r.act("an MP3 with an uncached cover: playing starts", 3000,
                   lambda: r.wait_line("EPLAY playing"), job=True)
+            r.picture_apart(start, "start")
         else:
             r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
             r.results[-1] = ("started, %s playing" % what, "AESSTART", speed.START)
