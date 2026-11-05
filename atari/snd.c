@@ -208,10 +208,12 @@ static long m_loop(void)
 	return 0;
 }
 
+static int open_to(long rate, int ext, int feed);
+
 static long measure(short pre)
 {
 	ext_pre = pre;
-	if (!snd_open(44100, 1))
+	if (!open_to(44100, 1, 2))	/* (one track, as 0.17 measured) */
 		return 0;
 	ring_n = 16384;
 	memset(ring, 0, (size_t)ring_n * 2 * FW);
@@ -487,7 +489,6 @@ long snd_rate_dsp(long rate, int *ext)
 	return best;
 }
 
-static int open_to(long rate, int ext, int feed);
 
 int snd_open(long rate, int ext)
 {
@@ -537,7 +538,11 @@ static int open_to(long rate, int ext, int feed)
 		Settracks(0, 0);
 		Setmontracks(0);
 		Setmode(STEREO16);
-		Devconnect(DMAPLAY, DSPRECV, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+		/* (2: an external clock measured, on one track to the DAC and
+		   the port, as up to 0.18: with the four tracks, 0.25 read the
+		   FDI's input clock at 44.1 kHz as 38,593 Hz, 7/8 of it, on
+		   Erez's Falcon, where 0.12 to 0.17 read 44,089 to 44,135) */
+		Devconnect(DMAPLAY, feed == 2 ? DAC | EXTOUT : DSPRECV, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
 	} else {
 		snd_fw = FW;
 		fw_shift = 4;
