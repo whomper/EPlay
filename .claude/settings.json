@@ -1,14 +1,24 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
-      "Bash(gh run watch *)",
-      "Bash(m68k-linux-gnu-objdump *)",
-      "Bash(m68k-linux-gnu-size *)",
-      "Bash(m68k-linux-gnu-nm *)",
-      "Bash(hatari --version)",
-      "mcp__claude-code-remote__list_sessions",
-      "mcp__claude-code-remote__get_session",
-      "mcp__claude-code-remote__list_repos"
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Agent",
+      "Skill",
+      "Workflow",
+      "mcp__github",
+      "mcp__GitHub",
+      "mcp__claude-code-remote",
+      "mcp__claude-artifacts",
+      "mcp__Claude_Docs"
     ]
   }
 }
