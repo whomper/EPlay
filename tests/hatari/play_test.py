@@ -197,7 +197,13 @@ def tone(x, rate):
 
 
 RESAMPLED = {"wav22", "aiff44", "settings"}       # (and every MP3)
-WAV_LEVEL = 0               # (set below once measured: wav's level on Hatari's Falcon)
+# wav's level when its own run recorded nothing (excused: Hatari's DMA on
+# a silent track) or didn't run: the tone's own, sox's sine at -6 dB
+# (0.501 of full scale, its RMS that over the square root of 2). Hatari
+# records the DAC as the samples are: the hub's wavvol at 8 (12 dB down)
+# read 2917, -12.0 dB from it (TOS 4.04, 6 Nov 2026). It was 0, so wavvol
+# alone, or after an excused wav, read -99 dB
+WAV_LEVEL = 32767 * 10 ** (-6 / 20) / math.sqrt(2)
 
 
 def analyse(rec, case):
