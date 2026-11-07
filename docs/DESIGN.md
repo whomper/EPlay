@@ -1368,6 +1368,40 @@ mix320.mp3 resampled to 49,170 Hz, 150 frames (300 granules), granules late:
 Better, not yet enough where the DSP is 5 % or more slower than Hatari's, as Erez's seems to be:
 the decoder itself has to get faster still, or the file plays at Normal.
 
+**0.29 on Erez's Falcon (7 Nov 2026), Output DSP:** two files of about 264 kbit/s (MPEG-1, 44.1 kHz,
+VBR), with seeks: 0 underruns, 0 late granules, 0 broken packets, the DSP's waits 844 a frame on
+average, the disk 35 s ahead at most and 9 s at least. He heard crackles. They fit the output, not
+the decoder: in Output DSP the DSP's output goes to the DAC and the DSP port together on the
+Falcon's own clock (49,170 Hz), and his FDI on the port plays at its own (48,011 Hz measured): 2.4 %
+more samples than it plays, a slip a click. What goes to the FDI in Output DSP is put to Erez (the
+DAC alone, or the FDI's clock as Auto). Output DSP never touches the FDI's clock, so that log
+holds no "the FDI to 44100 Hz" line; the FDI at 44.1 kHz needs a log with Output FDI.
+
+Erez's next run (7 Nov): no crackles; Output DSP plays on the Falcon's own output and on the FDI,
+FDI on the FDI alone; and the FDI "does not adhere to the file's sample rate and stays constant at
+48 kHz. This should be handled." Every log since 0.4 read 48 kHz at Cubase's 2 and 3 (its 8-track
+values for 44.1 and 48), and 44.1 kHz only at 0, from what came into the FDI's input. Cubase
+Audio's FDI routine (\$2A08 in Erez's copy) sets only these lines (its control word sent as
+samples, \$5190, is for another interface: with the FDI's driver answering it is jumped over), with
+5 and 7 for the same rates in its 16-track modes. **0.30** tries 2, 5, 3 and 7 for 44.1 (3, 7, 2, 5
+for 48), each measured, the first at rate kept, then 0, and logs every reading: the log will say
+which line, if any, moves this FDI's own clock.
+
+**What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
+waiting for Erez's DSP-mode log of 0.28 to say how much more is needed before taking them on:
+- *The synthesis window* (`swpair`, 12.4 %) is at its floor: one MAC an instruction, both
+  accumulators.
+- *Dequantising* (15.2 % with its paths): 87 % of the lines are not zero, and a cached value takes
+  some 13 instructions with four branches (zero, the range, kept, the sign). A table by the signed
+  value would take two of the branches out (about 2.5 %), but its 31 words have no room in internal
+  Y (CQ at \$00, the window's pairs from \$10 to \$FF). Working out values (`dqval`, about 850 calls
+  a frame, most of them a band's first use) is some 2 %; filling a band's 15 at its start would
+  cost as much as the test it saves. A loop without the range test where the region's table has
+  no linbits would save about 1 %.
+- *The resampler* (`rsl`, 10.4 %): left and right read the same taps twice. One chain over
+  interleaved samples, with both accumulators, would save about 1 %, but the position kept in A
+  would have to go elsewhere.
+
 ### A dialog held open while it plays (the hub, 4 Nov 2026; 0.24)
 
 A modal dialog (Settings, About) waits in common's `dlg_evnt`, not in EPlay's loop, so 0.23 read
