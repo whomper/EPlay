@@ -170,10 +170,10 @@ dsptest: $(B)/mp3files/.made
 # index (the guidelines, 4.3)
 HCP     ?= hcp
 help: binary/eplay.hyp
-binary/eplay.hyp: docs/GUIDE.md tools/mkhelp.py VERSION docs/front.json docs/help/WINDOW.IMG \
+binary/eplay.hyp: docs/GUIDE.md common/tools/mkhelp.py VERSION docs/front.json docs/help/WINDOW.IMG \
                   common/help/EPLAY.IMG common/tools/helpfront.py common/tools/gemimg.py | binary
 	mkdir -p $(B)/help
-	python3 tools/mkhelp.py docs/GUIDE.md VERSION $(B)/help/EPLAY.STG
+	python3 common/tools/mkhelp.py docs/GUIDE.md VERSION $(B)/help/EPLAY.STG --database "EPlay - music on the Falcon" --subject Sound
 	python3 common/tools/helpfront.py page docs/front.json $(B)/help/EPLAY.STG $(B)/help/EPLAY.STG
 	$(HCP) -q -o $@ $(B)/help/EPLAY.STG >/dev/null
 	test -s binary/eplay.ref
