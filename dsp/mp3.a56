@@ -1027,7 +1027,17 @@ pkf1	rts				; will see HF2
 ; word lost on the way) drops what came, counted as a packet broken, and
 ; the next count starts it again
 pkpoll	jclr	#2,x:V_SF,pkp9
-	move	x:V_PKB,b
+	jclr	#0,x:HSR,pkpq		; a word the interrupt left: taken here as it
+	ori	#3,mr			; would take it (Hatari 2.4.1 raises none for a
+	jclr	#0,x:HSR,pkpu		; word written into an empty port; a DSP56001
+	move	r3,x:V_SVP		; does: its interrupt is HRDF's while HRIE)
+	move	x:V_PKP,r3
+	bclr	#3,x:HCR
+	movep	x:HRX,y:(r3)+
+	move	r3,x:V_PKP
+	move	x:V_SVP,r3
+pkpu	andi	#$fc,mr
+pkpq	move	x:V_PKB,b
 	move	#>1,x1
 	sub	x1,b
 	move	b1,x0			; its count's place

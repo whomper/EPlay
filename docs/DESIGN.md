@@ -1340,6 +1340,12 @@ resampling (the FDI at 44.1 kHz) the same file takes 82 %.
   HF2 (a packet wanted) goes off with a packet's first word, in the interrupt: the routine that
   took the last word cleared it before, and with the interrupt taking it the 68030 saw HF2 still
   on and sent the next packet over the end of this one (play_test's first MP3: the DSP stopped).
+  Hatari 2.4.1 (the rigs', and the hub's) raises no host receive interrupt for a word the host
+  writes into an empty port (its dsp_core.c sets HRDF there without the interrupt; later Hatari,
+  and a DSP56001, raise it while HRDF and HRIE are both set). So `pkpoll`, in the waits, also
+  takes a word the interrupt left, with the interrupts held off a moment: on a real Falcon the
+  interrupt takes nearly all of them while the DSP decodes, and under 2.4.1 the waits take them
+  as they did. stream.c passes on both cores.
 
 `tests/dspmp3/stream.c` (in `make dsptest`) runs STREAM as EPlay plays: the SSI clocked at the
 output's rate, the packets sent on HF2, the status words read; it fails when the DSP stops, a
