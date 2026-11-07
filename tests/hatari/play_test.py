@@ -12,8 +12,9 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, list, m3u, tree, repeat, shuffle, save, mini (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon (Erez's, with the
-DFB1) and Falcon-4 (a stock Falcon) by default. Each case leaves
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, list, m3u, tree, repeat, shuffle, save, mini (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
+by default; Falcon (Erez's, with the DFB1) when named, once a week (the
+hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
 """
@@ -513,7 +514,7 @@ def run(work, case, spec):
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-play")
     cases = [a for a in sys.argv[2:] if a in CASES] or [c for c in CASES if c not in NOT_DEFAULT]
-    specs = [a for a in sys.argv[2:] if a not in CASES] or ["Falcon", "Falcon-4"]
+    specs = [a for a in sys.argv[2:] if a not in CASES] or ["Falcon-4"]
     failed = 0
     for spec in specs:
         for case in cases:
