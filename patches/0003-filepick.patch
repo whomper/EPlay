@@ -1,0 +1,2108 @@
+From d8ed3254fb31df9b720405f97554c4f25599d132 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Sat, 7 Nov 2026 10:27:01 +0000
+Subject: [PATCH] common/ui/filepick.c: the family's file dialog, several files
+ at once
+
+From EPlay's Add files (ui/addfiles.c and src/dirlist.c; Erez, 4 Nov
+2026), as the hub asked (5 Nov 2026), for EPDF's EConvert and the next
+app that takes several files: the AES's own objects with Selectric's
+ways, the last ten folders, the type, the sort, a mask, sizes and dates,
+a click, Shift-click, a drag, Control+A, All and None, the count and
+bytes, folders taken whole, idle() every 20 ms while it is open.
+
+What was EPlay's own is now the app's FP_SPEC: the title ("Add files"),
+the default button ("Add"), the empty Folders line, the name of the
+rigs' picture times on the console ("EPLAY picture add 110 ms") and the
+Type pop-up's entries, a DL_TYPE table of names and extensions (12 at
+most; with none, All files alone). The rest is EPlay's code as it was.
+
+tests/dirlist: EPlay's checks of the folder (masks, the sorts with
+folders first, the selection, sizes and dates, 5,000 entries) with its
+types as a table, and the table's own (none, the first chosen, AIFC,
+names without a dot): all pass, with AddressSanitizer.
+
+tests/filepick: FPTEST.PRG opens it on a folder of music, a text file
+and two folders with EPlay's types; run.py selects with Down and
+Shift+Down, types a mask and clears it, takes all with Control+A and
+adds them with Return; the files taken must be the five music files in
+name order, idle() called, no CRASH.LOG. With --old it runs EPlay's own
+(FPOLD.PRG, make old EPLAY=...) the same way and compares the five
+screenshots pixel for pixel. On EmuTOS:
+
+  Falcon:16     all passed, the five the same as EPlay's; opened in 110 ms
+  Falcon-4:16   all passed, the five the same; 160 ms
+  ST:mono       all passed, the five the same; 415 ms
+  ST:med        all passed, the five the same; 420 ms
+
+No pixel changed. Seen on ST:med (EPlay never runs there): with an
+8-pixel font a folder's shape reaches into the row above it. That is
+for a change of its own, with its pictures.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SZeNoDozTmbWt4s2sFN9eL
+---
+ common/README.md                    |   1 +
+ common/src/dirlist.c                | 292 +++++++++
+ common/src/dirlist.h                |  76 +++
+ common/tests/dirlist/Makefile       |  14 +
+ common/tests/dirlist/test_dirlist.c | 148 +++++
+ common/tests/filepick/Makefile      |  65 ++
+ common/tests/filepick/fptest.c      |  82 +++
+ common/tests/filepick/run.py        | 129 ++++
+ common/tests/filepick/stub/draw.c   | 182 ++++++
+ common/tests/filepick/stub/ui.h     |  39 ++
+ common/ui/filepick.c                | 878 ++++++++++++++++++++++++++++
+ common/ui/filepick.h                |  53 ++
+ 12 files changed, 1959 insertions(+)
+ create mode 100644 common/src/dirlist.c
+ create mode 100644 common/src/dirlist.h
+ create mode 100644 common/tests/dirlist/Makefile
+ create mode 100644 common/tests/dirlist/test_dirlist.c
+ create mode 100644 common/tests/filepick/Makefile
+ create mode 100644 common/tests/filepick/fptest.c
+ create mode 100644 common/tests/filepick/run.py
+ create mode 100644 common/tests/filepick/stub/draw.c
+ create mode 100644 common/tests/filepick/stub/ui.h
+ create mode 100644 common/ui/filepick.c
+ create mode 100644 common/ui/filepick.h
+
+diff --git a/common/README.md b/common/README.md
+index 1c98a66..d5e515c 100644
+--- a/common/README.md
++++ b/common/README.md
+@@ -135,6 +135,7 @@ same as before.
+ | `ui/aboutbox.c/.h` | ECal | the About box: `about_show(&ABOUT)` with the name, version, tagline, up to three lines of the app's own and its icon; in the small font, the licence line always and up to three of the app's (the trademarks it names); `about_ram()` for "TT RAM"; `about_icon16()` for the colour icon. In the same frame, `text_box(title, text)` shows plain text, and `crash_offer(app, where)`, at start-up after a crash TOS recorded, says so and offers to show the report from CRASH.LOG (guidelines 6.4) |
+ | `ui/aboutline.c/.h` | | the About box's status lines in the family's words (guidelines 1.3): `about_net_line(buf, n, net_stack(), ABOUT_DIRECT, ABOUT_ONLINE)` gives "STinG  •  Direct  •  online", `about_mem_line(buf, n)` "TT RAM  •  Free: 98.2 MB TT, 3.1 MB ST"; the app writes the line between them. `tests/about` checks the words on the build machine |
+ | `ui/fontsel.c/.h` | ECal | the family's Font dialog (guidelines 5.3), laid out as NVDI's WDIALOG selector: the **Family** list (one row per family, the system font first), beside it the **Style** list (Regular, Italic, Bold, Bold Italic, then the others by weight) and the **Size** list, then the Type line, a sample in the font chosen ("The quick brown fox jumps over the lazy dog"), OK and Cancel; 48 by 17 cells of the system font (Erez, 20 Oct 2026: no Hebrew samples, no Pt: field, a quarter smaller than the first). Only the system font and the fixed-width GDOS fonts with letters are listed ('i', 'W' and 'm' as wide at 12 points; not Symbol Monospaced, whose 'A' has no Unicode letter, nor a font named Symbol, Dingbats, Wingdings...); each is measured once and the answer kept in the app's `NAME.FNT` (`#FNT2`: `1 name<tab>id<tab>family<tab>style<tab>format`; earlier files' fixed-width answers are measured again for the letters). Families and styles from `vqt_xfntinfo` (`atari/gem.c`; NVDI's Courier 10 Pitch says "Roman") or from the name's trailing Bold, Italic, Light... The sizes are the ones `vst_point` gives for 6 to 36 points. Keys: Up and Down in the list with the ring (Shift: a page), Tab, Shift+Tab, Left and Right between the lists, a letter to a family, Return OK, Esc and Undo Cancel; a row is chosen by a press of the button, never where the pointer rests; the type line and sample wait until no key does. `fontsel_run(&fs)` with the app's current font, `NAME.FNT`'s path, whether the GDOS fonts are loaded (the program's are loaded there; an accessory's never: without them it lists `NAME.FNT`'s for the next start and says so), and its hooks: `apply` (OK: take it and save), `message` (EMail's PEOPLE answers). Every clip it sets on `vdi_h` is off before it returns. `fontsel_hebrew()` says where a font has its Hebrew; `fontsel_usable()` answers the font protocol. `tests/fontsel`: the names, the styles' order and `NAME.FNT`'s lines on the build machine |
++| `ui/filepick.c/.h`, `src/dirlist.c/.h` | EPlay (its Add files, Erez, 4 Nov 2026) | the family's file dialog for several files at once, which TOS's file selector can't give: `filepick_run(&spec, dir, recent, take, idle)`. The AES's own objects (3D where the AES has it, in a window on MiNT and MagiC), Selectric's ways: the drive at the folder line's start, the last ten folders, the app's types (`DL_TYPE`: a name and its extensions), the sort, a mask, each file's size and date, a click, Shift-click, a drag, Control+A, All and None, the count and bytes; folders taken whole (a `\\` at the end); `idle()` every 20 ms while it is open. `FP_SPEC` gives the title, the default button, the empty Folders line, the rigs' log name and the types. It draws with the app's own drawing (`gemui.h`). Tests: `tests/dirlist` (the folder, on the build machine), `tests/filepick` (`FPTEST.PRG`: the keys, the mask, the files taken; `--old` against EPlay's own, pixel for pixel) |
+ | `ui/clip.c/.h`, `ui/clipedit.c` | EContact | the GEM clipboard (guidelines 4.4): `clip_put(text, n)` writes SCRAP.TXT in the AES's clipboard folder (made when it isn't there, else `\CLIPBRD` on the boot drive or the drive the program runs from), the other `SCRAP.*` gone, lines ending CR LF, and tells the other programs (SC_CHANGED) where the AES broadcasts; a long text (a whole document) goes in slices, `clip_put_begin()`, `clip_put_step(text, n)` each slice, `clip_put_end(ok)` (EPDF, 31 Oct 2026): 16 KB a write (32 KB on a 68020 or better), no file open between the calls, the old clipboard kept when given up before the first piece; `clip_put` is the three at once; `clip_get(buf, size)` reads it, lines ending `'\n'`; `clip_line()` keeps the first line for a field of one; `clip_key(key)` tells ^C ^X ^V; `clip_edit(tree, obj, &idx, key)` does them on a dialog's edit field through `objc_edit`, so the field's length and template hold. `tests/dd` checks it on the build machine |
+ | `ui/dd.c/.h` | | things dropped on a window (guidelines 4.2): `dd_message(msg, DD_WANT_FILES \| DD_WANT_TEXT, &d)` takes AP_DRAGDROP (MiNT, MagiC: the pipe `U:\PIPE\DRAGDROP.xx`, as cflib's `dd_open`), offering ARGS and `.TXT`, refusing what isn't wanted (DD_EXT, DD_NAK) or is too long (DD_LEN), and VA_DRAGACCWIND from the desktop; files come quoted as VA_START's, text with `'\n'` line ends. `tests/dd` checks the protocol on the build machine with a stand-in pipe |
+ | `ui/iconify.c/.h` | ECal | iconified windows (guidelines 5.1): `icon_kind(kind)` adds the iconifier where the AES can iconify; `icon_redraw(h, area, icon, icon16, "3 new")` draws the window as the app's icon, in colour with 16 colours or more, with a short status under it when there is room, through the rectangle list over the work area as it is now. `tests/av/app_av.py` with `icon NAME` and `uniconify NAME` in THING.ACC's script sends an app WM_ICONIFY and WM_UNICONIFY under EmuTOS (which can't shrink the window, so the icon is drawn in the whole of it) |
+diff --git a/common/src/dirlist.c b/common/src/dirlist.c
+new file mode 100644
+index 0000000..f8ff37e
+--- /dev/null
++++ b/common/src/dirlist.c
+@@ -0,0 +1,292 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * dirlist.c - a folder's entries for the family's file dialog (dirlist.h).
++ */
++#include <stdlib.h>
++#include <string.h>
++#include <stdio.h>
++#include "dirlist.h"
++
++static const DL_TYPE all_files[1] = { { "All files", "" } };
++
++void dl_init(DLIST *d)
++{
++	memset(d, 0, sizeof(*d));
++	d->types = all_files;
++	d->ntypes = 1;
++	d->type = 0;
++	d->sort = DS_NAME;
++}
++
++void dl_types(DLIST *d, const DL_TYPE *t, int n)
++{
++	if (t && n > 0) {
++		d->types = t;
++		d->ntypes = n > DL_TYPES ? DL_TYPES : n;
++	} else {
++		d->types = all_files;
++		d->ntypes = 1;
++	}
++	d->type = 0;
++}
++
++void dl_free(DLIST *d)
++{
++	free(d->e);
++	free(d->view);
++	d->e = 0;
++	d->view = 0;
++	d->n = d->cap = d->nview = 0;
++}
++
++void dl_clear(DLIST *d)
++{
++	d->n = d->nview = 0;
++}
++
++static int up(int c)
++{
++	return c >= 'a' && c <= 'z' ? c - 32 : c;
++}
++
++int dl_add(DLIST *d, const char *name, long size, unsigned short date, unsigned short time, int dir)
++{
++	DENT *x;
++	if (!strcmp(name, ".") || !strcmp(name, ".."))
++		return 1;
++	if (d->n >= d->cap) {
++		int cap = d->cap ? d->cap * 2 : 64;
++		DENT *e = malloc((size_t)cap * sizeof(DENT));
++		int *v = malloc((size_t)cap * sizeof(int));
++		if (!e || !v) {
++			free(e);
++			free(v);
++			return 0;
++		}
++		if (d->n)
++			memcpy(e, d->e, (size_t)d->n * sizeof(DENT));
++		free(d->e);
++		free(d->view);
++		d->e = e;
++		d->view = v;
++		d->cap = cap;
++	}
++	x = &d->e[d->n++];
++	memset(x, 0, sizeof(*x));
++	snprintf(x->name, sizeof(x->name), "%s", name);
++	x->size = size;
++	x->date = date;
++	x->time = time;
++	x->dir = dir != 0;
++	return 1;
++}
++
++static int namecmp(const char *a, const char *b)
++{
++	for (; *a && up(*a) == up(*b); a++, b++)
++		;
++	return up(*a) - up(*b);
++}
++
++static const char *ext(const char *n)
++{
++	const char *d = strrchr(n, '.');
++	return d ? d + 1 : "";
++}
++
++static int sort_by;
++static int cmp(const void *pa, const void *pb)
++{
++	const DENT *a = pa, *b = pb;
++	long k = 0;
++	if (a->dir != b->dir)
++		return a->dir ? -1 : 1;	/* folders first */
++	if (!a->dir)
++		switch (sort_by) {
++		case DS_DATE:		/* the newest first, as Selectric */
++			k = ((long)b->date << 16 | b->time) - ((long)a->date << 16 | a->time);
++			break;
++		case DS_SIZE:		/* the biggest first */
++			k = b->size > a->size ? 1 : b->size < a->size ? -1 : 0;
++			break;
++		case DS_TYPE:
++			k = namecmp(ext(a->name), ext(b->name));
++			break;
++		}
++	if (k)
++		return k > 0 ? 1 : -1;
++	return namecmp(a->name, b->name);
++}
++
++void dl_sort(DLIST *d)
++{
++	sort_by = d->sort;
++	if (d->n > 1)
++		qsort(d->e, (size_t)d->n, sizeof(DENT), cmp);
++	dl_filter(d);
++}
++
++int dl_match(const char *m, const char *s)
++{
++	/* (8.3 names: a backtracking match is enough) */
++	if (!*m)
++		return !*s;
++	if (*m == '*') {
++		for (;; s++) {
++			if (dl_match(m + 1, s))
++				return 1;
++			if (!*s)
++				return 0;
++		}
++	}
++	if (!*s)
++		return 0;
++	if (*m != '?' && up(*m) != up(*s))
++		return 0;
++	return dl_match(m + 1, s + 1);
++}
++
++/* name's extension one of exts' (a space between each) */
++static int ext_in(const char *name, const char *exts)
++{
++	const char *e = ext(name);
++	while (*exts) {
++		size_t n;
++		while (*exts == ' ')
++			exts++;
++		for (n = 0; exts[n] && exts[n] != ' '; n++)
++			;
++		if (n) {
++			size_t k;
++			for (k = 0; k < n && e[k] && up(e[k]) == up(exts[k]); k++)
++				;
++			if (k == n && !e[k])
++				return 1;
++		}
++		exts += n;
++	}
++	return 0;
++}
++
++int dl_type_ok(const DLIST *d, int type, const char *name)
++{
++	const char *x;
++	if (type < 0 || type >= d->ntypes)
++		return 1;
++	x = d->types[type].exts;
++	return !x || !*x || ext_in(name, x);
++}
++
++const char *dl_type_name(const DLIST *d, int type)
++{
++	return type >= 0 && type < d->ntypes ? d->types[type].name : "?";
++}
++
++const char *dl_sort_name(int sort)
++{
++	static const char *const n[DS_N] = { "By name", "By date", "By size", "By type" };
++	return sort >= 0 && sort < DS_N ? n[sort] : "?";
++}
++
++void dl_filter(DLIST *d)
++{
++	int i;
++	int any = !d->mask[0] || !strcmp(d->mask, "*") || !strcmp(d->mask, "*.*");
++	d->nview = 0;
++	for (i = 0; i < d->n; i++) {
++		DENT *e = &d->e[i];
++		if (e->dir || (dl_type_ok(d, d->type, e->name) && (any || dl_match(d->mask, e->name))))
++			d->view[d->nview++] = i;
++		else
++			e->sel = 0;	/* (out of sight: not added) */
++	}
++}
++
++DENT *dl_at(DLIST *d, int row)
++{
++	return row >= 0 && row < d->nview ? &d->e[d->view[row]] : 0;
++}
++
++void dl_select_all(DLIST *d, int on)
++{
++	int r;
++	for (r = 0; r < d->nview; r++) {
++		DENT *e = dl_at(d, r);
++		e->sel = on && !e->dir;
++	}
++}
++
++void dl_select_only(DLIST *d, int row)
++{
++	DENT *e = dl_at(d, row);
++	dl_select_all(d, 0);
++	if (e)
++		e->sel = 1;
++}
++
++void dl_toggle(DLIST *d, int row)
++{
++	DENT *e = dl_at(d, row);
++	if (e)
++		e->sel = !e->sel;
++}
++
++void dl_select_range(DLIST *d, int a, int b)
++{
++	int r;
++	if (a > b) {
++		r = a;
++		a = b;
++		b = r;
++	}
++	dl_select_all(d, 0);
++	for (r = a; r <= b; r++) {
++		DENT *e = dl_at(d, r);
++		if (e)
++			e->sel = 1;
++	}
++}
++
++int dl_selected_dirs(const DLIST *d)
++{
++	int r, k = 0;
++	for (r = 0; r < d->nview; r++)
++		k += d->e[d->view[r]].sel && d->e[d->view[r]].dir;
++	return k;
++}
++
++int dl_selected(const DLIST *d, long *bytes)
++{
++	int r, k = 0;
++	long b = 0;
++	for (r = 0; r < d->nview; r++) {
++		const DENT *e = &d->e[d->view[r]];
++		if (e->sel) {
++			k++;
++			if (!e->dir)
++				b += e->size;
++		}
++	}
++	if (bytes)
++		*bytes = b;
++	return k;
++}
++
++void dl_size_text(long size, char *out)
++{
++	if (size < 1024)
++		sprintf(out, "%ld", size);
++	else if (size < 1024L * 1024)
++		sprintf(out, "%ldK", (size + 512) / 1024);
++	else if (size < 10L * 1024 * 1024) {
++		long t = (size * 10 + 512L * 1024) / (1024L * 1024);	/* tenths of a MB */
++		sprintf(out, "%ld.%ldM", t / 10, t % 10);
++	} else
++		sprintf(out, "%ldM", (size + 512L * 1024) / (1024L * 1024));
++}
++
++void dl_date_text(unsigned short date, char *out)
++{
++	sprintf(out, "%02u.%02u.%02u", date & 31, (date >> 5) & 15, (unsigned)((date >> 9) + 80) % 100);
++}
+diff --git a/common/src/dirlist.h b/common/src/dirlist.h
+new file mode 100644
+index 0000000..a773420
+--- /dev/null
++++ b/common/src/dirlist.h
+@@ -0,0 +1,76 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * dirlist.h - a folder's entries for the family's file dialog (ui/filepick.c;
++ * from EPlay's Add files, Erez, 4 Nov 2026: Selectric's ways, a selection,
++ * no check boxes): its folders and files with their sizes and dates, as
++ * many as memory holds, sorted (folders first) by name, date, size or
++ * type, and the view of them a type and a mask (* and ?) let through, each
++ * file selected or not. The types are the app's: a table of names and the
++ * extensions each lets through. No TOS here: the dialog reads the folder
++ * and hands each entry in, so the host can test it all (tests/dirlist).
++ */
++#ifndef AERA_DIRLIST_H
++#define AERA_DIRLIST_H
++
++typedef struct {
++	char name[14];		/* 8.3, as GEMDOS gives it */
++	long size;
++	unsigned short date;	/* GEMDOS's: year - 1980 << 9 | month << 5 | day */
++	unsigned short time;
++	unsigned char dir;	/* a folder */
++	unsigned char sel;	/* selected (files only) */
++} DENT;
++
++/* the Type pop-up's entries, the app's: its name ("Music files") and the
++   extensions it lets through, a space between ("MP3 WAV AIF AIFF"), ""
++   for every file. The first is the dialog's own at its start */
++typedef struct {
++	const char *name;
++	const char *exts;
++} DL_TYPE;
++#define DL_TYPES 12		/* the most a pop-up holds */
++
++enum { DS_NAME, DS_DATE, DS_SIZE, DS_TYPE, DS_N };		/* the Sort pop-up */
++
++typedef struct {
++	DENT *e;
++	int n, cap;		/* all the folder's entries, sorted */
++	int *view, nview;	/* those shown: indexes into e */
++	int type, sort;		/* type: an index into types */
++	char mask[14];		/* "" or "*": everything */
++	const DL_TYPE *types;	/* dl_init: one, "All files" */
++	int ntypes;
++} DLIST;
++
++void dl_init(DLIST *d);
++void dl_types(DLIST *d, const DL_TYPE *t, int n);	/* the app's; type 0 then */
++void dl_free(DLIST *d);
++void dl_clear(DLIST *d);	/* its entries gone (another folder), the type, sort and mask kept */
++/* an entry of the folder read ("." and ".." are left out): 0 when there's
++   no memory for it */
++int dl_add(DLIST *d, const char *name, long size, unsigned short date, unsigned short time, int dir);
++/* sorted (folders first, then the files, each as d->sort has it), and
++   the view made again from the type and the mask (folders always) */
++void dl_sort(DLIST *d);
++void dl_filter(DLIST *d);
++DENT *dl_at(DLIST *d, int row);		/* the view's row: 0 past it */
++
++int dl_match(const char *mask, const char *name);	/* * and ?, case aside */
++int dl_type_ok(const DLIST *d, int type, const char *name);
++const char *dl_type_name(const DLIST *d, int type);	/* its name: "?" past the table */
++const char *dl_sort_name(int sort);	/* "By name", ... */
++
++/* the selection: in the view's rows */
++void dl_select_only(DLIST *d, int row);
++void dl_toggle(DLIST *d, int row);
++void dl_select_range(DLIST *d, int a, int b);	/* a to b, and only them */
++void dl_select_all(DLIST *d, int on);	/* on: every file (not the folders: a drive's all at once) */
++int dl_selected_dirs(const DLIST *d);	/* of those, the folders (added with their subfolders) */
++int dl_selected(const DLIST *d, long *bytes);	/* how many rows (files and folders), the files' bytes */
++
++/* "7.1M", "64M", "512K", "12"; "03.11.26" */
++void dl_size_text(long size, char *out);
++void dl_date_text(unsigned short date, char *out);
++
++#endif
+diff --git a/common/tests/dirlist/Makefile b/common/tests/dirlist/Makefile
+new file mode 100644
+index 0000000..7fe9b64
+--- /dev/null
++++ b/common/tests/dirlist/Makefile
+@@ -0,0 +1,14 @@
++# SPDX-License-Identifier: GPL-2.0-or-later
++# Copyright (C) 2026 AERA | Erez Yaary
++# src/dirlist.c, the file dialog's folder, on the build machine, with
++# AddressSanitizer: make test
++CFLAGS := -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -I../../src
++build/test_dirlist: test_dirlist.c ../../src/dirlist.c ../../src/dirlist.h | build
++	cc $(CFLAGS) -o $@ test_dirlist.c ../../src/dirlist.c
++build:
++	mkdir -p $@
++test: build/test_dirlist
++	./build/test_dirlist
++clean:
++	rm -rf build
++.PHONY: test clean
+diff --git a/common/tests/dirlist/test_dirlist.c b/common/tests/dirlist/test_dirlist.c
+new file mode 100644
+index 0000000..ab36194
+--- /dev/null
++++ b/common/tests/dirlist/test_dirlist.c
+@@ -0,0 +1,148 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * test_dirlist.c - src/dirlist.c: the file dialog's folder (the masks,
++ * the app's types, the sorts with folders first, the selection, the sizes
++ * and dates as shown), and a folder of 5,000 entries. The types are
++ * EPlay's, whose Add files the dialog was. With AddressSanitizer: make test
++ */
++#include <stdio.h>
++#include <string.h>
++#include "dirlist.h"
++
++static int bad;
++static void check(int ok, const char *what)
++{
++	printf("%s  %s\n", ok ? "ok  " : "FAIL", what);
++	bad += !ok;
++}
++
++enum { DT_MUSIC, DT_MP3, DT_WAV, DT_AIFF, DT_M3U, DT_ALL, DT_N };
++static const DL_TYPE music[DT_N] = { { "Music files", "MP3 WAV AIF AIFF AIFC M3U" }, { "MP3", "MP3" },
++				     { "WAV", "WAV" }, { "AIFF", "AIF AIFF AIFC" }, { "Playlists", "M3U" },
++				     { "All files", "" } };
++
++#define D(y, m, dd) ((unsigned short)(((y) - 1980) << 9 | (m) << 5 | (dd)))
++
++static const char *names(DLIST *d)
++{
++	static char s[400];
++	int r;
++	s[0] = 0;
++	for (r = 0; r < d->nview; r++) {
++		if (r)
++			strcat(s, " ");
++		strcat(s, dl_at(d, r)->name);
++	}
++	return s;
++}
++
++int main(void)
++{
++	DLIST d;
++	char t[16];
++	long b;
++	int i, ok;
++	/* masks */
++	check(dl_match("*", "A.MP3") && dl_match("*.MP3", "night.mp3") && !dl_match("*.MP3", "A.WAV") &&
++	      dl_match("0?_*", "01_NIGHT.MP3") && !dl_match("0?_*", "1_NIGHT.MP3") &&
++	      dl_match("*LIVE*", "MYLIVE01.WAV") && !dl_match("A?", "A") && dl_match("", ""),
++	      "masks: * and ?, the case aside");
++	/* the folder */
++	dl_init(&d);
++	check(d.ntypes == 1 && !strcmp(dl_type_name(&d, 0), "All files") && dl_type_ok(&d, 0, "X.PRG"),
++	      "no table: All files alone");
++	dl_types(&d, music, DT_N);
++	check(d.type == DT_MUSIC && d.ntypes == DT_N && !strcmp(dl_type_name(&d, DT_M3U), "Playlists") &&
++	      !strcmp(dl_type_name(&d, DT_N), "?"), "the app's types, the first chosen");
++	dl_add(&d, ".", 0, 0, 0, 1);
++	dl_add(&d, "..", 0, 0, 0, 1);
++	dl_add(&d, "09_RAIN.MP3", 6000000, D(2026, 11, 2), 0, 0);
++	dl_add(&d, "LIVE", 0, D(2026, 10, 30), 0, 1);
++	dl_add(&d, "01_NIGHT.MP3", 7100000, D(2026, 11, 1), 100, 0);
++	dl_add(&d, "06_LAST.WAV", 67108864, D(2026, 11, 2), 5, 0);
++	dl_add(&d, "COVER.JPG", 48000, D(2026, 11, 1), 0, 0);
++	dl_add(&d, "07_ECHO.AIF", 45000000, D(2026, 11, 3), 0, 0);
++	dl_add(&d, "BONUS", 0, D(2026, 11, 3), 0, 1);
++	check(d.n == 7, "\".\" and \"..\" left out");
++	dl_sort(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 01_NIGHT.MP3 06_LAST.WAV 07_ECHO.AIF 09_RAIN.MP3"),
++	      "by name, folders first, music files only");
++	d.sort = DS_DATE;
++	dl_sort(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 07_ECHO.AIF 06_LAST.WAV 09_RAIN.MP3 01_NIGHT.MP3"),
++	      "by date: the newest first (the same day by time)");
++	d.sort = DS_SIZE;
++	dl_sort(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 06_LAST.WAV 07_ECHO.AIF 01_NIGHT.MP3 09_RAIN.MP3"),
++	      "by size: the biggest first");
++	d.sort = DS_TYPE;
++	dl_sort(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 07_ECHO.AIF 01_NIGHT.MP3 09_RAIN.MP3 06_LAST.WAV"),
++	      "by type: AIF, MP3, WAV");
++	d.sort = DS_NAME;
++	d.type = DT_ALL;
++	dl_sort(&d);
++	check(d.nview == 7, "All files: the picture too");
++	d.type = DT_MP3;
++	dl_filter(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 01_NIGHT.MP3 09_RAIN.MP3"), "MP3 only (folders always)");
++	check(dl_type_ok(&d, DT_MUSIC, "LIVE.M3U") && dl_type_ok(&d, DT_M3U, "a.m3u") &&
++	      !dl_type_ok(&d, DT_M3U, "A.MP3") && dl_type_ok(&d, DT_AIFF, "x.aifc") && !dl_type_ok(&d, DT_AIFF, "x.AI") &&
++	      !dl_type_ok(&d, DT_AIFF, "x.AIFFF") && !dl_type_ok(&d, DT_MP3, "MP3") && dl_type_ok(&d, DT_ALL, "README"),
++	      "playlists: among the music files, and a type of their own");
++	d.type = DT_MUSIC;
++	strcpy(d.mask, "0?_*");
++	dl_filter(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 01_NIGHT.MP3 06_LAST.WAV 07_ECHO.AIF 09_RAIN.MP3"), "a mask");
++	strcpy(d.mask, "*E*");
++	dl_filter(&d);
++	check(!strcmp(names(&d), "BONUS LIVE 07_ECHO.AIF"), "a mask narrows the files, not the folders");
++	d.mask[0] = 0;
++	dl_filter(&d);
++	/* the selection */
++	dl_select_only(&d, 2);
++	check(dl_selected(&d, 0) == 1 && dl_at(&d, 2)->sel, "a click: that file alone");
++	dl_toggle(&d, 4);
++	check(dl_selected(&d, &b) == 2 && b == 7100000 + 45000000, "Shift-click adds one; the bytes");
++	dl_toggle(&d, 4);
++	check(dl_selected(&d, 0) == 1, "Shift-click again takes it out");
++	dl_select_range(&d, 5, 0);
++	check(dl_selected(&d, &b) == 6 && dl_selected_dirs(&d) == 2 && dl_at(&d, 0)->sel && dl_at(&d, 1)->sel &&
++	      b == 7100000 + 67108864 + 45000000 + 6000000,
++	      "a range: its folders too (phase 4: added with their subfolders), the files' bytes alone");
++	dl_select_only(&d, 0);
++	check(dl_selected(&d, 0) == 1 && dl_selected_dirs(&d) == 1, "a folder selected by a click");
++	dl_select_all(&d, 1);
++	check(dl_selected(&d, 0) == 4 && dl_selected_dirs(&d) == 0, "All: the files, not the folders");
++	strcpy(d.mask, "*E*");
++	dl_filter(&d);
++	d.mask[0] = 0;
++	dl_filter(&d);
++	check(dl_selected(&d, 0) == 1, "what a mask hid is no longer selected (not added unseen)");
++	/* what is shown */
++	dl_size_text(12, t);
++	ok = !strcmp(t, "12");
++	dl_size_text(524288, t);
++	ok &= !strcmp(t, "512K");
++	dl_size_text(7445000, t);
++	ok &= !strcmp(t, "7.1M");
++	dl_size_text(67108864, t);
++	ok &= !strcmp(t, "64M");
++	dl_date_text(D(2026, 11, 3), t);
++	ok &= !strcmp(t, "03.11.26");
++	dl_date_text(D(1999, 1, 9), t);
++	ok &= !strcmp(t, "09.01.99");
++	check(ok, "sizes and dates as the list shows them");
++	/* a big folder: as many as memory holds */
++	dl_clear(&d);
++	for (i = 0, ok = 1; i < 5000; i++) {
++		sprintf(t, "T%04d.MP3", 4999 - i);
++		ok &= dl_add(&d, t, i, 0, 0, 0);
++	}
++	dl_sort(&d);
++	check(ok && d.nview == 5000 && !strcmp(dl_at(&d, 0)->name, "T0000.MP3") &&
++	      !strcmp(dl_at(&d, 4999)->name, "T4999.MP3"), "5,000 files, sorted");
++	dl_free(&d);
++	return bad != 0;
++}
+diff --git a/common/tests/filepick/Makefile b/common/tests/filepick/Makefile
+new file mode 100644
+index 0000000..4f94460
+--- /dev/null
++++ b/common/tests/filepick/Makefile
+@@ -0,0 +1,65 @@
++# SPDX-License-Identifier: GPL-2.0-or-later
++# Copyright (C) 2026 AERA | Erez Yaary
++# FPTEST.PRG, the file dialog (ui/filepick.c) with EPlay's types: make,
++# then python3 run.py WORK MACHINE [--nvdi]. With EPLAY=its checkout,
++# make old builds FPOLD.PRG from EPlay's own ui/addfiles.c and
++# src/dirlist.c, and run.py WORK MACHINE --old compares the two, pixel
++# for pixel (the move changes nothing: the hub, 5 Nov 2026)
++CROSS   ?= m68k-linux-gnu-
++GCCINC  := $(shell $(CROSS)gcc -print-file-name=include 2>/dev/null)
++A       := ../../atari
++U       := ../../ui
++S       := ../../src
++TCFLAGS := -m68000 -Os -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
++           -fno-tree-loop-distribute-patterns -fno-store-merging -fdisable-tree-bswap -fno-asynchronous-unwind-tables \
++           -Wall -nostdinc -isystem $(GCCINC) -I$(A)/include -I$(A) -Istub -I$(U) -I$(S)
++TLDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
++            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
++T       := build/atari
++LIB     := dialog popup click text bidi gem libc tos
++OBJS    := $(T)/crt0.o $(T)/nf.o $(T)/fptest.o $(T)/filepick.o $(T)/dirlist.o $(T)/draw.o $(addprefix $(T)/,$(addsuffix .o,$(LIB)))
++
++all: $(T)/FPTEST.PRG
++$(T)/FPTEST.PRG: $(T)/fptest.elf ../../tools/elf2tos.py
++	python3 ../../tools/elf2tos.py $< $@
++$(T)/fptest.elf: $(OBJS)
++	$(CROSS)gcc $(TLDFLAGS) -o $@ $^ -lgcc
++$(T)/fptest.o: fptest.c $(U)/filepick.h $(S)/dirlist.h | $(T)
++	$(CROSS)gcc $(TCFLAGS) -c -o $@ $<
++$(T)/filepick.o: $(U)/filepick.c $(U)/filepick.h $(S)/dirlist.h | $(T)
++	$(CROSS)gcc $(TCFLAGS) -Wextra -Wno-unused-parameter -Werror -c -o $@ $<
++$(T)/dirlist.o: $(S)/dirlist.c $(S)/dirlist.h | $(T)
++	$(CROSS)gcc $(TCFLAGS) -Wextra -Werror -c -o $@ $<
++$(T)/draw.o: stub/draw.c stub/ui.h | $(T)
++	$(CROSS)gcc $(TCFLAGS) -c -o $@ $<
++$(T)/%.o: $(U)/%.c | $(T)
++	$(CROSS)gcc $(TCFLAGS) -c -o $@ $<
++$(T)/%.o: $(S)/%.c | $(T)
++	$(CROSS)gcc $(TCFLAGS) -c -o $@ $<
++$(T)/%.o: $(A)/%.c | $(T)
++	$(CROSS)gcc $(TCFLAGS) -c -o $@ $<
++$(T)/%.o: $(A)/%.S | $(T)
++	$(CROSS)gcc -m68000 -c -o $@ $<
++$(T):
++	mkdir -p $@
++
++# FPOLD.PRG: EPlay's own, for the comparison
++O       := build/old
++OFLAGS  := $(subst -I$(S),-I$(EPLAY)/src -I$(EPLAY)/ui -I$(S),$(TCFLAGS)) -DFP_OLD
++old: $(O)/FPOLD.PRG
++$(O)/FPOLD.PRG: $(O)/fpold.elf ../../tools/elf2tos.py
++	python3 ../../tools/elf2tos.py $< $@
++$(O)/fpold.elf: $(T)/crt0.o $(T)/nf.o $(O)/fptest.o $(O)/addfiles.o $(O)/dirlist.o $(T)/draw.o \
++                $(addprefix $(T)/,$(addsuffix .o,$(LIB)))
++	$(CROSS)gcc $(TLDFLAGS) -o $@ $^ -lgcc
++$(O)/fptest.o: fptest.c | $(O)
++	$(CROSS)gcc $(OFLAGS) -c -o $@ $<
++$(O)/addfiles.o: $(EPLAY)/ui/addfiles.c | $(O)
++	$(CROSS)gcc $(OFLAGS) -c -o $@ $<
++$(O)/dirlist.o: $(EPLAY)/src/dirlist.c | $(O)
++	$(CROSS)gcc $(OFLAGS) -c -o $@ $<
++$(O):
++	mkdir -p $@
++clean:
++	rm -rf build
++.PHONY: all old clean
+diff --git a/common/tests/filepick/fptest.c b/common/tests/filepick/fptest.c
+new file mode 100644
+index 0000000..65dbcb5
+--- /dev/null
++++ b/common/tests/filepick/fptest.c
+@@ -0,0 +1,82 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * FPTEST.PRG: the family's file dialog (ui/filepick.c) in an emulator, for
++ * run.py: opened on C:\MUSIC\ with EPlay's types, as EPlay's Add files.
++ * run.py presses the keys and clicks; each file taken goes to the console
++ * as "FPT took PATH", then "FPT done N" (N taken) and the folder it was
++ * left in, "FPT dir PATH". The pictures' times as "FPT picture NAME ..."
++ * (the spec's log). Built with -DFP_OLD, the same with EPlay's own
++ * addfiles.c, for run.py --old (the move changes no pixel).
++ */
++#include <stdio.h>
++#include <string.h>
++#include "tos.h"
++#include "gem.h"
++#include "ui.h"
++#include "text.h"
++#ifdef FP_OLD
++#include "addfiles.h"
++#define FP_RECENT AF_RECENT
++#define FP_PATH AF_PATH
++#else
++#include "filepick.h"
++#endif
++
++short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes, gl_wchar, gl_hchar, ap_id;
++
++static int idles;
++
++static void take(const char *path)
++{
++	char b[FP_PATH + 16];
++	snprintf(b, sizeof(b), "FPT took %s\n", path);
++	nf_debug(b);
++}
++
++static void idle(void)
++{
++	idles++;
++}
++
++int main(void)
++{
++	static char recent[FP_RECENT][FP_PATH];
++	char dir[FP_PATH], b[FP_PATH + 32];
++	short wo[57], d;
++	int n;
++#ifndef FP_OLD
++	static const DL_TYPE types[] = { { "Music files", "MP3 WAV AIF AIFF AIFC M3U" }, { "MP3", "MP3" },
++					 { "WAV", "WAV" }, { "AIFF", "AIF AIFF AIFC" }, { "Playlists", "M3U" },
++					 { "All files", "" } };
++	static const FP_SPEC spec = { "Add files", "Add", "No folder added from yet", "FPT", types, 6 };
++#endif
++	ap_id = appl_init();
++	vdi_h = graf_handle(&gl_wchar, &gl_hchar, &d, &d);
++	cw = gl_wchar;
++	ch = gl_hchar;
++	vdi_h = v_opnvwk_(vdi_h, wo);
++	scr_w = wo[0] + 1;
++	scr_h = wo[1] + 1;
++	vq_extnd(vdi_h, 1, wo);
++	planes = wo[4];
++	vst_alignment(vdi_h, 0, 5);
++	text_font(vdi_h, 1, cw, ch);
++	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
++	graf_mouse(ARROW, 0);
++	strcpy(recent[0], "C:\\MUSIC\\LIVE\\");
++	strcpy(dir, "C:\\MUSIC\\");
++	nf_debug("FPT open\n");
++#ifdef FP_OLD
++	n = addfiles_run(dir, recent, take, idle);
++#else
++	n = filepick_run(&spec, dir, recent, take, idle);
++#endif
++	snprintf(b, sizeof(b), "FPT done %d, idle %s\n", n, idles > 0 ? "called" : "never");
++	nf_debug(b);
++	snprintf(b, sizeof(b), "FPT dir %s; recent %s\n", dir, recent[0]);
++	nf_debug(b);
++	v_clsvwk(vdi_h);
++	appl_exit();
++	return 0;
++}
+diff --git a/common/tests/filepick/run.py b/common/tests/filepick/run.py
+new file mode 100644
+index 0000000..be06ae7
+--- /dev/null
++++ b/common/tests/filepick/run.py
+@@ -0,0 +1,129 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: GPL-2.0-or-later
++# Copyright (C) 2026 AERA | Erez Yaary
++"""FPTEST.PRG (make) on one of the family's machines: the family's file
++dialog opened on a folder of music, a file, folders, a playlist and a text
++file, with EPlay's types (Music files first). The keys select (Down,
++Shift+Down), the mask narrows (*.W*) and is cleared, Control+A takes
++every file, Return adds them. Checks: the dialog came, each step changed
++the screen, the files taken were the music files in name order and not the
++text file, the dialog called idle(), and no CRASH.LOG. A screenshot each
++step in WORK/shots.
++
++    run.py WORK MACHINE [--nvdi] [--old]
++
++--old also runs FPOLD.PRG (make old EPLAY=...: EPlay's own Add files) the
++same way and compares every screenshot, pixel for pixel: the move into
++common must change none (the hub, 5 Nov 2026).
++"""
++import os
++import shutil
++import subprocess
++import sys
++import time
++
++HERE = os.path.dirname(os.path.abspath(__file__))
++sys.path.insert(0, os.path.join(HERE, "..", "speed"))
++import speed  # noqa: E402
++
++# C:\MUSIC: (name, bytes); folders end in '\'. Fixed dates, so a shot is
++# the same each run (3 Nov 2026, 14:00)
++FILES = [("01_NIGHT.MP3", 6123456), ("02_RAIN.WAV", 52000000), ("03_ECHO.AIF", 9000), ("LIVE.M3U", 812),
++         ("README.TXT", 1200), ("04_LAST.MP3", 700000), ("LIVE\\", 0), ("BONUS\\", 0), ("LIVE\\X.MP3", 1000)]
++WHEN = time.mktime((2026, 11, 3, 14, 0, 0, 0, 0, -1))
++WANT = ["C:\\MUSIC\\01_NIGHT.MP3", "C:\\MUSIC\\02_RAIN.WAV", "C:\\MUSIC\\03_ECHO.AIF", "C:\\MUSIC\\04_LAST.MP3",
++        "C:\\MUSIC\\LIVE.M3U"]
++STEPS = [("1-open", []), ("2-select", ["Down", "shift+Down"]), ("3-mask", ["type:*.W*"]),
++         ("4-cleared", ["BackSpace", "BackSpace", "BackSpace", "BackSpace"]), ("5-all", ["ctrl+a"])]
++
++
++def session(work, machine, nvdi, prg, display):
++    r = speed.Rig(work, machine, nvdi=nvdi, display=display)
++    fails, shots = [], {}
++    try:
++        music = os.path.join(r.hd, "MUSIC")
++        for name, size in FILES:
++            p = os.path.join(music, *name.rstrip("\\").split("\\"))
++            if name.endswith("\\"):
++                os.makedirs(p, exist_ok=True)
++            else:
++                os.makedirs(os.path.dirname(p), exist_ok=True)
++                with open(p, "wb") as f:
++                    f.truncate(size)
++        for d, ds, fs in os.walk(music):
++            for n in ds + fs:
++                os.utime(os.path.join(d, n), (WHEN, WHEN))
++        # under one name, FPTEST.PRG: the desktop shows it at the top
++        shutil.copy(prg, os.path.join(r.hd, "FPTEST.PRG"))
++        r.start("C:\\FPTEST.PRG", ready="picture add", boot=900)
++        if "picture add" not in r.console():
++            fails.append("the dialog never came")
++            return fails, shots
++        prev = None
++        for name, keys in STEPS:
++            for k in keys:
++                if k.startswith("type:"):
++                    r.type(k[5:])
++                else:
++                    r.key(k)
++            r.still(most=20)
++            shots[name] = r.shot(name)
++            if prev and same(prev, shots[name]):
++                fails.append("%s: the screen didn't change" % name)
++            prev = shots[name]
++        r.key("Return")
++        t_end = time.time() + 60
++        while time.time() < t_end and "FPT dir" not in r.console():
++            time.sleep(1)
++        con = r.console()
++        took = [l[9:] for l in con.splitlines() if l.startswith("FPT took ")]
++        if took != WANT:
++            fails.append("took %s, wanted %s" % (took, WANT))
++        if "idle called" not in con:
++            fails.append("idle() never called")
++        if "FPT dir C:\\MUSIC\\; recent C:\\MUSIC\\" not in con:
++            fails.append("the folder and the recent ones: %s" %
++                         [l for l in con.splitlines() if l.startswith("FPT dir")])
++        for d, _, fs in os.walk(r.hd):
++            if any(f.upper() == "CRASH.LOG" for f in fs):
++                fails.append("CRASH.LOG in %s" % d)
++        print("  %s on %s: %s" % (os.path.basename(prg), r.describe(),
++                                  "; ".join(l for l in con.splitlines() if " picture " in l)))
++    finally:
++        r.stop()
++    return fails, shots
++
++
++def same(a, b):
++    p = subprocess.run(["compare", "-metric", "AE", a, b, "null:"], capture_output=True, text=True)
++    try:
++        return int(float(p.stderr.split()[0])) == 0
++    except (ValueError, IndexError):
++        return False
++
++
++def main():
++    a = [x for x in sys.argv[1:] if not x.startswith("--")]
++    if len(a) < 2:
++        sys.exit(__doc__)
++    work, machine, nvdi = os.path.abspath(a[0]), a[1], "--nvdi" in sys.argv
++    print("the file dialog on %s%s" % (machine, " with NVDI" if nvdi else ""))
++    fails, shots = session(os.path.join(work, "new"), machine, nvdi,
++                           os.path.join(HERE, "build", "atari", "FPTEST.PRG"), ":92")
++    if "--old" in sys.argv:
++        f2, old = session(os.path.join(work, "old"), machine, nvdi,
++                          os.path.join(HERE, "build", "old", "FPOLD.PRG"), ":92")
++        fails += ["EPlay's: " + f for f in f2 if not f.startswith("took")]
++        for name in shots:
++            if name in old and not same(shots[name], old[name]):
++                fails.append("%s differs from EPlay's own (%s, %s)" % (name, shots[name], old[name]))
++            elif name in old:
++                print("ok    %s the same as EPlay's own, pixel for pixel" % name)
++    for f in fails:
++        print("FAIL  " + f)
++    print("all passed" if not fails else "%d failed" % len(fails))
++    return 1 if fails else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/common/tests/filepick/stub/draw.c b/common/tests/filepick/stub/draw.c
+new file mode 100644
+index 0000000..c92ebb0
+--- /dev/null
++++ b/common/tests/filepick/stub/draw.c
+@@ -0,0 +1,182 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * draw.c - the app's own drawing that the file dialog takes (gemui.h), for
++ * FPTEST.PRG: EPlay's, the system font only (from EUpdate's). Common's fast paths where
++ * they are faster (the guidelines' Speed, AERA-Atari 482f184): plain
++ * text by text_plain and bold by text_fx where they go into the screen
++ * (TOS's VDI), else the VDI's text as before; the clip through
++ * text_clip, which text_n and text_plain go by; the VDI's attributes set
++ * only when they change. scr_fill isn't used: a Falcon's VDI fills as
++ * fast (scr_cpu_wins, b3fafbe).
++ */
++#include <string.h>
++#include "ui.h"
++#include "text.h"
++
++static short cur_mode = -1, cur_fill = -1, cur_line = -1, cur_tcol = -1, cur_fx = -1, fill_set;
++
++static void mode(short m)
++{
++	if (cur_mode != m) {
++		vswr_mode(vdi_h, m);
++		cur_mode = m;
++	}
++}
++
++/* the attributes as they are not known (another's drawing: the About box) */
++void draw_forget(void)
++{
++	cur_mode = cur_fill = cur_line = cur_tcol = cur_fx = -1;
++	fill_set = 0;
++}
++
++void clip_on(GRECT *r)
++{
++	short pxy[4];
++	pxy[0] = r->x;
++	pxy[1] = r->y;
++	pxy[2] = r->x + r->w - 1;
++	pxy[3] = r->y + r->h - 1;
++	text_clip(vdi_h, pxy);
++}
++
++void clip_off(void)
++{
++	text_noclip(vdi_h);
++}
++
++/* bitmaps the VDI copies must be in ST RAM: one small block */
++static unsigned short st_fallback[256];
++static unsigned short *st_buf;
++void *st_ram(long n)
++{
++	if (!st_buf) {
++		void *p = Mxalloc(sizeof(st_fallback), 0);
++		st_buf = (long)p > 0 ? p : st_fallback;
++	}
++	return n <= (long)sizeof(st_fallback) ? st_buf : 0;
++}
++
++void fill(GRECT *r, short color)
++{
++	short pxy[4];
++	if (r->w <= 0 || r->h <= 0)
++		return;
++	pxy[0] = r->x;
++	pxy[1] = r->y;
++	pxy[2] = r->x + r->w - 1;
++	pxy[3] = r->y + r->h - 1;
++	if (!fill_set) {
++		vsf_interior(vdi_h, 1);
++		vsf_perimeter(vdi_h, 0);
++		fill_set = 1;
++	}
++	if (cur_fill != color) {
++		vsf_color(vdi_h, color);
++		cur_fill = color;
++	}
++	mode(1);
++	vr_recfl(vdi_h, pxy);
++}
++
++void line_col(short x1, short y1, short x2, short y2, short color)
++{
++	short p[4];
++	p[0] = x1;
++	p[1] = y1;
++	p[2] = x2;
++	p[3] = y2;
++	mode(1);
++	if (cur_line != color) {
++		vsl_color(vdi_h, color);
++		cur_line = color;
++	}
++	v_pline(vdi_h, 2, p);
++}
++
++void hline(short x1, short x2, short y)
++{
++	line_col(x1, y, x2, y, 1);
++}
++
++void frame(GRECT *r, short color)
++{
++	short p[10];
++	p[0] = p[6] = p[8] = r->x;
++	p[1] = p[3] = p[9] = r->y;
++	p[2] = p[4] = r->x + r->w - 1;
++	p[5] = p[7] = r->y + r->h - 1;
++	mode(1);
++	if (cur_line != color) {
++		vsl_color(vdi_h, color);
++		cur_line = color;
++	}
++	v_pline(vdi_h, 5, p);
++}
++
++void text_at(short x, short y, const char *s, long n, short cols, short flags)
++{
++	if (n > cols)
++		n = cols;
++	if (n <= 0)
++		return;
++	if (!(cw & 7))
++		x = (x + 3) & ~7;		/* text on a byte: the VDI's fast way */
++	/* plain or bold, black on the white ground: common's fast ways,
++	   where they go into the screen (TOS's VDI: text_plain_state 0
++	   before the first check, 1 after), in MD_REPLACE as they want it */
++	if (!(flags & (TX_INVERSE | TX_DIM)) && text_plain_state() >= 0 &&
++	    (!(flags & TX_BOLD) || text_fx_fast(1, 1))) {
++		short fx;
++		mode(1);
++		if (cur_tcol != 1) {
++			vst_color(vdi_h, 1);
++			cur_tcol = 1;
++		}
++		if (cur_fx != 0) {
++			vst_effects(vdi_h, 0);
++			cur_fx = 0;
++		}
++		fx = (flags & TX_BOLD) ? 1 : 0;
++		text_plain(vdi_h, x, y, s, n);
++		if (fx)
++			text_fx(vdi_h, x, y, s, n, fx, 1);	/* (bold on the plain text) */
++		return;
++	}
++	/* else as before: the VDI's text, transparent (text_n: v_gtext_n,
++	   clipped the fast way on TOS's VDI, as it is under NVDI) */
++	mode(2);
++	if (cur_tcol != ((flags & TX_INVERSE) ? 0 : 1)) {
++		cur_tcol = (flags & TX_INVERSE) ? 0 : 1;
++		vst_color(vdi_h, cur_tcol);
++	}
++	{
++		short fx = (flags & TX_BOLD) ? 1 : (flags & TX_DIM) ? 2 : 0;
++		if (cur_fx != fx) {
++			vst_effects(vdi_h, fx);
++			cur_fx = fx;
++		}
++	}
++	text_n(vdi_h, x, y, s, n);
++}
++
++void font_sys_push(void)
++{
++}
++
++void font_sys_pop(void)
++{
++}
++
++int rc_intersect(const GRECT *a, GRECT *b)
++{
++	short x1 = a->x > b->x ? a->x : b->x, y1 = a->y > b->y ? a->y : b->y;
++	short x2 = a->x + a->w < b->x + b->w ? a->x + a->w : b->x + b->w;
++	short y2 = a->y + a->h < b->y + b->h ? a->y + a->h : b->y + b->h;
++	b->x = x1;
++	b->y = y1;
++	b->w = x2 - x1;
++	b->h = y2 - y1;
++	return b->w > 0 && b->h > 0;
++}
+diff --git a/common/tests/filepick/stub/ui.h b/common/tests/filepick/stub/ui.h
+new file mode 100644
+index 0000000..fbf532b
+--- /dev/null
++++ b/common/tests/filepick/stub/ui.h
+@@ -0,0 +1,39 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * ui.h - FPTEST.PRG's stand-in for an app's ui.h: what common's drawing
++ * blocks (gemui.h) take from it, as EPlay's has it.
++ */
++#ifndef UI_H
++#define UI_H
++
++#include "tos.h"
++#include "gem.h"
++
++typedef struct { short x, y, w, h; } GRECT;
++
++#define TX_BOLD    1
++#define TX_INVERSE 2
++#define TX_LTR     4
++#define TX_DIM     8
++
++#define KEY_SCAN(k)  (((k) >> 8) & 0xff)
++#define KEY_ASCII(k) ((k) & 0xff)
++
++extern short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
++extern short gl_wchar, gl_hchar, ap_id;
++
++void fill(GRECT *r, short color);
++void frame(GRECT *r, short color);
++void hline(short x1, short x2, short y);
++void line_col(short x1, short y1, short x2, short y2, short color);
++void text_at(short x, short y, const char *s, long n, short cols, short flags);
++void clip_on(GRECT *r);
++void clip_off(void);
++void draw_forget(void);	/* the VDI's attributes not as draw.c left them (the About box) */
++void font_sys_push(void);
++void font_sys_pop(void);
++void *st_ram(long n);
++int rc_intersect(const GRECT *a, GRECT *b);
++
++#endif
+diff --git a/common/ui/filepick.c b/common/ui/filepick.c
+new file mode 100644
+index 0000000..ff9431c
+--- /dev/null
++++ b/common/ui/filepick.c
+@@ -0,0 +1,878 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * filepick.c - the family's file dialog, several files at once
++ * (filepick.h; EPlay's Add files, Erez, 4 Nov 2026). The tree is the AES's
++ * own objects, given the AES's 3D look by dlg_3d (dlg_open); the list in
++ * its white well is drawn here, as the Font dialog draws its lists
++ * (fontsel.c), through dlg_more and dlg_cut so that it is right in a
++ * dialog window too. The folder's entries, their sort, type, mask and
++ * selection are src/dirlist.c's (tests/dirlist).
++ */
++#include <string.h>
++#include <stdio.h>
++#include "tos.h"
++#include "gem.h"
++#include "ui.h"
++#include "gemui.h"
++#include "dialog.h"
++#include "popup.h"
++#include "click.h"
++#include "dirlist.h"
++#include "filepick.h"
++
++/* the tree: 42 by 24 cells */
++enum { O_ROOT, O_BAND, O_DRIVE, O_PATH, O_PATHT, O_UP, O_FOLDERS, O_TYPE, O_SORT, O_NAMEL, O_MASK, O_LIST, O_INFO,
++       O_ALL, O_NONE, O_CANCEL, O_ADD, O_N };
++static OBJECT tree[O_N];
++static TEDINFO ted_band, ted_path, ted_mask;
++static char s_path[FP_PATH], s_mask[13], t_mask[13], v_mask[13], s_drive[8], s_type[20], s_sort[16],
++	s_info[48];
++
++static void obj_in(short p, short i, short type, short flags, short state, long spec, short x, short y, short w,
++		   short h)
++{
++	OBJECT *o = &tree[i];
++	o->ob_next = -1;
++	o->ob_head = o->ob_tail = -1;
++	o->ob_type = type;
++	o->ob_flags = flags;
++	o->ob_state = state;
++	o->ob_spec = spec;
++	o->ob_x = x;
++	o->ob_y = y;
++	o->ob_width = w;
++	o->ob_height = h;
++	if (i > 0) {
++		if (tree[p].ob_tail >= 0)
++			tree[tree[p].ob_tail].ob_next = i;
++		else
++			tree[p].ob_head = i;
++		tree[p].ob_tail = i;
++		o->ob_next = p;
++	}
++}
++
++static void obj(short i, short type, short flags, short state, long spec, short x, short y, short w, short h)
++{
++	obj_in(0, i, type, flags, state, spec, x, y, w, h);
++}
++
++static void ted(TEDINFO *t, char *text, char *tmpl, char *valid, short just, short color, short thick)
++{
++	memset(t, 0, sizeof(*t));
++	t->te_ptext = text;
++	t->te_ptmplt = tmpl;
++	t->te_pvalid = valid;
++	t->te_font = 3;			/* the system font */
++	t->te_just = just;
++	t->te_color = color;
++	t->te_thickness = thick;
++	t->te_txtlen = (short)strlen(text) + 1;
++	t->te_tmplen = (short)strlen(tmpl) + 1;
++}
++
++static const FP_SPEC *spec;
++
++static void build(void)
++{
++	memset(tree, 0, sizeof(tree));
++	obj(O_ROOT, G_BOX, 0, OUTLINED, 0x00021100L, 0, 0, 42, (short)(8 << 8 | 22));
++	tree[0].ob_head = tree[0].ob_tail = -1;
++	/* the title band: hidden in a dialog window, whose title names it */
++	ted(&ted_band, (char *)spec->title, "", "", 2, 0x1071, 0);	/* (white text, transparent, on black) */
++	obj(O_BAND, G_BOXTEXT, 0, 0, (long)&ted_band, 0, 0, 42, 1);
++	obj(O_DRIVE, G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long)s_drive, 1, 2, 5, 1);
++	/* the folder: its text in a white well (not typed into: the drive,
++	   the folders, Up and a double click change it) */
++	obj(O_PATH, G_BOX, 0, 0, 0x00FF1100L, 7, 2, 30, 1);
++	ted(&ted_path, s_path, "", "", 0, 0x1100, 0);
++	obj_in(O_PATH, O_PATHT, G_TEXT, 0, 0, (long)&ted_path, 1, 0, 28, 1);
++	obj(O_UP, G_BOXCHAR, TOUCHEXIT, 0, 0x01FF1100L, 38, 2, 3, 1);
++	obj(O_FOLDERS, G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long)"Folders \x02", 1, 4, 12, 1);
++	obj(O_TYPE, G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long)s_type, 14, 4, 15, 1);
++	obj(O_SORT, G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long)s_sort, 30, 4, 11, 1);
++	obj(O_NAMEL, G_STRING, 0, 0, (long)"Name", 1, 6, 4, 1);
++	ted(&ted_mask, s_mask, t_mask, v_mask, 0, 0x1180, -1);
++	obj(O_MASK, G_FBOXTEXT, EDITABLE, 0, (long)&ted_mask, 7, 6, 13, 1);
++	/* a white well with a frame: ten rows and its edges */
++	obj(O_LIST, G_BOX, 0, 0, 0x00FF1100L, 1, 8, 40, (short)(2 << 8 | 10));
++	obj(O_INFO, G_STRING, 0, 0, (long)s_info, 1, (short)(4 << 8 | 18), 40, 1);
++	obj(O_ALL, G_BUTTON, SELECTABLE | EXIT, 0, (long)"All", 1, (short)(4 << 8 | 20), 5, 1);
++	obj(O_NONE, G_BUTTON, SELECTABLE | EXIT, 0, (long)"None", 7, (short)(4 << 8 | 20), 6, 1);
++	obj(O_CANCEL, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 24, (short)(4 << 8 | 20), 8, 1);
++	obj(O_ADD, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)spec->ok, 33, (short)(4 << 8 | 20), 8, 1);
++	tree[O_N - 1].ob_flags |= LASTOB;
++	tree[0].ob_next = -1;
++	rsrc_obfix_all(tree, O_N);
++	/* the list's well a few pixels taller, its rows whole */
++}
++
++/* ---- the folder ---- */
++
++static DLIST dl;
++static char dir_now[FP_PATH];
++static int top, cur = -1, anchor = -1;
++static GRECT lr;			/* the list's rows (inside the well) */
++static short rows, rh, sw;
++
++static void read_folder(void)
++{
++	char mask[FP_PATH + 4];
++	DTA *old = Fgetdta(), dta;
++	graf_mouse(BUSYBEE, 0);
++	dl_clear(&dl);
++	snprintf(mask, sizeof(mask), "%s*.*", dir_now);
++	Fsetdta(&dta);
++	if (Fsfirst(mask, 0x10) == 0)
++		do {
++			if (!dl_add(&dl, dta.d_fname, dta.d_length, dta.d_date, dta.d_time, (dta.d_attrib & 0x10) != 0))
++				break;
++		} while (Fsnext() == 0);
++	Fsetdta(old);
++	dl_sort(&dl);
++	top = 0;
++	cur = anchor = dl.nview ? 0 : -1;
++	graf_mouse(ARROW, 0);
++}
++
++/* the path shown: its end, where it is longer than the field */
++static void show_path(void)
++{
++	size_t n = strlen(dir_now), room = 28;
++	snprintf(s_drive, sizeof(s_drive), "%c: \x02", dir_now[0] ? dir_now[0] : 'C');
++	if (n <= 2)
++		snprintf(s_path, sizeof(s_path), "\\");
++	else if (n - 2 <= room)
++		snprintf(s_path, sizeof(s_path), "%s", dir_now + 2);
++	else
++		snprintf(s_path, sizeof(s_path), "...%s", dir_now + n - (room - 3));
++}
++
++static void info(void)
++{
++	long bytes;
++	int k = dl_selected(&dl, &bytes), dirs = dl_selected_dirs(&dl), files = 0, r;
++	char sz[12], fo[24];
++	for (r = 0; r < dl.nview; r++)
++		files += !dl_at(&dl, r)->dir;
++	k -= dirs;			/* (the files selected; the folders said apart) */
++	fo[0] = 0;
++	if (dirs)
++		snprintf(fo, sizeof(fo), " + %d folder%s", dirs, dirs == 1 ? "" : "s");
++	dl_size_text(bytes, sz);
++	if (bytes >= 1024) {		/* "61.1M": "61.1 MB" */
++		size_t n = strlen(sz);
++		char u = sz[n - 1];
++		sz[n - 1] = 0;
++		snprintf(s_info, sizeof(s_info), "%d of %d selected%s, %s %cB", k, files, fo, sz, u);
++	} else if (k)
++		snprintf(s_info, sizeof(s_info), "%d of %d selected%s, %s bytes", k, files, fo, sz);
++	else if (dirs)
++		snprintf(s_info, sizeof(s_info), "%d file%s%s selected", files, files == 1 ? "" : "s", fo);
++	if (!k && !dirs)
++		snprintf(s_info, sizeof(s_info), "%d file%s", files, files == 1 ? "" : "s");
++}
++
++/* ---- drawing ---- */
++
++static void place(void)
++{
++	short x, y;
++	objc_offset(tree, O_LIST, &x, &y);
++	sw = 2 * gl_wchar;
++	rh = gl_hchar;
++	lr.x = x + 1;
++	lr.y = y + 1;
++	lr.w = tree[O_LIST].ob_width - 2;
++	lr.h = tree[O_LIST].ob_height - 2;
++	rows = lr.h / rh;
++}
++
++static int cut(GRECT *r)
++{
++	GRECT c = *r;
++	if (!dlg_cut(&c.x, &c.y, &c.w, &c.h))
++		return 0;
++	clip_on(&c);
++	return 1;
++}
++
++static void draw_obj(short o)
++{
++	dlg_draw(tree, o);
++}
++
++/* row r of the view, in its place (-1 rows past the end: blank) */
++static void row_at(int r, GRECT *clip)
++{
++	GRECT t;
++	DENT *e = dl_at(&dl, r);
++	short y = lr.y + (short)(r - top) * rh, x = lr.x + 4, w = lr.w - sw;
++	char sz[12], dt[12];
++	short fl = TX_LTR;
++	if (r < top || r >= top + rows)
++		return;
++	t.x = lr.x;
++	t.y = y;
++	t.w = w;
++	t.h = rh;
++	(void)clip;
++	if (e && e->sel) {
++		fill(&t, 1);
++		fl |= TX_INVERSE;
++	} else
++		fill(&t, 0);
++	if (!e)
++		return;
++	if (e->dir) {
++		/* a folder: its shape, then its name */
++		GRECT f;
++		short c = e->sel ? 0 : 1;
++		f.x = x + 1;
++		f.y = y + rh / 2 - 3;
++		f.w = gl_wchar + 6;
++		f.h = 8;
++		frame(&f, c);
++		line_col(f.x + 2, f.y - 2, f.x + 5, f.y - 2, c);
++		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
++	} else {
++		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
++		dl_size_text(e->size, sz);
++		text_at(lr.x + w - 4 - (short)(9 + strlen(sz)) * gl_wchar, y, sz, (long)strlen(sz), 6, fl);
++	}
++	dl_date_text(e->date, dt);
++	text_at(lr.x + w - 4 - 8 * gl_wchar, y, dt, 8, 8, fl);
++	if (r == cur) {			/* the keys' place: a dotted frame (the VDI's dots) */
++		vsl_type(vdi_h, 3);
++		frame(&t, e->sel ? 0 : 1);
++		vsl_type(vdi_h, 1);
++	}
++}
++
++static void slider(void)
++{
++	GRECT t, s;
++	short ah = rh;
++	t.x = lr.x + lr.w - sw;
++	t.y = lr.y;
++	t.w = sw;
++	t.h = lr.h;
++	fill(&t, 0);
++	frame(&t, 1);
++	s = t;
++	s.h = ah;
++	frame(&s, 1);
++	text_at(s.x + gl_wchar / 2, s.y, "\x01", 1, 1, TX_LTR);
++	s.y = t.y + t.h - ah;
++	frame(&s, 1);
++	text_at(s.x + gl_wchar / 2, s.y, "\x02", 1, 1, TX_LTR);
++	if (dl.nview > rows) {
++		short ty = t.y + ah, th = t.h - 2 * ah, h = (short)((long)th * rows / dl.nview), y;
++		if (h < 6)
++			h = 6;
++		y = ty + (short)((long)(th - h) * top / (dl.nview - rows));
++		s.x = t.x + 2;
++		s.w = t.w - 4;
++		s.y = y;
++		s.h = h;
++		fill(&s, 1);
++	}
++}
++
++/* the shown rows' selection and the keys' place, before a change: then
++   only the rows that changed are drawn (a click: 50 ms drawn whole) */
++static unsigned char snap_sel[64];
++static int snap_cur, snap_top;
++
++static void snap(void)
++{
++	int i;
++	snap_cur = cur;
++	snap_top = top;
++	for (i = 0; i < rows && i < 64; i++) {
++		DENT *e = dl_at(&dl, top + i);
++		snap_sel[i] = e ? e->sel : 0;
++	}
++}
++
++static void draw_list(void);
++
++static void draw_changed(void)
++{
++	GRECT r;
++	int i;
++	if (top != snap_top) {
++		draw_list();
++		return;
++	}
++	graf_mouse(M_OFF, 0);
++	r.x = lr.x;
++	r.y = lr.y;
++	r.w = lr.w - sw;
++	r.h = rows * rh;
++	if (cut(&r)) {
++		for (i = 0; i < rows && i < 64; i++) {
++			DENT *e = dl_at(&dl, top + i);
++			int k = top + i;
++			if ((e ? e->sel : 0) != snap_sel[i] || k == cur || k == snap_cur)
++				row_at(k, &r);
++		}
++		clip_off();
++	}
++	graf_mouse(M_ON, 0);
++}
++
++static void draw_list(void)
++{
++	GRECT r = lr, rest;
++	graf_mouse(M_OFF, 0);
++	if (cut(&r)) {
++		int i;
++		for (i = top; i < top + rows; i++)
++			row_at(i, &r);
++		rest.x = lr.x;
++		rest.y = lr.y + rows * rh;
++		rest.w = lr.w - sw;
++		rest.h = lr.h - rows * rh;
++		fill(&rest, 0);
++		slider();
++		clip_off();
++	}
++	graf_mouse(M_ON, 0);
++}
++
++/* the AES asks for a piece again (a dialog window uncovered): the list */
++static void pic_end(void);
++
++static void more(short x, short y, short w, short h)
++{
++	(void)x;
++	(void)y;
++	(void)w;
++	(void)h;
++	place();			/* (the list's place first: in a window the dialog's
++					   first picture is this one, before the loop's place:
++					   0.23 to 0.25 drew it nowhere, the list empty on
++					   XaAES until a key moved it) */
++	draw_list();
++	pic_end();			/* (in a window: the dialog's first picture) */
++}
++
++static void show_info(void)
++{
++	info();
++	draw_obj(O_INFO);
++}
++
++/* cur in sight, top kept within the list */
++static int in_sight(void)
++{
++	int t = top;
++	if (cur >= 0 && cur < top)
++		top = cur;
++	if (cur >= top + rows)
++		top = cur - rows + 1;
++	if (top > dl.nview - rows)
++		top = dl.nview - rows;
++	if (top < 0)
++		top = 0;
++	return t != top;
++}
++
++
++/* a picture's time, from when it is due to its last piece drawn, to the
++   rigs' console ("EPLAY picture folder 45 ms", spec->log naming the app):
++   the guidelines' Speed, "A rule never costs speed" */
++static unsigned long pic_t0, pic_in, input_ms;	/* input_ms: the dialog's last key or click */
++static const char *pic_name;
++static void pic_begin(const char *n)
++{
++	if (!pic_name) {
++		pic_name = n;
++		pic_t0 = tos_ms();
++		pic_in = input_ms && pic_t0 - input_ms < 2000 ? input_ms : pic_t0;
++	}
++}
++
++static void pic_end(void)
++{
++	if (pic_name && spec->log) {
++		char b[80];
++		unsigned long now = tos_ms();
++		snprintf(b, sizeof(b), "%s picture %s %lu ms, %lu from the input\n", spec->log, pic_name,
++			 now - pic_t0, now - pic_in);
++		nf_debug(b);
++	}
++	pic_name = 0;
++}
++
++static void folder_shown(void)
++{
++	pic_begin("folder");
++	show_path();
++	info();
++	draw_obj(O_DRIVE);
++	draw_obj(O_PATH);
++	draw_obj(O_INFO);
++	draw_list();			/* (whole, no event call between: Erez, 4 Nov 2026) */
++	pic_end();
++}
++
++static void go(const char *d)
++{
++	snprintf(dir_now, sizeof(dir_now), "%s", d);
++	read_folder();
++	folder_shown();
++}
++
++static void go_up(int root)
++{
++	char *p;
++	size_t n = strlen(dir_now);
++	if (n <= 3)
++		return;
++	if (root) {
++		dir_now[3] = 0;
++	} else {
++		dir_now[n - 1] = 0;
++		p = strrchr(dir_now, '\\');
++		if (p)
++			p[1] = 0;
++	}
++	read_folder();
++	folder_shown();
++}
++
++static void open_row(int r)
++{
++	DENT *e = dl_at(&dl, r);
++	char d[FP_PATH];
++	if (!e || !e->dir)
++		return;
++	if (strlen(dir_now) + strlen(e->name) + 2 > sizeof(d))
++		return;
++	snprintf(d, sizeof(d), "%s%s\\", dir_now, e->name);
++	go(d);
++}
++
++/* ---- the pop-ups ---- */
++
++static void below(short o, short *x, short *y)
++{
++	objc_offset(tree, o, x, y);
++	*y += tree[o].ob_height;
++}
++
++static void pop_drive(void)
++{
++	static char lab[26][8];
++	const char *p[26];
++	char drv[26];
++	long map = Drvmap();
++	short x, y, n = 0, k;
++	int i;
++	for (i = 0; i < 26; i++)
++		if (map & (1L << i)) {
++			snprintf(lab[n], sizeof(lab[n]), "%c %c: ", dir_now[0] == 'A' + i ? '\x08' : ' ', 'A' + i);
++			p[n] = lab[n];
++			drv[n++] = (char)('A' + i);
++		}
++	below(O_DRIVE, &x, &y);
++	k = popup(x, y, p, n);
++	if (k >= 0) {
++		char d[4];
++		d[0] = drv[k];
++		d[1] = ':';
++		d[2] = '\\';
++		d[3] = 0;
++		go(d);
++	}
++}
++
++static void pop_folders(char recent[FP_RECENT][FP_PATH])
++{
++	static char lab[FP_RECENT][44];
++	const char *p[FP_RECENT];
++	short x, y, n = 0, k;
++	int i;
++	for (i = 0; i < FP_RECENT && recent[i][0]; i++) {
++		size_t len = strlen(recent[i]);
++		if (len <= 38)
++			snprintf(lab[n], sizeof(lab[n]), "  %s ", recent[i]);
++		else
++			snprintf(lab[n], sizeof(lab[n]), "  ...%s ", recent[i] + len - 35);
++		p[n] = lab[n];
++		n++;
++	}
++	if (!n) {
++		static char lab0[44];
++		const char *none[1];
++		snprintf(lab0, sizeof(lab0), "~  %s ", spec->none);
++		none[0] = lab0;
++		below(O_FOLDERS, &x, &y);
++		popup(x, y, none, 1);
++		return;
++	}
++	below(O_FOLDERS, &x, &y);
++	k = popup(x, y, p, n);
++	if (k >= 0)
++		go(recent[k]);
++}
++
++static void set_labels(void)
++{
++	snprintf(s_type, sizeof(s_type), "%s \x02", dl_type_name(&dl, dl.type));
++	snprintf(s_sort, sizeof(s_sort), "%s \x02", dl_sort_name(dl.sort));
++}
++
++static void pop_type(void)
++{
++	static char lab[DL_TYPES][20];
++	const char *p[DL_TYPES];
++	short x, y, k;
++	int i;
++	for (i = 0; i < dl.ntypes; i++) {
++		snprintf(lab[i], sizeof(lab[i]), "%c %s ", i == dl.type ? '\x08' : ' ', dl_type_name(&dl, i));
++		p[i] = lab[i];
++	}
++	below(O_TYPE, &x, &y);
++	k = popup(x, y, p, (short)dl.ntypes);
++	if (k >= 0 && k != dl.type) {
++		dl.type = k;
++		dl_filter(&dl);
++		top = 0;
++		cur = anchor = dl.nview ? 0 : -1;
++		set_labels();
++		draw_obj(O_TYPE);
++		show_info();
++		draw_list();
++	}
++}
++
++static void pop_sort(void)
++{
++	static char lab[DS_N][16];
++	const char *p[DS_N];
++	short x, y, k;
++	int i;
++	for (i = 0; i < DS_N; i++) {
++		snprintf(lab[i], sizeof(lab[i]), "%c %s ", i == dl.sort ? '\x08' : ' ', dl_sort_name(i));
++		p[i] = lab[i];
++	}
++	below(O_SORT, &x, &y);
++	k = popup(x, y, p, DS_N);
++	if (k >= 0 && k != dl.sort) {
++		dl.sort = k;
++		dl_sort(&dl);
++		top = 0;
++		cur = anchor = dl.nview ? 0 : -1;
++		set_labels();
++		draw_obj(O_SORT);
++		draw_list();
++	}
++}
++
++/* ---- the selection ---- */
++
++static int row_y(short my)
++{
++	int r = (my - lr.y) / rh;
++	if (my < lr.y || r >= rows)
++		return -1;
++	r += top;
++	return r < dl.nview ? r : -1;
++}
++
++static void select_to(int r, int shift)
++{
++	if (r < 0 || r >= dl.nview)
++		return;
++	snap();
++	cur = r;
++	if (shift && anchor >= 0)
++		dl_select_range(&dl, anchor, cur);
++	else {
++		dl_select_only(&dl, cur);
++		anchor = cur;
++	}
++	in_sight();
++	draw_changed();
++	show_info();
++}
++
++static void (*idle_fn)(void);
++
++static void idle_turn(void)
++{
++	if (idle_fn)
++		idle_fn();
++}
++
++/* a press on the list: a click selects the file alone, Shift-click adds
++   or takes out one, a drag selects the files it passes; a double click
++   opens a folder, or adds the file. 1: add now (the double click) */
++static int list_press(short mx, short my, short ks)
++{
++	int r = row_y(my), dbl;
++	GRECT box;
++	short dx, dy;
++	if (r < 0)
++		return 0;
++	dbl = press_double((short)r, mx, my);
++	snap();
++	if (ks & 3) {
++		dl_toggle(&dl, r);
++		anchor = cur = r;
++		draw_changed();
++		show_info();
++		return 0;
++	}
++	cur = anchor = r;
++	dl_select_only(&dl, r);
++	draw_changed();
++	show_info();
++	box.x = lr.x;
++	box.y = lr.y + (short)(r - top) * rh;
++	box.w = lr.w - sw;
++	box.h = rh;
++	switch (press_track(&box, mx, my, idle_turn, 0, &dx, &dy)) {
++	case PRESS_IN:
++		if (dbl) {
++			DENT *e = dl_at(&dl, r);
++			if (e && e->dir) {
++				open_row(r);
++				return 0;
++			}
++			return e != 0;
++		}
++		return 0;
++	case PRESS_DRAG: {
++		/* the rows it passes, from where it began; the list moves on
++		   at its edges */
++		short x, y, b, k, last = -1;
++		do {
++			int at;
++			graf_mkstate(&x, &y, &b, &k);
++			if (y < lr.y && top > 0) {
++				top--;
++				at = top;
++			} else if (y >= lr.y + rows * rh && top + rows < dl.nview) {
++				top++;
++				at = top + rows - 1;
++			} else
++				at = row_y(y < lr.y ? lr.y : y >= lr.y + rows * rh ? lr.y + rows * rh - 1 : y);
++			if (at < 0)
++				at = dl.nview - 1;
++			if (at != last) {
++				snap();
++				snap_top = top == snap_top ? top : -1;
++				cur = at;
++				dl_select_range(&dl, anchor, cur);
++				draw_changed();
++				show_info();
++				last = (short)at;
++			}
++			idle_turn();
++			evnt_timer_(20);
++		} while (b & 1);
++		return 0;
++	}
++	}
++	return 0;
++}
++
++/* a press on the slider: an arrow a row, the track a page */
++static void slider_press(short my)
++{
++	short ah = rh, t = top;
++	if (my < lr.y + ah)
++		top--;
++	else if (my >= lr.y + lr.h - ah)
++		top++;
++	else if (dl.nview > rows) {
++		short th = lr.h - 2 * ah, h = (short)((long)th * rows / dl.nview), y;
++		if (h < 6)
++			h = 6;
++		y = lr.y + ah + (short)((long)(th - h) * top / (dl.nview - rows));
++		top += my < y ? -rows : my >= y + h ? rows : 0;
++	}
++	if (top > dl.nview - rows)
++		top = dl.nview - rows;
++	if (top < 0)
++		top = 0;
++	if (top != t)
++		draw_list();
++}
++
++/* a button's press as GEM's: drawn pressed, its action on the release
++   over it */
++static int button(short o)
++{
++	short x, y, b, k;
++	graf_mkstate(&x, &y, &b, &k);
++	if (!(b & 1))
++		return 1;		/* (let go already) */
++	return graf_watchbox(tree, o, SELECTED, 0);
++}
++
++int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path),
++		 void (*idle)(void))
++{
++	short x, y, w, h, idx = 0, m[8];
++	int done = 0, added = 0, i;
++	AEVENT e;
++	spec = sp;
++	idle_fn = idle;
++	dl_init(&dl);
++	dl_types(&dl, sp->types, sp->ntypes);
++	build();
++	memset(t_mask, '_', 12);
++	t_mask[12] = 0;
++	memset(v_mask, 'X', 12);	/* (any letter, wildcards too) */
++	v_mask[12] = 0;
++	s_mask[0] = 0;
++	ted_path.te_txtlen = FP_PATH;
++	ted_mask.te_txtlen = 13;
++	ted_mask.te_tmplen = 13;
++	if (dir[0])
++		snprintf(dir_now, sizeof(dir_now), "%s", dir);
++	else
++		snprintf(dir_now, sizeof(dir_now), "%c:\\", (char)('A' + Dgetdrv()));
++	read_folder();
++	show_path();
++	set_labels();
++	info();
++	dlg_name(spec->title);
++	dlg_band(O_BAND);
++	pic_begin("add");
++	dlg_open(tree, &x, &y, &w, &h);
++	dlg_more(more);
++	if (!dlg_in_window()) {
++		/* (TOS: the tree drawn; the list with it, before the first event
++		   call. In a window the AES's redraw draws both: more) */
++		place();
++		draw_list();
++		pic_end();
++	}
++	objc_edit(tree, O_MASK, 0, &idx, ED_INIT);
++	while (!done) {
++		dlg_evnt(MU_KEYBD | MU_BUTTON | MU_TIMER, 1, 1, 1, 20, m, &e);
++		if (e.which & (MU_KEYBD | MU_BUTTON))
++			input_ms = tos_ms();	/* (a picture's time from the input: the rigs') */
++		place();			/* (the window may have moved) */
++		if (e.which & MU_TIMER)
++			idle_turn();
++		if (e.which & MU_KEYBD) {
++			short scan = (e.kreturn >> 8) & 0xff, a = e.kreturn & 0xff;
++			int shift = (e.kstate & 3) != 0;
++			if (scan == 0x48)
++				select_to(cur - 1, shift);
++			else if (scan == 0x50)
++				select_to(cur + 1, shift);
++			else if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
++				/* (a folder at the keys' place, alone or nothing
++				   selected: opened, as before; Add adds it) */
++				DENT *c = dl_at(&dl, cur);
++				int k = dl_selected(&dl, 0);
++				if (c && c->dir && (!k || (k == 1 && c->sel)))
++					open_row(cur);
++				else
++					done = 2;
++			} else if (scan == 0x61)			/* Undo */
++				done = 1;
++			else if (key_ctrl(e.kstate, e.kreturn) && (a == 1 || (a | 0x20) == 'a')) {	/* ^A */
++				dl_select_all(&dl, 1);
++				draw_list();
++				show_info();
++			} else if (a == 27 && !s_mask[0])	/* Esc, the field empty: Cancel */
++				done = 1;
++			else {
++				/* the mask: typed into, the list narrowed as it is */
++				char was[13];
++				strcpy(was, s_mask);
++				objc_edit(tree, O_MASK, e.kreturn, &idx, ED_CHAR);
++				if (strcmp(was, s_mask)) {
++					snprintf(dl.mask, sizeof(dl.mask), "%s", s_mask);
++					dl_filter(&dl);
++					top = 0;
++					cur = anchor = dl.nview ? 0 : -1;
++					draw_list();
++					show_info();
++				}
++			}
++		}
++		if ((e.which & MU_BUTTON) && !done) {
++			short o = objc_find(tree, 0, 8, e.mx, e.my);
++			switch (o) {
++			case O_DRIVE:
++				pop_drive();
++				break;
++			case O_FOLDERS:
++				pop_folders(recent);
++				break;
++			case O_TYPE:
++				pop_type();
++				break;
++			case O_SORT:
++				pop_sort();
++				break;
++			case O_UP:
++				go_up(press_double(-2, e.mx, e.my));
++				break;
++			case O_ALL:
++			case O_NONE:
++				if (button(o)) {
++					dl_select_all(&dl, o == O_ALL);
++					draw_list();
++					show_info();
++				}
++				tree[o].ob_state &= ~SELECTED;
++				draw_obj(o);
++				break;
++			case O_CANCEL:
++			case O_ADD:
++				if (button(o))
++					done = o == O_ADD ? 2 : 1;
++				tree[o].ob_state &= ~SELECTED;
++				draw_obj(o);
++				break;
++			case O_LIST:
++				if (e.mx >= lr.x + lr.w - sw)
++					slider_press(e.my);
++				else if (list_press(e.mx, e.my, e.kstate))
++					done = 2;
++				break;
++			}
++		}
++	}
++	objc_edit(tree, O_MASK, 0, &idx, ED_END);
++	dlg_close();
++	if (done == 2) {
++		/* the selected files and folders in the list's order (a folder
++		   with its subfolders: its name ending in '\'); with none, the
++		   file at the keys' place */
++		char p[FP_PATH + 16];
++		int any = dl_selected(&dl, 0);
++		for (i = 0; i < dl.nview; i++) {
++			DENT *f = dl_at(&dl, i);
++			if (any ? !f->sel : f->dir || i != cur)
++				continue;
++			snprintf(p, sizeof(p), "%s%s%s", dir_now, f->name, f->dir ? "\\" : "");
++			add(p);
++			added++;
++		}
++		if (added) {
++			/* the folder to the front of the Folders pop-up */
++			int k;
++			for (k = 0; k < FP_RECENT - 1 && strcmp(recent[k], dir_now); k++)
++				;
++			for (; k > 0; k--)
++				strcpy(recent[k], recent[k - 1]);
++			strcpy(recent[0], dir_now);
++		}
++	}
++	snprintf(dir, FP_PATH, "%s", dir_now);
++	dl_free(&dl);
++	return added;
++}
+diff --git a/common/ui/filepick.h b/common/ui/filepick.h
+new file mode 100644
+index 0000000..2ad46c1
+--- /dev/null
++++ b/common/ui/filepick.h
+@@ -0,0 +1,53 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later
++ * Copyright (C) 2026 AERA | Erez Yaary */
++/*
++ * filepick.h - the family's file dialog: several files (and folders)
++ * chosen at once, which TOS's file selector can't give. From EPlay's File >
++ * Open... (Add files; Erez, 4 Nov 2026). A dialog of the AES's own objects
++ * (3D where the AES has it, in a window on MiNT and MagiC), Selectric's
++ * width and ways: the drive in one pop-up at the folder line's start, the
++ * last folders, the type, the sort, a name mask, each file's size and
++ * date, a selection (a click, Shift-click, a drag, Control+A, All and
++ * None), the selected files' count and bytes. Return or a double click
++ * opens a folder alone; Up goes up, a double click on it to the root.
++ *
++ * Built on dialog.c (dlg_open, dlg_evnt with idle, dlg_more, dlg_cut),
++ * popup.c and click.c, and src/dirlist.c for the folder; it draws with
++ * the app's own drawing (gemui.h: fill, frame, line_col, text_at,
++ * clip_on, clip_off). 42 x 24 cells of the system font.
++ *
++ *     static const DL_TYPE types[] = { { "Music files", "MP3 WAV AIF AIFF AIFC M3U" },
++ *                                      { "MP3", "MP3" }, { "All files", "" } };
++ *     static const FP_SPEC spec = { "Add files", "Add", "No folder added from yet",
++ *                                   "EPLAY", types, 3 };
++ *     n = filepick_run(&spec, dir, recent, take_one, feed_music);
++ */
++#ifndef AERA_FILEPICK_H
++#define AERA_FILEPICK_H
++
++#include "dirlist.h"
++
++#define FP_RECENT 10		/* the Folders pop-up's: the last folders taken from */
++#define FP_PATH 128
++
++typedef struct {
++	const char *title;	/* the band's and the dialog window's: "Add files" */
++	const char *ok;		/* the default button (8 cells): "Add" */
++	const char *none;	/* the Folders pop-up with none yet (37 at most) */
++	const char *log;	/* the rigs' picture times on the console, "EPLAY
++				   picture folder 45 ms"; 0: none */
++	const DL_TYPE *types;	/* the Type pop-up (names of 13 at most), the first
++				   the dialog's own; 0: All files alone */
++	int ntypes;		/* DL_TYPES at most */
++} FP_SPEC;
++
++/* the dialog, at folder dir (ending in '\'; "" for the current drive's
++   root) and left in it; recent[] the last folders, the newest first, kept
++   up to date (each FP_PATH long, "" where none). Each file chosen goes to
++   take() in the list's order, a folder with a '\' at its end; idle() is
++   called every 20 ms or so while it is open (music fed, a transfer on).
++   The number taken, 0 when cancelled */
++int filepick_run(const FP_SPEC *spec, char *dir, char recent[FP_RECENT][FP_PATH], void (*take)(const char *path),
++		 void (*idle)(void));
++
++#endif
+-- 
+2.43.0
+

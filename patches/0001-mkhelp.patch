@@ -1,0 +1,441 @@
+From 3ee47ebb01a6d75991fea964175f7f9f89f06563 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Sat, 7 Nov 2026 10:09:54 +0000
+Subject: [PATCH] common/tools/mkhelp.py: the family's help generator
+ (guidelines 4.3)
+
+From EPlay's tools/mkhelp.py (EPDF's, EContact's, EMail's and
+EHypView's before it), so that every app makes its guide with one
+generator: docs/GUIDE.md into NAME.STG, a page a "## " section, tables
+in columns, every line within 75 columns, links between sections, the
+Atari character set, the same file each time.
+
+What was EPlay's own is now an option: --app (the name in the page
+titles; the guide's first heading's first word by default),
+--database (the guide's first heading), --subject (Programs) and
+--help-page (Keyboard; none with ""). NAME.HYP is the output's name.
+EPlay's guide comes out byte for byte as before with
+--database "EPlay - music on the Falcon" --subject Sound.
+
+tests/help/test_mkhelp.py: pages, links, tables, listings, pictures
+left out, @ as @@, the widths, CR/LF, the character set, the same file
+twice, the options, then helpfront.py page over it and hcp compiling
+the two (when there is one): all pass, with hcp.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SZeNoDozTmbWt4s2sFN9eL
+---
+ common/README.md                 |   1 +
+ common/tests/help/test_mkhelp.py | 143 +++++++++++++++++++
+ common/tools/mkhelp.py           | 237 +++++++++++++++++++++++++++++++
+ 3 files changed, 381 insertions(+)
+ create mode 100644 common/tests/help/test_mkhelp.py
+ create mode 100644 common/tools/mkhelp.py
+
+diff --git a/common/README.md b/common/README.md
+index 1c98a66..0f0c69a 100644
+--- a/common/README.md
++++ b/common/README.md
+@@ -122,6 +122,7 @@ same as before.
+ | `tools/crashaddr.py` | EMail | turns the offsets in a `CRASH.LOG` into function names, from the ELF file of the same build |
+ | `tools/getrelease.py` | | another AERA program for a test, from its GitHub release (guidelines 1.2): `getrelease.py EHypView DIR EHYPVIEW.PRG` takes the latest, `EHypView@v1.8` a given one, and writes `DIR/EHYPVIEW.VERSION` so the report can name it; `--source AERA-Gateway DIR gateway/eftpgate.py` takes files of the source at the latest release's tag, for a program whose release carries no files. Standard Python only; `xl/tools/getrelease.py` is the same file |
+ | `tools/machines.py` | | the family's test machines (guidelines, The machines): `ST`, `ST-1`, `TT` and `Falcon`, each with its screens (`Falcon:256`). `Machine(name, hd).args()` gives Hatari's arguments and `env()` its own HOME (its own NVRAM), `network()` FAKESTNG and its bridge; Erez's TOS from `$AERA_TOS` (`~/.aera/tos`, never in git) or EmuTOS 1.4. An ST gets `C:\AUTO\CLOCK.PRG` (the date and time; an ST has no clock) and, with TOS 1.04, `C:\AUTO\BOOTC.PRG` (C: as the boot drive). `python3 tools/machines.py list`; tested by `tests/machines/test_machines.py`. Standard Python only |
++| `tools/mkhelp.py` | EPlay (EPDF's, EContact's, EMail's, EHypView's before it) | the family's help generator (guidelines 4.3): `mkhelp.py docs/GUIDE.md VERSION build/NAME.STG [--app A] [--database D] [--subject S] [--help-page P]` makes the app's `docs/GUIDE.md` into an ST-Guide source, a page a `## ` section, tables in columns, every line within 75, links between sections, the Atari character set, the same file each time; then `helpfront.py page` puts the front page in as Main and hcp compiles it. Standard Python only. `tests/help/test_mkhelp.py` checks it (and compiles it with hcp when there is one) |
+ | `tools/helpfront.py`, `tools/gemimg.py`, `help/NAME.IMG` | | the family's help front page (guidelines 4.3): `helpfront.py page docs/front.json IN.STG OUT.STG` makes the Main node from the app's `docs/front.json` (welcome, window, diagram, contents; `**bold**`, `[[Page]]` and `[[text\|Page]]` in its texts) and copies the pictures next to OUT.STG for hcp; standard Python only. `helpfront.py thumb SCREEN.PNG docs/help/WINDOW.IMG x,y,w,h [bx,by ...]` makes the half-size window picture with numbered badges once (Pillow; commit it). `help/NAME.IMG` are the banners, drawn by AERA-Atari's `brand/tools/mkhelpbanner.py`; `gemimg.py` writes 16-colour GEM IMGs in the standard palette and their monochrome masks. `tests/help/test_helpfront.py` checks a page (and compiles it with hcp when there is one) |
+ | `tools/pens/` | EWeb (webgate, AERA-Gateway's `pens/`) | `aerapens`: a picture made into an Atari screen's pens on the Pi's gateway with the Atari's own `src/pic.c` (decode, scaler, dither), so the pens are the very ones the Atari would make; both of EWeb's builds in one program (libjpeg-turbo as EWEB.PRG, TJpgDec as EWEBST.PRG: pic.c again with `pens_tj.h`'s names). One length-prefixed request on stdin (`AEPQ`), EWeb's `EWPN` pens on stdout after a line naming the AERA-Atari commit and the build; nothing else opened (systemd runs one a connection on webgate's socket); pictures of 16 million pixels at most, made 4 million at most. The forms are in `aerapens.c`. `make -C common/tools/pens` for this machine, `make pi` for a Pi (arm64, armhf, static); AERA-Gateway builds it on the Pi from its `pens/common/` copy. `tests/pic/pens.py` (`make pens` there) checks every build, under QEMU, against the same code as 68030 and 68000 code; `make fuzzpens` fuzzes its requests (libFuzzer, ASan, UBSan; seeds and finds in `tests/pic/fuzz/pens`) |
+ | `tools/fakesting/` | every app's network rigs (`machines.py` `network()`) | the Hatari rigs' network (Hatari has no network card): `FAKESTNG.PRG` (`make -C common/tools/fakesting`, then into `C:\AUTO`) stands in for STinG (on TOS 1.04 too: it makes the cookie jar that TOS lacks and turns off its XON/XOFF) and carries up to four TCP connections over the emulated serial port to `serial_bridge.py FROM_ATARI TO_ATARI`, which makes the real ones. Never on a real Atari. As real STinG it never holds the machine: sends wait in a queue, received bytes are filed as they come, read straight from the serial buffer for at most 20 ms a call (ECal's background syncing measures its gaps through it: a Mega ST stays within 100 ms), and the bridge sends no more than the Atari has said it has room for (EFTP's downloads). `C:\FASTCLK` sets timer C to 312 Hz, a 200 Hz clock 1.56 times too fast, as on Erez's Falcon (EFTP's `clock_test.py`). EFTP's `net_test.py` passes with it (Falcon, and the ST edition on 1 MB), its downloads twice as fast as with EFTP's own copy. A connection's number used again at once (a page stopped with Esc, then the next) no longer gets the last of the old one's data: the bridge sends nothing of a socket that is no longer the connection's, and FAKESTNG files data only for a connection open (19 Oct 2026, found by EWeb's pictures rig) |
+diff --git a/common/tests/help/test_mkhelp.py b/common/tests/help/test_mkhelp.py
+new file mode 100644
+index 0000000..ff98960
+--- /dev/null
++++ b/common/tests/help/test_mkhelp.py
+@@ -0,0 +1,143 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: GPL-2.0-or-later
++# Copyright (C) 2026 AERA | Erez Yaary
++"""mkhelp.py: a guide's pages, links, tables, listings and pictures; every
++line within the page; the Atari character set; the same file each time;
++the options; then helpfront.py page over it, and hcp (when on the PATH,
++or HCP=) compiles the two.
++
++    python3 common/tests/help/test_mkhelp.py
++"""
++import os
++import re
++import shutil
++import subprocess
++import sys
++import tempfile
++
++HERE = os.path.dirname(os.path.abspath(__file__))
++TOOLS = os.path.join(HERE, "..", "..", "tools")
++MKHELP = os.path.join(TOOLS, "mkhelp.py")
++
++GUIDE = """# Test - user guide
++
++Welcome. See [Keyboard](#keyboard) and [the settings](#settings-and-files); \
++[a site](https://example.com) is only its text. An @ stays one.
++
++![The window](docs/help/window.png)
++
++## Keyboard
++
++| Key | What it does |
++|---|---|
++| Space | Play or pause, the longest description of all here, long enough that it has to be wrapped onto a second line |
++| ⇧-Left | The previous file |
++| `a|b` | A bar in code |
++
++- **Bold** item, and a long list item that goes on past the page's width so that it hangs under itself as it should
++  with its continuation.
++- ↑ and ↓ move — «quoted» and café.
++
++## Settings and files
++
++```
++C:\\GUIDES\\TEST.HYP        the guide, where the viewer finds it first, a description that is too long for one line
++short
++```
++
++### A heading inside
++
++Text.
++"""
++
++
++def run(*args):
++    return subprocess.run([sys.executable, "-I", MKHELP] + list(args), check=True)
++
++
++def main():
++    d = tempfile.mkdtemp(prefix="mkhelp")
++    fails = 0
++
++    def check(ok, what):
++        nonlocal fails
++        print(("ok    " if ok else "FAIL  ") + what)
++        fails += not ok
++
++    try:
++        guide = os.path.join(d, "GUIDE.md")
++        ver = os.path.join(d, "VERSION")
++        with open(guide, "w", encoding="utf-8") as f:
++            f.write(GUIDE)
++        with open(ver, "w") as f:
++            f.write("1.2\n")
++        out = os.path.join(d, "TEST.STG")
++        run(guide, ver, out)
++        raw = open(out, "rb").read()
++        s = raw.decode("latin-1")
++        lines = s.split("\r\n")
++        check(b"\n" not in raw.replace(b"\r\n", b""), "CR/LF line ends only")
++        check(all(ord(c) < 256 for c in s) and "\xaf" in s and "\xae" in s and "\x82" in s,
++              "the Atari character set (\u00bb \u00ab \u00e9)")
++        check('@database "Test - user guide"' in lines and '@subject "Programs"' in lines and
++              "@$VER: TEST.HYP 1.2" in lines and '@help "Keyboard"' in lines,
++              "the header from the guide and the defaults")
++        nodes = re.findall(r'@node "([^"]+)" "([^"]+)"', s)
++        check(nodes == [("Main", "Test 1.2"), ("Keyboard", "Test: Keyboard"),
++                        ("Settings and files", "Test: Settings and files")], "a page a section: %s" % nodes)
++        check(s.count("@node") == s.count("@endnode"), "every page ended")
++        check('@{"Keyboard" LINK "Keyboard"}' in s and '@{"the settings" LINK "Settings and files"}' in s,
++              "links between sections")
++        check("example.com" not in s and "a site" in s, "a link out of the guide is its text")
++        check("window.png" not in s and "The window" not in s, "pictures left out")
++        check("An @@ stays one" in s, "@ written as @@")
++        check("@{B}Bold@{b}" in s and "@{B}A heading inside@{b}" in s, "bold and ### headings")
++        check("Shift-Left" in s and "Up and Down" in s, "arrows and shift in words")
++        check("a|b" in s, "a | inside code stays in its cell")
++
++        def vis(l):
++            return len(re.sub(r"@\{[^}]*\}", "", l).replace("@@", "@"))
++        body = [l for l in lines if not l.startswith("@") or l.startswith("@{")]
++        check(all(vis(l) <= 75 for l in body), "every line within 75 columns (the widest %d)" %
++              max(vis(l) for l in body))
++        check(any(l.startswith("  ") and "hangs" in l for l in lines), "a list item hangs under itself")
++        col = len("C:\\GUIDES\\TEST.HYP        ")
++        check(any(l.startswith(" " * col) and l[col] != " " for l in lines),
++              "a long listing line goes on under its description")
++        run(guide, ver, out)
++        check(open(out, "rb").read() == raw, "the same guide gives the same file")
++
++        out2 = os.path.join(d, "OTHER.STG")
++        run(guide, ver, out2, "--app", "Other", "--database", "Other - the guide", "--subject", "Sound",
++            "--help-page", "")
++        s2 = open(out2, encoding="latin-1").read()
++        check('@database "Other - the guide"' in s2 and '@subject "Sound"' in s2 and "@help" not in s2 and
++              "@$VER: OTHER.HYP 1.2" in s2 and '"Other: Keyboard"' in s2, "the options")
++
++        # the family's front page over it, as the apps' Makefiles do
++        front = os.path.join(d, "front.json")
++        with open(front, "w") as f:
++            f.write('{"name": "Test", "banner": "EPLAY", "address": "github.com/whomper/Test", '
++                    '"welcome": ["Hello. See [[Keyboard]]."], '
++                    '"contents": [["Start", ["Keyboard", "Settings and files"]]]}')
++        try:
++            subprocess.run([sys.executable, "-I", os.path.join(TOOLS, "helpfront.py"), "page", front, out, out],
++                           check=True, capture_output=True)
++            check(True, "helpfront.py page takes it")
++        except subprocess.CalledProcessError as e:
++            check(False, "helpfront.py page: %s" % e.stderr.decode(errors="replace").strip())
++        hcp = os.environ.get("HCP") or shutil.which("hcp")
++        if hcp:
++            r = subprocess.run([hcp, "-o", os.path.join(d, "TEST.HYP"), out], capture_output=True, cwd=d)
++            check(r.returncode == 0 and os.path.exists(os.path.join(d, "TEST.HYP")),
++                  "hcp compiles it" + ("" if r.returncode == 0 else ": " + r.stderr.decode(errors="replace")))
++        else:
++            print("NOTE  no hcp: not compiled")
++    finally:
++        shutil.rmtree(d)
++    print("all passed" if not fails else "%d failed" % fails)
++    return 1 if fails else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/common/tools/mkhelp.py b/common/tools/mkhelp.py
+new file mode 100644
+index 0000000..59567d2
+--- /dev/null
++++ b/common/tools/mkhelp.py
+@@ -0,0 +1,237 @@
++#!/usr/bin/env python3
++# SPDX-License-Identifier: GPL-2.0-or-later
++# Copyright (C) 2026 AERA | Erez Yaary
++"""The family's help generator (guidelines 4.3): an app's docs/GUIDE.md
++into an ST-Guide hypertext source, NAME.STG. From EPlay's (EPDF's,
++EContact's, EMail's, EHypView's before it): one generator for every app.
++
++    mkhelp.py docs/GUIDE.md VERSION build/NAME.STG [--app EPlay]
++              [--database "EPlay - music on the Falcon"] [--subject Sound]
++              [--help-page Keyboard]
++
++--app is the name in the page titles ("EPlay: Settings"; by default the
++guide's first heading's first word), --database the database's title (by
++default the guide's first heading), --subject the category ST-Guide's
++catalogue sorts it under (Programs by default), --help-page the page the Help
++key opens in the viewer (Keyboard by default; none with ""). NAME.HYP is
++OUT's name.
++
++Each "## " section becomes a page, the text before the first one the
++main page with the contents. ST-Guide shows text as it is written, so
++tables are laid out in columns here and every line is kept within the
++page width (a long line in a listing goes on under its description);
++bold becomes @{B}, links between sections become ST-Guide links, and
++pictures are left out. The text is written in the Atari character set,
++and the same guide always gives the same file (no date in it). Compile
++with HCP (the hypview project): hcp -o binary/NAME.HYP build/NAME.STG;
++helpfront.py page then puts the family's front page in as Main.
++"""
++import argparse
++import os
++import re
++import sys
++
++WIDTH = 75
++
++# what the guide uses beyond ASCII, in the Atari character set
++ATARI = {"»": "\xaf", "«": "\xae", "×": "x", "—": "-", "–": "-",
++         "─": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "≡": "\xf0",
++         "·": "\xfa", "é": "\x82", "è": "\x8a", "ü": "\x81", "ö": "\x94", "ä": "\x84"}
++
++
++def atari(s):
++    return "".join(ATARI.get(c, c if ord(c) < 128 else "?") for c in s)
++
++
++def slug(title):
++    """GitHub's anchor for a heading: lower case, spaces to dashes"""
++    return re.sub(r"[^a-z0-9 -]", "", title.lower()).replace(" ", "-")
++
++
++def plain(s):
++    """the visible text of a line of markdown, without its markup"""
++    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
++    return s.replace("**", "").replace("`", "")
++
++
++def markup(s, anchors):
++    """markdown inline markup to ST-Guide's; links to sections become links"""
++    def link(m):
++        text, target = m.group(1), m.group(2)
++        if target.startswith("#") and target[1:] in anchors:
++            return '@{"%s" LINK "%s"}' % (text, anchors[target[1:]])
++        return text
++    s = s.replace("@", "@@")
++    s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", link, s)
++    s = re.sub(r"\*\*([^*]+)\*\*", r"@{B}\1@{b}", s)
++    return s.replace("`", "")
++
++
++def vislen(w):
++    """the width of a word on the page: no @{...} commands, @@ as one"""
++    return len(re.sub(r"@\{[^}]*\}", "", w).replace("@@", "@"))
++
++
++def wrap(text, width):
++    """words into lines of at most width characters; an ST-Guide command
++    with spaces in it (a link) stays one word"""
++    text = re.sub(r"@\{[^}]*\}", lambda m: m.group(0).replace(" ", "\0"), text)
++    out, line, n = [], "", 0
++    for w in text.split():
++        lw = vislen(w.replace("\0", " "))
++        if line and n + 1 + lw > width:
++            out.append(line)
++            line, n = w, lw
++        else:
++            line, n = (w, lw) if not line else (line + " " + w, n + 1 + lw)
++    if line or not out:
++        out.append(line)
++    return [l.replace("\0", " ") for l in out]
++
++
++def table(rows):
++    """a markdown table in columns, the widest column wrapped to fit"""
++    def split(r):
++        r = re.sub(r"`[^`]*`", lambda m: m.group(0).replace("|", "\0"), r.strip().strip("|"))
++        r = r.replace("\\|", "\0")          # an escaped one, as GitHub writes it
++        return [plain(c.strip().replace("\0", "|")).replace("@", "@@") for c in r.split("|")]
++    cells = [split(r) for r in rows]
++    cells = [r for r in cells if not all(re.fullmatch(r":?-+:?", c) for c in r)]
++    n = max(len(r) for r in cells)
++    cells = [r + [""] * (n - len(r)) for r in cells]
++    widths = [max(len(r[i]) for r in cells) for i in range(n)]
++    while sum(widths) + 2 * (n - 1) > WIDTH:
++        widest = widths.index(max(widths))
++        widths[widest] -= 1
++    out = []
++    for k, r in enumerate(cells):
++        parts = [wrap(c, widths[i]) for i, c in enumerate(r)]
++        for j in range(max(len(p) for p in parts)):
++            line = "  ".join((p[j] if j < len(p) else "").ljust(widths[i]) for i, p in enumerate(parts))
++            out.append(("@{B}%s@{b}" % line.rstrip()) if k == 0 else line.rstrip())
++        if k == 0:
++            out.append("  ".join("-" * w for w in widths))
++    return out
++
++
++def code_line(s):
++    """a line of a listing as it is, or, when it's too long, its
++    description (after the last gap of two spaces) wrapped under itself"""
++    if len(s) <= WIDTH:
++        return [s.replace("@", "@@")]
++    m = None
++    for m in re.finditer(r"  +(?=\S)", s):
++        pass
++    col = m.end() if m else 0
++    if not m or col > WIDTH - 20:
++        return [s[k:k + WIDTH].replace("@", "@@") for k in range(0, len(s), WIDTH)]
++    lines = wrap(s[col:].replace("@", "@@"), WIDTH - col)
++    return [s[:col].replace("@", "@@") + lines[0]] + [" " * col + l for l in lines[1:]]
++
++
++def page(lines, anchors):
++    """the body of one page: paragraphs and list items flowed to the page
++    width, code as it is, tables in columns"""
++    out, i = [], 0
++    while i < len(lines):
++        s = lines[i]
++        if s.startswith("```"):
++            i += 1
++            while i < len(lines) and not lines[i].startswith("```"):
++                out += code_line(lines[i])
++                i += 1
++            i += 1
++        elif s.startswith("|"):
++            rows = []
++            while i < len(lines) and lines[i].startswith("|"):
++                rows.append(lines[i])
++                i += 1
++            out += table(rows)
++        elif s.startswith("### "):
++            out.append("@{B}%s@{b}" % s[4:].strip())
++            i += 1
++        elif not s.strip():
++            out.append("")
++            i += 1
++        elif re.fullmatch(r"(\s*!\[[^\]]*\]\([^)]*\))+\s*", s):
++            i += 1		# a picture: not in the help
++            if i < len(lines) and not lines[i].strip() and out and not out[-1].strip():
++                i += 1
++        else:
++            # a paragraph, or a list item with its indented continuation
++            ind = len(s) - len(s.lstrip())
++            item = s.lstrip().startswith("- ")
++            text = [s.strip()]
++            i += 1
++            while i < len(lines) and lines[i].strip() and not lines[i].startswith(("```", "|", "#")):
++                nxt = lines[i]
++                nind = len(nxt) - len(nxt.lstrip())
++                if nxt.lstrip().startswith("- ") or (item and nind <= ind):
++                    break
++                text.append(nxt.strip())
++                i += 1
++            hang = ind + (2 if item else 0)
++            for k, l in enumerate(wrap(markup(" ".join(text), anchors), WIDTH - hang)):
++                out.append(" " * (ind if k == 0 else hang) + l)
++    while out and not out[-1].strip():
++        out.pop()
++    while out and not out[0].strip():
++        out.pop(0)
++    return out
++
++
++def main(argv=None):
++    ap = argparse.ArgumentParser(description="docs/GUIDE.md to an ST-Guide source")
++    ap.add_argument("guide")
++    ap.add_argument("version", help="the VERSION file")
++    ap.add_argument("out", help="NAME.STG")
++    ap.add_argument("--app")
++    ap.add_argument("--database")
++    ap.add_argument("--subject", default="Programs")
++    ap.add_argument("--help-page", default="Keyboard")
++    a = ap.parse_args(argv)
++    src, dst = a.guide, a.out
++    version = open(a.version).read().strip()
++    name = os.path.splitext(os.path.basename(dst))[0].upper()
++    # words for what the Atari's font has no letter for, before laying out
++    text = open(src, encoding="utf-8").read().replace("↑", "Up").replace("↓", "Down")
++    text = text.replace("⇧-", "Shift-").replace("⇧", "Shift+").split("\n")
++    title = text[0].lstrip("# ").strip()
++    app = a.app or (title.split() or [name.capitalize()])[0]
++    sections, cur = [], ("Main", [])
++    for s in text[1:]:
++        if s.startswith("## "):
++            sections.append(cur)
++            cur = (s[3:].strip(), [])
++        else:
++            cur[1].append(s)
++    sections.append(cur)
++    anchors = {slug(t): t for t, _ in sections[1:]}
++    out = ['@database "%s"' % (a.database or title),
++           '@subject "%s"' % a.subject,
++           '@author "AERA | Erez Yaary"',
++           '@$VER: %s.HYP %s' % (name, version),
++           "@width %d" % WIDTH,
++           "@inputenc atarist",
++           "@charset atarist",
++           "@autorefoff"]
++    if a.help_page:
++        out.append('@help "%s"' % a.help_page)
++    out += ['@options "+z"',		# and NAME.REF, for ST-Guide's index
++            "",
++            '@node "Main" "%s %s"' % (app, version),
++            "@{U}%s@{u}" % title, ""]
++    out += page(sections[0][1], anchors)
++    out += ["", "@{B}Contents@{b}", ""]
++    out += ['  @{"%s" LINK "%s"}' % (t, t) for t, _ in sections[1:]]
++    out += ["@endnode", ""]
++    for t, body in sections[1:]:
++        out += ['@node "%s" "%s: %s"' % (t, app, t), "@{U}%s@{u}" % t, ""]
++        out += page(body, anchors)
++        out += ["", '@{"Contents" LINK "Main"}', "@endnode", ""]
++    with open(dst, "w", encoding="latin-1", newline="\r\n") as f:
++        f.write(atari("\n".join(out)) + "\n")
++
++
++if __name__ == "__main__":
++    main()
+-- 
+2.43.0
+
