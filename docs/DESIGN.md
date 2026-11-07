@@ -1393,8 +1393,11 @@ clock 39280)". So the lines choose the clock's source and nothing else: with the
 (2, 3, 7) the FDI's own, 48 kHz; with it clear (0, 5) what comes into its S/PDIF input, here
 about 39.3 kHz, a receiver with nothing to lock to (0.6 and 0.7 read 44.1 kHz at 0 with Erez's
 sound card feeding it; 0.25 and 0.26 read 38.6). EPlay played on at 48 kHz, resampled, with 0
-underruns. Asked of Erez: whether the input is plugged in, and whether Cubase reaches 44.1 kHz
-with nothing in it.
+underruns. Erez: the input is his sound card's optical output at 44.1 kHz; he unplugged it and
+plugged it in again, "and now it is in 44.1". So the FDI's receiver had lost its lock on a signal
+there (the 38.6 to 39.3 kHz since 0.25: its oscillator free), and EPlay's 0 plays the file at
+44.1 kHz bit for bit once it has it. Put to Erez: a word in the window when the input has no
+signal to follow (the FDI's own 48 kHz then, resampled).
 
 **What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
 waiting for Erez's DSP-mode log of 0.28 to say how much more is needed before taking them on:
