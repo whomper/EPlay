@@ -73,6 +73,150 @@ long snd_underruns;
 long snd_first_under = -1;	/* frames played at the first underrun (-1: none) */
 long snd_least_lead = -1;	/* the fewest frames written ahead, past the first second */
 
+/* ---- the TT's and the STE's sound (phase 6, Erez 7 Nov 2026): 8-bit
+   stereo DMA, no matrix, no XBIOS sound calls: its registers at $FF8900
+   set directly. A frame two bytes (left, right) in a ring in ST RAM. The
+   music comes in as 16-bit frames at the file's rate (snd_ptr's staging
+   buffer, as on the Falcon) and snd_wrote puts it at the DMA's rate: on a
+   TT interpolated and dithered to 8 bits, on an STE the nearest sample.
+   played and written count the DMA's frames; snd_played and snd_written
+   give them as the file's (play.c's time) */
+int snd_dma8;			/* the TT's or STE's sound */
+int snd_dma8_interp;		/* interpolate and dither (a 68030), else the nearest sample */
+#define D8(o)	(*(volatile unsigned char *)(0xffff8900L + (o)))
+#define RING8_MAX	25033L	/* frames: half a second at 50,066 Hz (50 KB) */
+#define STAGE_N		1024	/* the staging buffer's frames */
+static unsigned char *ring8;
+static short stage[2 * STAGE_N];
+static long in8, out8;		/* the file's rate, the DMA's */
+static unsigned long ph8, step8;	/* the position in the file's frames, 16.16; the step a frame out */
+static short h8l, h8r;		/* the file's last frame before stage[0] */
+static long e8l, e8r;		/* the dither's errors carried */
+static unsigned char mode8, keep8[2];
+static const long rates8[] = { 50066, 25033, 12517, 6258 };	/* $FF8921's 3, 2, 1, 0 */
+static int nrates8 = 4;
+static unsigned char *start8, *end8;
+
+static long keep_regs8(void)
+{
+	keep8[0] = D8(0x01);
+	keep8[1] = D8(0x21);
+	return 0;
+}
+
+static long put_regs8(void)
+{
+	D8(0x01) = 0;
+	D8(0x21) = keep8[1];
+	return 0;
+}
+
+static long set8(void)
+{
+	unsigned long a = (unsigned long)start8, b = (unsigned long)end8;
+	D8(0x01) = 0;			/* stopped */
+	D8(0x21) = mode8;		/* stereo, the rate */
+	D8(0x03) = (unsigned char)(a >> 16);
+	D8(0x05) = (unsigned char)(a >> 8);
+	D8(0x07) = (unsigned char)a;
+	D8(0x0f) = (unsigned char)(b >> 16);
+	D8(0x11) = (unsigned char)(b >> 8);
+	D8(0x13) = (unsigned char)b;
+	return 0;
+}
+
+static long go8(void)
+{
+	D8(0x01) = 3;			/* play, round and round */
+	return 0;
+}
+
+static long stop8(void)
+{
+	D8(0x01) = 0;
+	return 0;
+}
+
+/* in8 frames at the file's rate in, out8 at the DMA's: the file's frames
+   that fill n of the DMA's (rounded down, so never more than fit) */
+static long in_for(long n)
+{
+	return out8 == in8 ? n : (long)(((unsigned long long)n * (unsigned long long)in8) / (unsigned long long)out8);
+}
+
+/* the DMA's n frames as the file's */
+static long as_in(long n)
+{
+	return out8 == in8 ? n : (long)(((unsigned long long)n * (unsigned long long)in8) / (unsigned long long)out8);
+}
+
+/* a 16-bit sample to 8 bits: with its error carried to the next (a
+   first-order noise shaping: the error's power moved up, out of the
+   middle of what is heard), or cut */
+static unsigned char to8(long v, long *e, int dither)
+{
+	long w;
+	if (dither) {
+		v += *e;
+		w = v < -32768 ? -32768 : v > 32767 ? 32767 : v;
+		w = (w + 128) >> 8;
+		if (w > 127)
+			w = 127;
+		*e = v - (w << 8);
+		if (*e > 32767 || *e < -32768)
+			*e = 0;
+		return (unsigned char)w;
+	}
+	return (unsigned char)(v >> 8);
+}
+
+/* k of the file's frames in stage[] to the ring at the DMA's rate: the
+   frames made */
+static long put8(long k)
+{
+	long made = 0;
+	const short *x = stage;
+	unsigned char *r = ring8 + 2 * wpos;
+	unsigned char *rend = ring8 + 2 * ring_n;
+	unsigned long p = ph8, lim = (unsigned long)k << 16;
+	if (snd_dma8_interp) {
+		while (p < lim) {
+			long i = (long)(p >> 16), f = (long)(p & 0xffff), al, ar, bl, br;
+			if (i == 0) {
+				al = h8l;
+				ar = h8r;
+			} else {
+				al = x[2 * i - 2];
+				ar = x[2 * i - 1];
+			}
+			bl = x[2 * i];
+			br = x[2 * i + 1];
+			*r++ = to8(al + (((bl - al) * f) >> 16), &e8l, 1);
+			*r++ = to8(ar + (((br - ar) * f) >> 16), &e8r, 1);
+			if (r >= rend)
+				r = ring8;
+			made++;
+			p += step8;
+		}
+	} else {
+		while (p < lim) {
+			long i = (long)(p >> 16);
+			*r++ = (unsigned char)(x[2 * i] >> 8);
+			*r++ = (unsigned char)(x[2 * i + 1] >> 8);
+			if (r >= rend)
+				r = ring8;
+			made++;
+			p += step8;
+		}
+	}
+	ph8 = p - lim;
+	if (k > 0) {
+		h8l = x[2 * k - 2];
+		h8r = x[2 * k - 1];
+	}
+	return made;
+}
+
 /* the matrix, as found: $FF8920 (the DMA's mode), $FF8930-$FF893A */
 static unsigned short keep[8];
 static long keep_regs(void)
@@ -472,8 +616,19 @@ int snd_init(const char **why)
 {
 	long snd = get_cookie(0x5F534E44L);	/* _SND: bit 2 the codec, 4 the matrix */
 	if ((snd & 0x14) != 0x14) {
-		*why = "EPlay 0.1 needs a Falcon's sound.";
-		return 0;
+		/* the TT's or the STE's 8-bit DMA (_SND bit 1) */
+		if (!(snd & 2)) {
+			*why = "EPlay needs DMA sound: a Falcon, a TT or an STE.";
+			return 0;
+		}
+		snd_dma8 = 1;
+		/* a 68020 or better interpolates (a TT); the 68000 takes the
+		   nearest sample. A TT's DMA has no 6,258 Hz */
+		snd_dma8_interp = get_cookie(0x5F435055L) >= 20;	/* '_CPU' */
+		if ((get_cookie(0x5F4D4348L) >> 16) == 2)		/* '_MCH': a TT */
+			nrates8 = 3;
+		Supexec(keep_regs8);
+		return 1;
 	}
 	if (Locksnd() != 1) {
 		*why = "Another program is using the sound.";
@@ -490,6 +645,10 @@ int snd_init(const char **why)
 void snd_exit(void)
 {
 	snd_close();
+	if (snd_dma8) {
+		Supexec(put_regs8);
+		return;
+	}
 	if (snd_fdi_changed) {		/* the FDI's lines as its program left them */
 		Gpio(0, snd_gpio_dir);
 		Gpio(2, snd_gpio_data);
@@ -511,6 +670,16 @@ long snd_rate_for(long rate, int *ext)
 	long best = internal[0], d, bd = 1L << 30;
 	unsigned i;
 	*ext = 0;
+	if (snd_dma8) {
+		/* the lowest at or above the file's (it's resampled up to it),
+		   else the highest: 44.1 and 48 kHz at 50,066, 22.05 at 25,033 */
+		int j;
+		best = rates8[0];
+		for (j = 0; j < nrates8; j++)
+			if (rates8[j] >= rate)
+				best = rates8[j];
+		return best;
+	}
 	if (snd_ext_use && snd_ext_rate && (rate - snd_ext_rate < snd_ext_rate / 100 && snd_ext_rate - rate < snd_ext_rate / 100)) {
 		*ext = 1;
 		return snd_ext_rate;
@@ -560,10 +729,54 @@ int snd_open_feed(long rate, int ext)
 	return open_to(rate, ext, 1);
 }
 
+long snd_in_rate;		/* the file's rate, for the 8-bit DMA's resampling (play.c sets it) */
+
+static int open8(long rate)
+{
+	int j;
+	if (!ring8) {
+		/* ST RAM: Mxalloc where GEMDOS has it (TOS 2 and on), else
+		   Malloc, which an STE's TOS gives from ST RAM, all it has */
+		unsigned char *p = Mxalloc(RING8_MAX * 2, 0);
+		if ((long)p == -32)	/* (EINVFN: a GEMDOS without Mxalloc) */
+			p = (unsigned char *)Malloc(RING8_MAX * 2);
+		if ((long)p <= 0)
+			return 0;
+		ring8 = p;
+	}
+	mode8 = 3;
+	for (j = 0; j < nrates8; j++)
+		if (rates8[j] == rate)
+			mode8 = (unsigned char)(3 - j);
+	out8 = rate;
+	in8 = snd_in_rate > 0 ? snd_in_rate : rate;
+	step8 = (unsigned long)(((unsigned long long)in8 << 16) / (unsigned long long)out8);
+	ph8 = 1UL << 16;		/* (the first frame out: the file's first, whole) */
+	h8l = h8r = 0;
+	e8l = e8r = 0;
+	ring_n = rate / 2;
+	if (ring_n > RING8_MAX)
+		ring_n = RING8_MAX;
+	memset(ring8, 0, (size_t)ring_n * 2);
+	start8 = ring8;
+	end8 = ring8 + 2 * ring_n;
+	Supexec(set8);
+	snd_fw = 2;
+	fw_shift = 1;
+	wpos = written = played = 0;
+	last_ppos = 0;
+	playing = 0;
+	snd_underruns = 0;
+	snd_first_under = snd_least_lead = -1;
+	return 1;
+}
+
 static int open_to(long rate, int ext, int feed)
 {
 	short pre = 1;
 	unsigned i;
+	if (snd_dma8)
+		return feed ? 0 : open8(rate);
 	if (!ring) {
 		long n = RING_MAX;
 		short *p = Mxalloc(n * 2 * FW, 0);
@@ -630,8 +843,11 @@ static int open_to(long rate, int ext, int feed)
 #define RTATTEN 1
 #define ADDERIN 4
 static short adder_found = -1;
+
 void snd_dac_volume(int att, int mute)
 {
+	if (snd_dma8)
+		return;		/* (the volume is the samples' own there: play.c) */
 	if (!locked)
 		return;
 	if (adder_found < 0) {
@@ -646,6 +862,12 @@ void snd_dac_volume(int att, int mute)
 
 void snd_close(void)
 {
+	if (snd_dma8) {
+		if (ring8)
+			Supexec(stop8);
+		playing = 0;
+		return;
+	}
 	if (ring) {
 		Buffoper(0);
 		playing = 0;
@@ -664,6 +886,12 @@ static long hw_once(void)
 {
 	volatile unsigned char *c = (volatile unsigned char *)0xffff8909L;
 	long a = (long)c[0] << 16 | (long)c[2] << 8 | c[4];
+	if (snd_dma8) {
+		if (a < (long)ring8 || a > (long)(ring8 + 2 * ring_n))
+			return -1;
+		a = (a - (long)ring8) >> 1;
+		return a >= ring_n ? a - ring_n : a;
+	}
 	if (a < (long)ring || a > (long)(ring + snd_fw * ring_n))
 		return -1;
 	a = (a - (long)ring) >> fw_shift;	/* (a frame's bytes; no division: the tick's) */
@@ -721,28 +949,45 @@ void snd_update(void)
 
 long snd_played(void)
 {
-	return played;
+	return snd_dma8 ? as_in(played) : played;
 }
 
 long snd_written(void)
 {
-	return written;
+	return snd_dma8 ? as_in(written) : written;
 }
 
 long snd_room(void)
 {
 	long r = ring_n - (written - played) - 1024;	/* a guard behind the DMA */
+	if (snd_dma8 && r > 0) {
+		r = in_for(r) - 1;	/* (the file's frames that fill it, one spare for the step) */
+		if (r > STAGE_N)
+			r = STAGE_N;
+	}
 	return r > 0 ? r : 0;
 }
 
 short *snd_ptr(long *n)
 {
+	if (snd_dma8) {
+		*n = STAGE_N;
+		return stage;
+	}
 	*n = ring_n - wpos;
 	return ring + snd_fw * wpos;
 }
 
 void snd_wrote(long n)
 {
+	if (snd_dma8) {
+		long m = put8(n);
+		wpos += m;
+		if (wpos >= ring_n)
+			wpos -= ring_n;
+		written += m;
+		return;
+	}
 	wpos += n;
 	if (wpos >= ring_n)
 		wpos -= ring_n;
@@ -772,7 +1017,10 @@ void snd_play(void)
 		/* the DMA starts at the ring's start; Buffptr, until it has,
 		   may still say where the last one stopped (measure_ext's) */
 		last_ppos = 0;
-		Buffoper(PLAY_ENABLE | PLAY_REPEAT);
+		if (snd_dma8)
+			Supexec(go8);
+		else
+			Buffoper(PLAY_ENABLE | PLAY_REPEAT);
 		playing = 1;
 	}
 }

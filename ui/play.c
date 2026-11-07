@@ -84,7 +84,7 @@ static const unsigned short gain_tab[VOL_MAX] = {
 static void apply_volume(void)
 {
 	int a = VOL_MAX - vol;		/* 0..15 steps down, while vol is 1 or more */
-	if (s_ext && play_is_open()) {
+	if ((s_ext || snd_dma8) && play_is_open()) {
 		snd_dac_volume(0, 0);
 		t_gain = vol ? gain_tab[a] : 0;
 		t_gsub = vol ? a : 255;
@@ -1055,7 +1055,13 @@ int play_open(const char *path, char *err, int n)
 			if (snd_fdi_note[0])
 				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 		}
-		if (out_rate != rate) {
+		snd_in_rate = rate;	/* (the 8-bit DMA resamples from it) */
+		if (snd_dma8) {
+			if (out_rate != rate)
+				elog("%ld Hz up to the DMA's %ld Hz by the 68%s0: %s", rate, out_rate,
+				     snd_dma8_interp ? "03" : "00", snd_dma8_interp ? "interpolated, dithered to 8 bits" :
+				     "the nearest sample");
+		} else if (out_rate != rate) {
 			int dext, r;
 			long dr = snd_rate_dsp(rate, &dext);
 			if (dr <= rate)
@@ -1080,7 +1086,13 @@ int play_open(const char *path, char *err, int n)
 	apply_volume();
 	pcm_gain_set(&gs, t_gain);	/* (a file starts at its volume: no glide) */
 	play_nosig = 0;
-	if (dsp && out_rate != rate) {	/* (the DSP resamples) */
+	if (snd_dma8 && out_rate != rate) {	/* (the TT's or STE's DMA, resampled by the 68030 or 68000) */
+		char fr[16];
+		khz(fr, sizeof(fr), rate);
+		snprintf(play_out, sizeof(play_out), "DMA 8 bits  %s (from %s)", kr, fr);
+	} else if (snd_dma8)
+		snprintf(play_out, sizeof(play_out), "DMA 8 bits  %s", kr);
+	else if (dsp && out_rate != rate) {	/* (the DSP resamples) */
 		char fr[16];
 		khz(fr, sizeof(fr), rate);
 		if (ext && snd_fdi_nosig && out_set != OUT_DSP) {

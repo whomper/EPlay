@@ -22,9 +22,11 @@ after another, and the music goes on while you work in other dialogs and menus.
   files, a folder or an `.M3U` playlist on EPlay's window or on `eplay.prg`. What you give goes
   into the list, and the first file plays.
 
-**Needs:** a Falcon030 with TOS 4.0x or EmuTOS, a screen 640 pixels wide or more. MP3 needs the
-Falcon's DSP; WAV and AIFF its sound DMA. A Falcon with TT RAM (a DFB1 and the like) has room for
-very long lists; a stock Falcon plays as well.
+**Needs:** a Falcon030 with TOS 4.0x or EmuTOS, or a TT, and a screen 640 pixels wide or more.
+MP3 needs the Falcon's DSP; WAV and AIFF play on the Falcon's sound DMA, or on the TT's 8-bit DMA
+sound (interpolated up to 50 kHz and dithered to 8 bits by the 68030). On a TT MP3 files show dim
+in the list and are passed over. A Falcon with TT RAM (a DFB1 and the like) has room for very long
+lists; a stock Falcon plays as well.
 
 **What it plays:** MP3 (MPEG-1, 2 and 2.5 layer III, every bit rate, constant or variable); WAV
 (PCM, 8 to 32 bits, mono or stereo); AIFF and AIFC (uncompressed). A file at a rate the Falcon's

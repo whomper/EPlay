@@ -114,6 +114,19 @@ int list_add(const char *path)
 	memset(e, 0, sizeof(*e));
 	e->path = p;
 	e->title = e->artist = e->album = "";
+	/* an MP3 where there's no DSP (a TT, an STE): shown dim, passed over
+	   (Erez, 7 Nov 2026: "MP3 needs a Falcon's DSP"); known from its name
+	   at once, before its tags are read, for files given at the start */
+	{
+		const char *d = strrchr(p, '.');
+		static int dsp = -1;	/* _SND bit 3: the DSP (asked once: a Supexec) */
+		if (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4]) {
+			if (dsp < 0)
+				dsp = (get_cookie(0x5F534E44L) & 8) != 0;
+			if (!dsp)
+				e->bad = 1;
+		}
+	}
 	order_size(&list_order, n + 1);
 	return n++;
 }

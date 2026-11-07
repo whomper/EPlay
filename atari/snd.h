@@ -19,6 +19,9 @@ void snd_exit(void);
 /* the external clock on the DSP port as the DMA measures it: 0 if none
    (the FDI's 44100 or 48000 Hz) */
 extern long snd_ext_rate;
+extern int snd_dma8;		/* the TT's or STE's 8-bit DMA sound, not the Falcon's */
+extern int snd_dma8_interp;	/* it interpolates and dithers (a 68030), else the nearest sample */
+extern long snd_in_rate;	/* the file's rate, for the 8-bit DMA's resampling (before snd_open) */
 extern int snd_ext_use, snd_ext_only;	/* Settings' Output: DSP (no external clock), FDI (it at any ratio) */
 extern int snd_ta_busy;	/* the last measure timed by the 200 Hz clock (Timer A in use), not Timer A */
 extern long snd_ext_raw;	/* the DMA's rate on it at prescale 1, as measured (0: no clock) */
