@@ -1377,6 +1377,16 @@ more samples than it plays, a slip a click. What goes to the FDI in Output DSP i
 DAC alone, or the FDI's clock as Auto). Output DSP never touches the FDI's clock, so that log
 holds no "the FDI to 44100 Hz" line; the FDI at 44.1 kHz needs a log with Output FDI.
 
+Erez's next run (7 Nov): no crackles; Output DSP plays on the Falcon's own output and on the FDI,
+FDI on the FDI alone; and the FDI "does not adhere to the file's sample rate and stays constant at
+48 kHz. This should be handled." Every log since 0.4 read 48 kHz at Cubase's 2 and 3 (its 8-track
+values for 44.1 and 48), and 44.1 kHz only at 0, from what came into the FDI's input. Cubase
+Audio's FDI routine (\$2A08 in Erez's copy) sets only these lines (its control word sent as
+samples, \$5190, is for another interface: with the FDI's driver answering it is jumped over), with
+5 and 7 for the same rates in its 16-track modes. **0.30** tries 2, 5, 3 and 7 for 44.1 (3, 7, 2, 5
+for 48), each measured, the first at rate kept, then 0, and logs every reading: the log will say
+which line, if any, moves this FDI's own clock.
+
 **What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
 waiting for Erez's DSP-mode log of 0.28 to say how much more is needed before taking them on:
 - *The synthesis window* (`swpair`, 12.4 %) is at its floor: one MAC an instruction, both
