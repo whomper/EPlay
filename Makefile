@@ -31,11 +31,11 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list dirlist addfiles order m3u
-CSRC    := bidi charset pic png inflate jpegdc
+OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u
+CSRC    := bidi charset pic png inflate jpegdc dirlist
 CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
@@ -136,8 +136,6 @@ $(B)/test_probe: tests/probe/test_probe.c src/probe.c src/probe.h src/tags.c src
 		common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Isrc/mp3 -Icommon/src -o $@ tests/probe/test_probe.c \
 		src/probe.c src/tags.c src/pcm.c src/mp3/mp3frame.c common/src/charset.c common/src/bidi.c
-$(B)/test_dirlist: tests/dirlist/test_dirlist.c src/dirlist.c src/dirlist.h
-	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/dirlist/test_dirlist.c src/dirlist.c
 $(B)/test_m3u: tests/m3u/test_m3u.c src/m3u.c src/m3u.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_m3u.c src/m3u.c
 $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
@@ -145,10 +143,9 @@ $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_dirlist $(B)/test_m3u $(B)/test_order
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order
 	./$(B)/test_inf
 	./$(B)/test_gain
-	./$(B)/test_dirlist
 	./$(B)/test_m3u
 	./$(B)/test_order
 	./$(B)/test_tags

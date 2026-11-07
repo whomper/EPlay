@@ -25,7 +25,7 @@
 #include "list.h"
 #include "dd.h"
 #include "popup.h"
-#include "addfiles.h"
+#include "filepick.h"
 #include "m3u.h"
 #include "elog.h"
 #include "snd.h"
@@ -662,11 +662,19 @@ static void feed_only(void)
 		play_step(15);
 }
 
+/* File > Open... (^O): common's file dialog with EPlay's types (Add
+   files: Erez, 4 Nov 2026) */
+static const DL_TYPE add_types[] = { { "Music files", "MP3 WAV AIF AIFF AIFC M3U" }, { "MP3", "MP3" },
+				     { "WAV", "WAV" }, { "AIFF", "AIF AIFF AIFC" }, { "Playlists", "M3U" },
+				     { "All files", "" } };
+static const FP_SPEC add_spec = { "Add files", "Add", "No folder added from yet", "EPLAY", add_types,
+				  (int)(sizeof(add_types) / sizeof(add_types[0])) };
+
 static void open_file(void)
 {
 	int before = list_count();
 	first_added = -1;
-	addfiles_run(settings_add_dir(), settings_recent(), add_one_file, feed_only);
+	filepick_run(&add_spec, settings_add_dir(), settings_recent(), add_one_file, feed_only);
 	settings_recent_changed();	/* (its folder kept, and the last folders if any were added) */
 	{
 		char line[60];
