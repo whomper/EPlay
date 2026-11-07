@@ -226,13 +226,16 @@ static void row_at(int r, GRECT *clip)
 	if (!e)
 		return;
 	if (e->dir) {
-		/* a folder: its shape, then its name */
+		/* a folder: its shape, then its name. The shape, its tab two
+		   pixels over it, within the row: 8 high on rows of 12 and more
+		   (16: as drawn since 4 Nov 2026), 5 on the ST's rows of 8, where
+		   8 reached a row into the next one's */
 		GRECT f;
-		short c = e->sel ? 0 : 1;
+		short c = e->sel ? 0 : 1, fh = rh >= 12 ? 8 : rh - 3;
 		f.x = x + 1;
-		f.y = y + rh / 2 - 3;
+		f.y = y + (rh - fh - 2) / 2 + 2;
 		f.w = gl_wchar + 6;
-		f.h = 8;
+		f.h = fh;
 		frame(&f, c);
 		line_col(f.x + 2, f.y - 2, f.x + 5, f.y - 2, c);
 		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
