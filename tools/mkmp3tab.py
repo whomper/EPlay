@@ -489,12 +489,13 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "OV1", 0x2d50, 576, None),
     # the output ring, left and right in turn, that the SSI plays with r7
     # modulo its size, on a multiple of 4096 (the DSP's modulo rule): a
-    # frame (2304), or resampled all of Y above it but the packet: 3354
-    # words, the granule played, the one decoded and 0.6 of another of
+    # frame (2304), or resampled all of Y above it but the packet and its
+    # count's word below it (hri's): 3352 words, the granule played, the
+    # one decoded and 0.6 of another of
     # slack (Erez, 7 Nov 2026: a stock Falcon plays MP3 through its DSP at
     # 49,170 Hz; on his it took 94 % with a few granules late, where 2576
     # words left the decoder no more than a granule ahead)
-    ("Y", "PCM", 0x3000, 3354, None),
+    ("Y", "PCM", 0x3000, 3352, None),
     ("Y", "PKT", 0x4000 - 742, 742, None),
     ("Y", "RSH", 0x2722, 14, None),      # the resampler's last 7 inputs, each channel
     # the resampler's taps, up or down, which the 68030 loads before each
