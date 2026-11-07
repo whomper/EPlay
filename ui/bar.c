@@ -420,8 +420,10 @@ static short badge(int slot, short x, short y, short rh, const char *s, short pe
 	c[2] = clip_r.x + clip_r.w - 1;
 	c[3] = clip_r.y + clip_r.h - 1;
 	badge_draw(&bt[slot], x, y, rh, s, pen, c);
-	if (badge_vdi)			/* (the VDI's way: its attributes changed) */
+	if (badge_vdi) {		/* (the VDI's way: its attributes changed) */
 		cur_fill = cur_pat = cur_tcol = cur_fx = -1;
+		draw_forget();
+	}
 	return badge_width(s);
 }
 
