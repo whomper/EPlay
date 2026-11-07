@@ -1368,6 +1368,15 @@ mix320.mp3 resampled to 49,170 Hz, 150 frames (300 granules), granules late:
 Better, not yet enough where the DSP is 5 % or more slower than Hatari's, as Erez's seems to be:
 the decoder itself has to get faster still, or the file plays at Normal.
 
+**0.29 on Erez's Falcon (7 Nov 2026), Output DSP:** two files of about 264 kbit/s (MPEG-1, 44.1 kHz,
+VBR), with seeks: 0 underruns, 0 late granules, 0 broken packets, the DSP's waits 844 a frame on
+average, the disk 35 s ahead at most and 9 s at least. He heard crackles. They fit the output, not
+the decoder: in Output DSP the DSP's output goes to the DAC and the DSP port together on the
+Falcon's own clock (49,170 Hz), and his FDI on the port plays at its own (48,011 Hz measured): 2.4 %
+more samples than it plays, a slip a click. What goes to the FDI in Output DSP is put to Erez (the
+DAC alone, or the FDI's clock as Auto). Output DSP never touches the FDI's clock, so that log
+holds no "the FDI to 44100 Hz" line; the FDI at 44.1 kHz needs a log with Output FDI.
+
 **What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
 waiting for Erez's DSP-mode log of 0.28 to say how much more is needed before taking them on:
 - *The synthesis window* (`swpair`, 12.4 %) is at its floor: one MAC an instruction, both
