@@ -1,0 +1,111 @@
+From abd4b985babfde9d262f61ba90a4ca825e804829 Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Sat, 7 Nov 2026 10:46:31 +0000
+Subject: [PATCH] filepick.c: a folder's shape within its row on the ST's rows
+ of 8 pixels
+
+The folder's shape was 8 pixels high with its tab 2 over it, from
+EPlay's 16-pixel rows. On rows of 8 (ST low and medium) it reached a
+pixel into the next row, its tab into the row above, and over the next
+row's name. Now it is 8 high on rows of 12 and more, as before, and 5 on
+rows of 8, its tab within the row.
+
+On rows of 16 not a pixel moves: tests/filepick's --old against EPlay's
+own, all five shots the same on ST:mono and Falcon:16. On ST:med the
+five differ in the folders' column alone (14 x 30 at 174,158); run.py
+--old now says so as a NOTE there and fails anything wider. Pictures
+before and after: patches/0004-folder-stmed-*.png on EPlay's
+hub/common-patches.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SZeNoDozTmbWt4s2sFN9eL
+---
+ common/tests/filepick/run.py | 28 ++++++++++++++++++++++++----
+ common/ui/filepick.c         | 11 +++++++----
+ 2 files changed, 31 insertions(+), 8 deletions(-)
+
+diff --git a/common/tests/filepick/run.py b/common/tests/filepick/run.py
+index be06ae7..610d4eb 100644
+--- a/common/tests/filepick/run.py
++++ b/common/tests/filepick/run.py
+@@ -14,9 +14,13 @@ step in WORK/shots.
+ 
+ --old also runs FPOLD.PRG (make old EPLAY=...: EPlay's own Add files) the
+ same way and compares every screenshot, pixel for pixel: the move into
+-common must change none (the hub, 5 Nov 2026).
++common must change none (the hub, 5 Nov 2026). On rows of 8 pixels (ST
++low and medium) the folders' shapes are the one change since: they no
++longer reach into the next row. There a difference within one column of
++folder shapes (16 pixels wide at most) is a NOTE; anything more fails.
+ """
+ import os
++import re
+ import shutil
+ import subprocess
+ import sys
+@@ -94,6 +98,14 @@ def session(work, machine, nvdi, prg, display):
+     return fails, shots
+ 
+ 
++def diff_box(a, b):
++    """the box the two pictures differ in, (w, h, x, y), or None"""
++    p = subprocess.run(["convert", a, b, "-compose", "difference", "-composite", "-trim", "info:"],
++                       capture_output=True, text=True)
++    m = re.search(r" (\d+)x(\d+) \d+x\d+\+(\d+)\+(\d+) ", p.stdout)
++    return tuple(int(g) for g in m.groups()) if m else None
++
++
+ def same(a, b):
+     p = subprocess.run(["compare", "-metric", "AE", a, b, "null:"], capture_output=True, text=True)
+     try:
+@@ -114,11 +126,19 @@ def main():
+         f2, old = session(os.path.join(work, "old"), machine, nvdi,
+                           os.path.join(HERE, "build", "old", "FPOLD.PRG"), ":92")
+         fails += ["EPlay's: " + f for f in f2 if not f.startswith("took")]
++        small = machine.split(":")[-1] in ("med", "low")
+         for name in shots:
+-            if name in old and not same(shots[name], old[name]):
+-                fails.append("%s differs from EPlay's own (%s, %s)" % (name, shots[name], old[name]))
+-            elif name in old:
++            if name not in old:
++                continue
++            if same(shots[name], old[name]):
+                 print("ok    %s the same as EPlay's own, pixel for pixel" % name)
++                continue
++            box = diff_box(shots[name], old[name])
++            if small and box and box[0] <= 16:
++                print("NOTE  %s: the folders' shapes only (%dx%d at %d,%d), as on rows of 8 they should" %
++                      ((name,) + box))
++            else:
++                fails.append("%s differs from EPlay's own (%s, %s; %s)" % (name, shots[name], old[name], box))
+     for f in fails:
+         print("FAIL  " + f)
+     print("all passed" if not fails else "%d failed" % len(fails))
+diff --git a/common/ui/filepick.c b/common/ui/filepick.c
+index ff9431c..b682df7 100644
+--- a/common/ui/filepick.c
++++ b/common/ui/filepick.c
+@@ -226,13 +226,16 @@ static void row_at(int r, GRECT *clip)
+ 	if (!e)
+ 		return;
+ 	if (e->dir) {
+-		/* a folder: its shape, then its name */
++		/* a folder: its shape, then its name. The shape, its tab two
++		   pixels over it, within the row: 8 high on rows of 12 and more
++		   (16: as drawn since 4 Nov 2026), 5 on the ST's rows of 8, where
++		   8 reached a row into the next one's */
+ 		GRECT f;
+-		short c = e->sel ? 0 : 1;
++		short c = e->sel ? 0 : 1, fh = rh >= 12 ? 8 : rh - 3;
+ 		f.x = x + 1;
+-		f.y = y + rh / 2 - 3;
++		f.y = y + (rh - fh - 2) / 2 + 2;
+ 		f.w = gl_wchar + 6;
+-		f.h = 8;
++		f.h = fh;
+ 		frame(&f, c);
+ 		line_col(f.x + 2, f.y - 2, f.x + 5, f.y - 2, c);
+ 		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
+-- 
+2.43.0
+
