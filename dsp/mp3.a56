@@ -1029,8 +1029,10 @@ pkf1	rts				; will see HF2
 pkpoll	jclr	#2,x:V_SF,pkp9
 	jclr	#0,x:HSR,pkpq		; a word the interrupt left: taken here as it
 	ori	#3,mr			; would take it (Hatari 2.4.1 raises none for a
-	jclr	#0,x:HSR,pkpu		; word written into an empty port; a DSP56001
-	move	r3,x:V_SVP		; does: its interrupt is HRDF's while HRIE)
+	nop				; word written into an empty port; a DSP56001
+	nop				; does: its interrupt is HRDF's while HRIE). The
+	jclr	#0,x:HSR,pkpu		; nops: an interrupt may still come in the two
+	move	r3,x:V_SVP		; instructions after the ori (salign's too)
 	move	x:V_PKP,r3
 	bclr	#3,x:HCR
 	movep	x:HRX,y:(r3)+
