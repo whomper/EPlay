@@ -113,7 +113,7 @@ static void cmpbuf(const char *what, int space, unsigned addr, const dw *m, int 
 #define XR0_ADDR 0x0600
 #define XR1_ADDR 0x2480
 #define OV0_ADDR 0x2b10
-#define RSDN_ADDR 0x3b10
+#define RSTAB_ADDR 0x0100
 #define OV1_ADDR 0x2d50
 
 /* the Falcon's clock for a file's rate: the lowest of 49170 / k at or above it */
@@ -188,13 +188,13 @@ int main(int argc, char **argv)
 				break;
 			if (rsmode == 3 && rate <= 32780)
 				break;
-			if (rsmode && !rs_on) {	/* (the taps down over RSDN: LOADY), RSSET */
+			if (rsmode && !rs_on) {	/* (the taps over RSTAB: LOADY), RSSET */
 				long rout = rsmode == 2 ? 44100 : rsmode == 3 ? 32780 : falcon_rate(rate);
 				mp3rs_set(&rs, rate, rout);
-				if (rs.down) {
+				{	/* (the taps, up or down: RSTAB, as the 68030 loads them) */
 					int k;
 					put(4);
-					put(RSDN_ADDR);
+					put(RSTAB_ADDR);
 					put(256);
 					for (k = 0; k < 256; k++)
 						put(rs.tab[k]);
