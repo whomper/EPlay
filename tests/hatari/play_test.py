@@ -210,6 +210,11 @@ RESAMPLED = {"wav22", "aiff44", "settings"}       # (and every MP3)
 WAV_LEVEL = 32767 * 10 ** (-6 / 20) / math.sqrt(2)
 
 
+# a check given up, with why (guideline 1.2, AERA-Atari 3bdb497: never
+# "passed" over a skipped step): printed as SKIPPED and counted
+SKIPS = []
+
+
 def analyse(rec, case):
     """(ok, what was found) for the recording"""
     with wave.open(rec) as w:
@@ -228,7 +233,9 @@ def analyse(rec, case):
             # measurement), so its DAC hears another track: silence. Later
             # Hatari starts each DMA at the first word ("1st frame is
             # left"), as the Falcon does
-            return True, "no sound: Hatari %s's DMA starts mid-frame, its DAC on a silent track (excused)" % HATARI
+            SKIPS.append("%s: the sound itself (Hatari %s's DMA started mid-frame, its DAC on a silent track)" %
+                         (case, HATARI))
+            return True, "no sound recorded: Hatari %s's DMA (the sound's checks skipped)" % HATARI
         return False, "no sound recorded (%d frames at %d Hz)" % (n, rate)
     a, b = loud[0], loud[-1]
     secs = (b - a + 1) / 50
@@ -275,12 +282,14 @@ def analyse(rec, case):
         # measurement), fixed in later Hatari (crossbar.c, "1st frame is
         # left"). The Falcon starts each frame on the left.
         pitch, note = True, " (left and right swapped: Hatari %s's DMA)" % HATARI
+        SKIPS.append("%s: which channel is which (Hatari %s's DMA swapped them)" % (case, HATARI))
     if not pitch and hatari_keeps_parity() and not CASES[case][2] and case not in RESAMPLED and \
             ((abs(fl - want[1]) < 8 and ql > 0.9) or (abs(fr - want[0]) < 8 and qr > 0.9)):
         # (four tracks a frame: Hatari 2.4's DAC a word off takes one
         # channel and a silent track's word: one side the other's tone,
         # the other silent)
         pitch, note = True, " (a word off: Hatari %s's DMA, four tracks)" % HATARI
+        SKIPS.append("%s: one channel's tone (Hatari %s's DMA a word off)" % (case, HATARI))
         ql = qr = 1.0
     _, fmt, lame, out, _, length = CASES[case]
     if not lame and case not in RESAMPLED:
@@ -535,10 +544,13 @@ def main():
         for case in cases:
             if case == "mini" and no_dsp(spec):
                 case = "miniwav"
+            n = len(SKIPS)
             ok, what, found = run(work, case, spec)
             print("%s %s on %s: %s" % ("ok  " if ok else "FAIL", case, what, found), flush=True)
+            for r in SKIPS[n:]:
+                print("SKIPPED: %s on %s" % (r, spec), flush=True)
             failed += not ok
-    print("all passed" if not failed else "%d failed" % failed)
+    print("%d failed" % failed if failed else "passed, %d skipped" % len(SKIPS) if SKIPS else "all passed")
     sys.exit(1 if failed else 0)
 
 
