@@ -5,12 +5,13 @@ emulated time, so a speed-rig stretch never contains a disk wait. The
 tables here are what `common/tests/calib` (CALIB.PRG, release rigtools-1)
 measured on the real machines, microseconds a call:
 
-- `falcon-bluescsi.txt`: Erez's Falcon (TOS 4.04, GEMDOS 0.30), BlueSCSI SD card, 4 Nov 2026.
-- `falcon-idecf.txt`: the same Falcon with an IDE CF card, when it arrives.
-- `st-*.txt`: his ST, with the card it uses, when it arrives.
+- `falcon-ide16.txt`: Erez's Falcon (TOS 4.04, GEMDOS 0.30), stock 16 MHz, IDE, 5 Nov 2026.
+- `falcon-ide50-dfb1.txt`: the same, with the DFB1 at 50 MHz, IDE, 5 Nov 2026.
+- `st.txt`: his ST, when it arrives.
 
 The shim (an AUTO-folder program hooking trap #1) charges these times in
 emulated time. Read the table as: sequential reads are cheap, everything
 that changes the directory or the FAT is not (create, rename, delete about
-0.48 s, make folder 2 s, the close after a write 1.3 to 2.9 s, a random
-seek about 0.19 s).
+0.25 s, make folder 0.35 s, the close after a write 0.3 s on the stock
+Falcon; a seek and read about 9 ms). `Falcon-4` takes the stock table,
+`Falcon` the DFB1's.
