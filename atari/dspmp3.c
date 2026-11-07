@@ -321,15 +321,17 @@ static long s_late_at, s_rsy_at;	/* the frames at the first late granule, broken
 static long s_f100;			/* the frames at s_t100, when past 100 (the rate, measured) */
 static unsigned long s_t100;
 
-/* the taps for a step down (mp3dsp.h's MP3RS_DOWN) over the DSP's RSDN,
-   loaded with the program as t_rsdn (48 to 44.1 kHz): LOADY (4) */
-static void load_down(long rin, long rout)
+/* the taps, up or down (mp3dsp.h's MP3RS_DOWN), into the DSP's RSTAB,
+   loaded with the program as t_rsup: LOADY (4), before every stream
+   resampled, as the last may have left another table there (one slot
+   since 7 Nov 2026: the output ring took the room of the second) */
+static void load_taps(long rin, long rout)
 {
 	static const unsigned long *const tabs[3] = { t_rsdn, t_rsdn441, t_rsdn48 };
-	const unsigned long *t = tabs[MP3RS_DOWN(rin, rout)];
+	const unsigned long *t = rin > rout ? tabs[MP3RS_DOWN(rin, rout)] : t_rsup;
 	unsigned i, at = 0;
 	for (i = 0; i < sizeof(mp3dsp_load) / sizeof(mp3dsp_load[0]); i++)
-		if (mp3dsp_load[i].w == t_rsdn)
+		if (mp3dsp_load[i].w == t_rsup)
 			at = mp3dsp_load[i].addr;
 	put(4);
 	put(at);
@@ -352,8 +354,7 @@ void dspmp3_tick_stream(long rin, long rout, int pcm, int sblim)
 	if (rin != rout && rin > 0 && rout > 0) {
 		/* RSSET (13): the step, rin / rout input samples an output, as
 		   si + sf / 2^24 (mp3dsp.c's mp3rs_set); the taps up, or down */
-		if (rin > rout)
-			load_down(rin, rout);
+		load_taps(rin, rout);
 		put(13);
 		put((unsigned long)(rin / rout));
 		put((unsigned long)(((unsigned long long)(rin % rout) << 24) / (unsigned long long)rout));

@@ -489,18 +489,25 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("Y", "OV1", 0x2d50, 576, None),
     # the output ring, left and right in turn, that the SSI plays with r7
     # modulo its size, on a multiple of 4096 (the DSP's modulo rule): a
-    # frame (2304), or resampled two granules' outputs (to 2 x 643 pairs)
-    ("Y", "PCM", 0x3000, 2576, None),
-    ("Y", "RSUP", 0x3a10, 256, "t_rsup"),
-    ("Y", "RSDN", 0x3b10, 256, "t_rsdn"),
-    ("Y", "RSH", 0x3c10, 14, None),      # the resampler's last 7 inputs, each channel
-    ("Y", "PKT", 0x3c20, 742, None),
+    # frame (2304), or resampled all of Y above it but the packet and its
+    # count's word below it (hri's): 3352 words, the granule played, the
+    # one decoded and 0.6 of another of
+    # slack (Erez, 7 Nov 2026: a stock Falcon plays MP3 through its DSP at
+    # 49,170 Hz; on his it took 94 % with a few granules late, where 2576
+    # words left the decoder no more than a granule ahead)
+    ("Y", "PCM", 0x3000, 3352, None),
+    ("Y", "PKT", 0x4000 - 742, 742, None),
+    ("Y", "RSH", 0x2722, 14, None),      # the resampler's last 7 inputs, each channel
+    # the resampler's taps, up or down, which the 68030 loads before each
+    # stream (t_rsup with the program): at Y:$100, external memory with the
+    # data ROMs off (OMR's DE, which EPlay never sets)
+    ("Y", "RSTAB", 0x0100, 256, "t_rsup"),
 ]
 for sp in "XY":   # nothing overlaps, and all of it is external memory
     spans = sorted((a, a + n, nm) for s_, nm, a, n, _ in MAP if s_ == sp)
     for (a0, e0, n0), (a1, e1, n1) in zip(spans, spans[1:]):
         assert e0 <= a1, "%s: %s overlaps %s" % (sp, n0, n1)
-    assert spans[0][0] >= 0x200 and spans[-1][1] <= 0x4000
+    assert spans[0][0] >= 0x100 and spans[-1][1] <= 0x4000
 assert [a for s_, nm, a, n, _ in MAP if nm == "PCM"][0] % 4096 == 0
 sizes = {name: len(words) for name, words, _ in tabs}
 for sp, nm, a, n, t in MAP:

@@ -1301,6 +1301,70 @@ from its S/PDIF input (its lines at 0; Cubase Audio 2.06 the same, read 5 Nov 20
 has no 44.1 kHz clock a 44.1 kHz file is resampled to 48 kHz, and the DSP's time is what decides
 whether it keeps up (the faster decoder, next).
 
+### A stock Falcon's DSP at 49,170 Hz (Erez, 7 Nov 2026)
+
+"Many users will not have an FDI, so I need to have the stock falcon with DSP able to play mp3";
+"optimize as much as you can to make it happen". Erez's DFB1 speeds up the 68030 only: its DSP is a
+stock Falcon's, so his DSP-mode logs are the case. On it a 320 kbit/s file at 49,170 Hz left the
+DSP some 940 waits a frame (Hatari's DSP: about 6,900 on the same kind of file), and a few granules
+came late, each a click, then Normal by itself.
+
+Where the time goes (tests/dspmp3, mix320.mp3 resampled to 49,170 Hz: 92.1 % of Hatari's DSP):
+the synthesis window 12 %, the resampler 10 %, dequantising about 16 %, the bits and Huffman codes
+about 19 %, the synthesis DCT 11 %, the transform (9-point DCTs, windows) about 13 %. Without the
+resampling (the FDI at 44.1 kHz) the same file takes 82 %.
+
+**Not done, measured:**
+- *The Huffman codes on the 68030* (tests/huff68: the model's values from the main data's bytes,
+  checked against the model on all 17,389 granules of the test files): a stock 68030 decodes 63
+  granules a second of mix320.mp3 where playing needs 153, 243 % of it (mix128.mp3: 114 %). As
+  with the window (3 Nov), the stock 68030 can't take a part of the decode.
+- *Fewer resampler taps:* going up from 44.1 kHz the images of anything below about 19.5 kHz land
+  above the output's Nyquist (24.6 kHz) and fold back to where they are heard (a 10 kHz tone's to
+  15 kHz): the 8 taps' stopband is what keeps them out.
+- *The synthesis DCT on zero subbands:* it runs on the butterflies' sums and differences, where
+  zero subbands save nothing.
+
+**Done, bit for bit with the model (make dsptest), the same cycles:**
+- *The output ring 3352 words*, where it was 2576: all of Y above \$3000 but the packet. 2576 held
+  the granule playing and the one decoded, so a heavy granule had nothing to borrow from the light
+  ones before it; now the decoder may run 1.6 granules ahead. The resampler's taps, up or down, are
+  one slot at Y:\$100 (external memory with the data ROMs off: OMR's DE, which EPlay never sets),
+  loaded by the 68030 before every stream resampled; its last inputs went to \$2722.
+- *A packet's words taken by the host receive's interrupt* (P:\$20, `hri`, 7 words), while the DSP
+  decodes. They were taken only in its waits, a word each 1.2 us and only while the 68030's tick
+  pushed: at 49,170 Hz a stock Falcon's DSP has almost no waits, and a 68030 held by GEM (the album
+  art drawn) sent its words late, so the next frame waited for its packet. A word now costs some
+  14 cycles, about 1 % of the DSP for a 320 kbit/s packet. `slout` (only where nothing is
+  resampled) went to external P for the room: 0.6 % more there (square.mp3 97.9 %, from 97.3).
+  HF2 (a packet wanted) goes off with a packet's first word, in the interrupt: the routine that
+  took the last word cleared it before, and with the interrupt taking it the 68030 saw HF2 still
+  on and sent the next packet over the end of this one (play_test's first MP3: the DSP stopped).
+  Hatari 2.4.1 (the rigs', and the hub's) raises no host receive interrupt for a word the host
+  writes into an empty port (its dsp_core.c sets HRDF there without the interrupt; later Hatari,
+  and a DSP56001, raise it while HRDF and HRIE are both set). So `pkpoll`, in the waits, also
+  takes a word the interrupt left, with the interrupts held off a moment: on a real Falcon the
+  interrupt takes nearly all of them while the DSP decodes, and under 2.4.1 the waits take them
+  as they did. stream.c passes on both cores.
+
+`tests/dspmp3/stream.c` (in `make dsptest`) runs STREAM as EPlay plays: the SSI clocked at the
+output's rate, the packets sent on HF2, the status words read; it fails when the DSP stops, a
+packet breaks, or frames are missing. Two knobs stand for a real Falcon: SIMLOAD=P, the DSP P %
+slower than Hatari's, and SIMLAT=N, the 68030 ready with each word N cycles after the last.
+mix320.mp3 resampled to 49,170 Hz, 150 frames (300 granules), granules late:
+
+| SIMLOAD, SIMLAT | 0.26 | the ring | the ring and the interrupt |
+|---|---|---|---|
+| 100, 500 | 95 | 58 | 0 |
+| 105, 0 | 114 | 77 | 49 |
+| 105, 500 | 98 | 74 | 49 |
+| 110, 0 | 121 | 78 | 83 |
+| 110, 500 | 147 | 85 | 83 |
+
+(At SIMLAT 1500, some 47 us a word, a packet takes longer than its frame and nothing keeps up.)
+Better, not yet enough where the DSP is 5 % or more slower than Hatari's, as Erez's seems to be:
+the decoder itself has to get faster still, or the file plays at Normal.
+
 ### A dialog held open while it plays (the hub, 4 Nov 2026; 0.24)
 
 A modal dialog (Settings, About) waits in common's `dlg_evnt`, not in EPlay's loop, so 0.23 read

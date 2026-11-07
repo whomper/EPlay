@@ -141,7 +141,7 @@ V_SR6	equ	$9b
 V_OUT	equ	$9c		; the synthesis: where the slot's samples go (Y)
 V_RSN	equ	$9d		; resampling: the position, its sample (A1, from the
 V_RSF	equ	$9e		; slot's first) and its fraction (A0)
-V_RSTB	equ	$9f		; its taps' middle (RSUP or RSDN + 16), 0: none
+V_RSTB	equ	$9f		; its taps' middle (RSTAB + 16), 0: none
 V_RSI	equ	$a0		; the step: input samples an output (si, then sf
 V_RSS	equ	$a1		; as A0), and 28, read in turn (r3, modulo 3)
 V_RS28	equ	$a2
@@ -149,10 +149,10 @@ V_WS	equ	$fe		; resampled, streaming: where the granule's outputs began
 V_PKB	equ	$ff		; where a packet goes: PKT, or PKP (a PCM stream's)
 PKP	equ	OV0		; a PCM packet (1 + 1152 words): over the overlap (and
 				; the gap after it), which PCM doesn't use
-RSZ	equ	2576		; the ring, resampled (PCM's words)
+RSZ	equ	3352		; the ring, resampled (PCM's words: mkmp3tab.py's)
 RSREG	equ	1290		; a granule's outputs at most, and some (words)
-V_PKN	equ	$a3		; its words expected (-1: the count not yet)
-V_PKI	equ	$a4		; its words in
+V_SVH	equ	$a3		; hri: r0 kept
+V_PKP	equ	$a4		; where the host's next packet word goes (hri)
 V_IDLE	equ	$a5		; waits this frame (the decoder ahead of the sound)
 V_LATE	equ	$a6		; granules late (the sound played the old one again)
 V_SV3	equ	$a7		; refill: r3 and n3 kept
@@ -207,13 +207,32 @@ cmd	jsr	rd			; LOADP here; the rest from the external part
 	cmp	x1,a
 	jne	cmdx
 	jsr	rd
-	move	x0,r0
+	jmp	cmdl			; (over the host receive's vector)
+
+; a packet's word from the host, a long interrupt while a stream wants
+; one (pkfree to pkpoll): to y:V_PKP on, its count first (at the packet's
+; place less 1), taken while the DSP decodes, where it was taken only in
+; its waits (Erez, 7 Nov 2026: a stock Falcon's DSP has no waits to
+; spare at 49,170 Hz, and a 68030 busy with GEM sent its words late). r0:
+; m0 is linear but in XSTREAM's getrx, where the host's one word, the
+; end, lands where modulo 2048 changes nothing
+	org	p:$20
+	jsr	hri
+cmdl	move	x0,r0
 	jsr	rd
 	do	x0,lp
 	jsr	rd
 	movem	x0,p:(r0)+
 lp
 	jmp	cmd
+
+hri	move	r0,x:V_SVH
+	move	x:V_PKP,r0
+	bclr	#3,x:HCR		; HF2 off at its first word: the 68030 asks
+	movep	x:HRX,y:(r0)+		; for no other while this one comes
+	move	r0,x:V_PKP
+	move	x:V_SVH,r0
+	rti
 
 ; ---- the bits: refill while fewer than 25 (r1: the next word, in Y)
 refill	jclr	#15,r4,rf1
@@ -511,21 +530,6 @@ cpyx	do	x0,cpy1
 cpy1
 	rts
 
-; ---- a slot's samples into the ring at V_OUT on: T0's (left) and T1's
-; (right; mono: the left again) in turn, a word each time slot
-slout	move	x:V_OUT,r6
-	move	#>T0+7,r1
-	move	#>T1+7,r2
-	jset	#0,x:V_FLAGS,so1
-	move	#>T0+7,r2
-so1	move	x:(r1)+,a
-	do	#32,so2
-	move	x:(r2)+,b	a,y:(r6)+
-	move	x:(r1)+,a	b,y:(r6)+
-so2
-	move	r6,x:V_OUT
-	rts
-
 ; ---- resampling a slot (mp3dsp.c's mp3rs_run, from rsslot): while the
 ; position (a: its sample n in A1, from the slot's first, and its fraction
 ; in A0) is below 28, an output of each channel, 8 taps of its phase
@@ -679,6 +683,24 @@ rd	jclr	#0,x:HSR,rd
 	rts
 
 	org	p:$7000
+
+; ---- a slot's samples into the ring at V_OUT on: T0's (left) and T1's
+; (right; mono: the left again) in turn, a word each time slot (in external P since
+; 7 Nov 2026: the host receive's interrupt took its room; it runs only
+; where nothing is resampled)
+slout	move	x:V_OUT,r6
+	move	#>T0+7,r1
+	move	#>T1+7,r2
+	jset	#0,x:V_FLAGS,so1
+	move	#>T0+7,r2
+so1	move	x:(r1)+,a
+	do	#32,so2
+	move	x:(r2)+,b	a,y:(r6)+
+	move	x:(r1)+,a	b,y:(r6)+
+so2
+	move	r6,x:V_OUT
+	rts
+
 
 ; ---- XSTREAM's receive (P:$0C, P:$0E): each word the SSI takes from the
 ; matrix (the sound DMA's ring) into RXB's ring, modulo 2048. r6 is the
@@ -913,7 +935,7 @@ stc1
 	jclr	#4,x:V_SF,stc3
 	movep	#$f800,x:CRB		; XSTREAM: receive and its interrupt too
 stc3
-	movep	#$3000,x:IPR		; the SSI at level 2
+	movep	#$3400,x:IPR		; the SSI at level 2, the host's at 0
 	movep	#0,x:TX			; in step with the frame: a word written goes
 smt	jclr	#6,x:SSISR,smt		; out in the next slot; while slot 0 (TFS)
 	jclr	#2,x:SSISR,smr		; goes, a silent right, so that the ring's
@@ -965,6 +987,7 @@ stx	ori	#3,mr			; the end: interrupts and the SSI off
 	movep	#0,x:IPR
 	movec	#$ffff,m7
 	bclr	#0,x:V_SF
+	bclr	#0,x:HCR
 	bclr	#3,x:HCR
 	jmp	cmd
 
@@ -986,59 +1009,71 @@ sa8	move	(r7)+			; one word on
 sa9	andi	#$fc,mr
 	rts
 
-; PKT free: the next packet may come (HF2)
+; PKT free: the next packet may come (HF2), its words into it by the host
+; receive's interrupt (hri), its count at V_PKB - 1 (a, x0 used)
 pkfree	bset	#2,x:V_SF
-	move	#>-1,x0
-	move	x0,x:V_PKN
-	clr	a
-	move	a,x:V_PKI
+	move	x:V_PKB,a
+	move	#>1,x0
+	sub	x0,a
+	move	a1,x:V_PKP
+	bset	#0,x:HCR		; the host receive's interrupt
 	bset	#3,x:HCR
 	jclr	#1,x:HSR,pkf1		; a word to wake the 68030 (its interrupt):
 	movep	#$800000,x:HRX		; if the last isn't read yet, its reading
 pkf1	rts				; will see HF2
 
-; a packet's word if one is there (b, x0, x1 used)
+; the packet: all in yet? (b, x0, x1 used) Its count first (bit 23: no
+; data word has it); count 0, the end. A first word that is no count (a
+; word lost on the way) drops what came, counted as a packet broken, and
+; the next count starts it again
 pkpoll	jclr	#2,x:V_SF,pkp9
-	jclr	#0,x:HSR,pkp9
-	movep	x:HRX,x0
-	jclr	#23,x0,pkp0		; bit 23: a packet's count (no data word has it)
-	move	x:V_PKN,b		; one in the middle of a packet: a word was lost,
-	tst	b			; that packet dropped, this one taken
-	jlt	pkpc
-	jsr	resync
-pkpc	move	x0,b
-	move	#>$7fffff,x1
-	and	x1,b
-	move	b1,x:V_PKN
-	clr	a
-	move	a,x:V_PKI
-	tst	b
-	jne	pkp9
-	bset	#3,x:V_SF		; count 0: the end
-	jmp	pkp2
-pkp0	move	x:V_PKN,b		; a word with no count before it: passed
-	tst	b
-	jge	pkp1
-	jsr	resync
-	jmp	pkp9
-pkp1	move	r3,x:V_SVP
-	move	x:V_PKI,b
-	move	x:V_PKB,x1
-	add	x1,b
-	move	b1,r3
-	nop
-	move	x0,y:(r3)
+	jclr	#0,x:HSR,pkpq		; a word the interrupt left: taken here as it
+	ori	#3,mr			; would take it (Hatari 2.4.1 raises none for a
+	nop				; word written into an empty port; a DSP56001
+	nop				; does: its interrupt is HRDF's while HRIE). The
+	jclr	#0,x:HSR,pkpu		; nops: an interrupt may still come in the two
+	move	r3,x:V_SVP		; instructions after the ori (salign's too)
+	move	x:V_PKP,r3
+	bclr	#3,x:HCR
+	movep	x:HRX,y:(r3)+
+	move	r3,x:V_PKP
 	move	x:V_SVP,r3
-	move	x:V_PKI,b
+pkpu	andi	#$fc,mr
+pkpq	move	x:V_PKB,b
 	move	#>1,x1
-	add	x1,b
-	move	b1,x:V_PKI
-	move	x:V_PKN,x1
-	cmp	x1,b
-	jlt	pkp9
-pkp2	bclr	#3,x:HCR		; all in
+	sub	x1,b
+	move	b1,x0			; its count's place
+	move	x:V_PKP,b
+	sub	x0,b			; the words in, its count with them
+	jeq	pkp9
+	move	b1,x1
+	move	r3,x:V_SVP
+	move	x0,r3
+	nop
+	move	y:(r3),b
+	move	x:V_SVP,r3
+	jclr	#23,b1,pkpb
+	move	#>$7fffff,x0
+	and	x0,b
+	move	b1,b			; (positive: B2 from B1 again)
+	tst	b
+	jeq	pkpe			; count 0: the end
+	cmp	x1,b			; n - (n + 1 at the end)
+	jge	pkp9
+pkp2	bclr	#0,x:HCR		; all in
+	bclr	#3,x:HCR
 	bclr	#2,x:V_SF
 pkp9	rts
+pkpe	bset	#3,x:V_SF
+	jmp	pkp2
+pkpb	jsr	resync
+	ori	#3,mr			; (the interrupt writes V_PKP)
+	move	x:V_PKB,b
+	move	#>1,x1
+	sub	x1,b
+	move	b1,x:V_PKP
+	andi	#$fc,mr
+	rts
 
 resync	move	x:V_RSY,b		; (b used)
 	move	#>1,x1
@@ -1219,8 +1254,8 @@ ly
 	jmp	cmd
 
 ; ---- RSSET (13): resampling from here on: si, sf (the step: si + sf /
-; 2^24 input samples an output), the taps (0 none, 1 up, 2 down: RSDN, as
-; the 68030 loaded it), the subbands transformed (32 all; Quality Normal
+; 2^24 input samples an output), the taps (0 none, 1 up, 2 down: RSTAB,
+; as the 68030 loaded it, either way), the subbands transformed (32 all; Quality Normal
 ; fewer); the position and the last inputs from 0
 rsset	jsr	rd
 	move	x0,x:V_RSI
@@ -1233,11 +1268,7 @@ rsset	jsr	rd
 	clr	a
 	tst	b
 	jeq	rst1
-	move	#>RSUP+16,a
-	move	#>1,x0
-	cmp	x0,b
-	jeq	rst1
-	move	#>RSDN+16,a
+	move	#>RSTAB+16,a		; (up or down: the 68030 loaded the taps)
 rst1	move	a1,x:V_RSTB
 	move	#>28,x0
 	move	x0,x:V_RS28
