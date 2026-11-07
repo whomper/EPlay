@@ -300,6 +300,7 @@ static long measure_ext(void)
    measured, and the first at rate kept; the log has every reading. 1
    when the clock is at rate (snd_ext_rate, ext_pre set); else the lines
    as they were */
+int snd_fdi_nosig;		/* the last try found no signal at the FDI's input to follow */
 int snd_fdi_changed;		/* EPlay changed the FDI's lines (put back at the end) */
 char snd_fdi_note[512];
 
@@ -315,6 +316,7 @@ int snd_fdi_set(long rate)
 	static const int v44[5] = { 2, 5, 3, 7, 0 }, v48[5] = { 3, 7, 2, 5, 0 };
 	const int *v;
 	int k, n = 0;
+	snd_fdi_nosig = 0;
 	if (!snd_fdi || (rate != 44100 && rate != 48000))
 		return 0;
 	if (snd_ext_rate == rate)
@@ -388,6 +390,10 @@ int snd_fdi_set(long rate)
 				if (n >= (int)sizeof(snd_fdi_note))
 					n = (int)sizeof(snd_fdi_note) - 1;
 			}
+			/* nothing at 44.1 or 48 kHz there: no signal it locks to
+			   (Erez's 0.30: 39.3 kHz, its receiver free, until he
+			   plugged the optical cable in again), told in the window */
+			snd_fdi_nosig = !got;
 		}
 		snd_ext_rate = got;
 		if (got == rate)

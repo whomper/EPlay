@@ -189,7 +189,9 @@ static void open_window(void)
    the list full" while files were left out for want of memory) */
 static void playing_status(char *st, int n)
 {
-	if (list_cur >= 0 && list_count() > 1)
+	if (play_nosig)			/* (alone: it takes the line's width) */
+		snprintf(st, (size_t)n, "%s", play_out);
+	else if (list_cur >= 0 && list_count() > 1)
 		snprintf(st, (size_t)n, "Playing %d of %d%s  \xfa  %s", list_cur + 1, list_count(),
 			 list_full ? ", the list full" : "", play_out);
 	else

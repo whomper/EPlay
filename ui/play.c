@@ -47,6 +47,7 @@
 #define QMAX (8L * 1024 * 1024)
 
 char play_name[64], play_info[80], play_out[80];
+int play_nosig;
 TAGS play_tags;
 long play_kbps, play_hz;
 const char *play_via = "";
@@ -1078,10 +1079,18 @@ int play_open(const char *path, char *err, int n)
 	s_ext = ext;
 	apply_volume();
 	pcm_gain_set(&gs, t_gain);	/* (a file starts at its volume: no glide) */
+	play_nosig = 0;
 	if (dsp && out_rate != rate) {	/* (the DSP resamples) */
 		char fr[16];
 		khz(fr, sizeof(fr), rate);
-		snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr, fr);
+		if (ext && snd_fdi_nosig && out_set != OUT_DSP) {
+			/* the FDI couldn't follow its input (Erez, 7 Nov 2026: the
+			   words his): the window's info line says it alone */
+			snprintf(play_out, sizeof(play_out), "FDI %s (from %s): no signal at the FDI's input", kr, fr);
+			play_nosig = 1;
+		} else
+			snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr,
+				 fr);
 	} else if (ext)
 		snprintf(play_out, sizeof(play_out), "External clock  %s", kr);
 	else if (out_rate == rate)
