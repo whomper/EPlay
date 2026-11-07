@@ -2,8 +2,8 @@
 
 <img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
-An audio player for the Atari Falcon: MP3 decoded on the Falcon's DSP, WAV and AIFF, in a GEM
-window. Written in C and DSP56001 assembly for GEM.
+An audio player for the Atari Falcon and TT: MP3 decoded on the Falcon's DSP, WAV and AIFF, in a
+GEM window. Written in C and DSP56001 assembly for GEM.
 
 **Highlights**
 
@@ -24,13 +24,17 @@ window. Written in C and DSP56001 assembly for GEM.
   than 49,170 Hz (96 kHz) plays at the nearest rate the Falcon has, unless an FDI gives its rate.
 - **Shares the DSP:** EPlay holds the DSP only while it plays through it: an MP3, or a WAV or AIFF
   it resamples. When another program has it, that WAV plays at the nearest rate instead.
+- **On a TT:** WAV and AIFF on its 8-bit DMA sound, at 50 kHz for CD's 44.1 kHz: the 68030
+  interpolates between the file's samples and dithers them down to 8 bits. MP3 files show dim and
+  are passed over (MP3 needs a Falcon's DSP).
 
 *Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
 window. Phase 2 (0.4 to 0.17) plays MP3 on the Falcon's DSP or through the FDI as Cubase Audio
 does (the FDI set to the file's rate), chosen in the settings, with resampling on the DSP. (MP3 on
 the 68030 was dropped: no 68030 keeps up with it.) Phase 3 (0.18 to 0.24) is the player window;
-now phase 4, playlists and folders; then 5, the small player, keys, MiNT and MagiC; 6, the TT and
-STE.*
+phase 4 (0.25) playlists and folders; phase 5 (0.26 to 0.32) the keys, the guide, MiNT, MP3 on a
+stock Falcon's DSP and the FDI's rate; now phase 6, the TT (its 8-bit DMA sound: WAV and AIFF) and
+then the STE.*
 
 ## Getting started
 

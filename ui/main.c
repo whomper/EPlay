@@ -414,6 +414,24 @@ static void select_row(int i)
 	row_redraw(i);
 }
 
+/* the next (or the one before) from cur that EPlay can play here: rows
+   marked bad (an MP3 without a DSP, a file it couldn't read) passed over,
+   once round the list at most */
+static int playable_from(int cur, int ended, int back)
+{
+	int i = cur, k;
+	for (k = 0; k <= list_count(); k++) {
+		ENTRY *e;
+		i = back ? order_prev(&list_order, i) : order_next(&list_order, i, ended);
+		if (i < 0 || !(e = list_at(i)) || !e->bad)
+			return i;
+		order_played(&list_order, i);	/* (Shuffle: counted as played this round) */
+		if (i == cur)
+			return -1;
+	}
+	return -1;
+}
+
 static void play_index(int i)
 {
 	ENTRY *e = list_at(i);
@@ -603,6 +621,17 @@ static void full_note(void)
 		said = 0;
 }
 
+/* files came in and none can play here (MP3s without a DSP): said so,
+   when nothing plays (Erez, 7 Nov 2026: "MP3 needs a Falcon's DSP") */
+static void none_playable(int before)
+{
+	if (list_count() > before && play_state() != PS_PLAYING && !play_paused() &&
+	    !(get_cookie(0x5F534E44L) & 8)) {
+		nf_debug("EPLAY refused: MP3 needs a Falcon's DSP.\n");
+		status("MP3 needs a Falcon's DSP.");
+	}
+}
+
 /* names as VA_START has them (quoted where they have spaces): added; now 1
    plays the first of them at once, else it plays only if nothing plays */
 static void add_names(const char *s, int now)
@@ -611,7 +640,7 @@ static void add_names(const char *s, int now)
 	int first = -1, before = list_count();
 	while ((s = av_arg(s, f, sizeof(f))) != 0) {
 		int i = add_one(f);
-		if (first < 0)
+		if (first < 0 && i >= 0 && !list_at(i)->bad)	/* (the first it can play here) */
 			first = i;
 	}
 	if (list_count() > before)
@@ -622,8 +651,11 @@ static void add_names(const char *s, int now)
 		redraw(0, BP_LIST);
 	if (first >= 0 && (now || (play_state() != PS_PLAYING && !play_paused())))
 		play_index(first);
-	else if (list_count() > before)
+	else if (list_count() > before) {
+		if (first < 0)
+			none_playable(before);
 		redraw(0, BP_TEXT);	/* (Next may light) */
+	}
 }
 
 /* an MP3 whose album art the DSP unpacks first (Erez, 3 Nov 2026): its
@@ -653,7 +685,7 @@ static int first_added;
 static void add_one_file(const char *f)
 {
 	int i = add_one(f);	/* (a folder: its subfolders too; a playlist: its files) */
-	if (i >= 0 && first_added < 0)
+	if (i >= 0 && first_added < 0 && !list_at(i)->bad)
 		first_added = i;
 }
 
@@ -691,8 +723,11 @@ static void open_file(void)
 	redraw(0, BP_LIST);
 	if (first_added >= 0 && play_state() != PS_PLAYING && !play_paused())
 		play_index(first_added);
-	else
+	else {
+		if (first_added < 0)
+			none_playable(before);
 		redraw(0, BP_TEXT);
+	}
 }
 
 /* File > Clear the list: all but the one playing */
@@ -1162,13 +1197,13 @@ static void command(int c)
 		mini_switch();
 		break;
 	case C_PREV: {
-		int i = order_prev(&list_order, list_cur);
+		int i = playable_from(list_cur, 0, 1);
 		if (i >= 0)
 			play_index(i);
 		break;
 	}
 	case C_NEXT: {
-		int i = order_next(&list_order, list_cur, 0);
+		int i = playable_from(list_cur, 0, 0);
 		if (i >= 0)
 			play_index(i);
 		break;
@@ -1560,7 +1595,7 @@ static void turn(int nested)
 	} else if (next_due && !nested) {
 		next_due = 0;
 		{
-			int i = order_next(&list_order, list_cur, 1);	/* (Repeat one: the same) */
+			int i = playable_from(list_cur, 1, 0);	/* (Repeat one: the same) */
 			if (i >= 0)
 				play_index(i);
 		}
@@ -1716,6 +1751,12 @@ int app_main(void)
 		elog("free memory, the largest blocks: ST RAM %ld KB, TT RAM %ld KB", st > 0 ? st / 1024 : 0,
 		     tt > 0 ? tt / 1024 : 0);
 	}
+	if (snd_dma8) {
+		/* a TT or an STE (phase 6): its 8-bit DMA, WAV and AIFF */
+		elog("the sound: 8-bit DMA (a TT's or an STE's), the music %s",
+		     snd_dma8_interp ? "interpolated and dithered by the 68030" : "at the nearest sample");
+		status("8-bit DMA sound: WAV and AIFF. MP3 needs a Falcon's DSP.");
+	} else {
 	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz, timed by %s); taken as %ld Hz",
 	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
@@ -1728,6 +1769,7 @@ int app_main(void)
 		status("The FDI's driver is there, but no clock came from it: see EPLAY.LOG.");
 	else
 		status("No external clock: the Falcon's own rates.");
+	}
 	crash_offer("EPlay", "in EPlay's folder");
 	{
 		const char *cmd = av_command();	/* started with files */

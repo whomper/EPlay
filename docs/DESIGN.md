@@ -129,6 +129,27 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   50,066 Hz with interpolation and a dither to 8 bits; the STE more simply (the nearest sample at
   50,066, or 25,033 Hz). **The plain ST is left out:** it has no DMA sound, and samples on its YM
   chip would be about 4 bits at 10 to 16 kHz, taking nearly all of the 68000.
+- **Erez, 7 Nov 2026 (phase 6's decisions):** MP3 files on a TT or STE are shown greyed in the
+  list with "MP3 needs a Falcon's DSP"; ST low (320 x 200), too narrow for the 56-column window,
+  gets a message and EPlay stops; the plain ST stays out.
+
+**Phase 6a, the TT, as built (atari/snd.c):** `snd_init` takes the 8-bit DMA where `_SND` has bit 1
+and not the matrix (bits 2 and 4): no Locksnd, no FDI, its registers at \$FF8900 set in supervisor
+mode (\$FF8901 play and repeat, \$FF8903-07 the frame's start, \$FF890F-13 its end, \$FF8921 the
+mode), kept and put back. The ring is half a second of 2-byte frames (left, right; 50 KB at 50,066
+Hz) in ST RAM (Mxalloc, or Malloc where GEMDOS has no Mxalloc). play.c writes 16-bit frames at the
+file's rate as on the Falcon, into a staging buffer that `snd_ptr` hands out; `snd_wrote` takes
+them to the DMA's rate, the lowest of 50,066, 25,033 and 12,517 Hz at or above the file's (a TT's
+DMA has no 6,258): on a 68020 or better interpolated (a 16.16 step, the frame before carried over)
+and cut to 8 bits with the error carried to the next sample (first-order noise shaping); on a
+68000 the nearest sample. `snd_played` and `snd_written` give the file's frames, so play.c's time
+and end are as they were. The volume is the samples' own (play.c's gain, as through the FDI). The
+window says "DMA 8 bits 50.0 kHz (from 44.1 kHz)"; Settings has Auto alone (no FDI, no DSP).
+MP3s are marked in the list as they are added (by their names, before their tags are read), drawn
+dim, and passed over by Next, Previous and a file's end; files given or added with none playable
+say "MP3 needs a Falcon's DSP." ST low is common's `screen_check` (the family's message, then
+quit). `play_test` on Hatari's TT: the 20 cases, the MP3 ones refused in those words, the list and
+the playlist playing A and C with B.MP3 passed over, the mini player with a WAV.
 
 ## The DSP rule (the hub writes it into the guidelines)
 
