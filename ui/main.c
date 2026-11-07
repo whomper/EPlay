@@ -676,6 +676,7 @@ static void open_file(void)
 {
 	int before = list_count();
 	first_added = -1;
+	draw_forget();			/* (the text's height set again at its first) */
 	filepick_run(&add_spec, settings_add_dir(), settings_recent(), add_one_file, feed_only);
 	settings_recent_changed();	/* (its folder kept, and the last folders if any were added) */
 	{

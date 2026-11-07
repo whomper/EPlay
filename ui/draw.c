@@ -14,7 +14,7 @@
 #include "ui.h"
 #include "text.h"
 
-static short cur_mode = -1, cur_fill = -1, cur_line = -1, cur_tcol = -1, cur_fx = -1, fill_set;
+static short cur_mode = -1, cur_fill = -1, cur_line = -1, cur_tcol = -1, cur_fx = -1, cur_h = -1, fill_set;
 
 static void mode(short m)
 {
@@ -27,7 +27,7 @@ static void mode(short m)
 /* the attributes as they are not known (another's drawing: the About box) */
 void draw_forget(void)
 {
-	cur_mode = cur_fill = cur_line = cur_tcol = cur_fx = -1;
+	cur_mode = cur_fill = cur_line = cur_tcol = cur_fx = cur_h = -1;
 	fill_set = 0;
 }
 
@@ -145,8 +145,16 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 		return;
 	}
 	/* else as before: the VDI's text, transparent (text_n: v_gtext_n,
-	   clipped the fast way on TOS's VDI, as it is under NVDI) */
+	   clipped the fast way on TOS's VDI, as it is under NVDI), at the
+	   system font's own height, set here: Erez's Falcon drew Add files'
+	   names in the 8 x 8 font (7 Nov 2026), the height as something else
+	   left it, which neither EmuTOS nor his TOS and NVDI in Hatari do */
 	mode(2);
+	if (cur_h != ch) {
+		short a, b;
+		vst_height(vdi_h, ch >= 16 ? 13 : 6, &a, &b);
+		cur_h = ch;
+	}
 	if (cur_tcol != ((flags & TX_INVERSE) ? 0 : 1)) {
 		cur_tcol = (flags & TX_INVERSE) ? 0 : 1;
 		vst_color(vdi_h, cur_tcol);
