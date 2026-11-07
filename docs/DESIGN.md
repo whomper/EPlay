@@ -1387,6 +1387,15 @@ samples, \$5190, is for another interface: with the FDI's driver answering it is
 for 48), each measured, the first at rate kept, then 0, and logs every reading: the log will say
 which line, if any, moves this FDI's own clock.
 
+0.30 on Erez's Falcon, Output FDI, a 44.1 kHz MP3: "the FDI to 44100 Hz: 2: 48017 Hz (48036 at 200
+ms, 47997 at 500); 5: 39284 Hz (39272, 39283); 3: 48036 Hz; 7: 48011 Hz; 0: 39292 Hz (by the 200 Hz
+clock 39280)". So the lines choose the clock's source and nothing else: with their middle bit set
+(2, 3, 7) the FDI's own, 48 kHz; with it clear (0, 5) what comes into its S/PDIF input, here
+about 39.3 kHz, a receiver with nothing to lock to (0.6 and 0.7 read 44.1 kHz at 0 with Erez's
+sound card feeding it; 0.25 and 0.26 read 38.6). EPlay played on at 48 kHz, resampled, with 0
+underruns. Asked of Erez: whether the input is plugged in, and whether Cubase reaches 44.1 kHz
+with nothing in it.
+
 **What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
 waiting for Erez's DSP-mode log of 0.28 to say how much more is needed before taking them on:
 - *The synthesis window* (`swpair`, 12.4 %) is at its floor: one MAC an instruction, both
