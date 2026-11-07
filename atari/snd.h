@@ -26,6 +26,7 @@ extern long snd_ext_clock;	/* the clock's frequency from that, Hz */
 extern int snd_fdi;		/* the FDI's driver is there */
 extern int snd_gpio_dir, snd_gpio_data;	/* the DSP port's GPIO at the start (the FDI's) */
 extern char snd_ext_note[];
+extern int snd_fdi_nosig;	/* snd_fdi_set found no signal at the FDI's input */
 extern char snd_fdi_note[];	/* snd_fdi_set's tries: each value and its measure */
 
 int snd_fdi_set(long rate);	/* the FDI to 44.1 or 48 kHz: 1 when its clock is at it */

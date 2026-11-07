@@ -40,6 +40,7 @@ extern char play_name[64];	/* the file's name */
 #include "tags.h"
 extern TAGS play_tags;		/* what it says it is: title, artist, album, album art */
 extern char play_info[80];	/* "MP3  128 kbit/s  44.1 kHz  stereo" */
+extern int play_nosig;		/* play_out says the FDI's input has no signal */
 extern char play_out[80];	/* "FDI  44.1 kHz" */
 extern long play_kbps, play_hz;	/* the file's bit rate (a VBR file's average), its rate */
 extern const char *play_via;	/* "FDI", "DSP" or "DMA": where it plays */
