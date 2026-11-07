@@ -1291,6 +1291,16 @@ the DMA's, not the MP3's 500: 24 %.) `pcm_test` holds the spread's asm against t
 running out among its 48 runs. A first build stalled after its first packet: the ring's count,
 `and` on B1 alone, kept B2's sign when the interrupt's place had wrapped past getrx's.
 
+### The FDI: bit for bit, never Normal (Erez, 5 Nov 2026)
+
+"On FDI it can not drop to normal and stay true to exact bits." Quality by itself stays off on the
+FDI's clock, and the FDI is set for each file as it opens, to the file's rate: a 48 kHz file on the
+FDI's own 48 kHz, a 44.1 kHz file on 44.1 kHz, back and forth from one file to the next (`snd_fdi_set`
+for every open; the rate kept only while it is the one measured). On Erez's FDI 44.1 kHz comes only
+from its S/PDIF input (its lines at 0; Cubase Audio 2.06 the same, read 5 Nov 2026); while that input
+has no 44.1 kHz clock a 44.1 kHz file is resampled to 48 kHz, and the DSP's time is what decides
+whether it keeps up (the faster decoder, next).
+
 ### A dialog held open while it plays (the hub, 4 Nov 2026; 0.24)
 
 A modal dialog (Settings, About) waits in common's `dlg_evnt`, not in EPlay's loop, so 0.23 read

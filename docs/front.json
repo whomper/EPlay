@@ -4,5 +4,5 @@
  "address": "github.com/whomper/EPlay",
  "welcome": ["Welcome to **EPlay**, the music player for the Atari Falcon. It plays MP3 on the Falcon's DSP, or through a SoundPool FDI, and WAV and AIFF, from a list of files, folders and playlists, one after another; the music goes on while you work in its dialogs and menus."],
  "window": {"title": "The window", "picture": "docs/help/WINDOW.IMG", "intro": "A list playing:", "items": ["The info line: what EPlay is doing, and the output's rate.", "What plays: its album art, title and artist, bit rate and rate.", "Previous, Play/Pause and Next; where it plays (FDI, DSP or DMA) beside them.", "The position bar: click or drag on it to go there.", "The volume: click or drag, or + and -.", "The list: a double click or Return plays a row."], "more": "More in [[Windows and menus]] and [[Keyboard]]."},
- "contents": [["Getting started", ["Getting started", "Settings"]], ["Every day", ["Windows and menus", "Keyboard"]], ["When things go wrong", ["Troubleshooting", "About"]]]
+ "contents": [["Getting started", ["Getting started", "What EPlay does", "Settings"]], ["Every day", ["Windows and menus", "Keyboard"]], ["When things go wrong", ["Troubleshooting", "About"]]]
 }

@@ -21,7 +21,7 @@ static long used;
 
 void elog(const char *fmt, ...)
 {
-	char line[320];
+	char line[400];
 	va_list ap;
 	long n;
 	va_start(ap, fmt);

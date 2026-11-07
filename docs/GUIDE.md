@@ -31,6 +31,22 @@ very long lists; a stock Falcon plays as well.
 clock hasn't, such as 44.1 kHz without an external clock, is resampled on the DSP and heard at its
 own pitch.
 
+## What EPlay does
+
+- **Steady sound.** The music is fed by an interrupt from a queue of seconds to minutes held in
+  memory, so menus, dialogs, the file selector and other programs don't break it up. An
+  accelerated Falcon (a DFB1 at 50 MHz) plays exactly as a stock one.
+- **MP3 on the DSP.** The whole MP3 decoder runs on the Falcon's DSP56001, and the DSP plays what
+  it decodes itself: the 68030 only hands it the file, a piece at a time, when the DSP asks.
+- **Through the FDI.** With a SoundPool FDI on the DSP port, EPlay sets it to each file's rate
+  (44.1 or 48 kHz, as Cubase Audio does) and the music goes out bit for bit.
+- **At its own pitch.** A file at a rate the Falcon's clock hasn't, such as 44.1 kHz on a stock
+  Falcon (49,170 Hz), is resampled on the DSP; a WAV or AIFF reaches the DSP through the sound
+  DMA, so the 68030 has little to do. Only a file faster than 49,170 Hz (96 kHz) plays at the
+  nearest rate the Falcon has, unless an FDI gives its rate.
+- **Shares the DSP.** EPlay holds the DSP only while it plays through it, and gives it back on
+  Pause and Stop: see [Settings](#settings).
+
 ## Windows and menus
 
 EPlay has one window. **The bar** across its top shows what plays: the album art (unpacked on the
@@ -64,6 +80,10 @@ files and folders with a click, Shift-click or a drag; **All** selects every fil
 at the list's end: a folder with its subfolders, in the order of their names; a playlist's files in
 its order. Return opens a folder when it is the only one selected, or nothing is. The music goes on
 while the dialog is open.
+
+**Dropped files** go into the list too: drag MP3, WAV and AIFF files, a folder or an `.M3U`
+playlist onto EPlay's window from an AV desktop (Thing, Jinnee, Teradesk), or under MiNT and
+MagiC.
 
 **Playlists** are `.M3U` files, which other players read and write too. A line is a file, its path
 whole (`C:\MUSIC\A.MP3`) or relative to the playlist's folder (`LIVE\A.MP3`, `..\B.MP3`). EPlay
