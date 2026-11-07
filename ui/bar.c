@@ -23,6 +23,7 @@
 #include "dialog.h"
 #include "art.h"
 #include "list.h"
+#include "badge.h"
 
 int bar_held = BH_NONE, bar_drag = -1, bar_vdrag = -1;
 
@@ -126,7 +127,6 @@ static void rect(GRECT *r, short x, short y, short w, short h)
 	r->h = h;
 }
 
-static short scw, sch;		/* the badges' small font: its cell */
 
 void bar_layout(const GRECT *work)
 {
@@ -162,15 +162,7 @@ void bar_layout(const GRECT *work)
 	rect(&w_pos, w_ctl.x, y, w_ctl.w, ch);
 	rect(&w_track, w_ctl.x + 5 * cw + 4, y + ch / 2 - 2, w_ctl.w - 10 * cw - 8, 4);
 	rect(&w_list, work->x, work->y + bar_h, work->w, work->h - bar_h);
-	{
-		short a, b;
-		vst_height(vdi_h, 4, &scw, &sch);	/* (the badges' small font: its cell) */
-		vst_height(vdi_h, ch >= 16 ? 13 : 6, &a, &b);
-		if (scw <= 0 || sch <= 0) {
-			scw = cw;
-			sch = ch;
-		}
-	}
+	badge_init(vdi_h, ch >= 16 ? 13 : 6);	/* (the badges' small font: its cell) */
 	make_masks();
 }
 
@@ -409,104 +401,28 @@ static void mask_draw(const MASK *m, short x, short y, short pen)
 	vrt_cpyfm(vdi_h, 2, pxy, &src, &dst, colors);	/* transparent */
 }
 
-/* ---- the badges (the bit rate, the rate, where it plays): their text in
-   the system font's small size (6 x 6), a quarter narrower than the
-   window's and half as tall (Erez, 5 Nov 2026: "too big"), in a box a
-   pixel clear of it all round, centred in the row of height rh at y.
-   TOS's VDI draws a 6-pixel font a glyph at a time, shifted: with the
-   size set and text_font's set-up each time, the start's picture was 5
-   to 10 ms slower (the hub's speed rig, 5 Nov 2026). So each badge's
-   text is made once, as it changes, a 1-plane form from the font's own
-   glyphs (Line-A's), and drawn as the bar's shapes are, one raster copy */
-#define BT_WPL 8			/* 128 pixels: 21 characters */
-typedef struct {
-	char s[24];
-	MASK m;
-	unsigned short bits[BT_WPL * 8];
-} BTEXT;
-static BTEXT bt[3];
-
-static const unsigned char *const *line_a_fonts(void)
-{
-	register const unsigned char *const *f __asm__("a1");
-	__asm__ volatile(".dc.w 0xa000" : "=r"(f) : : "d0", "d1", "d2", "a0", "a2", "memory", "cc");
-	return f;
-}
-
-/* slot's text as a form, made again only when it changes; 0: the font
-   isn't as TOS's, or the text too long */
-static const MASK *badge_text(int slot, const char *s)
-{
-	BTEXT *b = &bt[slot];
-	const unsigned char *hd, *dat;
-	const short *off;
-	short first, last, fw, fh, n = (short)strlen(s), i, y;
-	if (b->m.bits && !strcmp(b->s, s))
-		return &b->m;
-	b->m.bits = 0;
-	hd = line_a_fonts()[0];			/* the 6 x 6 */
-	if (!hd || n <= 0 || n * scw > BT_WPL * 16 || (size_t)n >= sizeof(b->s))
-		return 0;
-	first = *(const short *)(hd + 36);
-	last = *(const short *)(hd + 38);
-	off = *(const short *const *)(hd + 72);
-	dat = *(const unsigned char *const *)(hd + 76);
-	fw = *(const short *)(hd + 80);
-	fh = *(const short *)(hd + 82);
-	if (!off || !dat || fh != sch || fh > 8 || fw <= 0)
-		return 0;
-	memset(b->bits, 0, sizeof(b->bits));
-	for (i = 0; i < n; i++) {
-		short c = (unsigned char)s[i], g0, g1, x;
-		if (c < first || c > last)
-			continue;
-		g0 = off[c - first];
-		g1 = off[c - first + 1];
-		for (x = 0; x < g1 - g0 && x < scw; x++) {
-			short sx = g0 + x, dx = i * scw + x;
-			for (y = 0; y < fh; y++)
-				if (dat[(long)y * fw + (sx >> 3)] & (0x80 >> (sx & 7)))
-					b->bits[y * BT_WPL + (dx >> 4)] |= 0x8000 >> (dx & 15);
-		}
-	}
-	strcpy(b->s, s);
-	b->m.w = n * scw;
-	b->m.h = fh;
-	b->m.wpl = BT_WPL;
-	b->m.bits = b->bits;
-	return &b->m;
-}
+/* ---- the badges (the bit rate, the rate, where it plays): common's
+   badge.c (AERA-Atari 7a84fd1, from this bar's own of 0.27): the text in
+   the system font's small size (6 x 6; Erez, 5 Nov 2026: "too big"), in a
+   box a pixel clear of it all round, centred in the row of height rh at
+   y, made once as it changes into a one-plane form, box and all, and
+   drawn with one raster copy */
+static BADGE bt[3];
 
 /* the badge's width; draw 0: only measured */
 static short badge(int slot, short x, short y, short rh, const char *s, short pen, int draw)
 {
-	short n = (short)strlen(s), w = n * scw + 5, h = sch + 4, by = y + (rh - h) / 2;
-	const MASK *m;
-	if (!draw || n <= 0)
-		return w;
-	box(x, by, w, 1, pen, 0);
-	box(x, by + h - 1, w, 1, pen, 0);
-	box(x, by, 1, h, pen, 0);
-	box(x + w - 1, by, 1, h, pen, 0);
-	/* (the glyphs' blank column is their right one: 3 left, 2 right) */
-	m = badge_text(slot, s);
-	if (m)
-		mask_draw(m, x + 3, by + 2, pen);
-	else {
-		short a, b;
-		vst_height(vdi_h, 4, &a, &b);
-		if (cur_tcol != pen) {
-			vst_color(vdi_h, pen);
-			cur_tcol = pen;
-		}
-		if (cur_fx != 0) {
-			vst_effects(vdi_h, 0);
-			cur_fx = 0;
-		}
-		v_gtext_n(vdi_h, x + 3, by + 2, s, n);
-		vst_height(vdi_h, ch >= 16 ? 13 : 6, &a, &b);
-	}
-	return w;
+	short c[4];
+	if (!draw || !*s)
+		return badge_width(s);
+	c[0] = clip_r.x;
+	c[1] = clip_r.y;
+	c[2] = clip_r.x + clip_r.w - 1;
+	c[3] = clip_r.y + clip_r.h - 1;
+	badge_draw(&bt[slot], x, y, rh, s, pen, c);
+	if (badge_vdi)			/* (the VDI's way: its attributes changed) */
+		cur_fill = cur_pat = cur_tcol = cur_fx = -1;
+	return badge_width(s);
 }
 
 /* the shapes, made for the layout's sizes */

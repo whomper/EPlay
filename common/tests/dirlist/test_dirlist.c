@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * test_dirlist.c - src/dirlist.c: the Add files dialog's folder (the
- * masks, the types, the sorts with folders first, the selection, the
- * sizes and dates as shown), and a folder of 5,000 entries.
+ * test_dirlist.c - src/dirlist.c: the file dialog's folder (the masks,
+ * the app's types, the sorts with folders first, the selection, the sizes
+ * and dates as shown), and a folder of 5,000 entries. The types are
+ * EPlay's, whose Add files the dialog was. With AddressSanitizer: make test
  */
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +16,11 @@ static void check(int ok, const char *what)
 	printf("%s  %s\n", ok ? "ok  " : "FAIL", what);
 	bad += !ok;
 }
+
+enum { DT_MUSIC, DT_MP3, DT_WAV, DT_AIFF, DT_M3U, DT_ALL, DT_N };
+static const DL_TYPE music[DT_N] = { { "Music files", "MP3 WAV AIF AIFF AIFC M3U" }, { "MP3", "MP3" },
+				     { "WAV", "WAV" }, { "AIFF", "AIF AIFF AIFC" }, { "Playlists", "M3U" },
+				     { "All files", "" } };
 
 #define D(y, m, dd) ((unsigned short)(((y) - 1980) << 9 | (m) << 5 | (dd)))
 
@@ -44,6 +50,11 @@ int main(void)
 	      "masks: * and ?, the case aside");
 	/* the folder */
 	dl_init(&d);
+	check(d.ntypes == 1 && !strcmp(dl_type_name(&d, 0), "All files") && dl_type_ok(&d, 0, "X.PRG"),
+	      "no table: All files alone");
+	dl_types(&d, music, DT_N);
+	check(d.type == DT_MUSIC && d.ntypes == DT_N && !strcmp(dl_type_name(&d, DT_M3U), "Playlists") &&
+	      !strcmp(dl_type_name(&d, DT_N), "?"), "the app's types, the first chosen");
 	dl_add(&d, ".", 0, 0, 0, 1);
 	dl_add(&d, "..", 0, 0, 0, 1);
 	dl_add(&d, "09_RAIN.MP3", 6000000, D(2026, 11, 2), 0, 0);
@@ -76,7 +87,9 @@ int main(void)
 	d.type = DT_MP3;
 	dl_filter(&d);
 	check(!strcmp(names(&d), "BONUS LIVE 01_NIGHT.MP3 09_RAIN.MP3"), "MP3 only (folders always)");
-	check(dl_type_ok(DT_MUSIC, "LIVE.M3U") && dl_type_ok(DT_M3U, "a.m3u") && !dl_type_ok(DT_M3U, "A.MP3"),
+	check(dl_type_ok(&d, DT_MUSIC, "LIVE.M3U") && dl_type_ok(&d, DT_M3U, "a.m3u") &&
+	      !dl_type_ok(&d, DT_M3U, "A.MP3") && dl_type_ok(&d, DT_AIFF, "x.aifc") && !dl_type_ok(&d, DT_AIFF, "x.AI") &&
+	      !dl_type_ok(&d, DT_AIFF, "x.AIFFF") && !dl_type_ok(&d, DT_MP3, "MP3") && dl_type_ok(&d, DT_ALL, "README"),
 	      "playlists: among the music files, and a type of their own");
 	d.type = DT_MUSIC;
 	strcpy(d.mask, "0?_*");

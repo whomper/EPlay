@@ -1198,7 +1198,8 @@ TOS 4.04's file selector gives one file. Of three ways (EPlay's own dialog, Sele
 protocol, both) Erez chose EPlay's own, and set how it looks over four drawings: a dialog box with
 the platform's look (3D where the AES has it), Selectric's width (about 40 columns), the drive in
 one pop-up button, and a selection with no check boxes.
-- **The tree** is the AES's own objects, built at run time (`ui/addfiles.c`) and given the 3D
+- **The tree** is the AES's own objects, built at run time (`ui/addfiles.c`, since 7 Nov 2026
+  common's `ui/filepick.c` with EPlay's `FP_SPEC`) and given the 3D
   flags by common's `dlg_3d`; it opens in a window under MiNT and MagiC (`dlg_open`). The list in
   its white well is drawn by EPlay, as the Font dialog's lists are (`dlg_more`, `dlg_cut`).
 - **From Selectric:** the drive pop-up at the folder line's start; Folders, the last ten added
@@ -1216,7 +1217,9 @@ one pop-up button, and a selection with no check boxes.
   a folder opened 45; a click 25; Shift-click 30; Add 130. A click draws only the rows whose
   selection changed (the whole list was 50).
 - `src/dirlist.c` holds the folder's entries, the sorts, the types, the mask and the selection,
-  tested on the host (`tests/dirlist`).
+  tested on the host (`tests/dirlist`). Both are common's since 7 Nov 2026 (AERA-Atari 74daba8, the
+  family's file dialog: the hub, 5 Nov), the types given by the app as a table; the move changed
+  no pixel (common's `tests/filepick` `--old`, on Erez's TOS 1.04 and 4.04 and under NVDI).
 
 ### Drawing whole (Erez, 4 Nov 2026; the guidelines' Speed, 4fd0a96)
 

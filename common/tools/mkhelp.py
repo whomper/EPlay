@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""Turn docs/GUIDE.md into an ST-Guide hypertext source (EPLAY.STG).
-From EPDF's tools/mkhelp.py (EContact's, EMail's, EHypView's).
+"""The family's help generator (guidelines 4.3): an app's docs/GUIDE.md
+into an ST-Guide hypertext source, NAME.STG. From EPlay's (EPDF's,
+EContact's, EMail's, EHypView's before it): one generator for every app.
 
-    mkhelp.py docs/GUIDE.md VERSION build/EPLAY.STG
+    mkhelp.py docs/GUIDE.md VERSION build/NAME.STG [--app EPlay]
+              [--database "EPlay - music on the Falcon"] [--subject Sound]
+              [--help-page Keyboard]
+
+--app is the name in the page titles ("EPlay: Settings"; by default the
+guide's first heading's first word), --database the database's title (by
+default the guide's first heading), --subject the category ST-Guide's
+catalogue sorts it under (Programs by default), --help-page the page the Help
+key opens in the viewer (Keyboard by default; none with ""). NAME.HYP is
+OUT's name.
 
 Each "## " section becomes a page, the text before the first one the
 main page with the contents. ST-Guide shows text as it is written, so
@@ -13,8 +23,11 @@ page width (a long line in a listing goes on under its description);
 bold becomes @{B}, links between sections become ST-Guide links, and
 pictures are left out. The text is written in the Atari character set,
 and the same guide always gives the same file (no date in it). Compile
-with HCP (the hypview project): hcp -o binary/EPLAY.HYP build/EPLAY.STG
+with HCP (the hypview project): hcp -o binary/NAME.HYP build/NAME.STG;
+helpfront.py page then puts the family's front page in as Main.
 """
+import argparse
+import os
 import re
 import sys
 
@@ -167,12 +180,24 @@ def page(lines, anchors):
     return out
 
 
-def main():
-    src, version, dst = sys.argv[1], open(sys.argv[2]).read().strip(), sys.argv[3]
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="docs/GUIDE.md to an ST-Guide source")
+    ap.add_argument("guide")
+    ap.add_argument("version", help="the VERSION file")
+    ap.add_argument("out", help="NAME.STG")
+    ap.add_argument("--app")
+    ap.add_argument("--database")
+    ap.add_argument("--subject", default="Programs")
+    ap.add_argument("--help-page", default="Keyboard")
+    a = ap.parse_args(argv)
+    src, dst = a.guide, a.out
+    version = open(a.version).read().strip()
+    name = os.path.splitext(os.path.basename(dst))[0].upper()
     # words for what the Atari's font has no letter for, before laying out
     text = open(src, encoding="utf-8").read().replace("↑", "Up").replace("↓", "Down")
     text = text.replace("⇧-", "Shift-").replace("⇧", "Shift+").split("\n")
     title = text[0].lstrip("# ").strip()
+    app = a.app or (title.split() or [name.capitalize()])[0]
     sections, cur = [], ("Main", [])
     for s in text[1:]:
         if s.startswith("## "):
@@ -182,25 +207,26 @@ def main():
             cur[1].append(s)
     sections.append(cur)
     anchors = {slug(t): t for t, _ in sections[1:]}
-    out = ['@database "EPlay - music on the Falcon"',
-           '@subject "Sound"',
+    out = ['@database "%s"' % (a.database or title),
+           '@subject "%s"' % a.subject,
            '@author "AERA | Erez Yaary"',
-           '@$VER: EPLAY.HYP %s' % version,
+           '@$VER: %s.HYP %s' % (name, version),
            "@width %d" % WIDTH,
            "@inputenc atarist",
            "@charset atarist",
-           "@autorefoff",
-           '@help "Keyboard"',
-           '@options "+z"',		# and EPLAY.REF, for ST-Guide's index
-           "",
-           '@node "Main" "EPlay %s"' % version,
-           "@{U}%s@{u}" % title, ""]
+           "@autorefoff"]
+    if a.help_page:
+        out.append('@help "%s"' % a.help_page)
+    out += ['@options "+z"',		# and NAME.REF, for ST-Guide's index
+            "",
+            '@node "Main" "%s %s"' % (app, version),
+            "@{U}%s@{u}" % title, ""]
     out += page(sections[0][1], anchors)
     out += ["", "@{B}Contents@{b}", ""]
     out += ['  @{"%s" LINK "%s"}' % (t, t) for t, _ in sections[1:]]
     out += ["@endnode", ""]
     for t, body in sections[1:]:
-        out += ['@node "%s" "EPlay: %s"' % (t, t), "@{U}%s@{u}" % t, ""]
+        out += ['@node "%s" "%s: %s"' % (t, app, t), "@{U}%s@{u}" % t, ""]
         out += page(body, anchors)
         out += ["", '@{"Contents" LINK "Main"}', "@endnode", ""]
     with open(dst, "w", encoding="latin-1", newline="\r\n") as f:

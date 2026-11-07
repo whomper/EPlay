@@ -40,9 +40,9 @@ void settings_set_mini(int on);
 
 /* the Add files dialog's folder and its last folders (ADDDIR=, FOLDER1=
    to FOLDER10= in the INF), saved by settings_flush once changed */
-#include "addfiles.h"
+#include "filepick.h"
 char *settings_add_dir(void);
-char (*settings_recent(void))[AF_PATH];
+char (*settings_recent(void))[FP_PATH];
 void settings_recent_changed(void);
 
 #endif

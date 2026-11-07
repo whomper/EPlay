@@ -1,18 +1,34 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * dirlist.c - a folder's entries for the Add files dialog (dirlist.h).
+ * dirlist.c - a folder's entries for the family's file dialog (dirlist.h).
  */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "dirlist.h"
 
+static const DL_TYPE all_files[1] = { { "All files", "" } };
+
 void dl_init(DLIST *d)
 {
 	memset(d, 0, sizeof(*d));
-	d->type = DT_MUSIC;
+	d->types = all_files;
+	d->ntypes = 1;
+	d->type = 0;
 	d->sort = DS_NAME;
+}
+
+void dl_types(DLIST *d, const DL_TYPE *t, int n)
+{
+	if (t && n > 0) {
+		d->types = t;
+		d->ntypes = n > DL_TYPES ? DL_TYPES : n;
+	} else {
+		d->types = all_files;
+		d->ntypes = 1;
+	}
+	d->type = 0;
 }
 
 void dl_free(DLIST *d)
@@ -131,33 +147,40 @@ int dl_match(const char *m, const char *s)
 	return dl_match(m + 1, s + 1);
 }
 
-static int ext_is(const char *name, const char *e)
+/* name's extension one of exts' (a space between each) */
+static int ext_in(const char *name, const char *exts)
 {
-	return !namecmp(ext(name), e);
-}
-
-int dl_type_ok(int type, const char *name)
-{
-	switch (type) {
-	case DT_MP3:
-		return ext_is(name, "MP3");
-	case DT_WAV:
-		return ext_is(name, "WAV");
-	case DT_AIFF:
-		return ext_is(name, "AIF") || ext_is(name, "AIFF") || ext_is(name, "AIFC");
-	case DT_M3U:
-		return ext_is(name, "M3U");
-	case DT_ALL:
-		return 1;
+	const char *e = ext(name);
+	while (*exts) {
+		size_t n;
+		while (*exts == ' ')
+			exts++;
+		for (n = 0; exts[n] && exts[n] != ' '; n++)
+			;
+		if (n) {
+			size_t k;
+			for (k = 0; k < n && e[k] && up(e[k]) == up(exts[k]); k++)
+				;
+			if (k == n && !e[k])
+				return 1;
+		}
+		exts += n;
 	}
-	return ext_is(name, "MP3") || ext_is(name, "WAV") || ext_is(name, "AIF") || ext_is(name, "AIFF") ||
-	       ext_is(name, "AIFC") || ext_is(name, "M3U");
+	return 0;
 }
 
-const char *dl_type_name(int type)
+int dl_type_ok(const DLIST *d, int type, const char *name)
 {
-	static const char *const n[DT_N] = { "Music files", "MP3", "WAV", "AIFF", "Playlists", "All files" };
-	return type >= 0 && type < DT_N ? n[type] : "?";
+	const char *x;
+	if (type < 0 || type >= d->ntypes)
+		return 1;
+	x = d->types[type].exts;
+	return !x || !*x || ext_in(name, x);
+}
+
+const char *dl_type_name(const DLIST *d, int type)
+{
+	return type >= 0 && type < d->ntypes ? d->types[type].name : "?";
 }
 
 const char *dl_sort_name(int sort)
@@ -173,7 +196,7 @@ void dl_filter(DLIST *d)
 	d->nview = 0;
 	for (i = 0; i < d->n; i++) {
 		DENT *e = &d->e[i];
-		if (e->dir || (dl_type_ok(d->type, e->name) && (any || dl_match(d->mask, e->name))))
+		if (e->dir || (dl_type_ok(d, d->type, e->name) && (any || dl_match(d->mask, e->name))))
 			d->view[d->nview++] = i;
 		else
 			e->sel = 0;	/* (out of sight: not added) */

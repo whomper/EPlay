@@ -1,12 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * addfiles.c - the Add files dialog (addfiles.h). The tree is the AES's
+ * filepick.c - the family's file dialog, several files at once
+ * (filepick.h; EPlay's Add files, Erez, 4 Nov 2026). The tree is the AES's
  * own objects, given the AES's 3D look by dlg_3d (dlg_open); the list in
  * its white well is drawn here, as the Font dialog draws its lists
- * (common's fontsel.c), through dlg_more and dlg_cut so that it is right
- * in a dialog window too. The folder's entries, their sort, type, mask
- * and selection are src/dirlist.c's (tests/dirlist).
+ * (fontsel.c), through dlg_more and dlg_cut so that it is right in a
+ * dialog window too. The folder's entries, their sort, type, mask and
+ * selection are src/dirlist.c's (tests/dirlist).
  */
 #include <string.h>
 #include <stdio.h>
@@ -18,14 +19,14 @@
 #include "popup.h"
 #include "click.h"
 #include "dirlist.h"
-#include "addfiles.h"
+#include "filepick.h"
 
 /* the tree: 42 by 24 cells */
 enum { O_ROOT, O_BAND, O_DRIVE, O_PATH, O_PATHT, O_UP, O_FOLDERS, O_TYPE, O_SORT, O_NAMEL, O_MASK, O_LIST, O_INFO,
        O_ALL, O_NONE, O_CANCEL, O_ADD, O_N };
 static OBJECT tree[O_N];
 static TEDINFO ted_band, ted_path, ted_mask;
-static char s_path[AF_PATH], s_mask[13], t_mask[13], v_mask[13], s_drive[8], s_type[20], s_sort[16],
+static char s_path[FP_PATH], s_mask[13], t_mask[13], v_mask[13], s_drive[8], s_type[20], s_sort[16],
 	s_info[48];
 
 static void obj_in(short p, short i, short type, short flags, short state, long spec, short x, short y, short w,
@@ -71,13 +72,15 @@ static void ted(TEDINFO *t, char *text, char *tmpl, char *valid, short just, sho
 	t->te_tmplen = (short)strlen(tmpl) + 1;
 }
 
+static const FP_SPEC *spec;
+
 static void build(void)
 {
 	memset(tree, 0, sizeof(tree));
 	obj(O_ROOT, G_BOX, 0, OUTLINED, 0x00021100L, 0, 0, 42, (short)(8 << 8 | 22));
 	tree[0].ob_head = tree[0].ob_tail = -1;
 	/* the title band: hidden in a dialog window, whose title names it */
-	ted(&ted_band, "Add files", "", "", 2, 0x1071, 0);	/* (white text, transparent, on black) */
+	ted(&ted_band, (char *)spec->title, "", "", 2, 0x1071, 0);	/* (white text, transparent, on black) */
 	obj(O_BAND, G_BOXTEXT, 0, 0, (long)&ted_band, 0, 0, 42, 1);
 	obj(O_DRIVE, G_BUTTON, SELECTABLE | TOUCHEXIT, 0, (long)s_drive, 1, 2, 5, 1);
 	/* the folder: its text in a white well (not typed into: the drive,
@@ -98,7 +101,7 @@ static void build(void)
 	obj(O_ALL, G_BUTTON, SELECTABLE | EXIT, 0, (long)"All", 1, (short)(4 << 8 | 20), 5, 1);
 	obj(O_NONE, G_BUTTON, SELECTABLE | EXIT, 0, (long)"None", 7, (short)(4 << 8 | 20), 6, 1);
 	obj(O_CANCEL, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 24, (short)(4 << 8 | 20), 8, 1);
-	obj(O_ADD, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"Add", 33, (short)(4 << 8 | 20), 8, 1);
+	obj(O_ADD, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)spec->ok, 33, (short)(4 << 8 | 20), 8, 1);
 	tree[O_N - 1].ob_flags |= LASTOB;
 	tree[0].ob_next = -1;
 	rsrc_obfix_all(tree, O_N);
@@ -108,14 +111,14 @@ static void build(void)
 /* ---- the folder ---- */
 
 static DLIST dl;
-static char dir_now[AF_PATH];
+static char dir_now[FP_PATH];
 static int top, cur = -1, anchor = -1;
 static GRECT lr;			/* the list's rows (inside the well) */
 static short rows, rh, sw;
 
 static void read_folder(void)
 {
-	char mask[AF_PATH + 4];
+	char mask[FP_PATH + 4];
 	DTA *old = Fgetdta(), dta;
 	graf_mouse(BUSYBEE, 0);
 	dl_clear(&dl);
@@ -223,13 +226,16 @@ static void row_at(int r, GRECT *clip)
 	if (!e)
 		return;
 	if (e->dir) {
-		/* a folder: its shape, then its name */
+		/* a folder: its shape, then its name. The shape, its tab two
+		   pixels over it, within the row: 8 high on rows of 12 and more
+		   (16: as drawn since 4 Nov 2026), 5 on the ST's rows of 8, where
+		   8 reached a row into the next one's */
 		GRECT f;
-		short c = e->sel ? 0 : 1;
+		short c = e->sel ? 0 : 1, fh = rh >= 12 ? 8 : rh - 3;
 		f.x = x + 1;
-		f.y = y + rh / 2 - 3;
+		f.y = y + (rh - fh - 2) / 2 + 2;
 		f.w = gl_wchar + 6;
-		f.h = 8;
+		f.h = fh;
 		frame(&f, c);
 		line_col(f.x + 2, f.y - 2, f.x + 5, f.y - 2, c);
 		text_at(x + 2 * gl_wchar + 4, y, e->name, (long)strlen(e->name), 12, fl);
@@ -379,8 +385,8 @@ static int in_sight(void)
 
 
 /* a picture's time, from when it is due to its last piece drawn, to the
-   rigs' console ("EPLAY picture folder 45 ms"): the guidelines' Speed, "A
-   rule never costs speed" */
+   rigs' console ("EPLAY picture folder 45 ms", spec->log naming the app):
+   the guidelines' Speed, "A rule never costs speed" */
 static unsigned long pic_t0, pic_in, input_ms;	/* input_ms: the dialog's last key or click */
 static const char *pic_name;
 static void pic_begin(const char *n)
@@ -394,14 +400,14 @@ static void pic_begin(const char *n)
 
 static void pic_end(void)
 {
-	if (pic_name) {
-		char b[64];
+	if (pic_name && spec->log) {
+		char b[80];
 		unsigned long now = tos_ms();
-		snprintf(b, sizeof(b), "EPLAY picture %s %lu ms, %lu from the input\n", pic_name, now - pic_t0,
-			 now - pic_in);
+		snprintf(b, sizeof(b), "%s picture %s %lu ms, %lu from the input\n", spec->log, pic_name,
+			 now - pic_t0, now - pic_in);
 		nf_debug(b);
-		pic_name = 0;
 	}
+	pic_name = 0;
 }
 
 static void folder_shown(void)
@@ -444,7 +450,7 @@ static void go_up(int root)
 static void open_row(int r)
 {
 	DENT *e = dl_at(&dl, r);
-	char d[AF_PATH];
+	char d[FP_PATH];
 	if (!e || !e->dir)
 		return;
 	if (strlen(dir_now) + strlen(e->name) + 2 > sizeof(d))
@@ -487,13 +493,13 @@ static void pop_drive(void)
 	}
 }
 
-static void pop_folders(char recent[AF_RECENT][AF_PATH])
+static void pop_folders(char recent[FP_RECENT][FP_PATH])
 {
-	static char lab[AF_RECENT][44];
-	const char *p[AF_RECENT];
+	static char lab[FP_RECENT][44];
+	const char *p[FP_RECENT];
 	short x, y, n = 0, k;
 	int i;
-	for (i = 0; i < AF_RECENT && recent[i][0]; i++) {
+	for (i = 0; i < FP_RECENT && recent[i][0]; i++) {
 		size_t len = strlen(recent[i]);
 		if (len <= 38)
 			snprintf(lab[n], sizeof(lab[n]), "  %s ", recent[i]);
@@ -503,7 +509,10 @@ static void pop_folders(char recent[AF_RECENT][AF_PATH])
 		n++;
 	}
 	if (!n) {
-		static const char *none[] = { "~  No folder added from yet " };
+		static char lab0[44];
+		const char *none[1];
+		snprintf(lab0, sizeof(lab0), "~  %s ", spec->none);
+		none[0] = lab0;
 		below(O_FOLDERS, &x, &y);
 		popup(x, y, none, 1);
 		return;
@@ -516,22 +525,22 @@ static void pop_folders(char recent[AF_RECENT][AF_PATH])
 
 static void set_labels(void)
 {
-	snprintf(s_type, sizeof(s_type), "%s \x02", dl_type_name(dl.type));
+	snprintf(s_type, sizeof(s_type), "%s \x02", dl_type_name(&dl, dl.type));
 	snprintf(s_sort, sizeof(s_sort), "%s \x02", dl_sort_name(dl.sort));
 }
 
 static void pop_type(void)
 {
-	static char lab[DT_N][20];
-	const char *p[DT_N];
+	static char lab[DL_TYPES][20];
+	const char *p[DL_TYPES];
 	short x, y, k;
 	int i;
-	for (i = 0; i < DT_N; i++) {
-		snprintf(lab[i], sizeof(lab[i]), "%c %s ", i == dl.type ? '\x08' : ' ', dl_type_name(i));
+	for (i = 0; i < dl.ntypes; i++) {
+		snprintf(lab[i], sizeof(lab[i]), "%c %s ", i == dl.type ? '\x08' : ' ', dl_type_name(&dl, i));
 		p[i] = lab[i];
 	}
 	below(O_TYPE, &x, &y);
-	k = popup(x, y, p, DT_N);
+	k = popup(x, y, p, (short)dl.ntypes);
 	if (k >= 0 && k != dl.type) {
 		dl.type = k;
 		dl_filter(&dl);
@@ -710,20 +719,23 @@ static int button(short o)
 	return graf_watchbox(tree, o, SELECTED, 0);
 }
 
-int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const char *path), void (*idle)(void))
+int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path),
+		 void (*idle)(void))
 {
 	short x, y, w, h, idx = 0, m[8];
 	int done = 0, added = 0, i;
 	AEVENT e;
+	spec = sp;
 	idle_fn = idle;
 	dl_init(&dl);
+	dl_types(&dl, sp->types, sp->ntypes);
 	build();
 	memset(t_mask, '_', 12);
 	t_mask[12] = 0;
 	memset(v_mask, 'X', 12);	/* (any letter, wildcards too) */
 	v_mask[12] = 0;
 	s_mask[0] = 0;
-	ted_path.te_txtlen = AF_PATH;
+	ted_path.te_txtlen = FP_PATH;
 	ted_mask.te_txtlen = 13;
 	ted_mask.te_tmplen = 13;
 	if (dir[0])
@@ -734,7 +746,7 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 	show_path();
 	set_labels();
 	info();
-	dlg_name("Add files");
+	dlg_name(spec->title);
 	dlg_band(O_BAND);
 	pic_begin("add");
 	dlg_open(tree, &x, &y, &w, &h);
@@ -843,7 +855,7 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 		/* the selected files and folders in the list's order (a folder
 		   with its subfolders: its name ending in '\'); with none, the
 		   file at the keys' place */
-		char p[AF_PATH + 16];
+		char p[FP_PATH + 16];
 		int any = dl_selected(&dl, 0);
 		for (i = 0; i < dl.nview; i++) {
 			DENT *f = dl_at(&dl, i);
@@ -856,14 +868,14 @@ int addfiles_run(char *dir, char recent[AF_RECENT][AF_PATH], void (*add)(const c
 		if (added) {
 			/* the folder to the front of the Folders pop-up */
 			int k;
-			for (k = 0; k < AF_RECENT - 1 && strcmp(recent[k], dir_now); k++)
+			for (k = 0; k < FP_RECENT - 1 && strcmp(recent[k], dir_now); k++)
 				;
 			for (; k > 0; k--)
 				strcpy(recent[k], recent[k - 1]);
 			strcpy(recent[0], dir_now);
 		}
 	}
-	snprintf(dir, AF_PATH, "%s", dir_now);
+	snprintf(dir, FP_PATH, "%s", dir_now);
 	dl_free(&dl);
 	return added;
 }

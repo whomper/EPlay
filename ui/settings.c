@@ -25,7 +25,7 @@
 
 static int output = OUT_AUTO;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
-static char add_dir[AF_PATH], recent[AF_RECENT][AF_PATH];	/* the Add files dialog's */
+static char add_dir[FP_PATH], recent[FP_RECENT][FP_PATH];	/* the Add files dialog's */
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static int qlate = 1;			/* QLATE=: the rigs' (read, never written). 1: Normal at the first granule late past the start (3 let a heavy file crackle six times first: Erez, 5 Nov 2026) */
@@ -84,10 +84,10 @@ void settings_load(void)
 		volume_saved = volume;
 	}
 	inf_get(inf, inf_n, "ADDDIR", add_dir, sizeof(add_dir));
-	for (i = 0; i < AF_RECENT; i++) {
+	for (i = 0; i < FP_RECENT; i++) {
 		char k[12];
 		snprintf(k, sizeof(k), "FOLDER%d", i + 1);
-		inf_get(inf, inf_n, k, recent[i], AF_PATH);
+		inf_get(inf, inf_n, k, recent[i], FP_PATH);
 	}
 	if (inf_get(inf, inf_n, "MINI", v, sizeof(v)))
 		mini = mini_saved = v[0] == '1';
@@ -144,7 +144,7 @@ static void save_in(void)
 		static const char dnote[] = "; Add files: the folder it opens at, and the last folders added from\r\n";
 		char *a = inf2, *b = inf3, *t;
 		int i;
-		for (i = -1; i < AF_RECENT && n >= 0; i++) {
+		for (i = -1; i < FP_RECENT && n >= 0; i++) {
 			char k[12];
 			if (i < 0)
 				n = inf_set(a, n, "ADDDIR", add_dir, dnote, b, INF_MAX);
@@ -303,7 +303,7 @@ char *settings_add_dir(void)
 	return add_dir;
 }
 
-char (*settings_recent(void))[AF_PATH]
+char (*settings_recent(void))[FP_PATH]
 {
 	return recent;
 }
