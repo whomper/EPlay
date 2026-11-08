@@ -38,12 +38,15 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u
-CSRC    := bidi charset pic png inflate jpegdc dirlist
+OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u netsrc \
+           stream plat_tos
+# (util, conn, net_tos, sting: phase 7's streams; tls_none until https takes TLS.OVL)
+CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn tls_none
 CTP     := tjpgd
-CATARI  := libc tos gem crash dspjpeg
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge
+CATARI  := libc tos gem crash dspjpeg net_tos sting
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
+           $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
@@ -111,6 +114,8 @@ $(OBJDIR)/nf.o: common/atari/nf.S | $(OBJDIR)
 $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
+	$(CC) -m$(CPU) -c -o $@ $<
+$(OBJDIR)/sting_s.o: common/atari/sting.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
 
 binary:

@@ -1583,10 +1583,28 @@ Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Atari
   the bytes); `.PLS` station lists. `tests/stream`, and `tests/fuzz/fuzz_stream.c` (`make fuzz`,
   libFuzzer: 1.3 million runs in 3 minutes, no fault); `make test` replays `tests/fuzz/found`
   and the seeds.
-- **7b, the stream as the queue's source:** common's `conn` (STinG or MiNTnet; TLS by TLS.OVL
-  for https on a Direct connection), read without waiting in GEM's steps into the same queue a
-  file fills; the DSP decodes as it does a file. Reconnecting when the line drops; the rigs
-  through common's fakesting on Hatari.
+- **7b, the stream as the queue's source (done, 8 Nov 2026):** `ui/netsrc.c` on common's `conn`
+  (`util`, `futil`, `conn`, `net_tos`, `sting`; `tls_none` until https takes TLS.OVL) and a
+  `plat_tos.c` of EPlay's own (ECal's). HTTP/1.0 with "Icy-MetaData: 1"; the head read into a
+  buffer of its own by `shead_parse`; up to five redirects; a station list (`.pls`, `.m3u`, or
+  its Content-Type) gives its first station; AAC, Ogg and HLS are refused in words that name the
+  Gateway. play.c opens a URL in place of a file: the first 8 KB for the probe (two MP3 frames
+  running), those bytes first into the queue, then what has come, read without waiting in GEM's
+  steps (`fill`: no whole pieces for a station); no tags, length or seeking. The DSP decodes it as
+  a file. When the connection ends, play_step connects again every 2 s, five times, while the
+  queue plays on from memory; the new connection's audio follows in the queue (the tick finds its
+  first frame by itself: one frame may be lost at the join). A station fills about 3 s of the
+queue before it plays (the bee showing, Esc to stop), so the network's pauses don't reach the
+music: without it, Hatari's serial link under load starved the DSP. A station never goes to
+Normal by itself: its frames late are the network's, not the DSP's, and it can't be opened again
+where it was. The station's titles go to the log
+  and to the rigs ("EPLAY title"). Connecting shows the bee, and Esc or Undo stops it (common's
+  `busy.c`, the guidelines' 7.1). The list takes a URL as a row (no tags read; dim where there's
+  no DSP). `tests/hatari/stream_test.py`: a station of its own on 127.0.0.1 (Icecast's answer, an
+  MP3 tone at its pace, a title every 4 s) through common's fakesting: `live` (the tone, no gap,
+  three titles), `drop` (the station closes after 6 s: connected again, no gap), `pls` (a 302 to a
+  `.pls`, its first station), `aac` (refused). All pass on Hatari's stock Falcon. EPLAY.PRG
+  376 KB (+20 KB).
 - **7c, through the Gateway:** a service on the Gateway that fetches the station (HTTPS, AAC,
   HLS) and gives EPlay plain MP3, written here and handed to the Gateway's session (7.3); its
   port and any package on it (ffmpeg, to convert AAC) are Erez's to decide.

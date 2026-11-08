@@ -32,6 +32,7 @@ int play_step(int ms);
 int play_wait_ms(void);		/* the GEM loop's timer until the next step */
 int play_state(void);
 int play_is_open(void);
+int play_is_net(void);		/* a station or stream plays (phase 7) */
 /* n bytes of the open file from at (the album art), its place for the
    queue kept: how many, or -1 */
 long play_read_at(long at, void *buf, long n);		/* opened and not stopped: Play goes on from where it is */

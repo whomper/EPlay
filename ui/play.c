@@ -40,6 +40,10 @@
 #include "settings.h"
 #include "mp3dsp.h"
 #include "tags.h"
+#include "netsrc.h"
+#include "plat.h"
+#include "conn.h"
+#include "busy.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -115,6 +119,11 @@ static volatile int loading;	/* MP3: the DSP's program still going in (the tick'
 				   2 while GEM's steps reset the DSP, after Play's draw */
 static PCMFMT fmt;
 static long rate, out_rate, len_ms, file_size;
+/* phase 7: a station or stream in place of the file (netsrc.c): its
+   bytes from the network, the queue filled with what has come */
+static int net;
+static long net_pend_at, net_pend_n;	/* the first audio, read with the probe: in fbuf */
+int play_net_lost;		/* the connection ended: play_step connects again */
 static unsigned char *fbuf;	/* the file's first bytes, fpos..fend */
 static long fpos, fend;
 static MP3PARSE parse;		/* the tick's */
@@ -177,7 +186,8 @@ static void refill(void)
 		fend -= fpos;
 		fpos = 0;
 	}
-	n = Fread(fh, (FBUF - fend) > 32768 ? 32768 : FBUF - fend, fbuf + fend);
+	n = net ? ns_read(fbuf + fend, (FBUF - fend) > 32768 ? 32768 : FBUF - fend, 1) :
+		  Fread(fh, (FBUF - fend) > 32768 ? 32768 : FBUF - fend, fbuf + fend);
 	if (n <= 0)
 		eof = 1;
 	else
@@ -186,6 +196,10 @@ static void refill(void)
 
 static void close_file(void)
 {
+	if (net) {
+		ns_close();
+		net = 0;
+	}
 	if (fh >= 0) {
 		Fclose(fh);
 		fh = -1;
@@ -226,7 +240,12 @@ static long find_mp3(MP3HDR *h)
 	if (fend >= 10 && !memcmp(fbuf, "ID3", 3))
 		at = 10 + ((long)(fbuf[6] & 127) << 21 | (long)(fbuf[7] & 127) << 14 |
 			   (long)(fbuf[8] & 127) << 7 | (fbuf[9] & 127));
-	if (at >= fend) {		/* a tag longer than what was read: past it */
+	while (net && at >= fend && !eof) {	/* (a stream's tag: read past, as it comes) */
+		at -= fend;
+		fpos = fend = 0;
+		refill();
+	}
+	if (!net && at >= fend) {	/* a tag longer than what was read: past it */
 		Fseek(at, fh, 0);
 		base = at;
 		fpos = fend = 0;
@@ -802,14 +821,29 @@ static void fill(unsigned long t0, int ms, int low)
 			n = data_left;
 		/* a whole piece, else wait for the room (but the file's end and
 		   the queue's end are read as they come) */
-		if (n <= 0 || (n < piece && n < data_left && at + n < q_size))
-			break;
+		if (n <= 0 || (!net && n < piece && n < data_left && at + n < q_size))
+			break;		/* (a station: what has come, as it comes) */
 		if (must) {
 			must = 0;
 			if (ms_now() - t0 >= (unsigned long)ms)
 				rd_forced++;	/* (the turn's time gone: read all the same) */
 		}
-		{
+		if (net) {
+			if (net_pend_n > 0) {
+				r = n < net_pend_n ? n : net_pend_n;
+				memcpy(q + at, fbuf + net_pend_at, (size_t)r);
+				net_pend_at += r;
+				net_pend_n -= r;
+			} else {
+				r = ns_read(q + at, n, 0);
+				if (r == 0)
+					break;	/* (nothing more yet) */
+				if (r < 0) {
+					play_net_lost = 1;	/* (play_step connects again) */
+					break;
+				}
+			}
+		} else {
 			unsigned long a = ms_now();
 			r = Fread(fh, n, q + at);
 			rd_ms += (long)(ms_now() - a);
@@ -855,6 +889,25 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 	}
+	net = surl_is(path);
+	if (net) {
+		/* a station: connected and its answer read (Esc stops it), the
+		   first few KB of its audio for the probe; no tags, no length,
+		   no seeking (Erez, 8 Nov 2026: Pause connects again) */
+		if (!ns_open(path, err, n)) {
+			net = 0;
+			return 0;
+		}
+		play_net_lost = 0;
+		file_size = 0x7fffffffL;
+		memset(&play_tags, 0, sizeof(play_tags));
+		seek_ms = seek_byte = 0;
+		fpos = fend = 0;
+		eof = 0;
+		while (!eof && fend < 8192)
+			refill();
+		snprintf(play_name, sizeof(play_name), "%s", ns_name());
+	} else {
 	fh = (int)Fopen(path, 0);
 	if (fh < 0) {
 		snprintf(err, n, "%s can't be opened.", base_name(path));
@@ -872,13 +925,14 @@ int play_open(const char *path, char *err, int n)
 	eof = 0;
 	refill();
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
+	}
 	dsp = xs = 0;
 	pcm_got = 0;
 	elog("open %s (%ld bytes)", path, file_size);
 	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
 		elog("tags: \"%s\", \"%s\", \"%s\"; album art %ld bytes%s", play_tags.title, play_tags.artist,
 		     play_tags.album, play_tags.pic_end - play_tags.pic_at, play_tags.pic_unsync ? " (unsynchronised)" : "");
-	if (pcm_probe(fbuf, fend, &fmt, &why)) {
+	if (!net && pcm_probe(fbuf, fend, &fmt, &why)) {
 		kind = fmt.kind;
 		rate = fmt.rate;
 		len_ms = fmt.frames / rate * 1000 + fmt.frames % rate * 1000 / rate;	/* (no overflow past 13 minutes) */
@@ -911,6 +965,11 @@ int play_open(const char *path, char *err, int n)
 	} else {
 		MP3HDR h;
 		long at = find_mp3(&h);
+		if (at < 0 && net) {
+			snprintf(err, n, "%s doesn't send MP3: play it through the Gateway.", play_name);
+			close_file();
+			return 0;
+		}
 		if (at < 0) {
 			snprintf(err, n, "%s isn't a file EPlay plays: %s, nor an MP3.", play_name, why);
 			close_file();
@@ -925,7 +984,7 @@ int play_open(const char *path, char *err, int n)
 			   length (a VBR file's first frame's bit rate is no
 			   guide); the frame holds no sound and isn't played */
 			int vbr;
-			long nf = first_at + h.length <= fend ? mp3_info_frames(fbuf + first_at, &h, &vbr) : 0;
+			long nf = !net && first_at + h.length <= fend ? mp3_info_frames(fbuf + first_at, &h, &vbr) : 0;
 			long bytes = file_size - at;
 			if (nf > 0) {
 				long fs = nf * h.samples;
@@ -940,7 +999,7 @@ int play_open(const char *path, char *err, int n)
 				vbr = 0;
 				has_toc = 0;
 				xing_at = at;
-				len_ms = h.bitrate ? bytes * 8 / h.bitrate : 0;
+				len_ms = h.bitrate && !net ? bytes * 8 / h.bitrate : 0;	/* (a station: Live) */
 			}
 			khz(kr, sizeof(kr), rate);
 			play_hz = rate;
@@ -997,7 +1056,11 @@ int play_open(const char *path, char *err, int n)
 		data_left = file_size - at;
 		q_base = at;
 		fr_sent = 0;
-		Fseek(at, fh, 0);		/* the frames read from here into the queue */
+		if (net) {
+			net_pend_at = at;	/* (what the probe read goes first) */
+			net_pend_n = fend - at;
+		} else
+			Fseek(at, fh, 0);	/* the frames read from here into the queue */
 		if (!take_queue(1)) {
 			snprintf(err, n, "There isn't the memory to play.");
 			close_file();
@@ -1020,6 +1083,31 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 		mp3_reset(&parse);
+		if (net) {
+			/* a station: about 3 s in the queue before it plays, so the
+			   network's pauses don't reach the music (the bee shows;
+			   Esc or Undo stops it, as connecting) */
+			long want = (bitrate > 0 ? bitrate : 128) * 125 * 3;
+			unsigned long t0 = ms_now();
+			if (want > q_size / 2)
+				want = q_size / 2;
+			while (q_w < want && !conn_stop && ms_now() - t0 < 20000) {
+				fill(ms_now(), 50, 0);
+				if (play_net_lost)
+					break;
+				if (q_w < want && pf_idle)
+					pf_idle();
+			}
+			if (q_w < want && (conn_stop || play_net_lost)) {
+				snprintf(err, n, conn_stop ? "Connecting to the station was stopped." :
+					 "The station closed the connection.");
+				dspmp3_close();
+				close_file();
+				return 0;
+			}
+			elog("the station: %ld KB in the queue before it plays, in %ld ms", q_w / 1024,
+			     (long)(ms_now() - t0));
+		}
 	}
 	/* Settings' Output, as it is at this Play (Erez, 2 Nov 2026): Auto and
 	   FDI put the FDI at the file's rate where they can; FDI then plays on
@@ -1218,7 +1306,7 @@ int play_paused(void)
 
 void play_start(void)
 {
-	if (fh >= 0 && state != PS_PLAYING) {
+	if ((fh >= 0 || net) && state != PS_PLAYING) {
 		state = PS_PLAYING;
 		if (dsp) {
 			snd_dsp_out(out_rate, out_rate == snd_ext_rate);
@@ -1259,7 +1347,12 @@ int play_state(void)
 
 int play_is_open(void)
 {
-	return fh >= 0;
+	return fh >= 0 || net;
+}
+
+int play_is_net(void)
+{
+	return net;
 }
 
 long play_read_at(long at, void *buf, long n)
@@ -1447,7 +1540,53 @@ int play_step(int ms)
 		return 1;
 	}
 	fill(t0, ms, !src_done && q_lead_ms() < 3000);
-	if (dsp && !kind && s_started && !s_ext && !q_normal && rate > 32780 && s_sblim == 32) {
+	if (net) {
+		int changed;
+		const char *t = ns_title(&changed);
+		if (changed) {
+			char l[200];
+			elog("the station's title: %s", t);
+			snprintf(l, sizeof(l), "EPLAY title: %s\n", t);
+			nf_debug(l);
+			play_note_new = 1;	/* (the bar and info line again) */
+		}
+	}
+	if (net && play_net_lost && !src_done) {
+		/* the station's connection ended: again, every 2 s at most and
+		   five times, while the queue plays on from memory (the music
+		   doesn't wait for it); the new connection's audio follows on
+		   in the queue (the tick finds its first frame by itself) */
+		static unsigned long last_try;
+		static int tries;
+		if (play_net_lost == 1) {
+			elog("the station's connection ended after %ld ms played; connecting again", play_ms());
+			play_net_lost = 2;
+			tries = 0;
+			last_try = ms_now() - 2000;
+		}
+		if (ms_now() - last_try >= 2000) {
+			char err[160];
+			int ok;
+			last_try = ms_now();
+			conn_stop = 0;
+			busy_bee(1);		/* (Esc or Undo gives it up: the music
+						   plays on from memory meanwhile) */
+			ok = ns_reopen(err, sizeof(err));
+			busy_bee(0);
+			if (ok) {
+				elog("connected again (try %d)", tries + 1);
+				play_net_lost = 0;
+			} else if (conn_stop || ++tries >= 5) {
+				elog(conn_stop ? "connecting again stopped" : "not connected again after 5 tries: %s", err);
+				conn_stop = 0;
+				src_done = 1;	/* (what the queue holds plays, then the end) */
+				snprintf(play_out, sizeof(play_out), "The station's connection ended.");
+			}
+		}
+	}
+	/* (not a station: its frames late are the network's, not the DSP's,
+	   and it can't be opened again where it was) */
+	if (dsp && !kind && !net && s_started && !s_ext && !q_normal && rate > 32780 && s_sblim == 32) {
 		/* High, and the DSP behind: Normal from here (a moment's break) */
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);

@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "plat.h"
+#include "conn.h"
+#include "busy.h"
+#include "stream.h"
 #include "ui.h"
 #include "mbar.h"
 #include "alert.h"
@@ -311,7 +315,19 @@ static void play_now(const char *f)
 	char err[160];
 	int opened;
 	PART_T0();
-	opened = play_open(f, err, sizeof(err));
+	if (surl_is(f)) {
+		/* a station: the bee while it connects, Esc or Undo stops it
+		   (the guidelines, 7.1) */
+		conn_stop = 0;
+		status("Connecting to the station...");
+		busy_bee(1);
+		opened = play_open(f, err, sizeof(err));
+		busy_bee(0);
+		if (!opened && conn_stop)
+			snprintf(err, sizeof(err), "Connecting to the station was stopped.");
+		conn_stop = 0;
+	} else
+		opened = play_open(f, err, sizeof(err));
 	PART("the file opened");
 	if (!opened) {
 		char line[200];
@@ -1710,6 +1726,7 @@ int app_main(void)
 	bar_colours();
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
+	pf_idle = busy_idle;		/* (Esc or Undo while a station connects: busy.h) */
 	crash_cleanup = crash_quit;
 	av_init("EPLAY|EPLAYST");	/* (the name the AES knows: EPLAYST.PRG on an STE) */
 	/* the VDI's ST RAM block taken now, not at the first draw that wants
