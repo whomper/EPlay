@@ -248,40 +248,65 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 	}
 #if defined(__m68k__)
 	/* the common case in assembly: signed samples (not 8-bit WAV), at or
-	   below the DMA's rate (no whole frame stepped over): two byte moves
-	   a frame, the ring's end, the fraction's carry the next frame. Some
-	   78 cycles a frame on a 68000, where the C's took 150 (an STE at
-	   24.5 kHz: 78 % of it in the tick, 7 Nov 2026) */
-	if (!x && !whole && room > 0 && k < nin) {
-		const unsigned char *a4 = sp + ol;
-		long n = room < 32767 ? room : 32767;
-		long left = nin - k;	/* the file's frames there are: one at least */
+	   below the DMA's rate (no whole frame stepped over). What fits is
+	   worked out first (to the ring's end, and while the file's frames
+	   last), so the loop holds no test but the fraction's carry: for
+	   16-bit stereo one movep.w (the two top bytes, two apart) and one
+	   move.w a frame, else two byte moves. Hatari's STE profile (7 Nov
+	   2026, a CD's 44.1 kHz at 50,066 Hz): the loop with its tests took
+	   101 cycles a frame, 63 % of the 68000 */
+	while (!x && !whole && made < room && k < nin) {
+		const unsigned char *a2 = sp + ol;
+		long left = nin - k, n, run;
 		unsigned short d = (unsigned short)(orr - ol);
-		long adv = 0, cnt = n - 1;
-		__asm__ volatile("1:\tmove.b\t(%0),(%1)+\n"
-				 "\tmove.b\t0(%0,%7.w),(%1)+\n"
-				 "\tcmpa.l\t%5,%1\n"
-				 "\tbcs.s\t2f\n"
-				 "\tmovea.l\t%6,%1\n"
-				 "2:\tadd.w\t%8,%2\n"
-				 "\tbcc.s\t3f\n"
-				 "\tadda.w\t%9,%0\n"
-				 "\taddq.l\t#1,%3\n"
-				 "\tcmp.l\t%10,%3\n"	/* (the file's frames used up: stop) */
-				 "\tbcc.s\t4f\n"
-				 "3:\tdbra\t%4,1b\n"
-				 "\tbra.s\t5f\n"
-				 "4:\tsubq.w\t#1,%4\n"		/* (this frame was made) */
-				 "5:"
-				 : "+a"(a4), "+a"(r), "+d"(f), "+d"(adv), "+d"(cnt)
-				 : "a"(rend), "a"(ring8), "d"(d), "d"(st), "d"((short)bpf), "d"(left)
-				 : "cc", "memory");
-		/* (cnt: -1 when all n were made, else those not made less one) */
-		made = n - 1 - (short)cnt;
-		if ((short)cnt == -1)
-			made = n;
-		k += adv;
-		sp = a4 - ol;
+		unsigned long lim;
+		short cnt;
+		if (left > 16384)
+			left = 16384;	/* (left << 16 within 32 bits) */
+		/* outputs j = 0.. at f + j st while under left << 16 */
+		lim = ((unsigned long)left << 16) - f - 1;
+		n = (long)(lim / st) + 1;
+		if (n > room - made)
+			n = room - made;
+		run = (long)(rend - r) / 2;
+		if (n > run)
+			n = run;
+		if (n > 32767)
+			n = 32767;
+		if (n <= 0)
+			break;
+		cnt = (short)(n - 1);
+		if (d == 2)
+			__asm__ volatile("1:\tmovep.w\t0(%0),%%d0\n"
+					 "\tmove.w\t%%d0,(%1)+\n"
+					 "\tadd.w\t%4,%2\n"
+					 "\tbcc.s\t2f\n"
+					 "\tadda.w\t%5,%0\n"
+					 "2:\tdbra\t%3,1b"
+					 : "+a"(a2), "+a"(r), "+d"(f), "+d"(cnt)
+					 : "d"(st), "d"((short)bpf)
+					 : "d0", "cc", "memory");
+		else
+			__asm__ volatile("1:\tmove.b\t(%0),(%1)+\n"
+					 "\tmove.b\t0(%0,%6.w),(%1)+\n"
+					 "\tadd.w\t%4,%2\n"
+					 "\tbcc.s\t2f\n"
+					 "\tadda.w\t%5,%0\n"
+					 "2:\tdbra\t%3,1b"
+					 : "+a"(a2), "+a"(r), "+d"(f), "+d"(cnt)
+					 : "d"(st), "d"((short)bpf), "d"(d)
+					 : "cc", "memory");
+		if (r >= rend)
+			r = ring8;
+		made += n;
+		{
+			/* the file's frames passed: by a shift where a frame is 2 or
+			   4 bytes, else one division a run */
+			unsigned long pb = (unsigned long)(a2 - ol - sp);
+			long used = bpf == 4 ? (long)(pb >> 2) : bpf == 2 ? (long)(pb >> 1) : (long)(pb / (unsigned)bpf);
+			k += used;
+			sp += pb;
+		}
 	}
 #endif
 	while (made < room && k < nin) {

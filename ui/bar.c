@@ -283,16 +283,10 @@ static void line(short x1, short y1, short x2, short y2, short pen)
 }
 
 /* text in a pen, transparent, cut to cols characters */
-static void text_e(short x, short y, const char *s, short cols, short pen, short fx);
-
-static void text(short x, short y, const char *s, short cols, short pen)
-{
-	text_e(x, y, s, cols, pen, 0);
-}
-
 /* fx: the VDI's effects (2: light, GEM's look for what can't be chosen,
    in any number of colours) */
-static void text_e(short x, short y, const char *s, short cols, short pen, short fx)
+static inline __attribute__((always_inline)) void text_e(short x, short y, const char *s, short cols, short pen,
+							  short fx)
 {
 	long n = (long)strlen(s);
 	if (n > cols)
@@ -310,6 +304,11 @@ static void text_e(short x, short y, const char *s, short cols, short pen, short
 		cur_fx = fx;
 	}
 	text_n(vdi_h, x, y, s, n);
+}
+
+static void text(short x, short y, const char *s, short cols, short pen)
+{
+	text_e(x, y, s, cols, pen, 0);
 }
 
 /* ---- the masks ---- */

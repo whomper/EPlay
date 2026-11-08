@@ -182,6 +182,12 @@ static void open_window(void)
 	wind_open(wh, x, y, w, h);
 	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 	bar_layout(&work);
+	{
+		/* (the rigs' clicks go by it: an STE's screen puts it elsewhere) */
+		char l[60];
+		snprintf(l, sizeof(l), "EPLAY window %d %d %d %d\n", work.x, work.y, work.w, work.h);
+		nf_debug(l);
+	}
 	av_window(wh, 1);		/* (an AV desktop drops files on it: VA_DRAGACCWIND) */
 }
 
