@@ -37,8 +37,9 @@ window. Phase 2 (0.4 to 0.17) plays MP3 on the Falcon's DSP or through the FDI a
 does (the FDI set to the file's rate), chosen in the settings, with resampling on the DSP. (MP3 on
 the 68030 was dropped: no 68030 keeps up with it.) Phase 3 (0.18 to 0.24) is the player window;
 phase 4 (0.25) playlists and folders; phase 5 (0.26 to 0.32) the keys, the guide, MiNT, MP3 on a
-stock Falcon's DSP and the FDI's rate; now phase 6, the TT (its 8-bit DMA sound: WAV and AIFF) and
-then the STE.*
+stock Falcon's DSP and the FDI's rate; phase 6 (0.33 to 1.0) the TT and the STE (their 8-bit DMA
+sound: WAV and AIFF). Next: phase 7, web radio and streams; phase 8, gapless playback,
+ReplayGain, search, lyrics, more formats and the family's links.*
 
 ## Getting started
 
