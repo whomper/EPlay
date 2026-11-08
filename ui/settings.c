@@ -18,6 +18,7 @@
 #include "tos.h"
 #include "gem.h"
 #include "dialog.h"
+#include "field.h"
 #include "inf.h"
 #include "snd.h"
 #include "elog.h"
@@ -34,8 +35,17 @@ static const char *const rnames[3] = { "OFF", "ALL", "ONE" };
 #define NOUT 3
 static const char *const names[NOUT] = { "AUTO", "FDI", "DSP" };
 static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
+/* phase 7: how a station is reached (the Options menu: Direct connection
+   or Through the Gateway; Erez, 8 Nov 2026), the Gateway's address and
+   port (Settings), and the last stations opened (Open URL). The INF's keys
+   are the family's: FALCON= (1: Direct connection), GATE=, GATEPORT= */
+static int gateway, gateway_saved;
+static char gate[64];
+static long gateport;
+static char urls[URL_RECENT][URL_MAX];
+static int urls_dirty, gate_dirty;
 
-#define INF_MAX 4096
+#define INF_MAX 8192		/* (ten stations' addresses: up to 2.5 KB) */
 static char inf[INF_MAX], *inf2, *inf3;	/* (the two a save writes into: taken for it) */
 static long inf_n;
 
@@ -99,6 +109,16 @@ void settings_load(void)
 		for (i = 0; i < 3; i++)
 			if (!strcmp(v, rnames[i]))
 				repeat = repeat_saved = i;
+	if (inf_get(inf, inf_n, "FALCON", v, sizeof(v)))
+		gateway = gateway_saved = v[0] == '0';
+	inf_get(inf, inf_n, "GATE", gate, sizeof(gate));
+	if (inf_get(inf, inf_n, "GATEPORT", v, sizeof(v)) && atol(v) > 0 && atol(v) < 65536)
+		gateport = atol(v);
+	for (i = 0; i < URL_RECENT; i++) {
+		char k[12];
+		snprintf(k, sizeof(k), "URL%d", i + 1);
+		inf_get(inf, inf_n, k, urls[i], URL_MAX);
+	}
 }
 
 int settings_qlate(void)
@@ -174,6 +194,36 @@ static void save_in(void)
 		if (n < 0)
 			return;
 	}
+	{
+		/* the stations' keys, a key at a time between the two buffers,
+		   ending in inf3 */
+		static const char cnote[] = "; Stations: 1 for a Direct connection, 0 Through the Gateway (Options menu)\r\n";
+		static const char gnote[] = "; Through the Gateway: its address and port (Settings)\r\n";
+		static const char unote[] = "; Open URL: the last stations opened\r\n";
+		char *a = inf3, *b = inf2, *t, ps[8];
+		int i;
+		snprintf(ps, sizeof(ps), "%ld", gateport);
+		for (i = -3; i < URL_RECENT && n >= 0; i++) {
+			char k[12];
+			if (i == -3)
+				n = inf_set(a, n, "FALCON", gateway ? "0" : "1", cnote, b, INF_MAX);
+			else if (i == -2)
+				n = inf_set(a, n, "GATE", gate, gnote, b, INF_MAX);
+			else if (i == -1)
+				n = inf_set(a, n, "GATEPORT", gateport ? ps : "", 0, b, INF_MAX);
+			else {
+				snprintf(k, sizeof(k), "URL%d", i + 1);
+				n = inf_set(a, n, k, urls[i], i ? 0 : unote, b, INF_MAX);
+			}
+			t = a;
+			a = b;
+			b = t;
+		}
+		if (n < 0)
+			return;
+		if (a != inf3)
+			memcpy(inf3, a, (size_t)n);
+	}
 	inf_path(path, sizeof(path), "eplay.inf");
 	inf_path(tmp, sizeof(tmp), "eplay.in$");
 	h = Fcreate(tmp, 0);
@@ -195,6 +245,8 @@ static void save_in(void)
 	mini_saved = mini;
 	shuffle_saved = shuffle;
 	repeat_saved = repeat;
+	gateway_saved = gateway;
+	urls_dirty = gate_dirty = 0;
 }
 
 int settings_output(void)
@@ -211,7 +263,7 @@ const char *settings_output_name(int out)
    radio buttons in a box of its own, so that the AES keeps one chosen in
    each ---- */
 
-#define NOBJ 16
+#define NOBJ 24
 static OBJECT tree[NOBJ];
 static short nobj;
 
@@ -242,7 +294,11 @@ static short add(short parent, short type, short flags, short state, long spec, 
 void settings_dialog(void)
 {
 	static const char sentence[] = "Output: how EPlay plays the music.";
-	short radio[NOUT], ok, cancel, r, g;
+	static const char gline[] = "Through the Gateway:", aword[] = "address", pword[] = "port";
+	static TEDINFO t_addr, t_port;
+	static char a_text[sizeof(gate)], a_tmpl[25], a_valid[25], p_text[6], p_tmpl[6], p_valid[6];
+	static LFIELD lf;
+	short radio[NOUT], ok, cancel, r, g, fa, fp;
 	int i, eff = settings_output(), chose = eff;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
@@ -252,21 +308,72 @@ void settings_dialog(void)
 	tree[0].ob_state = OUTLINED;
 	tree[0].ob_spec = 0x00021100L;
 	tree[0].ob_width = 62;
-	tree[0].ob_height = 8;
+	tree[0].ob_height = 11;
 	add(0, G_STRING, 0, 0, (long)sentence, 2, 1, (short)strlen(sentence), 1);
 	g = add(0, G_IBOX, 0, 0, 0L, 2, 3, 28, 1);
 	for (i = 0; i < NOUT; i++)
 		radio[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)((i == eff ? SELECTED : 0) |
 									(has(i) ? 0 : DISABLED)),
 			       (long)labels[i], (short)(10 * i), 0, 8, 1);
-	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 6, 9, 1);
-	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 6, 9, 1);
+	/* stations through the Gateway (phase 7): its address and port, as the
+	   family's Settings have them (7.3); the address a long field (5.4) */
+	add(0, G_STRING, 0, 0, (long)gline, 2, 5, (short)strlen(gline), 1);
+	add(0, G_STRING, 0, 0, (long)aword, 2, 6, (short)strlen(aword), 1);
+	memset(a_tmpl, '_', 24);
+	a_tmpl[24] = 0;
+	memset(a_valid, 'X', 24);
+	a_valid[24] = 0;
+	snprintf(a_text, sizeof(a_text), "%s", gate);
+	memset(&t_addr, 0, sizeof(t_addr));
+	t_addr.te_ptext = a_text;
+	t_addr.te_ptmplt = a_tmpl;
+	t_addr.te_pvalid = a_valid;
+	t_addr.te_font = 3;
+	t_addr.te_color = 0x1180;
+	t_addr.te_thickness = -1;
+	t_addr.te_txtlen = 25;
+	t_addr.te_tmplen = 25;
+	fa = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_addr, 10, 6, 24, 1);
+	add(0, G_STRING, 0, 0, (long)pword, 36, 6, (short)strlen(pword), 1);
+	strcpy(p_tmpl, "_____");
+	strcpy(p_valid, "99999");
+	if (gateport)
+		snprintf(p_text, sizeof(p_text), "%ld", gateport);
+	else
+		p_text[0] = 0;
+	memset(&t_port, 0, sizeof(t_port));
+	t_port.te_ptext = p_text;
+	t_port.te_ptmplt = p_tmpl;
+	t_port.te_pvalid = p_valid;
+	t_port.te_font = 3;
+	t_port.te_color = 0x1180;
+	t_port.te_thickness = -1;
+	t_port.te_txtlen = 6;
+	t_port.te_tmplen = 6;
+	fp = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_port, 41, 6, 5, 1);
+	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 9, 9, 1);
+	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 9, 9, 1);
 	tree[nobj - 1].ob_flags |= LASTOB;
 	rsrc_obfix_all(tree, nobj);
+	lf_init(&lf, tree, fa, a_text, (short)(sizeof(a_text) - 1), 0);
 	dlg_name("Settings");
-	r = dlg_modal(tree, 0, cancel);
+	r = dlg_modal(tree, fa, cancel);
+	lf_forget(tree);
 	if (r != ok)
 		return;
+	{
+		long pv = atol(p_text);
+		if (pv < 0 || pv > 65535)
+			pv = 0;
+		if (strcmp(a_text, gate) || pv != gateport) {
+			snprintf(gate, sizeof(gate), "%s", a_text);
+			gateport = pv;
+			gate_dirty = 1;
+			save();
+			elog("Settings: the Gateway at %s, port %ld", gate[0] ? gate : "(none)", gateport);
+		}
+	}
+	(void)fp;
 	for (i = 0; i < NOUT; i++)
 		if (tree[radio[i]].ob_state & SELECTED)
 			chose = i;
@@ -294,7 +401,7 @@ void settings_set_volume(int v)
 void settings_flush(void)
 {
 	if (volume != volume_saved || mini != mini_saved || recent_dirty || shuffle != shuffle_saved ||
-	    repeat != repeat_saved)
+	    repeat != repeat_saved || gateway != gateway_saved || urls_dirty || gate_dirty)
 		save();
 }
 
@@ -341,4 +448,47 @@ int settings_repeat(void)
 void settings_set_repeat(int r)
 {
 	repeat = r >= 0 && r < 3 ? r : 0;
+}
+
+int settings_gateway(void)
+{
+	return gateway;
+}
+
+void settings_set_gateway(int on)
+{
+	gateway = on != 0;
+}
+
+const char *settings_gate(void)
+{
+	return gate;
+}
+
+long settings_gateport(void)
+{
+	return gateport;
+}
+
+char (*settings_urls(void))[URL_MAX]
+{
+	return urls;
+}
+
+/* url to the top of the last stations (once: moved up if it was there) */
+void settings_url_used(const char *url)
+{
+	int i, at = URL_RECENT - 1;
+	if (strlen(url) >= URL_MAX)
+		return;
+	for (i = 0; i < URL_RECENT; i++)
+		if (!strcmp(urls[i], url)) {
+			at = i;
+			break;
+		}
+	if (at == 0 && !strcmp(urls[0], url))
+		return;
+	memmove(urls[1], urls[0], (size_t)at * URL_MAX);
+	snprintf(urls[0], URL_MAX, "%s", url);
+	urls_dirty = 1;
 }

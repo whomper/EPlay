@@ -18,6 +18,10 @@ Cases:
   pls       a .PLS station list behind a redirect (302): its first station
             plays
   aac       a station sending AAC: refused, in words that name the Gateway
+  url       File > Open URL... (Shift+Control+O) with nothing given: the
+            address typed and Return: it plays, the row and the bar show
+            the station, EPLAY.INF keeps it as the first of the last
+            stations, the Options menu ticks Direct connection
 """
 import math
 import os
@@ -37,7 +41,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "aac"]
+CASES = ["live", "drop", "pls", "aac", "url"]
 METAINT = 8192
 KBPS = 128
 
@@ -151,7 +155,8 @@ def analyse(rec, skip_s, secs):
     loud = [i for i, r in enumerate(rms) if r > 1000]
     if not loud:
         return False, "no sound recorded", 0
-    a = loud[0]
+    # (the music's start: 0.2 s of sound running, not a key's click)
+    a = next((i for i in loud if all(r > 1000 for r in rms[i:i + 10])), loud[0])
     b = min(len(rms) - 1, a + int(secs * 50))
     gaps = [i for i in range(a, b) if rms[i] < 1000]
     mid = (a + b) // 2 * blk
@@ -185,7 +190,7 @@ def run(work, case, spec):
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
-        fh.write(url + "\r\n")
+        fh.write(("" if case == "url" else url) + "\r\n")
     m = machines.Machine(spec, hd)
     net = m.network(40000)
     margs = m.args()                    # (makes Hatari's home and its config folder)
@@ -198,13 +203,47 @@ def run(work, case, spec):
     args = ["hatari"] + margs + net + ["--sound", str(REC_RATE), "--fast-boot", "yes", "--natfeats", "yes",
                                           "--cmd-fifo", fifo, "--screenshot-dir", shots, "--log-level", "warn",
                                           "--statusbar", "no", "--auto", "C:\\LAUNCH.PRG"]
-    p = subprocess.Popen(args, env=m.env(), stdout=open(log, "w"), stderr=subprocess.STDOUT)
+    env = m.env()
+    x = None
+    if case == "url":
+        # (a screen to type into: xdotool, as common's speed rig)
+        disp = ":%d" % (60 + os.getpid() % 30)
+        x = machines.xvfb(disp)
+        env = m.env(dict(os.environ, DISPLAY=disp, SDL_VIDEODRIVER="x11"))
+    p = subprocess.Popen(args, env=env, stdout=open(log, "w"), stderr=subprocess.STDOUT)
     try:
         if not wait_line(log, lambda l: l.startswith("LAUNCH shel_write"), 120):
             return False, m.describe(), "the launcher never ran"
         if case == "aac":
             got = wait_line(log, said, 90)
             return bool(got) and "AAC" in got and "Gateway" in got, m.describe(), got or "nothing said"
+        if case == "url":
+            def xdo(*a):
+                return subprocess.run(["xdotool", *a], env=env, capture_output=True, text=True).stdout
+            wait_line(log, lambda l: l.startswith("EPLAY window"), 60)
+            time.sleep(4)
+            win = ""
+            for _ in range(50):
+                win = (xdo("search", "--name", "Hatari") or xdo("search", "--class", "hatari")).split()
+                if win:
+                    break
+                time.sleep(0.2)
+            xdo("windowfocus", win[0])
+            xdo("keydown", "shift")
+            xdo("keydown", "ctrl")
+            time.sleep(0.3)
+            xdo("key", "--delay", "120", "o")
+            time.sleep(0.3)
+            xdo("keyup", "ctrl")
+            xdo("keyup", "shift")
+            time.sleep(2)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            time.sleep(1)
+            xdo("type", "--delay", "150", url)
+            time.sleep(1)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            time.sleep(1)
+            xdo("key", "Return")
         cmd(fifo, "hatari-shortcut", "recsound")
         played = wait_line(log, said, 90)
         if not played or not played.startswith("EPLAY playing"):
@@ -223,6 +262,14 @@ def run(work, case, spec):
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
+        elif case == "url":
+            xdo("key", "--delay", "120", "ctrl+q")     # (EPLAY.INF is written as EPlay quits)
+            time.sleep(4)
+            inf = open(os.path.join(hd, "eplay.inf"), errors="replace").read() if os.path.exists(
+                os.path.join(hd, "eplay.inf")) else ""
+            kept = ("URL1=" + url) in inf
+            note += "; EPLAY.INF %s it" % ("keeps" if kept else "doesn't keep")
+            ok = ok and gaps == 0 and kept
         return ok, m.describe(), note
     finally:
         cmd(fifo, "hatari-shortcut", "quit")
@@ -232,6 +279,8 @@ def run(work, case, spec):
             p.kill()
         m.stop()
         st.stop()
+        if x:
+            x.terminate()
 
 
 def main():

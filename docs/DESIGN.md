@@ -1611,6 +1611,26 @@ where it was. The station's titles go to the log
 - **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
   as Erez decides them.
 
+**7d, the window, as built (8 Nov 2026):** File > Open URL... on **⇧^O**, not ^U: ^U is the
+family's Close (3.2: a key never gets another meaning; related commands take ⇧^), put to Erez with
+the release. `ui/urldlg.c`: the address in common's long field (255 characters, 50 shown: 5.4),
+"http://" put in front of an address without it; the last stations as lines under it, a click opening one
+at once; the dialog as tall as the stations it has. Each station opened goes to the top of the ten
+(`URL1=` to `URL10=` in EPLAY.INF, which grew to 8 KB for them); its row shows the station's name
+once it answered. The Options menu ticks Direct connection or Through the Gateway (`FALCON=`, 1
+for Direct, as the family's INF); Settings has "Through the Gateway: address, port" (`GATE=`,
+`GATEPORT=`), the address a long field. Through the Gateway, EPlay asks `GET
+/stream?url=<the station's URL, %-encoded>` of the Gateway's address and port and plays what comes
+as a station's (7c: the service); with no address or port given: "Give the Gateway's address and
+port in Settings."; a Gateway that doesn't connect: "The Gateway doesn't answer: is it on?" (7.3's
+words). The bar for a station: its song on top (its name until the first title), its name under
+it; the time listened and "Live"; the position bar's track bare, and a press on it does nothing.
+Pause ends the connection (play_pause as for a file), Play connects again with the bee and Esc.
+Settings now has a field, so Esc empties it and Undo cancels (3.2): play_test's settings case and
+the speed rig's "Settings closed" row press Undo. stream_test's `url` case: ⇧^O with nothing given,
+the address typed (xdotool, as common's speed rig), Return: it plays (no gap), the row and bar show
+the station, EPLAY.INF keeps it as URL1.
+
 **Erez's decisions (8 Nov 2026):**
 - **Opening:** File > Open URL... (Control+U): one field for the address, and the last ten
   stations to choose from, as Add files' Folders has them; the station goes into the list and

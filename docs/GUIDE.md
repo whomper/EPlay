@@ -69,15 +69,16 @@ it plays: **FDI**, **DSP** or **DMA**.
 in the background, a file at a time). A click selects a row; a double click, or Return, plays it.
 A right click, or Insert, opens the row's menu. Make the window taller for more rows.
 
-- **File:** Open... (^O) opens **Add files**; Save playlist... (^S) writes the list as an `.M3U`;
-  Quit (^Q).
+- **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
+  Save playlist... (^S) writes the list as an `.M3U`; Quit (^Q).
 - **Edit:** Remove from the list (Delete); Clear the list keeps only the file that plays.
 - **View:** Mini player: the window becomes the bar alone, and back. `EPLAY.INF` keeps it.
 - **Play:** Play/Pause (Space), Stop (Clr Home), Previous (Shift+Left), Next (Shift+Right);
   **Shuffle** plays the list in a random order, each file once a round, the list itself left as
   it is; **Repeat** goes round Off, All (the list again from its start) and One (the file again).
   `EPLAY.INF` keeps both.
-- **Options:** Settings... (^,).
+- **Options:** Direct connection or Through the Gateway, how a station is reached (see **Web
+  radio**); Settings... (^,).
 - **Help:** this guide.
 
 **Add files** is EPlay's own file dialog. Choose the drive and the folder (or one of the last ten
@@ -96,6 +97,32 @@ whole (`C:\MUSIC\A.MP3`) or relative to the playlist's folder (`LIVE\A.MP3`, `..
 saves each file's length and tags with it, and its path relative to the playlist's folder where it
 is in it, so the playlist and its music can move together.
 
+## Web radio
+
+**File > Open URL...** (Shift+^O) plays a station on the Falcon: type its address
+(`http://radio.example.com:8000/live`, or a `.pls` or `.m3u` station list's), or choose one of the
+last ten stations under it. The station goes into the list, its name on its row, and plays. EPlay
+gathers about three seconds of it first, so the network's pauses aren't heard, and connects again
+by itself if the line drops, while what it gathered plays on. Esc or Undo stops a connection that
+takes too long.
+
+The bar shows the song playing (the station sends its titles) and the station's name under it;
+**Live** and the time listened stand where a file's length would. **Pause** ends the connection,
+and **Play** connects again and plays the station live from then. Station addresses in an `.M3U`
+playlist play as its files do.
+
+The **Options** menu chooses how a station is reached:
+
+- **Direct connection** (the default): EPlay connects to the station itself. It plays MP3
+  stations over plain HTTP, which most are.
+- **Through the Gateway:** the AERA Gateway fetches the station and passes it on as MP3, so
+  stations that send AAC or Ogg, HLS, or only HTTPS play too. Give the Gateway's address and port
+  in **Settings**. (The Gateway's stream service comes with a later release.)
+
+Web radio needs a network: STinG or MiNTnet with a network card. With STinG, set the **Delay** in
+`STING.CPX` to 10 on a Falcon or TT; it polls the card that often. Web radio needs the Falcon's
+DSP: on a TT or an STE a station's row shows dim and is passed over.
+
 ## Keyboard
 
 | Key | What it does |
@@ -110,12 +137,14 @@ is in it, so the playlist and its music can move together.
 | Delete | Take the selected row out of the list |
 | Insert | The selected row's menu |
 | ^O | Open: Add files |
+| Shift+^O | Open URL: a web radio station |
 | ^S | Save playlist |
 | ^, | Settings |
 | ^Q, ^U | Quit |
 | Help | This guide |
 
-In a dialog, Esc and Undo cancel, Return chooses the default button. The same keys work in the
+In a dialog, Esc and Undo cancel (in a text field, Esc empties it and Undo cancels), Return
+chooses the default button. The same keys work in the
 mini player.
 
 ## Settings
@@ -129,8 +158,12 @@ mini player.
   keep up with there goes on by itself at 32,780 Hz, up to about 15 kHz; the info line shows the
   rate.
 
+**Through the Gateway: address, port** are the AERA Gateway's, for stations reached through it
+(the Options menu).
+
 A change takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
-the mini player, Shuffle, Repeat and the Add files dialog's folders.
+the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and
+the last ten stations.
 
 EPlay holds the DSP only while it plays through it, and gives it back on Pause and Stop. When
 another program has it, an MP3 says so ("The DSP is in use by another program.") and a WAV plays
@@ -146,6 +179,14 @@ at the nearest rate instead.
   and the accessories. EPlay always leaves 40 KB of ST RAM for the AES. A Falcon with TT RAM has
   room for thousands of files.
 - **The FDI is greyed in Settings.** Its driver didn't answer: load the FDI's program at boot.
+- **"The station doesn't answer."** Check the address, and that the network is up (STinG or
+  MiNTnet). Through the Gateway: **"The Gateway doesn't answer: is it on?"**
+- **"The station sends AAC: play it through the Gateway."** (or Ogg, or HLS) EPlay plays MP3
+  stations directly; choose **Options > Through the Gateway** for these.
+- **"There's no network: EPlay needs STinG or MiNTnet."** Web radio needs a TCP/IP stack and a
+  network card.
+- **A station stops now and then.** The network fell behind for longer than the three seconds
+  EPlay gathered. With STinG, check the Delay in `STING.CPX` (10 on a Falcon).
 - **`EPLAY.LOG`**, beside the program, says what EPlay found and did: the external clock and how it
   set the FDI, each file's format and length, how playing ended, and how the DSP and the 68030 kept
   up. Please send it, and any `CRASH.LOG`, with a report.

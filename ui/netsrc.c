@@ -14,6 +14,8 @@
 #include "conn.h"
 #include "stream.h"
 #include "netsrc.h"
+#include "settings.h"
+#include "elog.h"
 
 extern const char app_version[];
 
@@ -124,8 +126,9 @@ static int ask(char *u, char *err, int n)
 	ns_close();
 	c = conn_open("HTTP", s.host, s.port, 0, s.tls ? SEC_TLS : SEC_PLAIN, err, n);
 	if (!c) {
-		if (!err[0])
-			snprintf(err, (size_t)n, "The station doesn't answer.");
+		/* (conn's own words to the log; the user's are the station's) */
+		elog("the station %s:%u: %s", s.host, s.port, err[0] ? err : "no connection");
+		snprintf(err, (size_t)n, "The station doesn't answer.");
 		return 0;
 	}
 	snprintf(req, sizeof(req),
@@ -229,15 +232,61 @@ static int ask(char *u, char *err, int n)
 	return 1;
 }
 
+/* through the Gateway (the Options menu): the station asked of it, which
+   fetches it (https, AAC and HLS too) and sends plain MP3 the same way
+   (phase 7c: its service). The station's URL as a query, its bytes
+   outside A-Z a-z 0-9 - . _ ~ as %XX */
+static int via_gateway(const char *url, char *out, int omax, char *err, int n)
+{
+	static const char hex[] = "0123456789ABCDEF";
+	const char *g = settings_gate();
+	long port = settings_gateport();
+	int k;
+	if (!g[0] || port <= 0) {
+		snprintf(err, (size_t)n, "Give the Gateway's address and port in Settings.");
+		return 0;
+	}
+	k = snprintf(out, (size_t)omax, "http://%s:%ld/stream?url=", g, port);
+	for (; *url && k < omax - 4; url++) {
+		unsigned char c = (unsigned char)*url;
+		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' ||
+		    c == '.' || c == '_' || c == '~')
+			out[k++] = (char)c;
+		else {
+			out[k++] = '%';
+			out[k++] = hex[c >> 4];
+			out[k++] = hex[c & 15];
+		}
+	}
+	if (*url) {
+		snprintf(err, (size_t)n, "That isn't a station's address EPlay can open.");
+		return 0;
+	}
+	out[k] = 0;
+	return 1;
+}
+
 static int open_url(const char *url, char *err, int n)
 {
-	int hops;
+	int hops, gw = settings_gateway();
 	err[0] = 0;
 	if (net_ok < 0)
 		net_ok = net_init();
 	if (!net_ok) {
 		snprintf(err, (size_t)n, "There's no network: EPlay needs STinG or MiNTnet.");
 		return 0;
+	}
+	if (gw) {
+		if (!via_gateway(url, url_now, sizeof(url_now), err, n))
+			return 0;
+		{
+			int r = ask(url_now, err, n);
+			if (!r && !conn_stop && !strcmp(err, "The station doesn't answer."))
+				snprintf(err, (size_t)n, "The Gateway doesn't answer: is it on?");
+			if (r == 1 && !hd.name[0])
+				snprintf(name, sizeof(name), "%s", url);	/* (not the Gateway's own address) */
+			return r == 1;
+		}
 	}
 	snprintf(url_now, sizeof(url_now), "%s", url);
 	for (hops = 0; hops < 6; hops++) {
@@ -299,6 +348,11 @@ const char *ns_title(int *changed)
 	if (changed)
 		*changed = icy.new_title;
 	icy.new_title = 0;
+	return icy.title;
+}
+
+const char *ns_title_peek(void)
+{
 	return icy.title;
 }
 

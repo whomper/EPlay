@@ -1350,9 +1350,16 @@ int play_is_open(void)
 	return fh >= 0 || net;
 }
 
+/* a station is what plays or is paused (its address, not a file) */
 int play_is_net(void)
 {
-	return net;
+	return net || (cur_path[0] && surl_is(cur_path));
+}
+
+/* the bar's for a station: the song now ("" before its first title) */
+const char *play_net_title(void)
+{
+	return net ? ns_title_peek() : "";
 }
 
 long play_read_at(long at, void *buf, long n)

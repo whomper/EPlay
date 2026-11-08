@@ -133,6 +133,14 @@ int list_add(const char *path)
 	return n++;
 }
 
+/* a row's title (a station's name, once it answered: phase 7) */
+void list_set_title(int i, const char *t)
+{
+	ENTRY *e = list_at(i);
+	if (e && t[0])
+		e->title = keep(t);
+}
+
 void list_remove(int i)
 {
 	int k;

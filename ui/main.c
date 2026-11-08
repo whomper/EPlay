@@ -13,6 +13,7 @@
 #include "conn.h"
 #include "busy.h"
 #include "stream.h"
+#include "urldlg.h"
 #include "ui.h"
 #include "mbar.h"
 #include "alert.h"
@@ -42,7 +43,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -50,6 +51,7 @@ static const MBAR_ITEM m_desk[] = {
 };
 static const MBAR_ITEM m_file[] = {
 	{ "Open...", "^O", C_OPEN },
+	{ "Open URL...", "\x01^O", C_URL },	/* (a station: phase 7; ^U is the family's Close) */
 	{ "Save playlist...", "^S", C_SAVE },
 	{ "-", 0, 0 },
 	{ "Quit", "^Q", C_QUIT },
@@ -75,6 +77,9 @@ static const MBAR_ITEM m_play[] = {
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_options[] = {
+	{ "Direct connection", 0, C_DIRECT },	/* (how a station is reached: Erez, 8 Nov 2026) */
+	{ "Through the Gateway", 0, C_GATEWAY },
+	{ "-", 0, 0 },
 	{ "Settings...", "^,", C_SETTINGS },
 	{ 0, 0, 0 }
 };
@@ -101,6 +106,13 @@ static MBAR mb;
 
 /* the Play menu as Shuffle and Repeat are: Shuffle ticked, Repeat's text
    ("Repeat: off", "all", "one": the item's own, the same length) */
+/* the Options menu as the connection is: one of the two ticked */
+static void conn_menu_shown(void)
+{
+	menu_icheck(mb.tree, mbar_object(&mb, C_DIRECT), !settings_gateway());
+	menu_icheck(mb.tree, mbar_object(&mb, C_GATEWAY), settings_gateway());
+}
+
 static void play_menu_shown(void)
 {
 	short o = mbar_object(&mb, C_REPEAT);
@@ -329,6 +341,14 @@ static void play_now(const char *f)
 	} else
 		opened = play_open(f, err, sizeof(err));
 	PART("the file opened");
+	if (opened && surl_is(f)) {
+		int i = list_find(f);
+		settings_url_used(f);	/* (Open URL's last stations) */
+		if (i >= 0) {
+			list_set_title(i, play_name);	/* (the row: the station's name) */
+			redraw(0, BP_LIST);
+		}
+	}
 	if (!opened) {
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
@@ -1203,6 +1223,24 @@ static void command(int c)
 	case C_QUIT:
 		quit = 1;
 		break;
+	case C_URL: {
+		/* File > Open URL...: a station into the list, played */
+		static char u[URL_MAX];
+		if (url_dialog(u, sizeof(u))) {
+			int i = list_add(u);
+			sliders();
+			redraw(0, BP_LIST);
+			if (i >= 0)
+				play_index(i);
+		}
+		break;
+	}
+	case C_DIRECT:
+	case C_GATEWAY:
+		settings_set_gateway(c == C_GATEWAY);
+		conn_menu_shown();
+		elog("stations: %s", c == C_GATEWAY ? "through the Gateway" : "a Direct connection");
+		break;
 	case C_SETTINGS:
 		settings_dialog();
 		break;
@@ -1257,7 +1295,20 @@ static void command(int c)
 			redraw(0, BP_PLAY | BP_TIME);
 		} else if (play_paused()) {
 			char err[160], st[100];
-			if (!play_resume(err, sizeof(err))) {
+			int ok;
+			if (play_is_net()) {
+				/* a station: connected again, live (Erez, 8 Nov 2026) */
+				conn_stop = 0;
+				status("Connecting to the station...");
+				busy_bee(1);
+				ok = play_resume(err, sizeof(err));
+				busy_bee(0);
+				if (!ok && conn_stop)
+					snprintf(err, sizeof(err), "Connecting to the station was stopped.");
+				conn_stop = 0;
+			} else
+				ok = play_resume(err, sizeof(err));
+			if (!ok) {
 				alert(1, "[1][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
@@ -1385,6 +1436,8 @@ static void drag_pos(short mx, short my)
 	AEVENT ev;
 	long len = play_len_ms();
 	int at;
+	if (play_is_net())
+		return;			/* (a station: nowhere to go) */
 	bar_drag = bar_pos_at(mx);
 	press_draw = 1;
 	redraw(0, BP_TIME);
@@ -1635,7 +1688,9 @@ static void turn(int nested)
 	if (which & MU_KEYBD) {
 		short a = ev.kreturn & 0xff;
 		if (key_ctrl(ev.kstate, ev.kreturn)) {
-			if (a == 15 || (a | 0x20) == 'o')
+			if ((a == 15 || (a | 0x20) == 'o') && (ev.kstate & 3))
+				command(C_URL);		/* (Shift+Control+O: Open URL) */
+			else if (a == 15 || (a | 0x20) == 'o')
 				command(C_OPEN);
 			else if (a == 19 || (a | 0x20) == 's')
 				command(C_SAVE);
@@ -1758,6 +1813,7 @@ int app_main(void)
 		return 1;
 	}
 	play_menu_shown();
+	conn_menu_shown();
 	bar_mini = settings_mini();
 	menu_icheck(mb.tree, mbar_object(&mb, C_MINI), bar_mini);
 	menu_bar(mb.tree, 1);
