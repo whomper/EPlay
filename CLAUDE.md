@@ -64,10 +64,11 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
 
   How it is made is the team's, without asking: code, structure, shared code, tests, measurements,
   fixes, docs and releases inside an approved phase.
-- **Testing with another AERA program uses its latest release**, what Erez runs, never a build of its
-  `main`: `common/tools/getrelease.py APP DIR FILE...` fetches it. Only for a change both programs are
-  still making, test against the other's `main` at a named commit, say so, and test again against its
-  release when it is out.
+- **Only the hub tests interdependency and the family** (Erez, 8 Nov 2026). An app's own tests run the
+  app alone: no other AERA program or accessory loaded, started or fetched for it (`getrelease.py`,
+  `machines.py accs()` and `acc_all.py` stop outside AERA-Atari). What it does with another program is
+  tested against a stand-in this repo owns; the real programs together are the hub's family checks.
+  The app does test its own gateway code, from its `gateway/` copy (guidelines 1.2).
 - **Every new source file starts with the SPDX line and copyright** (see any `.c` file); a generator
   writes them into the files it makes.
 - **The name** reads "AERA | Erez Yaary" wherever it is given: copyright lines

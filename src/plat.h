@@ -1,0 +1,94 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (C) 2026 AERA | Erez Yaary */
+/*
+ * plat.h - what common's network code (conn.c, net_tos.c, TLS.OVL) needs
+ * from the machine (phase 7, streaming): files, folders,
+ * the clock, a millisecond timer and TCP. Implemented for TOS/GEM in
+ * atari/plat_tos.c (as ECal's).
+ */
+#ifndef PLAT_H
+#define PLAT_H
+
+#include <stddef.h>
+
+#ifdef __m68k__
+#define PF_SEP '\\'
+#else
+#define PF_SEP '/'
+#endif
+
+/* ---- files ---- */
+#define PF_READ   0
+#define PF_WRITE  1	/* create or truncate */
+#define PF_APPEND 2
+#define PF_UPDATE 3	/* an existing file, written over in place */
+
+int  pf_open(const char *path, int mode);	/* handle >= 0, < 0 on error */
+long pf_read(int h, void *buf, long n);
+long pf_write(int h, const void *buf, long n);
+void pf_close(int h);
+long pf_seek(int h, long off);			/* from the start; new position or < 0 */
+/* up to n bytes from off: opened, read and closed again, < 0 on error */
+long pf_read_at(const char *path, long off, void *buf, long n);
+/* an open file's size, its place left at the start; futil.c's pf_load
+   uses it through pf_size_open when set (one look less a file read) */
+long pf_handle_size(int h);
+unsigned long pf_handle_info(int h, long *size);	/* an open file's date and time (as pf_stamp) and size: no look */
+extern long (*pf_size_open)(int h);
+long pf_size(const char *path);			/* -1 if missing */
+unsigned long pf_stamp(const char *path);	/* when it was last written (date, time); 0 if missing */
+unsigned long pf_info(const char *path, long *size);	/* both at once: pf_stamp, and pf_size in *size */
+int  pf_exists(const char *path);
+int  pf_mkdir(const char *path);		/* 0 ok or already there */
+int  pf_remove(const char *path);
+int  pf_rename(const char *from, const char *to);
+/* call cb for every plain file in dir; stop early if cb returns non-zero */
+/* a folder's files, from one listing (Fsfirst, Fsnext): name, size, and
+   date and time as pf_stamp gives them; cb returns 1 to stop */
+int  pf_list(const char *dir, int (*cb)(const char *name, long size, unsigned long stamp, void *ud), void *ud);
+
+/* whole-file helpers: pf_load returns a malloc'ed NUL-terminated copy */
+char *pf_load(const char *path, long *len);
+int   pf_save(const char *path, const void *data, long len);
+
+/* ---- time ---- */
+typedef struct {
+	short year, mon, day, hour, min, sec;
+} PFTIME;
+
+void pf_now(PFTIME *t);		/* local wall clock */
+unsigned long pf_ms(void);	/* monotonic milliseconds (5 ms steps on TOS) */
+void pf_debug(const char *s);	/* emulator console / stderr */
+/* raw unpredictable bytes (timer jitter on the Atari, /dev/urandom on
+   Linux); tls.c hashes them with a seed kept on disk */
+void pf_entropy(unsigned char *buf, int n);
+
+/* ---- TCP ---- */
+int  net_init(void);			/* 1 if a TCP/IP stack is present */
+const char *net_stack(void);		/* "STinG", "MiNTnet", "POSIX" ... */
+/* connect (resolving names); handle >= 0, or < 0 with err filled in */
+int  net_open(const char *host, unsigned short port, char *err, int errlen);
+long net_write(int h, const void *buf, long n);	/* bytes sent or < 0 */
+/* non-blocking: > 0 bytes read, 0 nothing yet, < 0 closed or failed */
+long net_read(int h, void *buf, long max);
+void net_close(int h);
+/* close once what was sent has gone out, waiting at most this long */
+void net_close_wait(int h, int seconds);
+
+/* the UI can show progress and keep the screen alive while we wait */
+extern void (*pf_idle)(void);
+
+/* n / d when the quotient fits in 16 bits: one divu.w on the 68000, not
+   a call to the C library's 32-bit division (hundreds of cycles, and the
+   collects' busiest arithmetic; the guidelines, Speed) */
+static inline unsigned short div16(unsigned long n, unsigned short d)
+{
+#if defined(__mc68000__) || defined(__m68k__)
+	__asm__("divu.w %1,%0" : "+d"(n) : "dm"(d));
+	return (unsigned short)n;
+#else
+	return (unsigned short)(n / d);
+#endif
+}
+
+#endif

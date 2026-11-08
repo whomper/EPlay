@@ -482,6 +482,13 @@ static void draw_text(void)
 	char t[24];
 	const char *title = play_tags.title[0] ? play_tags.title : play_name[0] ? play_name : "No file";
 	const char *artist = play_tags.artist[0] ? play_tags.artist : play_name[0] ? "" : "File > Open... (^O)";
+	if (play_is_net() && play_name[0]) {
+		/* a station (Erez, 8 Nov 2026): the song now on top, the
+		   station's name under it (the station's alone until its first) */
+		const char *song = play_net_title();
+		title = song[0] ? song : play_name;
+		artist = song[0] ? play_name : "";
+	}
 	short x = w_txt.x, cols = (short)(w_txt.w / cw);
 	text(x, w_txt.y, title, cols, p_txt);
 	text(x, w_txt.y + ch + 2, artist, cols, p_dim);
@@ -605,6 +612,15 @@ static void draw_time(void)
 		at = len * bar_drag / 1000;
 	if (at > len)
 		at = len;
+	if (play_is_net() && play_name[0]) {
+		/* a station: the time since it started, "Live" for the length,
+		   the position bar greyed (nothing to go to) */
+		fmt_time(a, sizeof(a), play_ms());
+		text(w_track.x - 4 - (short)strlen(a) * cw, w_pos.y, a, 6, p_dim);
+		text(w_track.x + w_track.w + 4, w_pos.y, "Live", 6, p_dim);
+		box(w_track.x, w_track.y + 1, w_track.w, 2, p_trk, 0);
+		return;
+	}
 	fmt_time(a, sizeof(a), at);
 	fmt_time(b, sizeof(b), len);
 	text(w_track.x - 4 - (short)strlen(a) * cw, w_pos.y, a, 6, p_dim);

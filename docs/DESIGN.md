@@ -1574,6 +1574,76 @@ Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Atari
   take (AAC, HLS) can be given to it as plain MP3;
 - the STE is left out (no MP3 there, and its 68000 already busy with the sound).
 
+**How it is built, in order:**
+- **7a, the parsing (done, 8 Nov 2026):** `src/stream.c`, host-tested and fuzzed, no allocation,
+  every length from the network checked. A stream's URL (http/https, host, port, path; a login,
+  IPv6, spaces and other schemes refused); the answer's head ("ICY 200 OK" or "HTTP/1.x", lines
+  up to 1 KB, icy-metaint 1 to 65535, icy-name, icy-br, Content-Type, Location for a redirect);
+  the ICY metadata taken out of the audio in place, the StreamTitle kept (tested at every cut of
+  the bytes); `.PLS` station lists. `tests/stream`, and `tests/fuzz/fuzz_stream.c` (`make fuzz`,
+  libFuzzer: 1.3 million runs in 3 minutes, no fault); `make test` replays `tests/fuzz/found`
+  and the seeds.
+- **7b, the stream as the queue's source (done, 8 Nov 2026):** `ui/netsrc.c` on common's `conn`
+  (`util`, `futil`, `conn`, `net_tos`, `sting`; `tls_none` until https takes TLS.OVL) and a
+  `plat_tos.c` of EPlay's own (ECal's). HTTP/1.0 with "Icy-MetaData: 1"; the head read into a
+  buffer of its own by `shead_parse`; up to five redirects; a station list (`.pls`, `.m3u`, or
+  its Content-Type) gives its first station; AAC, Ogg and HLS are refused in words that name the
+  Gateway. play.c opens a URL in place of a file: the first 8 KB for the probe (two MP3 frames
+  running), those bytes first into the queue, then what has come, read without waiting in GEM's
+  steps (`fill`: no whole pieces for a station); no tags, length or seeking. The DSP decodes it as
+  a file. When the connection ends, play_step connects again every 2 s, five times, while the
+  queue plays on from memory; the new connection's audio follows in the queue (the tick finds its
+  first frame by itself: one frame may be lost at the join). A station fills about 3 s of the
+queue before it plays (the bee showing, Esc to stop), so the network's pauses don't reach the
+music: without it, Hatari's serial link under load starved the DSP. A station never goes to
+Normal by itself: its frames late are the network's, not the DSP's, and it can't be opened again
+where it was. The station's titles go to the log
+  and to the rigs ("EPLAY title"). Connecting shows the bee, and Esc or Undo stops it (common's
+  `busy.c`, the guidelines' 7.1). The list takes a URL as a row (no tags read; dim where there's
+  no DSP). `tests/hatari/stream_test.py`: a station of its own on 127.0.0.1 (Icecast's answer, an
+  MP3 tone at its pace, a title every 4 s) through common's fakesting: `live` (the tone, no gap,
+  three titles), `drop` (the station closes after 6 s: connected again, no gap), `pls` (a 302 to a
+  `.pls`, its first station), `aac` (refused). All pass on Hatari's stock Falcon. EPLAY.PRG
+  376 KB (+20 KB).
+- **7c, through the Gateway:** a service on the Gateway that fetches the station (HTTPS, AAC,
+  HLS) and gives EPlay plain MP3, written here and handed to the Gateway's session (7.3); its
+  port and any package on it (ffmpeg, to convert AAC) are Erez's to decide.
+- **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
+  as Erez decides them.
+
+**7d, the window, as built (8 Nov 2026):** File > Open URL... on **⇧^O**, not ^U: ^U is the
+family's Close (3.2: a key never gets another meaning; related commands take ⇧^), put to Erez with
+the release. `ui/urldlg.c`: the address in common's long field (255 characters, 50 shown: 5.4),
+"http://" put in front of an address without it; the last stations as lines under it, a click opening one
+at once; the dialog as tall as the stations it has. Each station opened goes to the top of the ten
+(`URL1=` to `URL10=` in EPLAY.INF, which grew to 8 KB for them); its row shows the station's name
+once it answered. The Options menu ticks Direct connection or Through the Gateway (`FALCON=`, 1
+for Direct, as the family's INF); Settings has "Through the Gateway: address, port" (`GATE=`,
+`GATEPORT=`), the address a long field. Through the Gateway, EPlay asks `GET
+/stream?url=<the station's URL, %-encoded>` of the Gateway's address and port and plays what comes
+as a station's (7c: the service); with no address or port given: "Give the Gateway's address and
+port in Settings."; a Gateway that doesn't connect: "The Gateway doesn't answer: is it on?" (7.3's
+words). The bar for a station: its song on top (its name until the first title), its name under
+it; the time listened and "Live"; the position bar's track bare, and a press on it does nothing.
+Pause ends the connection (play_pause as for a file), Play connects again with the bee and Esc.
+Settings now has a field, so Esc empties it and Undo cancels (3.2): play_test's settings case and
+the speed rig's "Settings closed" row press Undo. stream_test's `url` case: ⇧^O with nothing given,
+the address typed (xdotool, as common's speed rig), Return: it plays (no gap), the row and bar show
+the station, EPLAY.INF keeps it as URL1.
+
+**Erez's decisions (8 Nov 2026):**
+- **Opening:** File > Open URL... (Control+U): one field for the address, and the last ten
+  stations to choose from, as Add files' Folders has them; the station goes into the list and
+  plays. Station URLs in `.m3u` and `.pls` playlists play too.
+- **The connection:** the Options menu has "Direct connection" and "Through the Gateway", one
+  ticked; the Gateway's address and port in Settings. Direct by default (most stations are plain
+  HTTP; https on a Direct connection takes TLS.OVL).
+- **Pause** on a live station ends the connection; Play connects again and plays it live from
+  then. Nothing piles up in memory.
+- **The bar** for a station: the song now playing on the top line (the stream's titles), the
+  station's name on the second; "Live" and the time since it started in place of the length; the
+  position bar greyed.
+
 ## Phase 8: the player's features (Erez, 8 Nov 2026)
 
 From the list put to Erez:

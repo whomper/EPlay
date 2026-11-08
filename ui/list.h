@@ -33,6 +33,7 @@ ENTRY *list_at(int i);
 /* a file added at the end: its index, or -1 (the list full, or no
    memory); a file already in it isn't added again (its index) */
 int list_add(const char *path);
+void list_set_title(int i, const char *t);	/* a station's name for its row (phase 7) */
 void list_remove(int i);
 void list_move(int from, int to);	/* row from to row to, the rows between closing up */
 void list_clear(void);

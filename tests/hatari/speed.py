@@ -244,7 +244,9 @@ def session(work, spec, kind):
         # Settings (^,), as the guidelines' rig opens it, and Esc
         r.act("Settings opened (playing)", speed.DIALOG, lambda: r.key("ctrl+comma"))
         r.shot("settings")
-        r.act("Settings closed (Esc)", speed.WINDOW, lambda: r.key("Escape"))
+        # (Undo: Settings has a field since the Gateway's address, and Esc
+        # empties a field: the family's 3.2)
+        r.act("Settings closed (Undo)", speed.WINDOW, lambda: r.key("Undo"))
         r.act("Pause: pressed (drawn pressed)", speed.KEY, lambda: r.press(*PAUSE))
         r.held_shown(PAUSE[0], PAUSE[1], "Pause")
         r.act("Pause: let go (pauses)", speed.KEY, r.let_go)

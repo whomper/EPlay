@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "tos.h"
+#include "stream.h"
 #include "list.h"
 #include "tags.h"
 #include "probe.h"
@@ -120,7 +121,8 @@ int list_add(const char *path)
 	{
 		const char *d = strrchr(p, '.');
 		static int dsp = -1;	/* _SND bit 3: the DSP (asked once: a Supexec) */
-		if (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4]) {
+		/* (a station, phase 7: its MP3 the DSP's too) */
+		if (surl_is(p) || (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4])) {
 			if (dsp < 0)
 				dsp = (get_cookie(0x5F534E44L) & 8) != 0;
 			if (!dsp)
@@ -129,6 +131,14 @@ int list_add(const char *path)
 	}
 	order_size(&list_order, n + 1);
 	return n++;
+}
+
+/* a row's title (a station's name, once it answered: phase 7) */
+void list_set_title(int i, const char *t)
+{
+	ENTRY *e = list_at(i);
+	if (e && t[0])
+		e->title = keep(t);
 }
 
 void list_remove(int i)
@@ -265,6 +275,8 @@ int list_step(int *row)
 		return 0;
 	e->read = 1;
 	*row = i;
+	if (surl_is(e->path))
+		return 1;		/* (a station: no tags nor length to read; it plays as it comes) */
 	fh_ = Fopen(e->path, 0);
 	if (fh_ < 0) {
 		e->bad = 1;

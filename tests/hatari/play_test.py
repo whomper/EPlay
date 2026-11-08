@@ -428,7 +428,9 @@ def run(work, case, spec):
             time.sleep(2)
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(4)
-            cmd(fifo, "hatari-event", "keypress", "0x01")    # Esc: Cancel, nothing changed
+            # Undo: Cancel, nothing changed (since the Gateway's address, a
+            # field: Esc empties a field, the family's 3.2)
+            cmd(fifo, "hatari-event", "keypress", "0x61")
         if case in ("many", "manym3u", "manytree"):
             got = wait_line(log, lambda l: l.startswith("LOG the list: "), 240)
             start = wait_line(log, lambda l: l.startswith("LOG free memory"), 1) or ""

@@ -38,12 +38,15 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u
-CSRC    := bidi charset pic png inflate jpegdc dirlist
+OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u netsrc urldlg \
+           stream plat_tos
+# (util, conn, net_tos, sting: phase 7's streams; tls_none until https takes TLS.OVL)
+CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn tls_none
 CTP     := tjpgd
-CATARI  := libc tos gem crash dspjpeg
-CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge
+CATARI  := libc tos gem crash dspjpeg net_tos sting
+CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
+           $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
@@ -112,6 +115,8 @@ $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
+$(OBJDIR)/sting_s.o: common/atari/sting.S | $(OBJDIR)
+	$(CC) -m$(CPU) -c -o $@ $<
 
 binary:
 	mkdir -p $@
@@ -162,9 +167,23 @@ $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_order.c src/order.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
+$(B)/test_stream: tests/stream/test_stream.c src/stream.c src/stream.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/stream/test_stream.c src/stream.c
+# the stream parser's fuzz target (the guidelines, 7.1): make fuzz runs
+# libFuzzer for FUZZ_S seconds; make test replays tests/fuzz/found and the
+# seeds with the build machine's compiler
+FUZZ_S ?= 60
+$(B)/fuzz_replay: tests/fuzz/fuzz_stream.c tests/fuzz/replay.c src/stream.c src/stream.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/fuzz/fuzz_stream.c tests/fuzz/replay.c src/stream.c
+fuzz: tests/fuzz/fuzz_stream.c src/stream.c src/stream.h | $(B)
+	clang -O1 -g -fsanitize=fuzzer,address,undefined -Isrc -o $(B)/fuzz_stream tests/fuzz/fuzz_stream.c src/stream.c
+	mkdir -p $(B)/fuzzcorpus
+	./$(B)/fuzz_stream -max_total_time=$(FUZZ_S) -artifact_prefix=tests/fuzz/found/ $(B)/fuzzcorpus tests/fuzz/seeds
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/fuzz_replay
 	./$(B)/test_inf
+	./$(B)/test_stream
+	./$(B)/fuzz_replay tests/fuzz/seeds/* tests/fuzz/found/*
 	./$(B)/test_gain
 	./$(B)/test_m3u
 	./$(B)/test_order

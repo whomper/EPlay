@@ -45,4 +45,16 @@ char *settings_add_dir(void);
 char (*settings_recent(void))[FP_PATH];
 void settings_recent_changed(void);
 
+/* phase 7, stations: Through the Gateway (1) or a Direct connection (0),
+   the Options menu's; the Gateway's address and port (Settings; port 0:
+   not given); the last stations opened (Open URL), the newest first */
+#define URL_RECENT 10
+#define URL_MAX 256
+int settings_gateway(void);
+void settings_set_gateway(int on);
+const char *settings_gate(void);
+long settings_gateport(void);
+char (*settings_urls(void))[URL_MAX];
+void settings_url_used(const char *url);
+
 #endif
