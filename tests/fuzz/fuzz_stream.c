@@ -66,7 +66,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 			if (icy_feed(&s, b, a) > a)
 				abort();
 		}
-		if (strlen(s.title) >= ICY_TITLE)
+		if (strlen(s.title) >= ICY_TITLE || strlen(s.url) >= ICY_URL || (s.url[0] && !surl_is(s.url)))
 			abort();
 		free(b);
 		break;

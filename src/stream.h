@@ -61,6 +61,7 @@ long shead_parse(const char *t, long n, SHEAD *h);
 int stype(const char *type);
 
 #define ICY_TITLE 128
+#define ICY_URL 256
 
 typedef struct {
 	long metaint;			/* 0: no metadata, all audio */
@@ -69,6 +70,8 @@ typedef struct {
 	char meta[16 * 255 + 1];
 	char title[ICY_TITLE];		/* StreamTitle, "" before the first */
 	int new_title;			/* set when the title changed; the caller clears it */
+	char url[ICY_URL];		/* StreamUrl, when an http(s) address: a picture's on some stations */
+	int new_url;			/* set when it changed; the caller clears it */
 } ICY;
 
 void icy_init(ICY *s, long metaint);

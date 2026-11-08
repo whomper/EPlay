@@ -61,7 +61,8 @@ EPlay has one window. **The bar** across its top shows what plays: the album art
 DSP, then kept in `cache\`), the title and artist from its tags, its bit rate and rate, and where
 it plays: **FDI**, **DSP** or **DMA**.
 
-- **The round button** plays and pauses; the arrows beside it go to the previous and next file.
+- **Play/Pause**, the symbol in the middle (in the accent colour), plays and pauses; the arrows
+  beside it go to the previous and next file.
 - **The position bar:** click or drag on it to go to that place in the file.
 - **The volume** at the right: click or drag on it, or press + and -.
 - **The info line** under the window's title says what EPlay is doing: "Playing", "Paused", the
@@ -109,7 +110,11 @@ by itself if the line drops, while what it gathered plays on. Esc or Undo stops 
 takes too long.
 
 The bar shows the song playing (the station sends its titles) and the station's name under it;
-**Live** and the time listened stand where a file's length would. **Pause** ends the connection,
+**Live** and the time listened stand where a file's length would. Where the station names a picture
+with its titles (some send each song's cover, some their logo), it takes the album art's place: on a
+Direct connection EPlay fetches it and the 68030 unpacks it, which takes a few seconds (the DSP is
+playing); through the Gateway it comes small and quickly. A picture seen before comes from
+`cache\`. **Pause** ends the connection,
 and **Play** connects again and plays the station live from then. Station addresses in an `.M3U`
 playlist play as its files do.
 

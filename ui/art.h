@@ -25,6 +25,11 @@ int art_needs_dsp(void);	/* its work still wants the DSP (the music waits) */
    piece (0: EPlay quits). 1: the art is ready now */
 int art_step(int (*turn)(void));
 int art_ready(void);
+/* a station's picture (sart.c): from the cache by its address's hash, or
+   from its bytes, unpacked by the 68030; art_clear: the disc again */
+int art_station_cached(const char *name, unsigned long ukey);
+int art_station(const char *name, unsigned long ukey, const unsigned char *d, long len);
+void art_clear(void);
 void art_draw(short x, short y, const GRECT *clip);	/* (ready only) */
 
 #endif

@@ -254,6 +254,40 @@ static void take_title(ICY *s)
 	}
 }
 
+/* StreamUrl='...'; the same way: a picture's address on some stations (a
+   song's cover at Radio Paradise, the station's logo at SomaFM), a site's
+   or "0" or nothing on others. Kept only when it is an http(s) address
+   that fits; "" otherwise */
+static void take_url(ICY *s)
+{
+	const char *p = strstr(s->meta, "StreamUrl='"), *e;
+	char u[ICY_URL];
+	long n;
+	if (!p)
+		return;
+	p += 11;
+	e = strstr(p, "';");
+	if (!e)
+		e = p + strlen(p);
+	n = e - p;
+	if (n >= ICY_URL)
+		n = 0;			/* (cut short, it would be another address) */
+	memcpy(u, p, (size_t)n);
+	u[n] = 0;
+	if (!surl_is(u) || strchr(u, ' '))
+		u[0] = 0;
+	{
+		long i;
+		for (i = 0; i < n; i++)
+			if ((unsigned char)u[i] < ' ')
+				u[0] = 0;
+	}
+	if (strcmp(u, s->url)) {
+		strcpy(s->url, u);
+		s->new_url = 1;
+	}
+}
+
 long icy_feed(ICY *s, unsigned char *b, long n)
 {
 	long r = 0, w = 0;
@@ -286,6 +320,7 @@ long icy_feed(ICY *s, unsigned char *b, long n)
 			if (s->mgot == s->mlen) {
 				s->meta[s->mlen] = 0;
 				take_title(s);
+				take_url(s);
 				s->mlen = -1;
 				s->left = s->metaint;
 			}

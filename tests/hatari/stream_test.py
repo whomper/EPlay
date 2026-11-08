@@ -20,6 +20,13 @@ Cases:
   chunked   the station answers HTTP/1.1 with Transfer-Encoding: chunked (as
             Swiss Radio's CDN does): the chunks taken out, the tone and its
             titles, no gap
+  cover     the station names a picture with its titles (StreamUrl, as
+            Radio Paradise's covers; 500 x 500, a photo's grain: some 70 KB): EPlay fetches it on a Direct
+            connection and the 68030 unpacks it: the art square shows it
+            (red on its left, blue on its right), the music without a gap
+  gwcover   as cover, Through the Gateway (radio/radiogate.py here): the
+            Gateway passes the StreamUrl on, EPlay asks its /art, which
+            gives a 64 x 64 JPEG
   aac       a station sending AAC: refused, in words that name the Gateway
   gateway   Through the Gateway (EPLAY.INF: FALCON=0) to radio/radiogate.py
             on this computer, an AAC station converted to MP3: the tone,
@@ -63,7 +70,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "chunked", "aac", "gateway", "https", "nginx", "url", "urledit"]
+CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "aac", "gateway", "https", "nginx", "url", "urledit"]
 METAINT = 8192
 KBPS = 128
 
@@ -80,6 +87,7 @@ class Station(threading.Thread):
         self.sock.listen(4)
         self.port = self.sock.getsockname()[1]
         self.conns = 0
+        self.cover = b""
         self.log = []
 
         self.tls = None                 # (the https case: a second port, TLS)
@@ -125,6 +133,11 @@ class Station(threading.Thread):
             if self.case in ("https", "nginx") and not secure:
                 c.sendall(("HTTP/1.1 302 Found\r\nLocation: https://radio.test:%d/live\r\n"
                            "Content-Length: 0\r\n\r\n" % self.tls[0].getsockname()[1]).encode())
+                return
+            if path == "/cover.jpg":
+                self.log.append("cover fetched")
+                c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n"
+                          % len(self.cover) + self.cover)
                 return
             if path == "/go":
                 c.sendall(b"HTTP/1.1 302 Found\r\nLocation: /list.pls\r\nContent-Length: 0\r\n\r\n")
@@ -184,6 +197,8 @@ class Station(threading.Thread):
                     secs = int(time.time() - t0)
                     if secs >= title_at:
                         t = ("StreamTitle='The rig - Tone %d';" % (secs // 4 + 1)).encode()
+                        if self.cover:
+                            t += ("StreamUrl='http://127.0.0.1:%d/cover.jpg';" % self.port).encode()
                         t += b"\0" * (-len(t) % 16)
                         out += bytes([len(t) // 16]) + t
                         title_at = secs + 4
@@ -326,6 +341,12 @@ def run(work, case, spec):
                         "%dk" % KBPS, "-f", "adts", aac], check=True)
         mp3 = aac                       # (the station sends AAC at the same pace)
     st = Station(open(mp3, "rb").read(), case)
+    if case in ("cover", "gwcover"):
+        jpg = os.path.join(w, "cover.jpg")
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "color=red:s=250x500[a];color=blue:s=250x500[b];[a][b]hstack,noise=alls=30:allf=u",
+                        "-frames:v", "1", "-q:v", "3", jpg], check=True)
+        st.cover = open(os.environ.get("COVER_FILE") or jpg, "rb").read()   # (COVER_FILE: a real one, times only)
     if case == "nginx" and not shutil.which("nginx"):
         return True, "-", "SKIPPED (no nginx here)"
     if case in ("https", "nginx"):
@@ -341,7 +362,7 @@ def run(work, case, spec):
         dns.start()
         os.environ["FAKESTING_DNS"] = "127.0.0.1:%d" % dns.port
     gate = None
-    if case == "gateway":
+    if case in ("gateway", "gwcover"):
         # the Gateway's radio service, EPlay's own (radio/), on this computer
         sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
         import radiogate
@@ -427,6 +448,9 @@ def run(work, case, spec):
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
         time.sleep(14 if case == "drop" else 10)
+        if case in ("cover", "gwcover"):
+            wait_line(log, lambda l: "album art:" in l or ("picture http" in l and "after" in l), 150)
+            time.sleep(1)
         cmd(fifo, "hatari-shortcut", "screenshot")
         cmd(fifo, "hatari-shortcut", "recsound")
         time.sleep(1)
@@ -443,6 +467,20 @@ def run(work, case, spec):
             if case in ("https", "nginx"):
                 note += "; " + ", ".join(l for l in st.log if l.startswith("TLS"))
                 ok = ok and any(l.startswith("TLS ") for l in st.log)
+        elif case in ("cover", "gwcover"):
+            from PIL import Image
+            shot = sorted(os.listdir(shots))[-1]
+            im = Image.open(os.path.join(shots, shot)).convert("RGB")
+            # (the art square: the bar's left; red pixels on its left half, blue on its right)
+            reds = sum(1 for x in range(90, 130) for y in range(140, 190)
+                       if im.getpixel((x, y))[0] > 150 and im.getpixel((x, y))[2] < 100)
+            blues = sum(1 for x in range(130, 175) for y in range(140, 190)
+                        if im.getpixel((x, y))[2] > 150 and im.getpixel((x, y))[0] < 100)
+            pic = [l for l in text.split("\n") if "picture" in l or "album art" in l]
+            note += "; %d red, %d blue; %s" % (reds, blues, " | ".join(l[4:] for l in pic))
+            ok = ok and gaps == 0 and reds > 300 and blues > 300 and "cover fetched" in st.log
+            if case == "gwcover":
+                ok = ok and any("through the Gateway" in l for l in pic)
         elif case == "chunked":
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "pls":

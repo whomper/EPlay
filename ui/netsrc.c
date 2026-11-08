@@ -418,6 +418,14 @@ const char *ns_title(int *changed)
 	return icy.title;
 }
 
+const char *ns_picture(int *changed)
+{
+	if (changed)
+		*changed = icy.new_url;
+	icy.new_url = 0;
+	return icy.url;
+}
+
 const char *ns_title_peek(void)
 {
 	return icy.title;

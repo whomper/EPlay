@@ -35,6 +35,7 @@ int ns_is_open(void);
 const char *ns_name(void);
 long ns_kbps(void);
 const char *ns_title(int *changed);
+const char *ns_picture(int *changed);	/* StreamUrl: a picture's address, or "" */
 const char *ns_title_peek(void);	/* the title now, its change left for ns_title */
 const char *ns_url(void);	/* the station's URL, after any redirect */
 

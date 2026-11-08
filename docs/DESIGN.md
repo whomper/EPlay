@@ -1658,6 +1658,29 @@ measured first; Ogg unlikely to fit the DSP's memory).
   station's name on the second; "Live" and the time since it started in place of the length; the
   position bar greyed.
 
+**The buttons (Erez, 8 Nov 2026):** from five drawn at the bar's pixels (A as it was, B bare
+symbols, C keys, D a strip, E bare in the accent), **E**: Play/Pause without its disc, the triangle
+or two bars 14 pixels high at VGA in the accent pen (cyan; black on mono), white while pressed;
+Previous and Next as they were; the click areas unchanged.
+
+**A station's picture (Erez, 8 Nov 2026: "if it is direct connection that the Atari does all,
+else the gateway"):** some stations name a picture with each title (ICY `StreamUrl`: Radio
+Paradise each song's cover, SomaFM its logo; laut.fm, KEXP, LBC and most send none). `stream.c`
+keeps it (an http(s) address only); `ui/sart.c` fetches it from the main loop, never inside
+play_step, its waits feeding the station's queue and its titles (`play_feed`) and redrawing the
+window: on a Direct connection the picture itself (http or https, three redirects, 512 KB), the
+68030 unpacking it (`art_station`: the DSP plays the station) from its blocks' averages alone
+(common's `jpegdc`, no IDCT) when it is 8 times the art's side or more, else TJpgDec fed 128 bytes
+at a time, the scaler polling every row; through the Gateway, radiogate 1.1's `GET /art?url=`
+(fetched with a station's checks, ffmpeg's middle square at 64 x 64, the last 64 kept). Kept in
+art.c's cache under the address's hash, so a cover seen again comes from the disk. Rigs: stream_test
+`cover` (a 500 x 500 JPEG with a photo's grain, 89 KB: fetched 17 s through fakesting's serial
+line, which the station's 16 KB/s shares; 18.2 s unpacked on Falcon-4, the longest between polls
+80 ms; a real Radio Paradise cover of 24 KB 11.3 s, 65 ms) and `gwcover` (376 bytes in 1.1 s,
+unpacked in 0.8 s, shown 3.2 s after it was named). A logo for the stations that send none, looked
+up at radio-browser.info, was left out for Erez to decide: by the stream's address it found none
+of four stations, by name some, often without a logo.
+
 ## Phase 8: the player's features (Erez, 8 Nov 2026)
 
 From the list put to Erez:

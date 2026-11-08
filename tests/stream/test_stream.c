@@ -204,8 +204,35 @@ static void long_lines(void)
 	CHECK(shead_parse(a, (long)strlen(a), &h) == -1);
 }
 
+/* StreamUrl: a picture's address kept; "0", '' and other schemes not */
+static void icy_url(void)
+{
+	static const char *in[] = {
+		"StreamTitle='Turin Brakes - Mirror';StreamUrl='http://img.radioparadise.com/covers/l/13378.jpg';",
+		"StreamTitle='x';StreamUrl='0';", "StreamTitle='x';StreamUrl='';",
+		"StreamTitle='x';StreamUrl='javascript:1';", "StreamTitle='x';"};
+	static const char *want[] = {"http://img.radioparadise.com/covers/l/13378.jpg", "", "", "", ""};
+	int i;
+	for (i = 0; i < 5; i++) {
+		ICY s;
+		unsigned char b[600];
+		long n = (long)strlen(in[i]), blocks = (n + 15) / 16, k;
+		icy_init(&s, 4);
+		memcpy(b, "abcd", 4);
+		b[4] = (unsigned char)blocks;
+		memset(b + 5, 0, (size_t)(blocks * 16));
+		memcpy(b + 5, in[i], (size_t)n);
+		k = 5 + blocks * 16;
+		memcpy(b + k, "efgh", 4);
+		CHECK(icy_feed(&s, b, k + 4) == 8 && !memcmp(b, "abcdefgh", 8));
+		CHECK(!strcmp(s.url, want[i]));
+		CHECK(s.new_url == (want[i][0] != 0));
+	}
+}
+
 int main(void)
 {
+	icy_url();
 	chunks();
 	long_lines();
 	urls();
@@ -214,6 +241,6 @@ int main(void)
 	pls();
 	if (fails)
 		return 1;
-	printf("stream: URLs, heads (long lines), ICY metadata at every cut, PLS, chunks at every cut: ok\n");
+	printf("stream: URLs, heads (long lines), ICY metadata at every cut, PLS, chunks at every cut, StreamUrl: ok\n");
 	return 0;
 }

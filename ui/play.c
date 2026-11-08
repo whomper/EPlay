@@ -1357,6 +1357,45 @@ int play_is_net(void)
 }
 
 /* the bar's for a station: the song now ("" before its first title) */
+/* the station's picture's address ("" none), and whether it changed */
+const char *play_net_picture(int *changed)
+{
+	if (!net) {
+		if (changed)
+			*changed = 0;
+		return "";
+	}
+	return ns_picture(changed);
+}
+
+/* a station's new title: to the log, the rigs' console, the bar */
+static void net_titles(void)
+{
+	int changed;
+	const char *t;
+	if (!net)
+		return;
+	t = ns_title(&changed);
+	if (changed) {
+		char l[200];
+		elog("the station's title: %s", t);
+		snprintf(l, sizeof(l), "EPLAY title: %s\n", t);
+		nf_debug(l);
+		play_note_new = 1;	/* (the bar and info line again) */
+	}
+}
+
+/* a station's queue topped up from what has come, and its titles (sart.c's
+   waits: a picture fetched while the station plays); never inside
+   play_step */
+void play_feed(void)
+{
+	if (state == PS_PLAYING && net && !src_done) {
+		fill(ms_now(), 5, 0);
+		net_titles();
+	}
+}
+
 const char *play_net_title(void)
 {
 	return net ? ns_title_peek() : "";
@@ -1547,17 +1586,7 @@ int play_step(int ms)
 		return 1;
 	}
 	fill(t0, ms, !src_done && q_lead_ms() < 3000);
-	if (net) {
-		int changed;
-		const char *t = ns_title(&changed);
-		if (changed) {
-			char l[200];
-			elog("the station's title: %s", t);
-			snprintf(l, sizeof(l), "EPLAY title: %s\n", t);
-			nf_debug(l);
-			play_note_new = 1;	/* (the bar and info line again) */
-		}
-	}
+	net_titles();
 	if (net && play_net_lost && !src_done) {
 		/* the station's connection ended: again, every 2 s at most and
 		   five times, while the queue plays on from memory (the music

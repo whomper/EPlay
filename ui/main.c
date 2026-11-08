@@ -36,6 +36,7 @@
 #include "snd.h"
 #include "bar.h"
 #include "art.h"
+#include "sart.h"
 
 extern const char app_version[];
 
@@ -327,6 +328,7 @@ static void play_now(const char *f)
 	char err[160];
 	int opened;
 	PART_T0();
+	sart_reset();		/* (a station's picture: the new one's from now) */
 	if (surl_is(f)) {
 		/* a station: the bee while it connects, Esc or Undo stops it
 		   (the guidelines, 7.1) */
@@ -1545,6 +1547,16 @@ static int art_turn(void)
 	return !quit;
 }
 
+/* the window's messages while a station's picture is fetched (sart.c):
+   redraws; a menu title let go (its command not taken then) */
+static void fetch_message(const short *msg)
+{
+	if (msg[0] == WM_REDRAW)
+		message((short *)msg);
+	else if (msg[0] == MN_SELECTED)
+		menu_tnormal(mb.tree, msg[3], 1);
+}
+
 static void message(short *msg)
 {
 	const char *s;
@@ -1782,6 +1794,7 @@ int app_main(void)
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
 	pf_idle = busy_idle;		/* (Esc or Undo while a station connects: busy.h) */
+	sart_init(fetch_message);
 	crash_cleanup = crash_quit;
 	av_init("EPLAY|EPLAYST");	/* (the name the AES knows: EPLAYST.PRG on an STE) */
 	/* the VDI's ST RAM block taken now, not at the first draw that wants
@@ -1863,8 +1876,17 @@ int app_main(void)
 
 	while (!quit) {
 		turn(0);
+		if (play_is_net()) {
+			/* a station's picture: its address from its titles */
+			int ch;
+			const char *pic = play_net_picture(&ch);
+			if (ch)
+				sart_want(pic);
+		}
 		if (art_pending() && art_step(art_turn))
 			redraw(0, BP_ART);	/* (the album art made: shown) */
+		else if (play_is_net() && sart_step())
+			redraw(0, BP_ART);	/* (the disc again) */
 		else if (list_unread) {
 			/* one file's tags and length, then its row */
 			int row;

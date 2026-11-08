@@ -36,6 +36,7 @@
 #include "tags.h"
 #include "pic.h"
 #include "dspjpeg.h"
+#include "jpegdc.h"
 #include "elog.h"
 
 enum { A_NONE, A_READ, A_DECODE, A_DITHER, A_PENS, A_READY, A_FAILED };
@@ -53,6 +54,8 @@ static char path_now[256];
 static TAGS tg;
 static unsigned char *buf;
 static long blen, bgot;
+static long klen;			/* the cache's length field: blen for a file, STATION_LEN for a station's */
+#define STATION_LEN 0x53544154L	/* "STAT": a station's picture, keyed by its address */
 static unsigned long key;
 static unsigned short *rgb;			/* the art, 5-6-5 */
 static unsigned char *pens;
@@ -180,7 +183,7 @@ static long cache_find(void)
 	if (!idx)
 		return -1;
 	for (i = 0; i < n_idx; i++)
-		if (idx[i].key == key && idx[i].len == (unsigned long)blen)
+		if (idx[i].key == key && idx[i].len == (unsigned long)klen)
 			return i;
 	return -1;
 }
@@ -196,7 +199,7 @@ static int cache_read(long slot)
 	if (h2 < 0)
 		return 0;
 	if (Fseek(slot * REC_SIZE, (short)h2, 0) == slot * REC_SIZE && Fread((short)h2, REC_HDR, h) == REC_HDR &&
-	    !memcmp(h, "ART1", 4) && be32(h + 4) == key && be32(h + 8) == (unsigned long)blen &&
+	    !memcmp(h, "ART1", 4) && be32(h + 4) == key && be32(h + 8) == (unsigned long)klen &&
 	    (h[12] << 8 | h[13]) == side && Fread((short)h2, n, rgb) == n)
 		ok = 1;
 	Fclose((short)h2);
@@ -224,7 +227,7 @@ static void cache_store(void)
 	memset(h, 0, sizeof(h));
 	memcpy(h, "ART1", 4);
 	put32(h + 4, key);
-	put32(h + 8, (unsigned long)blen);
+	put32(h + 8, (unsigned long)klen);
 	h[12] = (unsigned char)(side >> 8);
 	h[13] = (unsigned char)side;
 	/* (a record at the file's end or within it: TOS can't seek past it) */
@@ -245,7 +248,7 @@ static void cache_store(void)
 	}
 	Fclose((short)h2);
 	idx[slot].key = key;
-	idx[slot].len = (unsigned long)blen;
+	idx[slot].len = (unsigned long)klen;
 	if (slot >= n_idx)
 		n_idx = slot + 1;
 	next_slot = (slot + 1) % CACHE_MAX;
@@ -261,7 +264,7 @@ static void cache_store(void)
 		put32(hh + 8, (unsigned long)n_idx);
 		put32(hh + 12, (unsigned long)next_slot);
 		put32(e, key);
-		put32(e + 4, (unsigned long)blen);
+		put32(e + 4, (unsigned long)klen);
 		if (Fwrite((short)h2, 16, hh) == 16 && Fseek(16 + slot * 8, (short)h2, 0) == 16 + slot * 8)
 			Fwrite((short)h2, 8, e);
 	}
@@ -365,6 +368,7 @@ int art_begin(const char *path)
 	key = 2166136261UL ^ (unsigned long)blen;
 	for (i = 0; i < k; i++)
 		key = (key ^ buf[i]) * 16777619UL;
+	klen = blen;
 	bgot = k;
 	slot = cache_find();
 	if (slot >= 0 && cache_read(slot)) {
@@ -389,6 +393,76 @@ int art_begin(const char *path)
 	}
 	/* an MP3's music waits for the DSP; a WAV's or AIFF's plays on the DMA */
 	return on_dsp && !is_pcm ? ART_FIRST : ART_NOW;
+}
+
+/* a station's picture (sart.c): ukey its address's hash. From the cache:
+   1 (made from then on in art_step's, as a file's); else 0 */
+static unsigned long station_key(unsigned long ukey)
+{
+	return ukey ^ 0x5354u;
+}
+
+int art_station_cached(const char *name, unsigned long ukey)
+{
+	long slot;
+	if (busy || art_pending() || !form || side <= 0)
+		return 0;
+	if (!rgb)
+		rgb = malloc((size_t)REC_SIDE * REC_SIDE * 2);
+	if (!rgb)
+		return 0;
+	key = station_key(ukey);
+	klen = STATION_LEN;
+	slot = cache_find();
+	if (slot < 0 || !cache_read(slot))
+		return 0;
+	drop();
+	snprintf(path_now, sizeof(path_now), "%s", name);
+	t_job = now_ms();
+	snprintf(note, sizeof(note), "the station's picture: from the cache");
+	st = A_DITHER;
+	return 1;
+}
+
+/* the picture's bytes (len at d, a JPEG or a PNG), unpacked by the 68030 in
+   art_step's (the DSP plays the station meanwhile), then cached under ukey.
+   0: not now (another job), no memory, or too big */
+int art_station(const char *name, unsigned long ukey, const unsigned char *d, long len)
+{
+	if (busy || art_pending() || !form || side <= 0 || len <= 0 || len > ART_MAX_BYTES)
+		return 0;
+	if (!rgb)
+		rgb = malloc((size_t)REC_SIDE * REC_SIDE * 2);
+	if (!rgb)
+		return 0;
+	drop();
+	buf = Mxalloc(len + 16, 3);
+	if ((long)buf <= 0) {
+		buf = 0;
+		return 0;
+	}
+	memcpy(buf, d, (size_t)len);
+	blen = bgot = len;
+	memset(&tg, 0, sizeof(tg));
+	key = station_key(ukey);
+	klen = STATION_LEN;
+	snprintf(path_now, sizeof(path_now), "%s", name);
+	note[0] = 0;
+	t_job = now_ms();
+	is_pcm = 1;		/* (no music waits for it) */
+	on_dsp = 0;		/* (the DSP plays the station) */
+	st = A_DECODE;
+	return 1;
+}
+
+/* back to the disc (a station without a picture now) */
+void art_clear(void)
+{
+	if (busy)
+		return;
+	drop();
+	path_now[0] = 0;
+	st = A_NONE;
 }
 
 int art_pending(void)
@@ -430,6 +504,8 @@ static long feed(void *u, unsigned char *b, long n)
 		return 0;
 	if (n > blen - fed)
 		n = blen - fed;
+	if (!on_dsp && n > 128)
+		n = 128;	/* (the 68030's Huffman codes: a poll every 128 bytes, not 512) */
 	memcpy(b, buf + fed, (size_t)n);
 	fed += n;
 	return n;
@@ -550,6 +626,9 @@ static void decode(void)
 	abandon = 0;
 	fed = 0;
 	pic_poll = poll;
+	/* (the 68030's rows: a poll each, not every 16: 155 ms between them
+	   for a station's cover on Falcon-4) */
+	pic_scale_poll_rows = on_dsp ? 16 : 1;
 	rc = -1;
 	if (kind == PIC_JPEG && on_dsp && pic_size(buf, blen, &rw, &rh) && (rw + 7) / 8 + 1 > side &&
 	    (rh + 7) / 8 + 1 > side && (acc = calloc((size_t)side * 3, sizeof(*acc))) != 0) {
@@ -562,6 +641,47 @@ static void decode(void)
 			row_big(0, rh, 0, 0);	/* (the last output row) */
 		free(acc);
 		acc = 0;
+	} else if (kind == PIC_JPEG && !on_dsp && pic_size(buf, blen, &rw, &rh) && rw >= 8L * side &&
+		   rh >= 8L * side) {
+		/* the 68030 and a big picture (a station's cover: 500 x 500 and
+		   more): its blocks' averages alone (common's jpegdc: no IDCT),
+		   each pixel shown the mean of the blocks it covers */
+		int bw, bh, jw;
+		JDC *j = jdc_open(buf, blen, &bw, &bh, &jw);
+		jdc_poll = poll;
+		if (j && jdc_read(j)) {
+			long y, x;
+			bw = (bw + 7) / 8;
+			bh = (bh + 7) / 8;
+			for (y = 0; y < side; y++)
+				for (x = 0; x < side; x++) {
+					int y0 = (int)(y * bh / side), y1 = (int)((y + 1) * bh / side), x0 = (int)(x * bw / side),
+					    x1 = (int)((x + 1) * bw / side), bx, by, cr, cg, cb;
+					long r = 0, g = 0, b = 0, cnt = 0;
+					if (y1 <= y0)
+						y1 = y0 + 1;
+					if (x1 <= x0)
+						x1 = x0 + 1;
+					for (by = y0; by < y1; by++)
+						for (bx = x0; bx < x1; bx++) {
+							jdc_rgb(j, bx, by, &cr, &cg, &cb);
+							r += cr;
+							g += cg;
+							b += cb;
+							cnt++;
+						}
+					r /= cnt;
+					g /= cnt;
+					b /= cnt;
+					rgb[y * side + x] = (unsigned short)((r >> 3) << 11 | (g >> 2) << 5 | (b >> 3));
+				}
+			rc = 1;
+		} else if (j && jdc_why(j) == JW_OK && abandon)
+			rc = 0;
+		jdc_poll = 0;
+		if (j)
+			jdc_free(j);
+		why = PIC_DAMAGED;
 	} else if (kind == PIC_JPEG)
 		rc = pic_jpeg_rows(feed, 0, side, side, row, 0, &why);
 	if (rc < 0 && !abandon) {
