@@ -276,7 +276,34 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 		if (n <= 0)
 			break;
 		cnt = (short)(n - 1);
-		if (d == 2)
+		if (d == 2 && n >= 2) {
+			/* (two frames a pass: half the dbra's; an odd one first) */
+			if (n & 1)
+				__asm__ volatile("\tmovep.w\t0(%0),%%d0\n"
+						 "\tmove.w\t%%d0,(%1)+\n"
+						 "\tadd.w\t%3,%2\n"
+						 "\tbcc.s\t2f\n"
+						 "\tadda.w\t%4,%0\n"
+						 "2:"
+						 : "+a"(a2), "+a"(r), "+d"(f)
+						 : "d"(st), "d"((short)bpf)
+						 : "d0", "cc", "memory");
+			cnt = (short)(n / 2 - 1);
+			__asm__ volatile("1:\tmovep.w\t0(%0),%%d0\n"
+					 "\tmove.w\t%%d0,(%1)+\n"
+					 "\tadd.w\t%4,%2\n"
+					 "\tbcc.s\t2f\n"
+					 "\tadda.w\t%5,%0\n"
+					 "2:\tmovep.w\t0(%0),%%d0\n"
+					 "\tmove.w\t%%d0,(%1)+\n"
+					 "\tadd.w\t%4,%2\n"
+					 "\tbcc.s\t3f\n"
+					 "\tadda.w\t%5,%0\n"
+					 "3:\tdbra\t%3,1b"
+					 : "+a"(a2), "+a"(r), "+d"(f), "+d"(cnt)
+					 : "d"(st), "d"((short)bpf)
+					 : "d0", "cc", "memory");
+		} else if (d == 2)
 			__asm__ volatile("1:\tmovep.w\t0(%0),%%d0\n"
 					 "\tmove.w\t%%d0,(%1)+\n"
 					 "\tadd.w\t%4,%2\n"

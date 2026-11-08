@@ -176,9 +176,26 @@ EmuTOS), sent to the hub as patch 5.
 the About box 480 ms paused against 150, a button drawn pressed 105 against 50; and playing a CD's
 44.1 kHz at 50,066 Hz leaves GEM so little that About took 1,025 ms (515 at 25,033 Hz). EPLAYST.PRG
 is built (`make st`) and its sound passes, but it stays out of the release's files until the
-window's drawing meets the ST's times and Erez has chosen 50,066 or 25,033 Hz for an STE. speed.py's
-places are the Falcon's 640 x 480: on an STE's screens its clicks miss, so its STE figures wait for
-places of their own.
+window's drawing meets the ST's times. Erez chose 50,066 Hz for a CD's 44.1 kHz on an STE (7 Nov
+2026), and the window to be made faster for it.
+
+**The STE's loop, then (0.34):** the sample loop has no test but the fraction's carry, and 16-bit
+stereo takes both channels' top bytes with one `movep.w`, two frames a pass: from 101 cycles a frame
+to 56, then about 49 (Hatari's CPU profiler, the tick at a CD's rate from 72 % of the 68000 to some
+55 %). Of the rest, TOS's ROM takes 41 % (GEMDOS copying the file in, 176 KB/s), the loop 36 %, and
+the tick's other work 18 %. speed.py now clicks by the window's place (EPlay prints it: "EPLAY
+window x y w h"), so its rows work on an STE's screens. On Hatari's STE (mono) the rows paused are
+within the ST's times (About 120 against 150, a button pressed 25 against 50); playing a CD's rate
+they are about twice them (About 330, Settings 355): the window's next work.
+
+**Placement, not work (0.34, Falcon-4):** the start with 8 files given went 830 to 845-850 ms
+(limit 2,000), every run, with the common update (835 before it). Nothing in it runs more: each
+drawn part is the same to 0.1 ms. art.c's fixed loop (`spin`, a 200 Hz count) gives the clue: 1,460
+turns in 0.33, 1,370 before the update, 1,183 after, the same code where only its place moved, as
+the 68030's 256-byte caches meet TOS's trap code. Another: crt0.S leaves the stack's top 2 bytes
+off a longword (`_BasePage` 4 bytes, `_is_acc` 2, then the stack), so every long the stack takes
+is two bus cycles; aligned to 4 (tried here, not committed: common's) it gave 1,197 turns and
+840 ms, sent to the hub.
 
 ## The DSP rule (the hub writes it into the guidelines)
 
