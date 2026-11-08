@@ -103,7 +103,7 @@ is in it, so the playlist and its music can move together.
 
 **File > Open URL...** (Shift+^O) plays a station on the Falcon: type its address
 (`http://radio.example.com:8000/live`, or a `.pls` or `.m3u` station list's), or choose one of the
-last ten stations under it. The station goes into the list, its name on its row, and plays. EPlay
+last ten stations under it. The field keeps what was last typed in it. The station goes into the list, its name on its row, and plays. EPlay
 gathers about three seconds of it first, so the network's pauses aren't heard, and connects again
 by itself if the line drops, while what it gathered plays on. Esc or Undo stops a connection that
 takes too long.
@@ -192,6 +192,8 @@ at the nearest rate instead.
   network card.
 - **A station stops now and then.** The network fell behind for longer than the three seconds
   EPlay gathered. With STinG, check the Delay in `STING.CPX` (10 on a Falcon).
+- **`EPLAYNET.LOG`**, beside the program, says how each connection to a station went (the secure
+  connection's steps among them): please send it with a report about web radio.
 - **`EPLAY.LOG`**, beside the program, says what EPlay found and did: the external clock and how it
   set the FDI, each file's format and length, how playing ended, and how the DSP and the 68030 kept
   up. Please send it, and any `CRASH.LOG`, with a report.

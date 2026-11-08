@@ -70,7 +70,7 @@ int url_dialog(char *out, int omax)
 	tmpl[SHOW] = 0;
 	memset(valid, 'X', SHOW);
 	valid[SHOW] = 0;
-	text[0] = 0;
+	snprintf(text, sizeof(text), "%s", settings_url_typed());	/* (the last typed, again) */
 	memset(&t, 0, sizeof(t));
 	t.te_ptext = text;
 	t.te_ptmplt = tmpl;
@@ -118,6 +118,7 @@ int url_dialog(char *out, int omax)
 		e = s + strlen(s);
 		while (e > s && e[-1] == ' ')
 			*--e = 0;
+		settings_set_url_typed(s);
 		if (!*s)
 			return 0;
 		if (surl_is(s))

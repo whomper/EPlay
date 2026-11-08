@@ -122,6 +122,7 @@ static int ask(char *u, char *err, int n)
 	SURL s;
 	char req[SURL_PATH + SURL_HOST + 200];
 	long got = 0, h;
+	unsigned long t0;
 	if (!surl_parse(u, &s)) {
 		snprintf(err, (size_t)n, "That isn't a station's address EPlay can open.");
 		return 0;
@@ -132,7 +133,16 @@ static int ask(char *u, char *err, int n)
 		snprintf(err, (size_t)n, "The station needs a secure connection: play it through the Gateway.");
 		return 0;
 	}
+	{
+		/* (the path without its query: a station's tokens stay out of the log) */
+		const char *q = strchr(s.path, '?');
+		elog("the station: asking %s://%s:%u%.*s", s.tls ? "https" : "http", s.host, s.port,
+		     (int)(q ? q - s.path : (long)strlen(s.path)), s.path);
+	}
+	t0 = pf_ms();
 	c = conn_open("HTTP", s.host, s.port, 0, s.tls ? SEC_TLS : SEC_PLAIN, err, n);
+	if (c)
+		elog("the station: connected in %lu ms%s%s", pf_ms() - t0, s.tls ? ", " : "", conn_security(c));
 	if (!c) {
 		/* (conn's own words to the log; the user's are the station's) */
 		elog("the station %s:%u: %s", s.host, s.port, err[0] ? err : "no connection");
@@ -154,6 +164,8 @@ static int ask(char *u, char *err, int n)
 	for (;;) {
 		long r = conn_read(c, head + got, HEAD_MAX - got);
 		if (r <= 0) {
+			elog("the station: %s after %lu ms, %ld bytes of its answer (%s)",
+			     r < 0 ? "no answer" : "closed", pf_ms() - t0, got, c->err[0] ? c->err : "closed");
 			snprintf(err, (size_t)n, "The station closed the connection.");
 			ns_close();
 			return 0;
@@ -165,8 +177,11 @@ static int ask(char *u, char *err, int n)
 			ns_close();
 			return 0;
 		}
-		if (h > 0)
+		if (h > 0) {
+			elog("the station: answered %d in %lu ms, %s%s%s", hd.status, pf_ms() - t0,
+			     hd.type[0] ? hd.type : "no type", hd.metaint ? ", titles" : "", hd.chunked ? ", chunked" : "");
 			break;
+		}
 		if (got >= HEAD_MAX) {
 			snprintf(err, (size_t)n, "The station's answer isn't one EPlay reads.");
 			ns_close();
@@ -295,6 +310,8 @@ static void tls_paths(void)
 	tls_file_stamp = pf_stamp;
 	tls_read_at = pf_read_at;
 	tls_file_info = pf_info;
+	/* the connections' own steps (TLS's included), beside EPLAY.LOG */
+	snprintf(conn_logfile, sizeof(conn_logfile), "%sEPLAYNET.LOG", d);
 }
 
 static int open_url(const char *url, char *err, int n)

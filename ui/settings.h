@@ -56,5 +56,7 @@ const char *settings_gate(void);
 long settings_gateport(void);
 char (*settings_urls(void))[URL_MAX];
 void settings_url_used(const char *url);
+const char *settings_url_typed(void);
+void settings_set_url_typed(const char *t);
 
 #endif
