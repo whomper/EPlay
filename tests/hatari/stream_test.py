@@ -18,6 +18,9 @@ Cases:
   pls       a .PLS station list behind a redirect (302): its first station
             plays
   aac       a station sending AAC: refused, in words that name the Gateway
+  gateway   Through the Gateway (EPLAY.INF: FALCON=0) to radio/radiogate.py
+            on this computer, an AAC station converted to MP3: the tone,
+            no gap, its titles
   url       File > Open URL... (Shift+Control+O) with nothing given: the
             address typed and Return: it plays, the row and the bar show
             the station, EPLAY.INF keeps it as the first of the last
@@ -41,7 +44,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "aac", "url"]
+CASES = ["live", "drop", "pls", "aac", "gateway", "url"]
 METAINT = 8192
 KBPS = 128
 
@@ -87,6 +90,12 @@ class Station(threading.Thread):
                 body = ("[playlist]\r\nNumberOfEntries=1\r\nFile1=http://127.0.0.1:%d/live\r\n"
                         "Title1=The rig's station\r\nVersion=2\r\n" % self.port).encode()
                 c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: audio/x-scpls\r\n\r\n" + body)
+                return
+            if self.case == "gateway":
+                want_meta = b"icy-metadata: 1" in req.lower()
+                c.sendall(("ICY 200 OK\r\nicy-name: The rig's AAC station\r\nContent-Type: audio/aacp\r\n%s\r\n" %
+                           ("icy-metaint: %d\r\n" % METAINT if want_meta else "")).encode())
+                self.audio(c, n, want_meta)
                 return
             if self.case == "aac":
                 c.sendall(b"ICY 200 OK\r\nicy-name: An AAC station\r\nContent-Type: audio/aacp\r\n\r\n" +
@@ -186,7 +195,23 @@ def run(work, case, spec):
     subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", wav, "synth", "8", "sine", "1000",
                     "sine", "1500", "remix", "1", "2", "gain", "-6"], check=True)
     subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", str(KBPS), "--cbr", wav, mp3], check=True)
+    if case == "gateway":
+        aac = os.path.join(w, "tone.aac")
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", wav, "-c:a", "aac", "-b:a",
+                        "%dk" % KBPS, "-f", "adts", aac], check=True)
+        mp3 = aac                       # (the station sends AAC at the same pace)
     st = Station(open(mp3, "rb").read(), case)
+    gate = None
+    if case == "gateway":
+        # the Gateway's radio service, EPlay's own (radio/), on this computer
+        sys.path.insert(0, os.path.join(TOP, "radio"))
+        import radiogate
+        radiogate.Config.allow_local = True     # (the station is on 127.0.0.1)
+        gate = radiogate.ThreadingHTTPServer(("127.0.0.1", 0), radiogate.Handler)
+        gate.daemon_threads = True
+        threading.Thread(target=gate.serve_forever, daemon=True).start()
+        with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
+            fh.write("FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\n\r\n" % gate.server_address[1])
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
@@ -260,6 +285,8 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "drop":
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
+        elif case == "gateway":
+            ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
         elif case == "url":
@@ -279,6 +306,8 @@ def run(work, case, spec):
             p.kill()
         m.stop()
         st.stop()
+        if gate:
+            gate.shutdown()
         if x:
             x.terminate()
 

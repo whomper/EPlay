@@ -41,7 +41,7 @@ static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
    are the family's: FALCON= (1: Direct connection), GATE=, GATEPORT= */
 static int gateway, gateway_saved;
 static char gate[64];
-static long gateport;
+static long gateport = 8580;	/* (the radio service's port: Erez, 8 Nov 2026) */
 static char urls[URL_RECENT][URL_MAX];
 static int urls_dirty, gate_dirty;
 
