@@ -337,10 +337,7 @@ void settings_dialog(void)
 	add(0, G_STRING, 0, 0, (long)pword, 36, 6, (short)strlen(pword), 1);
 	strcpy(p_tmpl, "_____");
 	strcpy(p_valid, "99999");
-	if (gateport)
-		snprintf(p_text, sizeof(p_text), "%ld", gateport);
-	else
-		p_text[0] = 0;
+	snprintf(p_text, sizeof(p_text), "%ld", gateport > 0 ? gateport : 8580L);
 	memset(&t_port, 0, sizeof(t_port));
 	t_port.te_ptext = p_text;
 	t_port.te_ptmplt = p_tmpl;
@@ -363,8 +360,8 @@ void settings_dialog(void)
 		return;
 	{
 		long pv = atol(p_text);
-		if (pv < 0 || pv > 65535)
-			pv = 0;
+		if (pv <= 0 || pv > 65535)
+			pv = 8580;	/* (left empty: the radio service's port again) */
 		if (strcmp(a_text, gate) || pv != gateport) {
 			snprintf(gate, sizeof(gate), "%s", a_text);
 			gateport = pv;
