@@ -289,6 +289,8 @@ static unsigned long part_from;
 #endif
 
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
+static int chain_row = -1;	/* gapless: the next row, chosen as the file's last bytes went
+				   into the queue (followed on, or opened at its end) */
 static int shown_due;		/* what plays to draw whole the next turn: 2 the bar, 1 Play/Pause and
 				   the times (the open's turn is the file's: drawing and reading in
 				   turns of their own, each whole) */
@@ -709,6 +711,7 @@ static char pending_play[320];
 
 static void play_file(const char *f)
 {
+	chain_row = -1;			/* (a file chosen: gapless's next forgotten) */
 	play_log_stop();		/* (the one playing gives the DSP back) */
 	play_stop();
 	if (art_begin(f) == ART_FIRST) {
@@ -1368,6 +1371,40 @@ static int next_due;		/* a file played to its end: the list's next, next turn */
 static void step(int playing)
 {
 	unsigned long used = tos_ms() - turn_t0;
+	if (playing && play_chained()) {
+		/* the file that followed on is heard: the list's current row,
+		   the bar and its album art (unpacked by the 68030: the DSP
+		   plays) */
+		int old = list_cur, i = chain_row;
+		ENTRY *e = list_at(i);
+		chain_row = -1;
+		if (e) {
+			order_played(&list_order, i);
+			list_cur = i;
+			list_sel = i;
+			snprintf(file, sizeof(file), "%s", e->path);
+			show_row(i);
+			row_redraw(old);
+			row_redraw(i);
+			art_begin_cpu(e->path);
+		}
+		playing_drawn(1);
+		{
+			char line[240];		/* (the rigs' console, as play_now's) */
+			snprintf(line, sizeof(line), "EPLAY playing: %s | %s | %s (followed on)\n", play_name, play_info,
+				 play_out);
+			nf_debug(line);
+		}
+	}
+	if (playing && play_wants_next() && list_cur >= 0 && order_has_next(&list_order, list_cur)) {
+		/* gapless: the next row chosen now, as at the end (Shuffle,
+		   Repeat), and followed on in the queue where it can be */
+		ENTRY *e;
+		if (chain_row < 0)	/* (chosen once: Pause or a seek asks again) */
+			chain_row = playable_from(list_cur, 1, 0);
+		if (chain_row >= 0 && (e = list_at(chain_row)) != 0 && !play_chain(e->path))
+			elog("gapless: the next file opens at this one's end");
+	}
 	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
 		if (play_note_new) {
 			/* (Normal by itself: the rate on the bar and the info
@@ -1683,7 +1720,9 @@ static void turn(int nested)
 	} else if (next_due && !nested) {
 		next_due = 0;
 		{
-			int i = playable_from(list_cur, 1, 0);	/* (Repeat one: the same) */
+			/* (Repeat one: the same; gapless's choice where it was made) */
+			int i = chain_row >= 0 ? chain_row : playable_from(list_cur, 1, 0);
+			chain_row = -1;
 			if (i >= 0)
 				play_index(i);
 		}

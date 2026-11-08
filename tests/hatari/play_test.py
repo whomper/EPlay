@@ -94,6 +94,15 @@ SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # 3 Nov 2026: files added in bulk). Each a second, A and C WAVs, B an MP3
 LIST = [("A.WAV", None), ("B.MP3", ["-b", "128"]), ("C.WAV", None)]
 CASES["list"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 1)
+# gapless (phase 8a): one tone of 6 s cut into two WAVs of 3 s, given
+# together: the second follows on in the queue, the sound 6 s without a
+# gap, and EPlay says it followed on
+CASES["gapless"] = ("G1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 6)
+# the same with MP3s (44.1 kHz, LAME's Info frame each): the DSP's stream
+# goes on, not loaded again; the encoder's delay and padding (LAME's
+# header) are what may be heard at the join
+CASES["gaplessmp3"] = ("G1.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "128", "XING"], 49170,
+                       (1000, 1500), 6)
 # a folder of 1,000 files given (as dropped on the program): all in the
 # list, their tags and lengths read, and the memory it takes (the hub, 4
 # Nov 2026: the free ST RAM a menu needs under NVDI). Not by default (slow)
@@ -333,6 +342,20 @@ def run(work, case, spec):
             else:
                 shutil.copy(src, os.path.join(hd, name))
         tail = " ".join("C:\\" + n for n, _ in LIST)
+    if case == "gaplessmp3":
+        src = os.path.join(w, "src.wav")      # (make_file's tone, whole)
+        for k, (a, b) in enumerate((("0", "3"), ("3", None))):
+            half = os.path.join(w, "half%d.wav" % k)
+            subprocess.run(["sox", src, half, "trim", a] + ([b] if b else []), check=True)
+            subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", "128", half,
+                            os.path.join(hd, "G%d.MP3" % (k + 1))], check=True)
+        tail = "C:\\G1.MP3 C:\\G2.MP3"
+    if case == "gapless":
+        whole = os.path.join(w, "whole.wav")
+        shutil.move(os.path.join(hd, "G1.WAV"), whole)
+        subprocess.run(["sox", whole, os.path.join(hd, "G1.WAV"), "trim", "0", "3"], check=True)
+        subprocess.run(["sox", whole, os.path.join(hd, "G2.WAV"), "trim", "3"], check=True)
+        tail = "C:\\G1.WAV C:\\G2.WAV"
     if case == "keys":
         for n in ("K2.WAV", "K3.WAV"):
             shutil.copy(os.path.join(hd, "K1.WAV"), os.path.join(hd, n))
@@ -528,6 +551,29 @@ def run(work, case, spec):
         if not os.path.exists(rec):
             return False, m.describe(), "no recording"
         ok, what = analyse(rec, case)
+        if case in ("gapless", "gaplessmp3"):
+            followed = [l for l in open(log, errors="replace") if "(followed on)" in l]
+            what += "; %s" % ("the second followed on" if followed else "the second didn't follow on")
+            ok = ok and bool(followed)
+            # the join itself, on the channel that has the sound (Hatari 2.4's
+            # DMA may leave one silent): 6 s, no 5 ms block without it
+            with wave.open(rec) as wv:
+                r, ch, nf = wv.getframerate(), wv.getnchannels(), wv.getnframes()
+                smp = struct.unpack("<%dh" % (nf * ch), wv.readframes(nf))
+            best = None
+            for c in range(ch):
+                x = smp[c::ch]
+                blk = r // 200
+                rms = [math.sqrt(sum(v * v for v in x[i:i + blk]) / blk) for i in range(0, len(x) - blk, blk)]
+                loud = [i for i, v in enumerate(rms) if v > 1000]
+                if loud and (best is None or len(loud) > best[0]):
+                    a, b = loud[0], loud[-1]
+                    best = (len(loud), (b - a + 1) * 0.005, sum(1 for i in range(a, b + 1) if rms[i] < 1000))
+            if best:
+                what += "; %.3f s of sound, %d 5 ms blocks without it" % (best[1], best[2])
+                ok = ok and abs(best[1] - 6.0) < 0.05 and best[2] == 0
+            else:
+                ok = False
         under = wait_line(log, lambda l: l.startswith("EPLAY ended"), 5) or "EPLAY ended: ? underruns"
         ok = ok and " 0 underruns" in under
         if "XING" in (CASES[case][2] or []):

@@ -165,6 +165,27 @@ static int bshift;		/* a sample frame's bytes as a shift; -1 when not a power of
 #define B2FR(b)	(bshift >= 0 ? (b) >> bshift : (b) / fmt.bytes)
 static volatile int src_done;	/* the whole file is in the queue */
 
+/* gapless (phase 8a): the next file follows on in the same queue and the
+   same stream when its sound is the same (an MP3 at the same rate; a WAV
+   or AIFF of the same format), opened as this one's last bytes go into
+   the queue; the bar, the title and the time become its own when its
+   first sound is heard */
+static volatile long chain_q = -1;	/* the queue's total where the next file's bytes begin; -1 none */
+static volatile long chain_frame = -1;	/* MP3: the DSP frame its first packet is (t_frames then) */
+static volatile int chain_cross;	/* MP3: the tick has reached chain_q (the parser begun again) */
+static long chain_at;			/* MP3: the next file's first frame, in its file */
+static int chain_asked;			/* play_wants_next said so for this file */
+static int chain_heard;			/* the next file's sound has begun: play_chained says so once */
+static long fr_base, pcm_base;		/* the DSP's frames and the samples played before this file's */
+static struct {
+	char path[256], name[64], info[80];
+	TAGS tags;
+	long len_ms, kbps, bitrate, xing_at;
+	int has_toc;
+	unsigned char xtoc[100];
+} nx;					/* the next file's, until it is heard */
+static volatile int pk_chain;		/* MP3: the packet made is the next file's first */
+
 /* the tick's own */
 static volatile int t_end, t_dsp, t_failed;
 static volatile long t_ended_at;	/* the frames written when the file's end came; -1 before */
@@ -407,6 +428,14 @@ static void next_packet(void)
 		MP3HDR h;
 		long have = q_w - q_r;
 		int np;
+		if (chain_q >= 0 && !chain_cross && q_r >= chain_q) {
+			/* the next file's first byte: its frames from here, the
+			   bit reservoir begun again (its first frame's is empty) */
+			mp3_reset(&parse);
+			q_base = chain_at - chain_q;
+			chain_cross = 1;
+			pk_chain = 2;		/* (the next packet made is its first) */
+		}
 		if (have < 4) {
 			if (src_done)
 				src_out = 1;
@@ -438,6 +467,8 @@ static void next_packet(void)
 			}
 			if (np > 0) {
 				pk_n = np;
+				if (pk_chain == 2)
+					pk_chain = 1;	/* (offered: its frame noted) */
 				pk_samples = h.samples;
 				fr_at[fr_sent % FR_RING] = at;
 				fr_sent++;
@@ -528,6 +559,10 @@ static void tick_mp3(void)
 		if (!pk_n)
 			make_packet();
 		if (pk_n) {
+			if (pk_chain == 1) {
+				chain_frame = t_frames;	/* (the next file's first frame) */
+				pk_chain = 0;
+			}
 			dspmp3_tick_offer(pk, pk_n);
 			s_flags = pk[0];
 			s_spf = pk_samples;
@@ -1234,7 +1269,180 @@ int play_open(const char *path, char *err, int n)
 	pk_n = src_out = 0;
 	t_ended_at = -1;
 	last_sec = -1;
+	chain_q = chain_frame = -1;
+	chain_cross = chain_asked = chain_heard = 0;
+	pk_chain = 0;
+	fr_base = pcm_base = 0;
 	return 1;
+}
+
+/* gapless: 1 once, when this file's last bytes are in the queue and the
+   next could follow on (main.c then chooses it, as at a file's end, and
+   gives it to play_chain) */
+int play_wants_next(void)
+{
+	if (chain_asked || !src_done || net || paused || state != PS_PLAYING || chain_q >= 0 || t_end ||
+	    (dsp && xs) || (!dsp && raw8))
+		return 0;
+	if (q_w - q_r < 32768L)
+		return 0;		/* (too near the end to begin anything) */
+	chain_asked = 1;
+	return 1;
+}
+
+/* gapless: path opened to follow on in the queue: 1 when its sound is
+   the same as this one's (an MP3 at the same rate, its first frame found
+   and its Xing frame passed; a WAV or AIFF of the same format), 0 (and
+   nothing changed) when it isn't: it then opens at this one's end as
+   before */
+int play_chain(const char *path)
+{
+	int h2 = (int)Fopen(path, 0);
+	long size, at, left;
+	TAGS t;
+	if (h2 < 0)
+		return 0;
+	size = Fseek(0, (short)h2, 2);
+	memset(&nx, 0, sizeof(nx));
+	{
+		int was = fh;		/* (tag_read and refill read fh: the next file's here) */
+		long wpos = fpos, wend = fend;
+		int weof = eof;
+		fh = h2;
+		tags_read(&t, tag_read, 0, size);
+		Fseek(0, (short)h2, 0);
+		fpos = fend = 0;
+		eof = 0;
+		refill();
+		if (dsp) {
+			MP3HDR h;
+			int vbr = 0;
+			long nf;
+			at = find_mp3(&h);
+			if (at < 0 || h.rate != rate) {
+				fh = was;
+				fpos = wpos;
+				fend = wend;
+				eof = weof;
+				Fclose((short)h2);
+				elog("gapless: %s is no MP3 at %ld Hz: it opens at this one's end", base_name(path), rate);
+				return 0;
+			}
+			nf = first_at + h.length <= fend ? mp3_info_frames(fbuf + first_at, &h, &vbr) : 0;
+			nx.xing_at = at;
+			left = size - at;
+			if (nf > 0) {
+				long fs = nf * h.samples;
+				nx.has_toc = mp3_info_toc(fbuf + first_at, &h, nx.xtoc);
+				at += h.length;		/* (the Xing frame holds no sound) */
+				left -= h.length;
+				nx.len_ms = fs / rate * 1000 + fs % rate * 1000 / rate;
+				nx.bitrate = vbr && nx.len_ms > 0 ? left / nx.len_ms * 8 + (left % nx.len_ms) * 8 / nx.len_ms :
+								      h.bitrate;
+			} else {
+				nx.bitrate = h.bitrate;
+				nx.len_ms = h.bitrate ? left * 8 / h.bitrate : 0;
+			}
+			{
+				/* (an ID3v1 tag at its end isn't sound: left out of the queue) */
+				unsigned char tg[3];
+				if (size >= 128 && Fseek(size - 128, (short)h2, 0) == size - 128 && Fread((short)h2, 3, tg) == 3 &&
+				    !memcmp(tg, "TAG", 3))
+					left -= 128;
+			}
+			{
+				char kr[20];
+				khz(kr, sizeof(kr), rate);
+				nx.kbps = nx.bitrate;
+				snprintf(nx.info, sizeof(nx.info), "MP3  %s%ld kbit/s  %s  %s", vbr ? "VBR " : "", nx.bitrate,
+					 kr, h.channels == 2 ? "stereo" : "mono");
+			}
+			chain_at = at;
+		} else {
+			PCMFMT f2;
+			const char *why;
+			if (!pcm_probe(fbuf, fend, &f2, &why) || f2.kind != fmt.kind || f2.rate != fmt.rate ||
+			    f2.channels != fmt.channels || f2.bits != fmt.bits || f2.big != fmt.big || f2.sign8 != fmt.sign8) {
+				fh = was;
+				fpos = wpos;
+				fend = wend;
+				eof = weof;
+				Fclose((short)h2);
+				elog("gapless: %s is not this file's format: it opens at this one's end", base_name(path));
+				return 0;
+			}
+			at = f2.data;
+			left = f2.frames > 0 ? f2.frames * f2.bytes : size - f2.data;
+			nx.len_ms = f2.frames / f2.rate * 1000 + f2.frames % f2.rate * 1000 / f2.rate;
+			nx.kbps = (f2.rate * f2.channels * f2.bits + 500) / 1000;
+			{
+				char kr[20];
+				khz(kr, sizeof(kr), f2.rate);
+				snprintf(nx.info, sizeof(nx.info), "%s  %d bits  %s  %s", f2.kind == PCM_WAV ? "WAV" : "AIFF",
+					 f2.bits, kr, f2.channels == 2 ? "stereo" : "mono");
+			}
+		}
+		if (was >= 0)
+			Fclose((short)was);	/* (its bytes are all in the queue) */
+	}
+	Fseek(at, (short)h2, 0);
+	nx.tags = t;
+	snprintf(nx.path, sizeof(nx.path), "%s", path);
+	snprintf(nx.name, sizeof(nx.name), "%s", base_name(path));
+	chain_cross = 0;
+	chain_frame = -1;
+	pk_chain = 0;
+	data_left = left;
+	chain_q = q_w;			/* (its first byte goes there) */
+	src_done = 0;			/* (last: the tick sees more to come) */
+	elog("gapless: %s follows on (%ld bytes from %ld)", nx.name, left, at);
+	return 1;
+}
+
+/* gapless: 1 once, when the file that followed on is heard: it is what
+   plays now (its name, tags, length, the time from 0) */
+int play_chained(void)
+{
+	if (!chain_heard)
+		return 0;
+	chain_heard = 0;
+	return 1;
+}
+
+/* (play_step's: the next file's sound begun? its own from then) */
+static void chain_check(void)
+{
+	if (chain_q < 0)
+		return;
+	if (dsp) {
+		long fr, late, wmin, wavg;
+		if (chain_frame < 0)
+			return;
+		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
+		if (fr <= chain_frame)
+			return;
+		fr_base = chain_frame;
+		bitrate = nx.bitrate;
+		xing_at = nx.xing_at;
+		has_toc = nx.has_toc;
+		memcpy(xtoc, nx.xtoc, sizeof(xtoc));
+	} else {
+		if (snd_played() < B2FR(chain_q))
+			return;
+		pcm_base = B2FR(chain_q);
+	}
+	snprintf(cur_path, sizeof(cur_path), "%s", nx.path);
+	snprintf(play_name, sizeof(play_name), "%s", nx.name);
+	snprintf(play_info, sizeof(play_info), "%s", nx.info);
+	play_tags = nx.tags;
+	len_ms = nx.len_ms;
+	play_kbps = nx.kbps;
+	base_ms = 0;
+	chain_q = -1;
+	chain_asked = 0;
+	chain_heard = 1;
+	q_normal = 0;
+	elog("gapless: %s heard after %ld ms of the queue", play_name, play_ms());
 }
 
 
@@ -1426,10 +1634,11 @@ long play_ms(void)
 		if (!s_started)
 			return base_ms;		/* (the counts are the last stream's until this one's start) */
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
+		fr -= fr_base;		/* (a file followed on: its own frames) */
 		f = fr > 1 ? (fr - 1) * s_spf : 0;
 		return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 	}
-	f = snd_played();
+	f = snd_played() - pcm_base;
 	return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 }
 
@@ -1587,6 +1796,7 @@ int play_step(int ms)
 	}
 	fill(t0, ms, !src_done && q_lead_ms() < 3000);
 	net_titles();
+	chain_check();
 	if (net && play_net_lost && !src_done) {
 		/* the station's connection ended: again, every 2 s at most and
 		   five times, while the queue plays on from memory (the music

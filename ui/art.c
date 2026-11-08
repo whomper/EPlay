@@ -308,6 +308,19 @@ static void fail(const char *why)
 	st = A_FAILED;
 }
 
+static int force_cpu;		/* art_begin_cpu's: the 68030 unpacks it */
+
+/* a file that followed on (gapless): its picture as art_begin's, but the
+   68030 unpacks it (the DSP plays it) and no music waits */
+int art_begin_cpu(const char *path)
+{
+	int r;
+	force_cpu = 1;
+	r = art_begin(path);
+	force_cpu = 0;
+	return r;
+}
+
 int art_begin(const char *path)
 {
 	unsigned char head[12];
@@ -380,7 +393,7 @@ int art_begin(const char *path)
 		st = A_DITHER;
 		return ART_NOW;
 	}
-	on_dsp = !cpu_fast;
+	on_dsp = !cpu_fast && !force_cpu;
 	if (on_dsp && !dspjpeg_present()) {
 		fail("no DSP here to unpack it, and the 68030 too slow");
 		elog("%s", note);

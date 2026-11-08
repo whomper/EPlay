@@ -19,6 +19,7 @@ void art_init(short size);	/* at the start: its ST RAM; size: the art's side */
    from the cache, the same file's, or none) */
 enum { ART_NOW, ART_FIRST };
 int art_begin(const char *path);
+int art_begin_cpu(const char *path);	/* the same, the 68030 unpacking it (gapless: the DSP plays) */
 int art_pending(void);		/* work left */
 int art_needs_dsp(void);	/* its work still wants the DSP (the music waits) */
 /* one slice of the work (about 40 ms); turn() gives GEM its turn in a long

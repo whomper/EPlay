@@ -35,7 +35,13 @@ int play_is_open(void);
 int play_is_net(void);		/* a station or stream plays or is paused (phase 7) */
 const char *play_net_title(void);	/* its song now, "" before the first */
 const char *play_net_picture(int *changed);	/* its picture's address (StreamUrl), "" none */
-void play_feed(void);		/* a station's queue topped up (sart.c's waits) */
+void play_feed(void);
+/* gapless (phase 8a): play_wants_next is 1 once, as this file's last bytes
+   go into the queue; play_chain(path) has the next follow on (1) when its
+   sound is the same; play_chained is 1 once, when it is heard */
+int play_wants_next(void);
+int play_chain(const char *path);
+int play_chained(void);		/* a station's queue topped up (sart.c's waits) */
 /* n bytes of the open file from at (the album art), its place for the
    queue kept: how many, or -1 */
 long play_read_at(long at, void *buf, long n);		/* opened and not stopped: Play goes on from where it is */
