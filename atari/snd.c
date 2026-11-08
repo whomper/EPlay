@@ -150,10 +150,41 @@ static long stop8(void)
    * 62,830 for files up to 192 kHz */
 static unsigned long r8;
 static unsigned long in_written;	/* the file's frames given to snd_wrote */
+/* a * b by the 68000's mulu.w where both fit 16 bits (gcc otherwise
+   calls libgcc's 32-bit multiply, and folds a C cast back into it) */
+static inline unsigned long mul16(unsigned long a, unsigned long b)
+{
+#if defined(__m68k__)
+	if (a < 65536UL && b < 65536UL) {
+		unsigned long p = a;
+		__asm__("mulu.w\t%1,%0" : "+d"(p) : "d"(b) : "cc");
+		return p;
+	}
+#endif
+	return a * b;
+}
+
 static long as_in(long n)
 {
-	return out8 == in8 ? n : (long)(((unsigned long)n * r8) >> 12);
+	if (out8 == in8)
+		return n;
+	return (long)(mul16((unsigned long)n, r8) >> 12);	/* (twice a tick on an STE) */
 }
+
+/* a / b by the 68000's divu.w where the quotient fits 16 bits, else
+   libgcc's division (a tick's, on the STE) */
+static inline unsigned long div16(unsigned long a, unsigned short b)
+{
+#if defined(__m68k__)
+	if (b && (a >> 16) < b) {
+		unsigned long q = a;
+		__asm__("divu.w\t%1,%0" : "+d"(q) : "dm"(b) : "cc");
+		return q & 0xffffUL;
+	}
+#endif
+	return a / b;
+}
+
 #define in_for(n) as_in(n)		/* the file's frames that fill n of the DMA's */
 
 /* a 16-bit sample to 8 bits: with its error carried to the next (a
@@ -238,7 +269,7 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 {
 	unsigned char *r = ring8 + 2 * wpos, *rend = ring8 + 2 * ring_n;
 	unsigned short f = frac8, st = (unsigned short)step8;
-	long whole = (long)(step8 >> 16), wb = whole * bpf, room = ring_n - (written - played) - 1024, made = 0,
+	long whole = (long)(step8 >> 16), wb = (long)mul16((unsigned long)whole, (unsigned long)bpf), room = ring_n - (written - played) - 1024, made = 0,
 	     k = 0;
 	const unsigned char *sp = src;
 	while (skip8 && k < nin) {	/* (owed from the last call) */
@@ -265,7 +296,7 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 			left = 16384;	/* (left << 16 within 32 bits) */
 		/* outputs j = 0.. at f + j st while under left << 16 */
 		lim = ((unsigned long)left << 16) - f - 1;
-		n = (long)(lim / st) + 1;
+		n = (long)div16(lim, st) + 1;
 		if (n > room - made)
 			n = room - made;
 		run = (long)(rend - r) / 2;

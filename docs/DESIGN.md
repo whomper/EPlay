@@ -1547,4 +1547,41 @@ the queue's ring and the list both taken).
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.
 4. **MP3 on the DSP**, whole, tested as above.
 5. **TT and STE**, 8-bit WAV and AIFF.
-6. 1.0.
+6. 1.0: phase 6 closed as EPlay 1.0 (Erez, 8 Nov 2026).
+7. **Phase 7, streaming** (below).
+8. **Phase 8, the player's features** (below).
+
+## Phase 6 closed: EPlay 1.0 (Erez, 8 Nov 2026)
+
+Phase 6 (0.33 to 1.0) set out to play WAV and AIFF on the TT and the STE. Done: the TT in 0.33
+(interpolated to 50,066 Hz and dithered to 8 bits), EPLAYST.PRG for the STE in 0.35 (the nearest
+sample, the LMC1992's volume), and 1.0 with the STE's tick lighter. Left: an STE's window while a
+CD-rate file plays is still over the ST's times (About 285 ms and Settings 295 against 150 on
+Hatari's STE, mono; paused, within them). The next step is known: the tick less often on an
+STE (its fixed cost is some 13 % of the 68000 at 250 a second), then the once-a-second times
+drawn more cheaply. It goes on as speed work beside phase 7.
+
+## Phase 7: streaming (Erez, 8 Nov 2026)
+
+Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Ataris with Ethernet:
+- the stream as a source of the queue in place of the file (Icecast and Shoutcast: HTTP with a
+  continuous MP3), seconds held in memory so that the network's pauses don't break the music;
+  reconnecting when the connection drops; no position bar or length for a stream;
+- the station's titles from the stream's ICY metadata in the bar;
+- an Open URL entry, and station lists in `.m3u` and `.pls`;
+- **how it connects, as the other AERA programs do** (Erez): a direct connection, or through the
+  AERA gateway, chosen in the menu. Through the gateway, HTTPS and the stations the Falcon can't
+  take (AAC, HLS) can be given to it as plain MP3;
+- the STE is left out (no MP3 there, and its 68000 already busy with the sound).
+
+## Phase 8: the player's features (Erez, 8 Nov 2026)
+
+From the list put to Erez:
+1. gapless playback (the encoder's delay and padding from LAME's header);
+2. ReplayGain (track and album gain from the tags);
+3. search and sort in the list (by text; by artist, album, track);
+4. lyrics from the tags (USLT, and timed lyrics);
+5. more formats: tracker modules (MOD) on the DSP, FLAC (to be measured on the 68030), OGG
+   and AAC (DSP projects);
+6. working with the family: a "now playing" message to the other AERA programs, remote control
+   from a phone through the gateway, scrobbling (Last.fm) through the gateway.
