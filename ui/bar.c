@@ -436,17 +436,16 @@ static short badge(int slot, short x, short y, short rh, const char *s, short pe
 }
 
 /* the shapes, made for the layout's sizes */
-static MASK k_art, k_hole, k_spot, k_play, k_ptri, k_prev, k_next, k_spk;
+static MASK k_art, k_hole, k_spot, k_ptri, k_prev, k_next, k_spk;
 
 static void make_masks(void)
 {
-	short s = (short)(rad * 10 / 13), h = b_btn[BH_PREV - 1].h / 2;
+	short g = (short)(rad * 14 / 13), h = b_btn[BH_PREV - 1].h / 2;
 	pool_used = 0;
 	mask_disc(&k_art, w_art.w / 2 - 3);
 	mask_disc(&k_hole, 6);
 	mask_disc(&k_spot, 2);
-	mask_disc(&k_play, rad);
-	mask_tri(&k_ptri, s * 3 / 4 + 1, s, 1);
+	mask_tri(&k_ptri, g * 3 / 4 + 1, g, 1);
 	mask_tri(&k_prev, h * 3 / 4 + 1, h, -1);
 	mask_tri(&k_next, h * 3 / 4 + 1, h, 1);
 	mask_tri(&k_spk, 5, 13, -1);
@@ -548,16 +547,18 @@ static void draw_buttons(int parts)
 {
 	int pressed = bar_held == BH_PLAY;
 	GRECT *b = &b_btn[BH_PLAY - 1];
-	short cx = b->x + rad, cy = b->y + rad, s = (short)(rad * 10 / 13);
+	short cx = b->x + rad, cy = b->y + rad, g = (short)(rad * 14 / 13);
 	if (parts & BP_PLAY) {
+		/* the bare symbol in the family's accent, as the volume's (Erez's
+		   design E, 8 Nov 2026: no disc round it); white while pressed */
+		short pen = pressed ? p_txt : play_name[0] ? p_acc : p_trk, w = (short)((g + 2) / 4);
 		gbox(b, p_bar);
-		mask_draw(&k_play, cx - rad, cy - rad, pressed ? p_acc : p_txt);
 		if (play_state() == PS_PLAYING) {
-			/* Pause's two bars */
-			box(cx - s / 2 - 1, cy - s / 2, s / 3 + 1, s, p_bar, 0);
-			box(cx + s / 2 - s / 3, cy - s / 2, s / 3 + 1, s, p_bar, 0);
+			/* Pause's two bars, a bar's width apart */
+			box(cx - w - w / 2, cy - g / 2, w, g, pen, 0);
+			box(cx + w - w / 2, cy - g / 2, w, g, pen, 0);
 		} else
-			mask_draw(&k_ptri, cx - s / 3, cy - s / 2, play_name[0] ? p_bar : p_trk);
+			mask_draw(&k_ptri, cx - g * 3 / 8, cy - g / 2, pen);
 	}
 	if (parts & (BP_TEXT | BP_NAV)) {
 		/* Previous, Next: the list's, dim where there is none */
