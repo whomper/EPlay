@@ -25,6 +25,11 @@ Cases:
             one (a 302, as many do): a Direct connection through TLS.OVL,
             the rig's own root certificate as CACERT.PEM beside EPlay; the
             tone, no gap, its titles
+  nginx     laut.fm's way (Erez's station, 8 Nov 2026): an nginx at https
+            (AES-128-GCM, P-256 only) answers with a 302 to the station, and
+            hangs up on a client that hasn't asked within 5 s
+            (client_header_timeout): the handshake's curves on the DSP keep
+            EPlay inside it. SKIPPED where there is no nginx
   url       File > Open URL... (Shift+Control+O) with nothing given: the
             address typed and Return: it plays, the row and the bar show
             the station, EPLAY.INF keeps it as the first of the last
@@ -52,7 +57,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "aac", "gateway", "https", "url"]
+CASES = ["live", "drop", "pls", "aac", "gateway", "https", "nginx", "url"]
 METAINT = 8192
 KBPS = 128
 
@@ -72,6 +77,9 @@ class Station(threading.Thread):
         self.log = []
 
         self.tls = None                 # (the https case: a second port, TLS)
+        # (what is sent at a time: 1 KB; laut.fm's burst comes in whole 16 KB
+        # TLS records, HTTPS_PIECE=65536)
+        self.piece = int(os.environ.get("HTTPS_PIECE", "1024"))
 
     def run(self):
         if self.tls:
@@ -108,7 +116,7 @@ class Station(threading.Thread):
             line = req.split(b"\r\n")[0].decode(errors="replace")
             self.log.append(line)
             path = line.split()[1] if len(line.split()) > 1 else "/"
-            if self.case == "https" and not secure:
+            if self.case in ("https", "nginx") and not secure:
                 c.sendall(("HTTP/1.1 302 Found\r\nLocation: https://radio.test:%d/live\r\n"
                            "Content-Length: 0\r\n\r\n" % self.tls[0].getsockname()[1]).encode())
                 return
@@ -146,15 +154,16 @@ class Station(threading.Thread):
         Icecast sends), a title every 4 s, the metadata every METAINT"""
         rate = KBPS * 1000 // 8
         sent, t0, upto, title_at = 0, time.time(), METAINT, 0
+        burst = 15 if self.piece > 1024 else 2      # (laut.fm's: 15 s at once)
         pos = 0
         while True:
             if self.case == "drop" and n == 1 and time.time() - t0 > 6:
                 return                  # (the first connection ends)
-            due = rate * 2 + int((time.time() - t0) * rate)
+            due = rate * burst + int((time.time() - t0) * rate)
             if sent >= due:
                 time.sleep(0.02)
                 continue
-            k = min(1024, due - sent)
+            k = min(self.piece, due - sent)
             out = b""
             while k > 0:
                 take = min(k, upto, len(self.mp3) - pos)
@@ -208,6 +217,32 @@ class Dns(threading.Thread):
                              socket.inet_aton("127.0.0.1"), a)
 
 
+def nginx(w, cert, key, to):
+    """an nginx of the rig's own on 127.0.0.1, TLS 1.2, answering every
+    path with a 302 to `to`: (the process, its port)"""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    d = os.path.join(w, "nginx")
+    os.makedirs(os.path.join(d, "logs"), exist_ok=True)
+    conf = os.path.join(d, "nginx.conf")
+    with open(conf, "w") as fh:
+        fh.write("""daemon off; master_process off; pid %(d)s/nginx.pid; error_log %(d)s/logs/error.log info;
+events {}
+http { access_log %(d)s/logs/access.log;
+  client_body_temp_path %(d)s; proxy_temp_path %(d)s; fastcgi_temp_path %(d)s;
+  uwsgi_temp_path %(d)s; scgi_temp_path %(d)s;
+  server { listen 127.0.0.1:%(port)d ssl; server_name radio.test;
+    ssl_certificate %(cert)s; ssl_certificate_key %(key)s;
+    ssl_protocols TLSv1.2 TLSv1.3;%(extra)s
+    location / { return 302 %(to)s; } } }
+""" % dict(d=d, port=port, cert=cert, key=key, to=to, extra=os.environ.get("HTTPS_NGINX_TLS", "")))
+    p = subprocess.Popen(["nginx", "-c", conf, "-p", d], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    time.sleep(0.5)
+    return p, port
+
+
 def make_certs(w):
     """a root certificate of the rig's own, and radio.test's from it (RSA)"""
     def ossl(*a):
@@ -224,6 +259,11 @@ def make_certs(w):
          "-extfile", ext)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(srv, skey)
+    if os.environ.get("HTTPS_CIPHERS"):
+        ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+        ctx.set_ciphers(os.environ["HTTPS_CIPHERS"])
+    if os.environ.get("HTTPS_CURVE"):
+        ctx.set_ecdh_curve(os.environ["HTTPS_CURVE"])
     return ca, ctx
 
 
@@ -276,7 +316,9 @@ def run(work, case, spec):
                         "%dk" % KBPS, "-f", "adts", aac], check=True)
         mp3 = aac                       # (the station sends AAC at the same pace)
     st = Station(open(mp3, "rb").read(), case)
-    if case == "https":
+    if case == "nginx" and not shutil.which("nginx"):
+        return True, "-", "SKIPPED (no nginx here)"
+    if case in ("https", "nginx"):
         ca, ctx = make_certs(w)
         shutil.copy(ca, os.path.join(hd, "CACERT.PEM"))
         shutil.copy(os.path.join(TOP, "common", "tlsovl", "tls.ovl"), os.path.join(hd, "TLS.OVL"))
@@ -301,6 +343,15 @@ def run(work, case, spec):
             fh.write("FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\n\r\n" % gate.server_address[1])
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
+    ngx = None
+    if case == "nginx" or (case == "https" and os.environ.get("HTTPS_NGINX")):
+        if case == "nginx":
+            os.environ["HTTPS_NGINX_TLS"] = (" ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256;"
+                                             " ssl_ecdh_curve prime256v1; client_header_timeout 5s;")
+        # (laut.fm's way: an nginx at https sends EPlay on with a 302)
+        ngx, nport = nginx(w, os.path.join(w, "srv.pem"), os.path.join(w, "srv.key"),
+                           "https://radio.test:%d/live" % st.tls[0].getsockname()[1])
+        url = "https://radio.test:%d/musickoeln" % nport
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
         fh.write(("" if case == "url" else url) + "\r\n")
     m = machines.Machine(spec, hd)
@@ -372,9 +423,9 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "drop":
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
-        elif case in ("gateway", "https"):
-            ok = ok and gaps == 0 and len(titles) >= 2
-            if case == "https":
+        elif case in ("gateway", "https", "nginx"):
+            ok = ok and gaps == 0 and len(titles) >= (1 if case == "nginx" else 2)
+            if case in ("https", "nginx"):
                 note += "; " + ", ".join(l for l in st.log if l.startswith("TLS"))
                 ok = ok and any(l.startswith("TLS ") for l in st.log)
         elif case == "pls":
@@ -398,6 +449,8 @@ def run(work, case, spec):
         st.stop()
         if gate:
             gate.shutdown()
+        if ngx:
+            ngx.terminate()
         if x:
             x.terminate()
 

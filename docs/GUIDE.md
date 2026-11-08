@@ -117,7 +117,8 @@ The **Options** menu chooses how a station is reached:
 
 - **Direct connection** (the default): EPlay connects to the station itself. It plays MP3
   stations, at http and https addresses (https with `tls.ovl` and `CACERT.PEM` beside EPlay;
-  the secure connection takes a few seconds more to start).
+  the secure connection takes a few seconds more to start; its arithmetic is done on the DSP when
+  no music holds it).
 - **Through the Gateway:** the AERA Gateway fetches the station and passes it on as MP3, so
   stations that send AAC or Ogg, or HLS, play too. Give the Gateway's address and port
   in **Settings**. (The Gateway's stream service comes with AERA-Gateway 1.33.)

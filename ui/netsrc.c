@@ -293,8 +293,12 @@ static int via_gateway(const char *url, char *out, int omax, char *err, int n)
 }
 
 /* a Direct https station: TLS.OVL, CACERT.PEM and what TLS keeps between
-   sessions (ROOTS.DAT, SEED.DAT, SIGS.DAT), all beside EPlay. The DSP is
-   EPlay's music's: the handshake is the 68030's (tls_ovl_dsp never asked) */
+   sessions (ROOTS.DAT, SEED.DAT, SIGS.DAT), all beside EPlay. The
+   handshake's curves and RSA on the DSP when it is free (TLS.OVL locks it
+   with the XBIOS for each job, the 68030 when the music holds it): a
+   station connected before it plays has it. laut.fm's front hangs up on a
+   client that hasn't asked within about 4 s, and P-256 on a 50 MHz 68030
+   took 3.95 s of that (Erez's EPLAYNET.LOG, 8 Nov 2026); on the DSP 0.44 s */
 static void tls_paths(void)
 {
 	static int done;
@@ -310,6 +314,8 @@ static void tls_paths(void)
 	tls_file_stamp = pf_stamp;
 	tls_read_at = pf_read_at;
 	tls_file_info = pf_info;
+	tls_ovl_dsp(0, 1);
+	tls_ovl_dsp(1, 1);
 	/* the connections' own steps (TLS's included), beside EPLAY.LOG */
 	snprintf(conn_logfile, sizeof(conn_logfile), "%sEPLAYNET.LOG", d);
 }
