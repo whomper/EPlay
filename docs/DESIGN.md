@@ -1631,6 +1631,12 @@ the speed rig's "Settings closed" row press Undo. stream_test's `url` case: ⇧^
 the address typed (xdotool, as common's speed rig), Return: it plays (no gap), the row and bar show
 the station, EPLAY.INF keeps it as URL1.
 
+**The Gateway's radio service (Erez, 8 Nov 2026):** port **8580** (the row 8180, 8280, 8380, 8480
+goes on); **ffmpeg on the Gateway** now, so that AAC, Ogg and HLS stations play through it
+(converted to MP3 there; HTTPS MP3 passed on as it is); **AAC on the Falcon's DSP later**, in
+phase 8 (plain AAC likely fits beside the MP3 decoder's size; HE-AAC, most AAC radio, to be
+measured first; Ogg unlikely to fit the DSP's memory).
+
 **Erez's decisions (8 Nov 2026):**
 - **Opening:** File > Open URL... (Control+U): one field for the address, and the last ten
   stations to choose from, as Add files' Folders has them; the station goes into the list and
@@ -1652,6 +1658,6 @@ From the list put to Erez:
 3. search and sort in the list (by text; by artist, album, track);
 4. lyrics from the tags (USLT, and timed lyrics);
 5. more formats: tracker modules (MOD) on the DSP, FLAC (to be measured on the 68030), OGG
-   and AAC (DSP projects);
+   and AAC (DSP projects; AAC first, for web radio on a Direct connection: Erez, 8 Nov 2026);
 6. working with the family: a "now playing" message to the other AERA programs, remote control
    from a phone through the gateway, scrobbling (Last.fm) through the gateway.
