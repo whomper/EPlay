@@ -1593,6 +1593,19 @@ Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Atari
 - **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
   as Erez decides them.
 
+**Erez's decisions (8 Nov 2026):**
+- **Opening:** File > Open URL... (Control+U): one field for the address, and the last ten
+  stations to choose from, as Add files' Folders has them; the station goes into the list and
+  plays. Station URLs in `.m3u` and `.pls` playlists play too.
+- **The connection:** the Options menu has "Direct connection" and "Through the Gateway", one
+  ticked; the Gateway's address and port in Settings. Direct by default (most stations are plain
+  HTTP; https on a Direct connection takes TLS.OVL).
+- **Pause** on a live station ends the connection; Play connects again and plays it live from
+  then. Nothing piles up in memory.
+- **The bar** for a station: the song now playing on the top line (the stream's titles), the
+  station's name on the second; "Live" and the time since it started in place of the length; the
+  position bar greyed.
+
 ## Phase 8: the player's features (Erez, 8 Nov 2026)
 
 From the list put to Erez:
