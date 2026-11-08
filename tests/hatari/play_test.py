@@ -318,7 +318,9 @@ def run(work, case, spec):
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(TOP, "binary", "eplay.prg"), hd)
+    # (an STE runs the 68000 edition, EPLAYST.PRG, under the launcher's name)
+    shutil.copy(os.path.join(TOP, "binary", "eplayst.prg" if spec.startswith("STE") else "eplay.prg"),
+                os.path.join(hd, "eplay.prg"))
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     f = make_file(hd, case)
     tail = "C:\\%s" % f
@@ -434,10 +436,15 @@ def run(work, case, spec):
             return ok, m.describe(), "%s\n     %s" % (start[4:], got[4:] if got else "the list never read")
         if case == "keys":
             def key(scan, shift=False):
+                # (Shift held as a hand holds it: the AES gives the shift
+                # state when the event is taken, and a busy 68000 takes it
+                # after a Shift let go at once)
                 if shift:
                     cmd(fifo, "hatari-event", "keydown", "0x2a")
+                    time.sleep(0.3)
                 cmd(fifo, "hatari-event", "keypress", scan)
                 if shift:
+                    time.sleep(0.3)
                     cmd(fifo, "hatari-event", "keyup", "0x2a")
                 time.sleep(1.5)
             for k in ("0x4d", "0x4d", "0x4b"):

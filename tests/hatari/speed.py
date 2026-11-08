@@ -60,8 +60,27 @@ PICTURE_022 = {
 STEP = 5
 
 
+# where EPlay's window's work area opens on the Falcon's 640 x 480 (its
+# "EPLAY window" line): the places above are its; on another screen (an
+# STE's 640 x 400) they move with the window (Rig.at)
+WORK_FALCON = (85, 131)
+
+
 class Rig(speed.Rig):
     quick = False
+
+    def at(self, x, y):
+        """a place in EPlay's window as on the Falcon, where the window is
+        now (from its "EPLAY window" line); the menu bar's (y < 60) as it is"""
+        if y < 60:
+            return x, y
+        m = re.findall(r"EPLAY window (-?\d+) (-?\d+) \d+ \d+", self.console())
+        if not m:
+            return x, y
+        return x + int(m[-1][0]) - WORK_FALCON[0], y + int(m[-1][1]) - WORK_FALCON[1]
+
+    def click(self, x, y, button="1"):
+        super().click(*self.at(x, y), button)
 
     def still(self, most=30):
         """while it plays the time changes each second: a few seconds are
@@ -120,12 +139,14 @@ class Rig(speed.Rig):
     def press(self, x, y):
         """the button down over x, y (held: the guidelines' 5.8 times the
         press, the button drawn pressed, apart from the release's action)"""
+        x, y = self.at(x, y)
         g = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", self.win()).split())
         self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
         time.sleep(0.4)
         self.xdo("mousedown", "1")
 
     def dclick(self, x, y):
+        x, y = self.at(x, y)
         g = dict(l.split("=") for l in self.xdo("getwindowgeometry", "--shell", self.win()).split())
         self.xdo("mousemove", str(int(g["X"]) + x), str(int(g["Y"]) + y))
         time.sleep(0.4)
@@ -142,6 +163,7 @@ class Rig(speed.Rig):
         ring between its symbol and its edge"""
         from PIL import Image
         time.sleep(1)
+        x, y = self.at(x, y)
         img = Image.open(self.shot("held-" + what)).convert("L")
         ring = [(9, 0), (-9, 0), (0, 9), (0, -9), (7, 7), (-7, 7), (7, -7), (-7, -7)]
         box = [img.getpixel((x + dx, y + dy)) for dx, dy in ring]
@@ -160,7 +182,8 @@ def session(work, spec, kind):
     # (AERA_WITH_NVDI=1: under Erez's NVDI, as the hub runs it)
     r = Rig(os.path.join(work, kind), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1")
     try:
-        r.put(os.path.join(TOP, "build", "prof", "eplay.prg"))
+        # (an STE: the 68000's edition, make profst, under the same name)
+        r.put(os.path.join(TOP, "build", "profst" if r.m.name.startswith("STE") else "prof", "eplay.prg"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
         src = os.path.join(r.work, "src.wav")
         subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(SECS),
@@ -326,6 +349,9 @@ def list_session(r, src):
     def drag(y1, y2):
         g = dict(l.split("=") for l in r.xdo("getwindowgeometry", "--shell", r.win()).split())
         x, y = int(g["X"]), int(g["Y"])
+        px, y1 = r.at(300, y1)
+        _, y2 = r.at(300, y2)
+        x += px - 300
         r.xdo("mousemove", str(x + 300), str(y + y1))
         time.sleep(0.4)
         r.xdo("mousedown", "1")

@@ -151,6 +151,52 @@ say "MP3 needs a Falcon's DSP." ST low is common's `screen_check` (the family's 
 quit). `play_test` on Hatari's TT: the 20 cases, the MP3 ones refused in those words, the list and
 the playlist playing A and C with B.MP3 passed over, the mini player with a WAV.
 
+**Phase 6b, the STE, as built:** `EPLAYST.PRG`, the same sources for the 68000 (`make st`, in
+build/st; `-fdisable-tree-bswap -fno-store-merging`, then `oddaccess.py`), the 68030's EPLAY.PRG
+saying on a 68000 "This EPlay is for the Falcon and the TT. On an STE: EPLAYST.PRG." libgcc here is
+68020 code, and common's tos.c gives the 68000 its 32-bit multiply and divide but nothing for 64
+bits, so the 8-bit DMA's sums are 32-bit (the step 16.16 by its whole and its rest; the DMA's frames
+as the file's by a ratio of 12 fraction bits on a ring's count at most; `snd_written` the file's
+frames counted): EPLAYST.PRG met an illegal instruction in `__udivdi3` the first time. Only the
+MP3's and the Falcon's paths, which never run on an STE, still divide in 64 bits. The 68000 takes
+the file's bytes straight to the ring (`snd_put8_raw`): for 8 bits out a sample's top byte is all
+there is, so no 16-bit pass and no staging; the nearest frame, a 16-bit fraction a frame out whose
+carry steps the file on, in an assembly loop of two byte moves (about 78 cycles a frame: the C's
+150 had the tick at 78 % of the 68000 for a 24.5 kHz WAV, and 44.1 kHz fell behind, 10 s taking 23).
+Signed samples at or below the DMA's rate go that way; 8-bit WAV and files above 50 kHz take the C
+loop. The volume is the LMC1992's master volume through the Microwire (\$FF8922, \$FF8924), EPlay's
+1.5 dB steps as its 2 dB, 0 dB again at the end; the TT keeps play.c's gain on the samples. On
+Hatari's STE (EmuTOS, mono and medium) the 20 cases pass, a CD's 44.1 kHz at 50,066 Hz with no gap
+and no underrun, the tick some 72 % of the 68000 (24.5 kHz: 55 %). A row EPlay can't play is drawn
+light (VDI effect 2) where there's no grey pen, as in mono and four colours, where the dim pen had
+been the ground. The machine is common's `STE` (`machines.py`: TOS 1.62 where Erez has it, else
+EmuTOS), sent to the hub as patch 5.
+
+**Not released yet (7 Nov 2026):** the window is far over the ST's times on Hatari's STE (mono):
+the About box 480 ms paused against 150, a button drawn pressed 105 against 50; and playing a CD's
+44.1 kHz at 50,066 Hz leaves GEM so little that About took 1,025 ms (515 at 25,033 Hz). EPLAYST.PRG
+is built (`make st`) and its sound passes, but it stays out of the release's files until the
+window's drawing meets the ST's times. Erez chose 50,066 Hz for a CD's 44.1 kHz on an STE (7 Nov
+2026), and the window to be made faster for it.
+
+**The STE's loop, then (0.34):** the sample loop has no test but the fraction's carry, and 16-bit
+stereo takes both channels' top bytes with one `movep.w`, two frames a pass: from 101 cycles a frame
+to 56, then about 49 (Hatari's CPU profiler, the tick at a CD's rate from 72 % of the 68000 to some
+55 %). Of the rest, TOS's ROM takes 41 % (GEMDOS copying the file in, 176 KB/s), the loop 36 %, and
+the tick's other work 18 %. speed.py now clicks by the window's place (EPlay prints it: "EPLAY
+window x y w h"), so its rows work on an STE's screens. On Hatari's STE (mono) the rows paused are
+within the ST's times (About 120 against 150, a button pressed 25 against 50); playing a CD's rate
+they are about twice them (About 330, Settings 355): the window's next work.
+
+**Placement, not work (0.34, Falcon-4):** the start with 8 files given went 830 to 845-850 ms
+(limit 2,000), every run, with the common update (835 before it). Nothing in it runs more: each
+drawn part is the same to 0.1 ms. art.c's fixed loop (`spin`, a 200 Hz count) gives the clue: 1,460
+turns in 0.33, 1,370 before the update, 1,183 after, the same code where only its place moved, as
+the 68030's 256-byte caches meet TOS's trap code. Another: crt0.S leaves the stack's top 2 bytes
+off a longword (`_BasePage` 4 bytes, `_is_acc` 2, then the stack), so every long the stack takes
+is two bus cycles; aligned to 4 (tried here, not committed: common's) it gave 1,197 turns and
+840 ms, sent to the hub.
+
 ## The DSP rule (the hub writes it into the guidelines)
 
 - A program holds the DSP only while it uses it: EPlay locks it (`Dsp_Lock`) while an MP3 plays,

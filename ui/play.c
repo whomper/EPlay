@@ -84,7 +84,7 @@ static const unsigned short gain_tab[VOL_MAX] = {
 static void apply_volume(void)
 {
 	int a = VOL_MAX - vol;		/* 0..15 steps down, while vol is 1 or more */
-	if ((s_ext || snd_dma8) && play_is_open()) {
+	if ((s_ext || (snd_dma8 && snd_dma8_interp)) && play_is_open()) {
 		snd_dac_volume(0, 0);
 		t_gain = vol ? gain_tab[a] : 0;
 		t_gsub = vol ? a : 255;
@@ -271,6 +271,8 @@ static void adv(long n)
 }
 
 /* (no division or modulo here: the tick runs a thousand times a second) */
+static int raw8;		/* the STE's way: snd_put8_raw (set at the play's start) */
+
 static void tick_pcm(void)
 {
 	long room = snd_room(), cap = 1024;	/* (a tick short: GEM goes on between; 4 times what plays) */
@@ -293,6 +295,20 @@ static void tick_pcm(void)
 		if (kb > hb) {
 			k = B2FR(hb);
 			kb = FR2B(k);
+		}
+		if (raw8) {
+			/* the STE: the file's bytes straight to the ring (the volume
+			   the LMC1992's); the frames taken may be fewer than k */
+			long top = fmt.big ? 0 : fmt.bits / 8 - 1;
+			k = snd_put8_raw(q + q_roff, B2FR(hb), fmt.bytes, (int)top,
+					 (int)(fmt.channels == 2 ? top + fmt.bits / 8 : top),
+					 fmt.bits == 8 && !fmt.sign8 ? 0x80 : 0);
+			if (!k)
+				return;
+			adv(FR2B(k));
+			room = snd_room();
+			cap -= k;		/* (a tick short, as below) */
+			continue;
 		}
 		pcm_convert_to(&fmt, q + q_roff, p, k, SND_STEP);
 		if (!pcm_gain_idle(&gs, t_gain))
@@ -1056,6 +1072,7 @@ int play_open(const char *path, char *err, int n)
 				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 		}
 		snd_in_rate = rate;	/* (the 8-bit DMA resamples from it) */
+		raw8 = snd_dma8 && !snd_dma8_interp;
 		if (snd_dma8) {
 			if (out_rate != rate)
 				elog("%ld Hz up to the DMA's %ld Hz by the 68%s0: %s", rate, out_rate,

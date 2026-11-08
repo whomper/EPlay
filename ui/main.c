@@ -182,6 +182,12 @@ static void open_window(void)
 	wind_open(wh, x, y, w, h);
 	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 	bar_layout(&work);
+	{
+		/* (the rigs' clicks go by it: an STE's screen puts it elsewhere) */
+		char l[60];
+		snprintf(l, sizeof(l), "EPLAY window %d %d %d %d\n", work.x, work.y, work.w, work.h);
+		nf_debug(l);
+	}
 	av_window(wh, 1);		/* (an AV desktop drops files on it: VA_DRAGACCWIND) */
 }
 
@@ -1662,8 +1668,13 @@ static void turn(int nested)
 	step(playing && !piece && !open_due && !next_due);
 }
 
+#ifdef EPLAY_ST
+const long cpu_need = 0;	/* EPLAYST.PRG: the STE's (and any 68000 with DMA sound) */
+const char cpu_alert[] = "[3][EPlay can't run here.][ Quit ]";
+#else
 const long cpu_need = 30;
-const char cpu_alert[] = "[3][EPlay needs a Falcon.][ Quit ]";
+const char cpu_alert[] = "[3][This EPlay is for the Falcon and|the TT. On an STE: EPLAYST.PRG.][ Quit ]";
+#endif
 int app_main(void);
 int app_main(void)
 {
