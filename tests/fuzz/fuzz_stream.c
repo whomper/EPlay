@@ -3,7 +3,8 @@
 /*
  * fuzz_stream.c - libFuzzer target for src/stream.c (make fuzz): the input
  * plays a station, its first byte choosing what it is read as (a URL, the
- * answer's head, ICY audio in pieces of the second byte's size, a .PLS);
+ * answer's head, ICY audio in pieces of the second byte's size, a .PLS;
+ * with its bit 7, the ICY audio chunked first, as chunks_feed takes it);
  * built with replay.c instead, it runs tests/fuzz/found (make test).
  */
 #include <stdint.h>
@@ -45,15 +46,25 @@ int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
 	}
 	case 2: {
 		static ICY s;
+		static CHUNKS c;
 		unsigned char *b = malloc(n);
 		long piece = d[1] ? d[1] : 1, r = 2;
-		icy_init(&s, (long)(d[0] >> 2) + 1);
+		int chunked = d[0] & 0x80;
+		icy_init(&s, (long)((d[0] >> 2) & 31) + 1);
+		chunks_init(&c);
 		while (r < (long)n) {
-			long k = (long)n - r < piece ? (long)n - r : piece;
+			long k = (long)n - r < piece ? (long)n - r : piece, a = k;
 			memcpy(b, d + r, (size_t)k);
-			if (icy_feed(&s, b, k) > k)
-				abort();
 			r += k;
+			if (chunked) {
+				a = chunks_feed(&c, b, k);
+				if (a > k)
+					abort();
+				if (a < 0)
+					break;
+			}
+			if (icy_feed(&s, b, a) > a)
+				abort();
 		}
 		if (strlen(s.title) >= ICY_TITLE)
 			abort();

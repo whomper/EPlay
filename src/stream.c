@@ -135,13 +135,19 @@ long shead_parse(const char *t, long n, SHEAD *h)
 		while (i < n && t[i] != '\n')
 			i++;
 		if (i >= n)
-			return i - s > 1024 ? -1 : 0;	/* (the line not ended yet) */
+			return first && i - s > 1024 ? -1 : 0;	/* (the line not ended yet) */
 		e = i++;			/* (past the LF) */
 		if (e > s && t[e - 1] == '\r')
 			e--;
 		len = e - s;
-		if (len > 1024)
-			return -1;
+		/* a status line over 1 KB isn't one; any other line over 1 KB is
+		   passed over (a CDN's Content-Security-Policy: 2.4 KB at the
+		   BBC's), none of those EPlay reads is that long */
+		if (len > 1024) {
+			if (first)
+				return -1;
+			continue;
+		}
 		if (first) {
 			/* "ICY 200 OK", "HTTP/1.0 200 OK", "HTTP/1.1 302 Found" */
 			const char *l = t + s;
@@ -353,4 +359,82 @@ int pls_read(const char *t, long n, void (*add)(const char *url, const char *tit
 		given++;
 	}
 	return (int)given;
+}
+
+/* Transfer-Encoding: chunked, taken out in place: each chunk's size line
+   (hexadecimal, its extensions after ';' passed over), its bytes, CRLF;
+   the last chunk (size 0) ends it */
+void chunks_init(CHUNKS *c)
+{
+	memset(c, 0, sizeof(*c));
+}
+
+long chunks_feed(CHUNKS *c, unsigned char *b, long n)
+{
+	long i = 0, o = 0;
+	while (i < n) {
+		unsigned char x = b[i];
+		switch (c->state) {
+		case 0:				/* the size's digits */
+			if ((x >= '0' && x <= '9') || ((x | 32) >= 'a' && (x | 32) <= 'f')) {
+				if (++c->digits > 7)
+					return -1;	/* (over 256 MB a chunk: not a station's) */
+				c->left = c->left * 16 + (unsigned long)(x <= '9' ? x - '0' : (x | 32) - 'a' + 10);
+			} else if (!c->digits)
+				return -1;
+			else if (x == ';' || x == ' ' || x == '\t')
+				c->state = 1;
+			else if (x == '\r')
+				c->state = 2;
+			else if (x == '\n')
+				c->state = c->left ? 3 : 6;
+			else
+				return -1;
+			i++;
+			break;
+		case 1:				/* an extension: to the line's end */
+			if (x == '\n')
+				c->state = c->left ? 3 : 6;
+			else if (++c->ext > 256)
+				return -1;
+			i++;
+			break;
+		case 2:				/* CR seen: LF */
+			if (x != '\n')
+				return -1;
+			c->state = c->left ? 3 : 6;
+			i++;
+			break;
+		case 3: {			/* the chunk's bytes */
+			long k = n - i;
+			if ((unsigned long)k > c->left)
+				k = (long)c->left;
+			memmove(b + o, b + i, (size_t)k);
+			o += k;
+			i += k;
+			c->left -= (unsigned long)k;
+			if (!c->left)
+				c->state = 4;
+			break;
+		}
+		case 4:				/* after the bytes: CR LF (or a bare LF) */
+			c->state = 5;
+			if (x == '\r')
+				i++;
+			break;
+		case 5:
+			if (x != '\n')
+				return -1;
+			c->state = 0;
+			c->digits = 0;
+			c->ext = 0;
+			i++;
+			break;
+		default:			/* the last chunk: the rest passed over */
+			c->done = 1;
+			i = n;
+			break;
+		}
+	}
+	return o;
 }

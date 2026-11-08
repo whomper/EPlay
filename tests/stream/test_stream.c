@@ -70,7 +70,9 @@ static void heads(void)
 		static char longl[3000];
 		memcpy(longl, "ICY 200 OK\r\nX: ", 15);
 		memset(longl + 15, 'x', 2000);
-		CHECK(shead_parse(longl, 2015, &h) == -1);	/* (a line over 1 KB) */
+		/* (a header line over 1 KB, not ended: more wanted; the caller's
+		   8 KB for the whole head bounds it) */
+		CHECK(shead_parse(longl, 2015, &h) == 0);
 	}
 	CHECK(stype("audio/aacp") == STYPE_AAC && stype("audio/x-scpls") == STYPE_PLAYLIST &&
 	      stype("text/html") == STYPE_UNKNOWN);
@@ -143,14 +145,75 @@ static void pls(void)
 	CHECK(pls_read("File1=", 6, add, NULL) == 0 && npls == 0);
 }
 
+/* chunked: whole, and cut at every place; a bad frame refused; the
+   last chunk ends it (its trailer passed over) */
+static void chunks(void)
+{
+	const char *t = "4\r\nWiki\r\n6;ext=1\r\npedia \r\nE\r\nin \r\n\r\nchunks.\r\n0\r\nX-T: 1\r\n\r\n";
+	const char *want = "Wikipedia in \r\n\r\nchunks.";
+	long n = (long)strlen(t), cut;
+	for (cut = 1; cut <= n; cut++) {
+		CHUNKS c;
+		unsigned char b[128], out[128];
+		long i, o = 0;
+		chunks_init(&c);
+		for (i = 0; i < n; i += cut) {
+			long k = n - i < cut ? n - i : cut, r;
+			memcpy(b, t + i, (size_t)k);
+			r = chunks_feed(&c, b, k);
+			CHECK(r >= 0 && r <= k);
+			if (r > 0) {
+				memcpy(out + o, b, (size_t)r);
+				o += r;
+			}
+		}
+		CHECK(o == (long)strlen(want) && !memcmp(out, want, (size_t)o) && c.done);
+	}
+	{
+		CHUNKS c;
+		unsigned char b[16];
+		chunks_init(&c);
+		memcpy(b, "zz\r\n", 4);
+		CHECK(chunks_feed(&c, b, 4) == -1);	/* (not a size) */
+		chunks_init(&c);
+		memcpy(b, "2\r\nabX", 7);
+		CHECK(chunks_feed(&c, b, 7) == -1);	/* (no CRLF after its bytes) */
+		chunks_init(&c);
+		memcpy(b, "fffffffff\r\n", 11);
+		CHECK(chunks_feed(&c, b, 11) == -1);	/* (too big a chunk) */
+	}
+}
+
+/* a header line over 1 KB passed over (a CDN's Content-Security-Policy);
+   a status line over 1 KB still refused */
+static void long_lines(void)
+{
+	static char a[4096];
+	SHEAD h;
+	long n;
+	strcpy(a, "HTTP/1.1 200 OK\r\ncontent-security-policy: ");
+	memset(a + strlen(a), 'x', 2400);
+	strcat(a, "\r\nContent-Type: audio/mpeg\r\nicy-metaint: 16000\r\n\r\nAUDIO");
+	n = shead_parse(a, (long)strlen(a), &h);
+	CHECK(n == (long)(strstr(a, "AUDIO") - a) && h.status == 200 && h.metaint == 16000 &&
+	      !strcmp(h.type, "audio/mpeg"));
+	CHECK(shead_parse(a, 1500, &h) == 0);	/* (the long line not ended yet: more wanted) */
+	strcpy(a, "HTTP/1.1 200 ");
+	memset(a + strlen(a), 'x', 1100);
+	strcat(a, "\r\n\r\n");
+	CHECK(shead_parse(a, (long)strlen(a), &h) == -1);
+}
+
 int main(void)
 {
+	chunks();
+	long_lines();
 	urls();
 	heads();
 	icy();
 	pls();
 	if (fails)
 		return 1;
-	printf("stream: URLs, heads, ICY metadata at every cut, PLS: ok\n");
+	printf("stream: URLs, heads (long lines), ICY metadata at every cut, PLS, chunks at every cut: ok\n");
 	return 0;
 }

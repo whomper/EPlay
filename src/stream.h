@@ -43,7 +43,7 @@ typedef struct {
 	char name[SHEAD_NAME];		/* icy-name: the station's */
 	char type[SHEAD_TYPE];		/* Content-Type, lowercase, its parameters cut */
 	char location[SURL_PATH];	/* Location, for a redirect */
-	int chunked;			/* Transfer-Encoding: chunked (not taken) */
+	int chunked;			/* Transfer-Encoding: chunked (chunks_feed takes it out) */
 } SHEAD;
 
 /* the head in t (n bytes): its lines, CR/LF or LF, up to the blank line or
@@ -80,5 +80,17 @@ long icy_feed(ICY *s, unsigned char *b, long n);
 /* each station of the .PLS text t (n bytes) to add(url, title, ctx), in the
    order of their File lines; title "" without a TitleN. The stations given */
 int pls_read(const char *t, long n, void (*add)(const char *url, const char *title, void *ctx), void *ctx);
+
+/* Transfer-Encoding: chunked (some servers and CDNs answer so): the chunks'
+   framing taken out of the n bytes at b, the data moved down in place.
+   The data bytes left at b, or -1 for framing that isn't chunked's; done
+   is set after the last chunk */
+typedef struct {
+	int state, digits, ext, done;
+	unsigned long left;
+} CHUNKS;
+
+void chunks_init(CHUNKS *c);
+long chunks_feed(CHUNKS *c, unsigned char *b, long n);
 
 #endif

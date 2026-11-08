@@ -32,6 +32,7 @@ static char url_now[SURL_PATH], url_given[SURL_PATH];
 static char name[SHEAD_NAME];
 static char head[HEAD_MAX];
 static long held_at, held_n;	/* audio come with the head, in head[] */
+static CHUNKS chk;		/* the answer's chunks, when it is chunked */
 
 int ns_is_open(void)
 {
@@ -204,11 +205,7 @@ static int ask(char *u, char *err, int n)
 		ns_close();
 		return 0;
 	}
-	if (hd.chunked) {
-		snprintf(err, (size_t)n, "The station's answer isn't one EPlay reads.");
-		ns_close();
-		return 0;
-	}
+	chunks_init(&chk);
 	if (stype(hd.type) == STYPE_PLAYLIST || ends_with(u, ".pls") || ends_with(u, ".m3u") ||
 	    ends_with(u, ".m3u8")) {
 		/* a station list: its text (up to 8 KB), then its first station */
@@ -222,6 +219,11 @@ static int ask(char *u, char *err, int n)
 			got += r;
 		}
 		ns_close();
+		if (hd.chunked && (got = chunks_feed(&chk, (unsigned char *)head, got)) < 0) {
+			snprintf(err, (size_t)n, "The station's answer isn't one EPlay reads.");
+			return 0;
+		}
+		head[got < HEAD_MAX ? got : HEAD_MAX - 1] = 0;
 		first_url[0] = 0;
 		if (got >= 10 && !memcmp(head, "[playlist]", 10))
 			pls_read(head, got, take_first, 0);
@@ -249,6 +251,11 @@ static int ask(char *u, char *err, int n)
 	}
 	held_at = h;
 	held_n = got - h;
+	if (hd.chunked && (held_n = chunks_feed(&chk, (unsigned char *)head + held_at, held_n)) < 0) {
+		snprintf(err, (size_t)n, "The station's answer isn't one EPlay reads.");
+		ns_close();
+		return 0;
+	}
 	icy_init(&icy, hd.metaint);
 	held_n = icy_feed(&icy, (unsigned char *)head + held_at, held_n);
 	if (hd.name[0])
@@ -382,6 +389,11 @@ long ns_read(void *buf, long max, int wait)
 		r = conn_read(c, buf, max);
 		if (r <= 0)
 			return -1;		/* (closed, timed out or stopped) */
+		if (hd.chunked) {
+			r = chunks_feed(&chk, buf, r);
+			if (r < 0 || (chk.done && !r))
+				return -1;	/* (its framing broken, or its last chunk) */
+		}
 		r = icy_feed(&icy, buf, r);
 		if (r > 0 || !wait)
 			return r;		/* (all metadata: nothing for now) */

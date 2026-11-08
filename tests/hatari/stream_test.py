@@ -17,6 +17,9 @@ Cases:
             again and the music goes on
   pls       a .PLS station list behind a redirect (302): its first station
             plays
+  chunked   the station answers HTTP/1.1 with Transfer-Encoding: chunked (as
+            Swiss Radio's CDN does): the chunks taken out, the tone and its
+            titles, no gap
   aac       a station sending AAC: refused, in words that name the Gateway
   gateway   Through the Gateway (EPLAY.INF: FALCON=0) to radio/radiogate.py
             on this computer, an AAC station converted to MP3: the tone,
@@ -60,7 +63,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "aac", "gateway", "https", "nginx", "url", "urledit"]
+CASES = ["live", "drop", "pls", "chunked", "aac", "gateway", "https", "nginx", "url", "urledit"]
 METAINT = 8192
 KBPS = 128
 
@@ -143,9 +146,11 @@ class Station(threading.Thread):
                 time.sleep(1)
                 return
             want_meta = b"icy-metadata: 1" in req.lower()
-            c.sendall(("ICY 200 OK\r\nicy-name: The rig's station\r\nicy-br: %d\r\n"
-                       "Content-Type: audio/mpeg\r\n%s\r\n" % (KBPS, "icy-metaint: %d\r\n" % METAINT
-                                                                 if want_meta else "")).encode())
+            c.sendall(("%s\r\nicy-name: The rig's station\r\nicy-br: %d\r\n"
+                       "Content-Type: audio/mpeg\r\n%s%s\r\n" % (
+                           "HTTP/1.1 200 OK" if self.case == "chunked" else "ICY 200 OK", KBPS,
+                           "icy-metaint: %d\r\n" % METAINT if want_meta else "",
+                           "Transfer-Encoding: chunked\r\n" if self.case == "chunked" else "")).encode())
             self.audio(c, n, want_meta)
         except OSError:
             pass
@@ -187,6 +192,8 @@ class Station(threading.Thread):
                     upto = METAINT
                 elif upto == 0:
                     upto = METAINT
+            if self.case == "chunked":
+                out = b"%x;rig=1\r\n" % len(out) + out + b"\r\n"
             c.sendall(out)
 
     def stop(self):
@@ -436,6 +443,8 @@ def run(work, case, spec):
             if case in ("https", "nginx"):
                 note += "; " + ", ".join(l for l in st.log if l.startswith("TLS"))
                 ok = ok and any(l.startswith("TLS ") for l in st.log)
+        elif case == "chunked":
+            ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
         elif case in ("url", "urledit"):
