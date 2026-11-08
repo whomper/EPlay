@@ -113,8 +113,9 @@ The bar shows the song playing (the station sends its titles) and the station's 
 **Live** and the time listened stand where a file's length would. Where the station names a picture
 with its titles (some send each song's cover, some their logo), it takes the album art's place: on a
 Direct connection EPlay fetches it and the 68030 unpacks it, which takes a few seconds (the DSP is
-playing); through the Gateway it comes small and quickly. A picture seen before comes from
-`cache\`. **Pause** ends the connection,
+playing); through the Gateway it comes small and quickly. A station that names no picture shows
+its logo when a Gateway's address is in **Settings** (on a Direct connection too): the Gateway looks
+it up, and a station it knows none for keeps the disc. A picture seen before comes from `cache\`. **Pause** ends the connection,
 and **Play** connects again and plays the station live from then. Station addresses in an `.M3U`
 playlist play as its files do.
 

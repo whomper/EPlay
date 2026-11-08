@@ -1677,9 +1677,18 @@ art.c's cache under the address's hash, so a cover seen again comes from the dis
 `cover` (a 500 x 500 JPEG with a photo's grain, 89 KB: fetched 17 s through fakesting's serial
 line, which the station's 16 KB/s shares; 18.2 s unpacked on Falcon-4, the longest between polls
 80 ms; a real Radio Paradise cover of 24 KB 11.3 s, 65 ms) and `gwcover` (376 bytes in 1.1 s,
-unpacked in 0.8 s, shown 3.2 s after it was named). A logo for the stations that send none, looked
-up at radio-browser.info, was left out for Erez to decide: by the stream's address it found none
-of four stations, by name some, often without a logo.
+unpacked in 0.8 s, shown 3.2 s after it was named). **Logos (Erez, 8 Nov 2026: "If there is a gateway around, let it bring icons but silently without
+the user configuring anything"):** with a Gateway's address in Settings, whatever the connection,
+8 s into a station that has named no picture EPlay asks radiogate 1.2's `GET
+/logo?station=&name=`; nothing is said, a station it knows none for keeps the disc, the logo is
+cached under the station's address and comes back after a cover goes. The family has no way to
+find a Gateway by itself (each program is given its address), so "around" is one given in
+Settings. radiogate asks radio-browser.info (its mirrors in turn: one often refuses a connection)
+by the station's address, then its exact name, then its name's first words, the last taken only
+from an entry whose stream is on the station's own domain (no other station's logo); of eight
+stations tried it found six (Deutschlandfunk, SomaFM, Radio Paradise, FluxFM, Antenne Bayern;
+KEXP's an SVG ffmpeg doesn't read); none for laut.fm's or LBC. A station without one is asked
+again a day on. Rig: stream_test `logo` (a stand-in directory: 248 bytes in 1.1 s, shown).
 
 ## Phase 8: the player's features (Erez, 8 Nov 2026)
 

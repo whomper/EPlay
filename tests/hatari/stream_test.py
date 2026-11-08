@@ -27,6 +27,10 @@ Cases:
   gwcover   as cover, Through the Gateway (radio/radiogate.py here): the
             Gateway passes the StreamUrl on, EPlay asks its /art, which
             gives a 64 x 64 JPEG
+  logo      a Direct station that names no picture, a Gateway given in
+            Settings (EPLAY.INF: FALCON=1, GATE, GATEPORT): EPlay asks its
+            /logo 8 s in, which finds the station in radio-browser.info (a
+            stand-in here): the logo (green) in the art square, nothing said
   aac       a station sending AAC: refused, in words that name the Gateway
   gateway   Through the Gateway (EPLAY.INF: FALCON=0) to radio/radiogate.py
             on this computer, an AAC station converted to MP3: the tone,
@@ -70,7 +74,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "aac", "gateway", "https", "nginx", "url", "urledit"]
+CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit"]
 METAINT = 8192
 KBPS = 128
 
@@ -88,6 +92,7 @@ class Station(threading.Thread):
         self.port = self.sock.getsockname()[1]
         self.conns = 0
         self.cover = b""
+        self.logo = b""
         self.log = []
 
         self.tls = None                 # (the https case: a second port, TLS)
@@ -133,6 +138,16 @@ class Station(threading.Thread):
             if self.case in ("https", "nginx") and not secure:
                 c.sendall(("HTTP/1.1 302 Found\r\nLocation: https://radio.test:%d/live\r\n"
                            "Content-Length: 0\r\n\r\n" % self.tls[0].getsockname()[1]).encode())
+                return
+            if path.startswith("/json/stations/"):
+                # (radio-browser.info's stand-in: this station by its address)
+                body = ('[{"name": "The rig\'s station", "favicon": "http://127.0.0.1:%d/logo.png"}]' % self.port
+                        if "byurl" in path else "[]").encode()
+                c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n" + body)
+                return
+            if path == "/logo.png":
+                self.log.append("logo fetched")
+                c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: image/png\r\n\r\n" + self.logo)
                 return
             if path == "/cover.jpg":
                 self.log.append("cover fetched")
@@ -362,7 +377,12 @@ def run(work, case, spec):
         dns.start()
         os.environ["FAKESTING_DNS"] = "127.0.0.1:%d" % dns.port
     gate = None
-    if case in ("gateway", "gwcover"):
+    if case == "logo":
+        png = os.path.join(w, "logo.png")
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=0x00c000:s=128x128",
+                        "-frames:v", "1", png], check=True)
+        st.logo = open(png, "rb").read()
+    if case in ("gateway", "gwcover", "logo"):
         # the Gateway's radio service, EPlay's own (radio/), on this computer
         sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
         import radiogate
@@ -371,7 +391,9 @@ def run(work, case, spec):
         gate.daemon_threads = True
         threading.Thread(target=gate.serve_forever, daemon=True).start()
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
-            fh.write("FALCON=0\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\n\r\n" % gate.server_address[1])
+            fh.write("FALCON=%d\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\n\r\n" % (case == "logo", gate.server_address[1]))
+        if case == "logo":
+            radiogate.Config.rb_api = ["http://127.0.0.1:%d" % st.port]
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
     ngx = None
@@ -448,6 +470,9 @@ def run(work, case, spec):
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
         time.sleep(14 if case == "drop" else 10)
+        if case == "logo":
+            wait_line(log, lambda l: "album art:" in l or ("logo" in l and "after" in l), 120)
+            time.sleep(1)
         if case in ("cover", "gwcover"):
             wait_line(log, lambda l: "album art:" in l or ("picture http" in l and "after" in l), 150)
             time.sleep(1)
@@ -481,6 +506,16 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and reds > 300 and blues > 300 and "cover fetched" in st.log
             if case == "gwcover":
                 ok = ok and any("through the Gateway" in l for l in pic)
+        elif case == "logo":
+            from PIL import Image
+            shot = sorted(os.listdir(shots))[-1]
+            im = Image.open(os.path.join(shots, shot)).convert("RGB")
+            greens = sum(1 for x in range(92, 170) for y in range(140, 190)
+                         if im.getpixel((x, y))[1] > 120 and im.getpixel((x, y))[0] < 90 and im.getpixel((x, y))[2] < 90)
+            pic = [l[4:] for l in text.split("\n") if "logo" in l or "album art:" in l]
+            spoke = [l for l in text.split("\n") if l.startswith("EPLAY status") and "logo" in l.lower()]
+            note += "; %d green; %s" % (greens, " | ".join(pic))
+            ok = ok and gaps == 0 and greens > 1500 and "logo fetched" in st.log and not spoke
         elif case == "chunked":
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "pls":

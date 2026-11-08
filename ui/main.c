@@ -346,6 +346,7 @@ static void play_now(const char *f)
 	if (opened && surl_is(f)) {
 		int i = list_find(f);
 		settings_url_used(f);	/* (Open URL's last stations) */
+		sart_station(f, play_name);	/* (its logo, through a Gateway, if it names no picture) */
 		if (i >= 0) {
 			list_set_title(i, play_name);	/* (the row: the station's name) */
 			redraw(0, BP_LIST);

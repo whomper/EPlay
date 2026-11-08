@@ -32,7 +32,8 @@ extern const char app_version[];
 
 #define PIC_MAX (512L * 1024)		/* a bigger picture is left out */
 
-static char want[ICY_URL], done_url[ICY_URL];
+static char want[ICY_URL], done_url[ICY_URL + 8];
+static int logo_st;
 static void (*on_message)(const short *msg);
 
 void sart_init(void (*msg)(const short *msg))
@@ -43,6 +44,7 @@ void sart_init(void (*msg)(const short *msg))
 void sart_reset(void)
 {
 	want[0] = done_url[0] = 0;
+	logo_st = 0;
 }
 
 void sart_want(const char *url)
@@ -198,18 +200,15 @@ bad:
 	return 0;
 }
 
-/* the Gateway's: GET /art?url=<the picture's address, %-encoded> */
-static int gate_url(const char *pic, char *out, int omax)
+/* the address q %-encoded onto out at k (omax in all): its new length, or
+   -1 when it doesn't fit */
+static int enc(char *out, int k, int omax, const char *q)
 {
 	static const char hex[] = "0123456789ABCDEF";
-	const char *g = settings_gate();
-	long port = settings_gateport();
-	int k;
-	if (!g[0] || port <= 0)
-		return 0;
-	k = snprintf(out, (size_t)omax, "http://%s:%ld/art?url=", g, port);
-	for (; *pic && k < omax - 4; pic++) {
-		unsigned char ch = (unsigned char)*pic;
+	for (; *q; q++) {
+		unsigned char ch = (unsigned char)*q;
+		if (k >= omax - 4)
+			return -1;
 		if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' ||
 		    ch == '.' || ch == '_' || ch == '~')
 			out[k++] = (char)ch;
@@ -220,38 +219,32 @@ static int gate_url(const char *pic, char *out, int omax)
 		}
 	}
 	out[k] = 0;
-	return !*pic;
+	return k;
 }
 
-int sart_step(void)
+/* the Gateway's address and port (Settings), whatever the connection:
+   0 when none is given */
+static int gate_base(char *out, int omax, const char *what)
 {
-	char u[ICY_URL], why[160];
+	const char *g = settings_gate();
+	long port = settings_gateport();
+	if (!g[0] || port <= 0)
+		return 0;
+	return snprintf(out, (size_t)omax, "http://%s:%ld/%s", g, port, what);
+}
+
+/* one picture fetched (redirects followed) and handed to art.c under its
+   key; 1 shown (or being unpacked), 0 not (why logged unless quiet) */
+static int fetch_show(const char *what, const char *u0, const char *name, unsigned long key, int quiet)
+{
+	char u[ICY_URL + 512], why[160];
 	unsigned char *d = 0;
 	long len = 0;
-	int r = 0, hops, gw;
-	unsigned long t0, key;
+	int r = 0, hops;
+	unsigned long t0;
 	void (*was_idle)(void);
 	void (*was_msg)(const short *);
-	/* (once the music plays: play_step starts it, and a fetch before
-	   would hold it back) */
-	if (!strcmp(want, done_url) || art_pending() || play_ms() < 1000)
-		return 0;
-	snprintf(done_url, sizeof(done_url), "%s", want);
-	if (!want[0]) {
-		art_clear();		/* (no picture now: the disc) */
-		return 1;
-	}
-	key = hash(want);
-	if (art_station_cached(want, key))
-		return 0;		/* (art_step's from here) */
-	gw = settings_gateway();
-	if (gw) {
-		if (!gate_url(want, u, sizeof(u))) {
-			elog("the station's picture: no Gateway given");
-			return 0;
-		}
-	} else
-		snprintf(u, sizeof(u), "%s", want);
+	snprintf(u, sizeof(u), "%s", u0);
 	t0 = t_fetch = pf_ms();
 	was_idle = pf_idle;
 	was_msg = busy_message;
@@ -267,20 +260,105 @@ int sart_step(void)
 	pf_idle = was_idle;
 	busy_message = was_msg;
 	conn_stop = 0;
+	if (r != 1) {
+		if (!quiet || strncmp(why, "answered 404", 12))
+			elog("%s: %s, after %lu ms", what, r == 2 ? "redirected too often" : why, pf_ms() - t0);
+		return 0;
+	}
+	elog("%s: %ld bytes in %lu ms", what, len, pf_ms() - t0);
+	r = art_station(name, key, d, len);
+	if (!r)
+		elog("%s: not unpacked (memory, or another picture being made)", what);
+	free(d);
+	return r;
+}
+
+/* the station's logo, when it names no picture of its own and a Gateway is
+   given in Settings, whatever the connection (Erez, 8 Nov 2026: "if there
+   is a gateway around, let it bring icons, silently"): GET /logo of its
+   radio service, 8 s into the station; a station it knows none for keeps
+   the disc, and nothing is said */
+enum { L_NONE, L_ASK, L_HAVE, L_NO };
+static char logo_url[ICY_URL], logo_name[96], logo_key_s[ICY_URL + 8];
+
+void sart_station(const char *url, const char *name)
+{
+	snprintf(logo_url, sizeof(logo_url), "%s", url);
+	snprintf(logo_name, sizeof(logo_name), "%s", name);
+	snprintf(logo_key_s, sizeof(logo_key_s), "logo:%s", url);
+	logo_st = url[0] ? L_ASK : L_NONE;
+}
+
+int sart_step(void)
+{
+	char u[ICY_URL + 512], what[200];
+	unsigned long key;
+	const char *target;
+	/* (once the music plays: play_step starts it, and a fetch before
+	   would hold it back) */
+	if (art_pending() || play_ms() < 1000)
+		return 0;
+	if (logo_st == L_ASK && !want[0] && play_ms() >= 8000) {
+		/* the logo: from the cache, else asked of the Gateway */
+		int k;
+		key = hash(logo_key_s);
+		if (art_station_cached(logo_key_s, key)) {
+			logo_st = L_HAVE;
+			snprintf(done_url, sizeof(done_url), "%s", logo_key_s);
+			return 0;
+		}
+		k = gate_base(u, sizeof(u), "logo?station=");
+		if (k <= 0 || (k = enc(u, k, (int)sizeof(u), logo_url)) < 0 ||
+		    snprintf(u + k, sizeof(u) - (size_t)k, "&name=") >= (int)(sizeof(u) - (size_t)k) ||
+		    enc(u, k + 6, (int)sizeof(u), logo_name) < 0) {
+			logo_st = L_NO;		/* (no Gateway given: the disc) */
+			return 0;
+		}
+		snprintf(what, sizeof(what), "the station's logo (through the Gateway)");
+		logo_st = fetch_show(what, u, logo_key_s, key, 1) ? L_HAVE : L_NO;
+		if (logo_st == L_HAVE)
+			snprintf(done_url, sizeof(done_url), "%s", logo_key_s);
+		return 0;
+	}
+	/* what to show: the station's own picture, else its logo, else the disc */
+	target = want[0] ? want : logo_st == L_HAVE ? logo_key_s : "";
+	if (!strcmp(target, done_url))
+		return 0;
+	snprintf(done_url, sizeof(done_url), "%s", target);
+	if (!target[0]) {
+		art_clear();
+		return 1;
+	}
+	key = hash(target);
+	if (art_station_cached(target, key))
+		return 0;		/* (art_step's from here) */
+	if (target == logo_key_s) {
+		logo_st = L_ASK;	/* (gone from the cache: asked again) */
+		done_url[0] = 0;
+		return 0;
+	}
 	{
 		const char *q = strchr(want, '?');
-		if (r != 1) {
-			elog("the station's picture %.*s%s: %s, after %lu ms", (int)(q ? q - want : (long)strlen(want)),
-			     want, gw ? " (through the Gateway)" : "", r == 2 ? "redirected too often" : why,
-			     pf_ms() - t0);
+		int gw = settings_gateway();
+		snprintf(what, sizeof(what), "the station's picture %.*s%s", (int)(q ? q - want : (long)strlen(want)) > 100 ? 100 :
+			 (int)(q ? q - want : (long)strlen(want)), want, gw ? " (through the Gateway)" : "");
+		if (gw) {
+			int k = gate_base(u, sizeof(u), "art?url=");
+			if (k <= 0 || enc(u, k, (int)sizeof(u), want) < 0) {
+				elog("%s: no Gateway given", what);
+				return 0;
+			}
+		} else
+			snprintf(u, sizeof(u), "%s", want);
+		if (!fetch_show(what, u, want, key, 0)) {
+			if (logo_st == L_HAVE) {
+				done_url[0] = 0;	/* (the logo again) */
+				snprintf(want, sizeof(want), "%s", "");
+				return 0;
+			}
 			art_clear();
 			return 1;
 		}
-		elog("the station's picture %.*s%s: %ld bytes in %lu ms", (int)(q ? q - want : (long)strlen(want)),
-		     want, gw ? " (through the Gateway)" : "", len, pf_ms() - t0);
 	}
-	if (!art_station(want, key, d, len))
-		elog("the station's picture: not unpacked (memory, or another picture being made)");
-	free(d);
 	return 0;
 }
