@@ -2,8 +2,8 @@
 
 <img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
-An audio player for the Atari Falcon and TT: MP3 decoded on the Falcon's DSP, WAV and AIFF, in a
-GEM window. Written in C and DSP56001 assembly for GEM.
+An audio player for the Atari Falcon, TT and STE: MP3 decoded on the Falcon's DSP, WAV and AIFF,
+in a GEM window. Written in C and DSP56001 assembly for GEM.
 
 **Highlights**
 
@@ -27,6 +27,10 @@ GEM window. Written in C and DSP56001 assembly for GEM.
 - **On a TT:** WAV and AIFF on its 8-bit DMA sound, at 50 kHz for CD's 44.1 kHz: the 68030
   interpolates between the file's samples and dithers them down to 8 bits. MP3 files show dim and
   are passed over (MP3 needs a Falcon's DSP).
+- **On an STE:** `eplayst.prg`, the 68000's edition: WAV and AIFF on its 8-bit DMA sound, a CD's
+  44.1 kHz at 50 kHz (the nearest sample), the volume on the STE's own volume control. While a
+  CD-rate file plays, the music takes about half of the 68000, so the window answers slowly then
+  (EPlay is being made faster there).
 
 *Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
 window. Phase 2 (0.4 to 0.17) plays MP3 on the Falcon's DSP or through the FDI as Cubase Audio
@@ -43,7 +47,8 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 
 | File | What it is |
 |---|---|
-| `eplay.prg` | the program, for the Falcon |
+| `eplay.prg` | the program, for the Falcon and the TT |
+| `eplayst.prg` | the program for an STE (the 68000's edition) |
 | `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it (copy them to `C:\GUIDES\` or beside the program) |
 | `icons/` | its desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn` for desktops that take them) |
 | `notices.txt` | what EPlay includes under other licences |
@@ -84,8 +89,9 @@ found and how it set the FDI, each file's format and length, how playing ended, 
 and the 68030 kept up (the DSP's time to spare a frame, the share of the 68030 that playing
 took). While EPlay is young, please send it with any report.
 
-**Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS
-(MagiC and MiNT not tried yet), 640×400 or larger.
+**Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS,
+a TT (WAV and AIFF), or an STE or Mega STE with `eplayst.prg` (WAV and AIFF); a screen 640 pixels
+wide or more (MagiC and MiNT not tried yet).
 
 **What it plays:**
 - WAV (PCM, 8 to 32 bits, mono or stereo) and AIFF/AIFC (uncompressed);

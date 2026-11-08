@@ -188,6 +188,11 @@ window x y w h"), so its rows work on an STE's screens. On Hatari's STE (mono) t
 within the ST's times (About 120 against 150, a button pressed 25 against 50); playing a CD's rate
 they are about twice them (About 330, Settings 355): the window's next work.
 
+**In the release from 0.35 (Erez, 8 Nov 2026: "Yes, include it in"):** EPLAYST.PRG goes into the
+release's files before its window meets the ST's times, the over-time stated in the notes (on
+Hatari's STE, mono, a CD's rate playing: About 305 ms and Settings 330 against 150; paused, within
+them). The window's work goes on.
+
 **Placement, not work (0.34, Falcon-4):** the start with 8 files given went 830 to 845-850 ms
 (limit 2,000), every run, with the common update (835 before it). Nothing in it runs more: each
 drawn part is the same to 0.1 ms. art.c's fixed loop (`spin`, a 200 Hz count) gives the clue: 1,460

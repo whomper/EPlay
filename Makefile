@@ -198,7 +198,7 @@ binary/eplay.hyp: docs/GUIDE.md common/tools/mkhelp.py VERSION docs/front.json d
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
-DIST    := binary/eplay.prg binary/eplay.hyp binary/eplay.ref
+DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all help
 	rm -rf dist

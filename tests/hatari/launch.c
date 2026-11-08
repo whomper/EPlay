@@ -2,7 +2,8 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * launch.c - for play_test.py: Hatari's --auto takes no command line, so
- * this starts C:\eplay.prg with C:\TAIL.TXT's first line as its command
+ * this starts C:\eplay.prg (C:\eplayst.prg where it is: an STE's edition
+ * under its own name) with C:\TAIL.TXT's first line as its command
  * line, through the AES (shel_write), as a desktop starts a program with
  * a file dropped on it. Then it ends and the AES starts EPlay.
  */
@@ -14,6 +15,8 @@ int main(void)
 {
 	static char tail[128];
 	long fh, n;
+	static char dta[44];
+	const char *prg = "C:\\eplay.prg";
 	short ok;
 	appl_init();
 	fh = Fopen("C:\\TAIL.TXT", 0);
@@ -28,7 +31,10 @@ int main(void)
 	tail[0] = (char)n;
 	Dsetdrv(2);
 	Dsetpath("\\");
-	ok = shel_write(1, 1, 0, "C:\\eplay.prg", tail);
+	Fsetdta(dta);
+	if (Fsfirst("C:\\eplayst.prg", 0) == 0)
+		prg = "C:\\eplayst.prg";
+	ok = shel_write(1, 1, 0, prg, tail);
 	nf_debug(ok ? "LAUNCH shel_write ok\n" : "LAUNCH shel_write failed\n");
 	appl_exit();
 	return 0;

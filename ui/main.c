@@ -1711,7 +1711,7 @@ int app_main(void)
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
 	crash_cleanup = crash_quit;
-	av_init("EPLAY");
+	av_init("EPLAY|EPLAYST");	/* (the name the AES knows: EPLAYST.PRG on an STE) */
 	/* the VDI's ST RAM block taken now, not at the first draw that wants
 	   it: Erez's 0.12, DFB1X off, took it while the first file played,
 	   just past that file's queue, and the free ST RAM stayed split in two

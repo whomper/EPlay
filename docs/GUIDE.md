@@ -25,7 +25,11 @@ after another, and the music goes on while you work in other dialogs and menus.
 **Needs:** a Falcon030 with TOS 4.0x or EmuTOS, or a TT, and a screen 640 pixels wide or more.
 MP3 needs the Falcon's DSP; WAV and AIFF play on the Falcon's sound DMA, or on the TT's 8-bit DMA
 sound (interpolated up to 50 kHz and dithered to 8 bits by the 68030). On a TT MP3 files show dim
-in the list and are passed over. A Falcon with TT RAM (a DFB1 and the like) has room for very long
+in the list and are passed over. On an STE (or a Mega STE), start `eplayst.prg`, the 68000's
+edition: WAV and AIFF on its 8-bit DMA sound (a CD's 44.1 kHz at 50 kHz, the nearest sample), its
+volume on the STE's own volume control; MP3 files show light and are passed over. While a CD-rate
+file plays, the music takes about half of the 68000, so windows and menus answer slowly then
+(EPlay is being made faster there); paused, they answer as usual. A Falcon with TT RAM (a DFB1 and the like) has room for very long
 lists; a stock Falcon plays as well.
 
 **What it plays:** MP3 (MPEG-1, 2 and 2.5 layer III, every bit rate, constant or variable); WAV
