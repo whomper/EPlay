@@ -1690,6 +1690,46 @@ stations tried it found six (Deutschlandfunk, SomaFM, Radio Paradise, FluxFM, An
 KEXP's an SVG ffmpeg doesn't read); none for laut.fm's or LBC. A station without one is asked
 again a day on. Rig: stream_test `logo` (a stand-in directory: 248 bytes in 1.1 s, shown).
 
+### Phase 7's report (8 Nov 2026)
+
+**What it set out to do:** web radio and streams from a URL on the Falcon: the stream as the
+queue's source, held in memory against the network's pauses, connecting again by itself; the
+station's titles; Open URL and station lists; a Direct connection or the AERA Gateway, as the
+family does.
+
+**What was done, with the releases:**
+- [1.1](https://github.com/whomper/EPlay/releases/tag/v1.1): stations over plain HTTP, ICY titles,
+  `.pls` and `.m3u`, redirects, reconnecting; File > Open URL (⇧^O) with the last ten stations;
+  Options: Direct connection or Through the Gateway.
+- [1.2](https://github.com/whomper/EPlay/releases/tag/v1.2): https on a Direct connection
+  (TLS.OVL). [1.3](https://github.com/whomper/EPlay/releases/tag/v1.3): each connection's steps in
+  the logs (EPLAYNET.LOG); Open URL keeps what was typed.
+  [1.4](https://github.com/whomper/EPlay/releases/tag/v1.4): the handshake on the DSP while it is
+  free, so laut.fm and servers like it (a few seconds to ask) play; confirmed on Erez's Falcon.
+- [1.5](https://github.com/whomper/EPlay/releases/tag/v1.5): Left and Right in the address field
+  (common's field.c). [1.6](https://github.com/whomper/EPlay/releases/tag/v1.6): chunked answers
+  and long header lines (a survey of 21 real stations: 15 play, BBC's is HLS only).
+- [1.7](https://github.com/whomper/EPlay/releases/tag/v1.7): Play/Pause as design E; a station's
+  own picture (StreamUrl) in the art square, Direct by the Atari, else the Gateway.
+  [1.8](https://github.com/whomper/EPlay/releases/tag/v1.8): radiogate hardened.
+  [1.9](https://github.com/whomper/EPlay/releases/tag/v1.9): stations' logos through a Gateway
+  given in Settings, silently.
+- The Gateway's radio service (radiogate, port 8580, ffmpeg), written here and released by the
+  Gateway's session: AERA-Gateway 1.33 (AAC, Ogg, HLS and https stations as MP3), 1.34 (pictures),
+  1.36 (logos).
+- Tests: `stream_test.py` 13 cases in Hatari (live, drop, pls, chunked, cover, gwcover, logo, aac,
+  gateway, https, nginx, url, urledit), `test_radiogate.py` 10, the stream parser host-tested and
+  fuzzed.
+
+**What is left:** the Gateway's own discovery (finding a Gateway without its address given) is a
+family question for the hub; AAC on the Falcon's DSP is phase 8's (item 5); an STE plays no
+stations (no MP3 there), as planned.
+
+**The next phase, as a proposal:** phase 8 as Erez listed it, in this order: gapless playback,
+ReplayGain, search and sort in the list, lyrics, then the formats (AAC on the DSP first, for web
+radio on a Direct connection), and the family's links. Beside it, the STE's speed work (the window
+while a CD-rate file plays) goes on.
+
 ## Phase 8: the player's features (Erez, 8 Nov 2026)
 
 From the list put to Erez:
