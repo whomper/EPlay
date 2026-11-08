@@ -286,6 +286,21 @@ static void tick_pcm(void)
 		}
 		if (hb > tail)
 			hb = tail;
+		if (raw8) {
+			/* the STE: the file's bytes straight to the ring (the volume
+			   the LMC1992's), as many as fit; no snd_ptr, nor snd_room
+			   again: on the 68000 each is a multiply in libgcc */
+			long top = fmt.big ? 0 : fmt.bits / 8 - 1;
+			k = snd_put8_raw(q + q_roff, B2FR(hb), fmt.bytes, (int)top,
+					 (int)(fmt.channels == 2 ? top + fmt.bits / 8 : top),
+					 fmt.bits == 8 && !fmt.sign8 ? 0x80 : 0);
+			if (!k)
+				return;
+			adv(FR2B(k));
+			room -= k;		/* (snd_put8_raw keeps to the ring's room itself) */
+			cap -= k;		/* (a tick short, as below) */
+			continue;
+		}
 		p = snd_ptr(&k);
 		if (k > room)
 			k = room;
@@ -295,20 +310,6 @@ static void tick_pcm(void)
 		if (kb > hb) {
 			k = B2FR(hb);
 			kb = FR2B(k);
-		}
-		if (raw8) {
-			/* the STE: the file's bytes straight to the ring (the volume
-			   the LMC1992's); the frames taken may be fewer than k */
-			long top = fmt.big ? 0 : fmt.bits / 8 - 1;
-			k = snd_put8_raw(q + q_roff, B2FR(hb), fmt.bytes, (int)top,
-					 (int)(fmt.channels == 2 ? top + fmt.bits / 8 : top),
-					 fmt.bits == 8 && !fmt.sign8 ? 0x80 : 0);
-			if (!k)
-				return;
-			adv(FR2B(k));
-			room = snd_room();
-			cap -= k;		/* (a tick short, as below) */
-			continue;
 		}
 		pcm_convert_to(&fmt, q + q_roff, p, k, SND_STEP);
 		if (!pcm_gain_idle(&gs, t_gain))
