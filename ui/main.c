@@ -1662,8 +1662,13 @@ static void turn(int nested)
 	step(playing && !piece && !open_due && !next_due);
 }
 
+#ifdef EPLAY_ST
+const long cpu_need = 0;	/* EPLAYST.PRG: the STE's (and any 68000 with DMA sound) */
+const char cpu_alert[] = "[3][EPlay can't run here.][ Quit ]";
+#else
 const long cpu_need = 30;
-const char cpu_alert[] = "[3][EPlay needs a Falcon.][ Quit ]";
+const char cpu_alert[] = "[3][This EPlay is for the Falcon and|the TT. On an STE: EPLAYST.PRG.][ Quit ]";
+#endif
 int app_main(void);
 int app_main(void)
 {

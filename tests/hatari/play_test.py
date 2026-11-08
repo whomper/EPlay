@@ -318,7 +318,9 @@ def run(work, case, spec):
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(TOP, "binary", "eplay.prg"), hd)
+    # (an STE runs the 68000 edition, EPLAYST.PRG, under the launcher's name)
+    shutil.copy(os.path.join(TOP, "binary", "eplayst.prg" if spec.startswith("STE") else "eplay.prg"),
+                os.path.join(hd, "eplay.prg"))
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     f = make_file(hd, case)
     tail = "C:\\%s" % f

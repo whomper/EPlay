@@ -283,7 +283,16 @@ static void line(short x1, short y1, short x2, short y2, short pen)
 }
 
 /* text in a pen, transparent, cut to cols characters */
+static void text_e(short x, short y, const char *s, short cols, short pen, short fx);
+
 static void text(short x, short y, const char *s, short cols, short pen)
+{
+	text_e(x, y, s, cols, pen, 0);
+}
+
+/* fx: the VDI's effects (2: light, GEM's look for what can't be chosen,
+   in any number of colours) */
+static void text_e(short x, short y, const char *s, short cols, short pen, short fx)
 {
 	long n = (long)strlen(s);
 	if (n > cols)
@@ -296,9 +305,9 @@ static void text(short x, short y, const char *s, short cols, short pen)
 		vst_color(vdi_h, pen);
 		cur_tcol = pen;
 	}
-	if (cur_fx != 0) {
-		vst_effects(vdi_h, 0);
-		cur_fx = 0;
+	if (cur_fx != fx) {
+		vst_effects(vdi_h, fx);
+		cur_fx = fx;
 	}
 	text_n(vdi_h, x, y, s, n);
 }
@@ -634,7 +643,13 @@ static void draw_row(int i)
 	}
 	snprintf(t, sizeof(t), "%d", i + 1);
 	text(x + (i + 1 < 10 ? cw : 0), ry + 2, t, 3, fg);
-	text(c_title, ry + 2, list_name(e), tw, e->bad && !mono && i != list_cur ? p_dim : fg);
+	/* a row it can't play (an MP3 without a DSP, a file it couldn't read):
+	   in the dim pen where there is one, else light, as GEM shows what
+	   can't be chosen (four colours have no grey; mono, no pen at all) */
+	if (e->bad && i != list_cur && (mono || p_dim == 0))
+		text_e(c_title, ry + 2, list_name(e), tw, fg, 2);
+	else
+		text(c_title, ry + 2, list_name(e), tw, e->bad && i != list_cur ? p_dim : fg);
 	text(c_artist, ry + 2, e->artist, 11, fg);
 	text(c_album, ry + 2, e->album, 12, fg);
 	if (e->len_ms > 0) {

@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 # EPlay.
-#   make            binary/eplay.prg (68030 code), with a stock m68k ELF cross
+#   make            binary/eplay.prg (68030 code: the Falcon, the TT) and
+#                   binary/eplayst.prg (68000: the STE), with a stock m68k ELF cross
 #                   compiler (apt install gcc-m68k-linux-gnu) and a56 for its
 #                   DSP program: freestanding on common/'s runtime, the
 #                   header written by common/tools/elf2tos.py
@@ -23,12 +24,18 @@ OBJDIR  := build/atari
 INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icommon/ui \
            -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF \
            -DPIC_TJPGD_DSP
-CFLAGS  := -m68030 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+# CPU: 68030 (EPLAY.PRG), or 68000 for the STE's EPLAYST.PRG (make st, with
+# the family's 68000 rules: no bswap or store merging, oddaccess.py after)
+CPU     ?= 68030
+ifeq ($(CPU),68000)
+STFLAGS := -fdisable-tree-bswap -fno-store-merging -DEPLAY_ST
+endif
+CFLAGS  := -m$(CPU) $(STFLAGS) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
            -ffunction-sections -fdata-sections -Wall -Wno-pointer-sign \
            -nostdinc -isystem $(GCCINC) -Icommon/atari/include $(INC)
 OWNWARN := -Wextra -Wno-unused-parameter -Werror
-LDFLAGS := -m68030 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u
@@ -41,7 +48,15 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
 
-all: binary/eplay.prg
+all: binary/eplay.prg binary/eplayst.prg
+
+# the STE's: the same sources for the 68000, in build/st
+st: binary/eplayst.prg
+binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h | binary
+	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/st build/st/eplay.elf
+	python3 common/tools/oddaccess.py build/st/eplay.elf
+	python3 common/tools/elf2tos.py build/st/eplay.elf $@
+.PHONY: st
 
 binary/eplay.prg: $(OBJDIR)/eplay.elf common/tools/elf2tos.py | binary
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
@@ -76,7 +91,7 @@ $(OBJDIR)/%.o: src/mp3/%.c $(HDRS) | $(OBJDIR)
 # the first code, built for the 68000: on an ST it says EPlay needs a
 # Falcon, before anything of the 68030's runs (common's cpucheck.c)
 $(OBJDIR)/cpucheck.o: common/atari/cpucheck.c | $(OBJDIR)
-	$(CC) $(subst -m68030,-m68000,$(CFLAGS)) -c -o $@ $<
+	$(CC) $(subst -m$(CPU),-m68000,$(CFLAGS)) -c -o $@ $<
 $(OBJDIR)/%.o: common/src/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 # the album art's JPEGs (common's pic.c; GIF left out: an album's art
@@ -88,15 +103,15 @@ $(OBJDIR)/%.o: common/atari/%.c $(HDRS) | $(OBJDIR)
 $(OBJDIR)/%.o: common/ui/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/crt0.o: common/atari/crt0.S Makefile | $(OBJDIR)
-	$(CC) -m68030 -DSTACK_SIZE=16384 -c -o $@ $<
+	$(CC) -m$(CPU) -DSTACK_SIZE=16384 -c -o $@ $<
 $(OBJDIR)/crash_s.o: common/atari/crash.S | $(OBJDIR)
-	$(CC) -m68030 -c -o $@ $<
+	$(CC) -m$(CPU) -c -o $@ $<
 $(OBJDIR)/nf.o: common/atari/nf.S | $(OBJDIR)
-	$(CC) -m68030 -c -o $@ $<
+	$(CC) -m$(CPU) -c -o $@ $<
 $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
-	$(CC) -m68030 -c -o $@ $<
+	$(CC) -m$(CPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
-	$(CC) -m68030 -c -o $@ $<
+	$(CC) -m$(CPU) -c -o $@ $<
 
 binary:
 	mkdir -p $@
@@ -109,6 +124,11 @@ CFLAGS += -DAES_PROFILE=$(PROF)
 endif
 prof: $(B)/mp3tab.h $(B)/mp3_prog.h
 	$(MAKE) OBJDIR=build/prof PROF=20 build/prof/eplay.prg
+# the STE's, for the speed rig on an STE (speed.py takes it there)
+profst: $(B)/mp3tab.h $(B)/mp3_prog.h
+	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/profst PROF=20 build/profst/eplay.elf
+	python3 common/tools/elf2tos.py build/profst/eplay.elf build/profst/eplay.prg
+.PHONY: profst
 build/prof/eplay.prg: build/prof/eplay.elf common/tools/elf2tos.py
 	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
 

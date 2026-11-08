@@ -160,7 +160,8 @@ def session(work, spec, kind):
     # (AERA_WITH_NVDI=1: under Erez's NVDI, as the hub runs it)
     r = Rig(os.path.join(work, kind), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1")
     try:
-        r.put(os.path.join(TOP, "build", "prof", "eplay.prg"))
+        # (an STE: the 68000's edition, make profst, under the same name)
+        r.put(os.path.join(TOP, "build", "profst" if r.m.name.startswith("STE") else "prof", "eplay.prg"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
         src = os.path.join(r.work, "src.wav")
         subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(SECS),

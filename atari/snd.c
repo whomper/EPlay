@@ -104,10 +104,16 @@ static long keep_regs8(void)
 	return 0;
 }
 
+static long mw_send(void);
+static unsigned short mw_cmd;
 static long put_regs8(void)
 {
 	D8(0x01) = 0;
 	D8(0x21) = keep8[1];
+	if (!snd_dma8_interp) {		/* (the LMC1992 as TOS starts it: 0 dB) */
+		mw_cmd = 0x4c0 | 40;
+		mw_send();
+	}
 	return 0;
 }
 
@@ -137,18 +143,18 @@ static long stop8(void)
 	return 0;
 }
 
-/* in8 frames at the file's rate in, out8 at the DMA's: the file's frames
-   that fill n of the DMA's (rounded down, so never more than fit) */
-static long in_for(long n)
-{
-	return out8 == in8 ? n : (long)(((unsigned long long)n * (unsigned long long)in8) / (unsigned long long)out8);
-}
-
-/* the DMA's n frames as the file's */
+/* the DMA's n frames as the file's, rounded down: n a ring's at most.
+   In 32 bits, by in8 / out8 with 12 bits of fraction (r8): the 68000's
+   edition has no 64-bit division (libgcc's is 68020 code: EPLAYST.PRG
+   met an illegal instruction in __udivdi3, 7 Nov 2026). n * r8 < 25,033
+   * 62,830 for files up to 192 kHz */
+static unsigned long r8;
+static unsigned long in_written;	/* the file's frames given to snd_wrote */
 static long as_in(long n)
 {
-	return out8 == in8 ? n : (long)(((unsigned long long)n * (unsigned long long)in8) / (unsigned long long)out8);
+	return out8 == in8 ? n : (long)(((unsigned long)n * r8) >> 12);
 }
+#define in_for(n) as_in(n)		/* the file's frames that fill n of the DMA's */
 
 /* a 16-bit sample to 8 bits: with its error carried to the next (a
    first-order noise shaping: the error's power moved up, out of the
@@ -215,6 +221,109 @@ static long put8(long k)
 		h8r = x[2 * k - 1];
 	}
 	return made;
+}
+
+/* the 68000's way (an STE): the file's bytes straight into the ring, no
+   staging and no 16-bit pass: for 8 bits out a sample's top byte is all
+   there is to take (ol and orr: the left's and right's top bytes in a
+   frame of bpf bytes; x 0x80 for unsigned 8-bit WAV). The nearest frame
+   at the DMA's rate: a 16-bit fraction a frame out, the file's frames
+   stepped through by adds (no multiply, no shift: the 68000's are slow).
+   A frame passed over past nin is owed to the next call (skip8). The
+   file's frames taken back, at most nin */
+static unsigned long skip8;
+static unsigned short frac8;
+
+long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x)
+{
+	unsigned char *r = ring8 + 2 * wpos, *rend = ring8 + 2 * ring_n;
+	unsigned short f = frac8, st = (unsigned short)step8;
+	long whole = (long)(step8 >> 16), wb = whole * bpf, room = ring_n - (written - played) - 1024, made = 0,
+	     k = 0;
+	const unsigned char *sp = src;
+	while (skip8 && k < nin) {	/* (owed from the last call) */
+		sp += bpf;
+		k++;
+		skip8--;
+	}
+#if defined(__m68k__)
+	/* the common case in assembly: signed samples (not 8-bit WAV), at or
+	   below the DMA's rate (no whole frame stepped over): two byte moves
+	   a frame, the ring's end, the fraction's carry the next frame. Some
+	   78 cycles a frame on a 68000, where the C's took 150 (an STE at
+	   24.5 kHz: 78 % of it in the tick, 7 Nov 2026) */
+	if (!x && !whole && room > 0 && k < nin) {
+		const unsigned char *a4 = sp + ol;
+		long n = room < 32767 ? room : 32767;
+		long left = nin - k;	/* the file's frames there are: one at least */
+		unsigned short d = (unsigned short)(orr - ol);
+		long adv = 0, cnt = n - 1;
+		__asm__ volatile("1:\tmove.b\t(%0),(%1)+\n"
+				 "\tmove.b\t0(%0,%7.w),(%1)+\n"
+				 "\tcmpa.l\t%5,%1\n"
+				 "\tbcs.s\t2f\n"
+				 "\tmovea.l\t%6,%1\n"
+				 "2:\tadd.w\t%8,%2\n"
+				 "\tbcc.s\t3f\n"
+				 "\tadda.w\t%9,%0\n"
+				 "\taddq.l\t#1,%3\n"
+				 "\tcmp.l\t%10,%3\n"	/* (the file's frames used up: stop) */
+				 "\tbcc.s\t4f\n"
+				 "3:\tdbra\t%4,1b\n"
+				 "\tbra.s\t5f\n"
+				 "4:\tsubq.w\t#1,%4\n"		/* (this frame was made) */
+				 "5:"
+				 : "+a"(a4), "+a"(r), "+d"(f), "+d"(adv), "+d"(cnt)
+				 : "a"(rend), "a"(ring8), "d"(d), "d"(st), "d"((short)bpf), "d"(left)
+				 : "cc", "memory");
+		/* (cnt: -1 when all n were made, else those not made less one) */
+		made = n - 1 - (short)cnt;
+		if ((short)cnt == -1)
+			made = n;
+		k += adv;
+		sp = a4 - ol;
+	}
+#endif
+	while (made < room && k < nin) {
+		unsigned short o = f;
+		*r++ = (unsigned char)(sp[ol] ^ x);
+		*r++ = (unsigned char)(sp[orr] ^ x);
+		if (r >= rend)
+			r = ring8;
+		made++;
+		f = (unsigned short)(f + st);
+		sp += wb;
+		k += whole;
+		if (f < o) {		/* (the fraction carried: a frame more) */
+			sp += bpf;
+			k++;
+		}
+	}
+	if (k > nin) {
+		skip8 = (unsigned long)(k - nin);
+		k = nin;
+	}
+	frac8 = f;
+	wpos += made;
+	if (wpos >= ring_n)
+		wpos -= ring_n;
+	written += made;
+	in_written += (unsigned long)k;
+	return k;
+}
+
+/* the STE's and TT's volume: the LMC1992's master volume through the
+   Microwire ($FF8922 data, $FF8924 mask): 0 to 40, -80 to 0 dB in 2 dB */
+static long mw_send(void)
+{
+	volatile unsigned short *data = (volatile unsigned short *)0xffff8922L;
+	volatile unsigned short *mask = (volatile unsigned short *)0xffff8924L;
+	int t;
+	for (t = 0; t < 2000 && *mask != 0x07ff; t++)
+		;			/* (the last one out) */
+	*mask = 0x07ff;
+	*data = mw_cmd;
+	return 0;
 }
 
 /* the matrix, as found: $FF8920 (the DMA's mode), $FF8930-$FF893A */
@@ -750,8 +859,14 @@ static int open8(long rate)
 			mode8 = (unsigned char)(3 - j);
 	out8 = rate;
 	in8 = snd_in_rate > 0 ? snd_in_rate : rate;
-	step8 = (unsigned long)(((unsigned long long)in8 << 16) / (unsigned long long)out8);
+	/* 16.16, in 32 bits: the whole part, then the rest (< out8, so
+	   << 16 stays under 2^32) */
+	step8 = ((unsigned long)(in8 / out8) << 16) + (((unsigned long)(in8 % out8) << 16) / (unsigned long)out8);
+	r8 = ((unsigned long)in8 << 12) / (unsigned long)out8;
+	in_written = 0;
 	ph8 = 1UL << 16;		/* (the first frame out: the file's first, whole) */
+	frac8 = 0;
+	skip8 = 0;
 	h8l = h8r = 0;
 	e8l = e8r = 0;
 	ring_n = rate / 2;
@@ -846,8 +961,17 @@ static short adder_found = -1;
 
 void snd_dac_volume(int att, int mute)
 {
-	if (snd_dma8)
-		return;		/* (the volume is the samples' own there: play.c) */
+	if (snd_dma8) {
+		/* the STE (the 68000's way, no gain on the samples): its LMC1992;
+		   EPlay's steps of 1.5 dB as its 2 dB, silent at the bottom. A TT
+		   takes play.c's gain on the samples (snd_dma8_interp) */
+		if (!snd_dma8_interp) {
+			int d = mute ? 0 : 40 - (3 * att + 2) / 4;
+			mw_cmd = (unsigned short)(0x4c0 | (d < 0 ? 0 : d));
+			Supexec(mw_send);
+		}
+		return;
+	}
 	if (!locked)
 		return;
 	if (adder_found < 0) {
@@ -949,12 +1073,13 @@ void snd_update(void)
 
 long snd_played(void)
 {
-	return snd_dma8 ? as_in(played) : played;
+	/* (the file's frames written, less the DMA's lead as the file's) */
+	return snd_dma8 ? (long)in_written - as_in(written - played) : played;
 }
 
 long snd_written(void)
 {
-	return snd_dma8 ? as_in(written) : written;
+	return snd_dma8 ? (long)in_written : written;
 }
 
 long snd_room(void)
@@ -982,6 +1107,7 @@ void snd_wrote(long n)
 {
 	if (snd_dma8) {
 		long m = put8(n);
+		in_written += (unsigned long)n;
 		wpos += m;
 		if (wpos >= ring_n)
 			wpos -= ring_n;
