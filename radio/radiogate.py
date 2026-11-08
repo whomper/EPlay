@@ -362,9 +362,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         t0, sent = time.time(), [0]
         host = urlsplit(url).hostname or "?"
+        self.fault = None               # (the feed thread's, when it failed)
         try:
             self.stream(url, self.headers.get("Icy-MetaData", "") == "1", sent)
-            why = "ended"
+            why = self.fault or "ended"
         except Refused as e:
             if sent[0]:
                 why = e.words
@@ -477,7 +478,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not data:
                         break
             except (OSError, ValueError, ssl.SSLError):
-                pass
+                if not stop.is_set():
+                    self.fault = "the station's feed failed"
             finally:
                 try:
                     p.stdin.close()
@@ -566,8 +568,12 @@ class Handler(BaseHTTPRequestHandler):
                     stop.wait(target / 2)
                     u, t = fetch(state["url"], LIST_MAX)
                     state["text"] = t.decode("utf-8", "replace")
-            except (Refused, OSError, ValueError, ssl.SSLError):
-                pass
+            except Refused as e:
+                if not stop.is_set():
+                    self.fault = "a piece: " + e.words
+            except (OSError, ValueError, ssl.SSLError):
+                if not stop.is_set():
+                    self.fault = "the station's feed failed"
             finally:
                 try:
                     p.stdin.close()
