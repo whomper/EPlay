@@ -126,7 +126,8 @@ The **Options** menu chooses how a station is reached:
   no music holds it).
 - **Through the Gateway:** the AERA Gateway fetches the station and passes it on as MP3, so
   stations that send AAC or Ogg, or HLS, play too. Give the Gateway's address and port
-  in **Settings**. (The Gateway's stream service comes with AERA-Gateway 1.33.)
+  in **Settings**. The Gateway's radio service comes with AERA-Gateway 1.33 (`aera-gateway install
+  radio`); a station's picture through it, with the release after.
 
 Web radio needs a network: STinG or MiNTnet with a network card. With STinG, set the **Delay** in
 `STING.CPX` to 10 on a Falcon or TT; it polls the card that often. Web radio needs the Falcon's
