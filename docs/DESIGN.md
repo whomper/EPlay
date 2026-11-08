@@ -1574,6 +1574,25 @@ Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Atari
   take (AAC, HLS) can be given to it as plain MP3;
 - the STE is left out (no MP3 there, and its 68000 already busy with the sound).
 
+**How it is built, in order:**
+- **7a, the parsing (done, 8 Nov 2026):** `src/stream.c`, host-tested and fuzzed, no allocation,
+  every length from the network checked. A stream's URL (http/https, host, port, path; a login,
+  IPv6, spaces and other schemes refused); the answer's head ("ICY 200 OK" or "HTTP/1.x", lines
+  up to 1 KB, icy-metaint 1 to 65535, icy-name, icy-br, Content-Type, Location for a redirect);
+  the ICY metadata taken out of the audio in place, the StreamTitle kept (tested at every cut of
+  the bytes); `.PLS` station lists. `tests/stream`, and `tests/fuzz/fuzz_stream.c` (`make fuzz`,
+  libFuzzer: 1.3 million runs in 3 minutes, no fault); `make test` replays `tests/fuzz/found`
+  and the seeds.
+- **7b, the stream as the queue's source:** common's `conn` (STinG or MiNTnet; TLS by TLS.OVL
+  for https on a Direct connection), read without waiting in GEM's steps into the same queue a
+  file fills; the DSP decodes as it does a file. Reconnecting when the line drops; the rigs
+  through common's fakesting on Hatari.
+- **7c, through the Gateway:** a service on the Gateway that fetches the station (HTTPS, AAC,
+  HLS) and gives EPlay plain MP3, written here and handed to the Gateway's session (7.3); its
+  port and any package on it (ffmpeg, to convert AAC) are Erez's to decide.
+- **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
+  as Erez decides them.
+
 ## Phase 8: the player's features (Erez, 8 Nov 2026)
 
 From the list put to Erez:

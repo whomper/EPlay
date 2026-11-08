@@ -162,9 +162,23 @@ $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_order.c src/order.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
+$(B)/test_stream: tests/stream/test_stream.c src/stream.c src/stream.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/stream/test_stream.c src/stream.c
+# the stream parser's fuzz target (the guidelines, 7.1): make fuzz runs
+# libFuzzer for FUZZ_S seconds; make test replays tests/fuzz/found and the
+# seeds with the build machine's compiler
+FUZZ_S ?= 60
+$(B)/fuzz_replay: tests/fuzz/fuzz_stream.c tests/fuzz/replay.c src/stream.c src/stream.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/fuzz/fuzz_stream.c tests/fuzz/replay.c src/stream.c
+fuzz: tests/fuzz/fuzz_stream.c src/stream.c src/stream.h | $(B)
+	clang -O1 -g -fsanitize=fuzzer,address,undefined -Isrc -o $(B)/fuzz_stream tests/fuzz/fuzz_stream.c src/stream.c
+	mkdir -p $(B)/fuzzcorpus
+	./$(B)/fuzz_stream -max_total_time=$(FUZZ_S) -artifact_prefix=tests/fuzz/found/ $(B)/fuzzcorpus tests/fuzz/seeds
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/fuzz_replay
 	./$(B)/test_inf
+	./$(B)/test_stream
+	./$(B)/fuzz_replay tests/fuzz/seeds/* tests/fuzz/found/*
 	./$(B)/test_gain
 	./$(B)/test_m3u
 	./$(B)/test_order
