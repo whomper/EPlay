@@ -25,6 +25,9 @@ Cases:
             one (a 302, as many do): a Direct connection through TLS.OVL,
             the rig's own root certificate as CACERT.PEM beside EPlay; the
             tone, no gap, its titles
+  urledit   as url, then inside the typed address: Left four times, "Z",
+            Right twice, "Y" (common's field.c, an arrow one step: hub
+            d5786b7): EPLAY.INF's URLTYPED ends ".../ZliYve"
   nginx     laut.fm's way (Erez's station, 8 Nov 2026): an nginx at https
             (AES-128-GCM, P-256 only) answers with a 302 to the station, and
             hangs up on a client that hasn't asked within 5 s
@@ -57,7 +60,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "aac", "gateway", "https", "nginx", "url"]
+CASES = ["live", "drop", "pls", "aac", "gateway", "https", "nginx", "url", "urledit"]
 METAINT = 8192
 KBPS = 128
 
@@ -353,7 +356,7 @@ def run(work, case, spec):
                            "https://radio.test:%d/live" % st.tls[0].getsockname()[1])
         url = "https://radio.test:%d/musickoeln" % nport
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
-        fh.write(("" if case == "url" else url) + "\r\n")
+        fh.write(("" if case in ("url", "urledit") else url) + "\r\n")
     m = machines.Machine(spec, hd)
     net = m.network(40000)
     margs = m.args()                    # (makes Hatari's home and its config folder)
@@ -368,7 +371,7 @@ def run(work, case, spec):
                                           "--statusbar", "no", "--auto", "C:\\LAUNCH.PRG"]
     env = m.env()
     x = None
-    if case == "url":
+    if case in ("url", "urledit"):
         # (a screen to type into: xdotool, as common's speed rig)
         disp = ":%d" % (60 + os.getpid() % 30)
         x = machines.xvfb(disp)
@@ -380,7 +383,7 @@ def run(work, case, spec):
         if case == "aac":
             got = wait_line(log, said, 90)
             return bool(got) and "AAC" in got and "Gateway" in got, m.describe(), got or "nothing said"
-        if case == "url":
+        if case in ("url", "urledit"):
             def xdo(*a):
                 return subprocess.run(["xdotool", *a], env=env, capture_output=True, text=True).stdout
             wait_line(log, lambda l: l.startswith("EPLAY window"), 60)
@@ -404,6 +407,11 @@ def run(work, case, spec):
             time.sleep(1)
             xdo("type", "--delay", "150", url)
             time.sleep(1)
+            if case == "urledit":
+                for k in ["Left"] * 4 + ["Z"] + ["Right"] * 2 + ["Y"]:
+                    xdo("key", "--delay", "150", k)
+                    time.sleep(0.3)
+                time.sleep(1)
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(1)
             xdo("key", "Return")
@@ -430,12 +438,13 @@ def run(work, case, spec):
                 ok = ok and any(l.startswith("TLS ") for l in st.log)
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
-        elif case == "url":
+        elif case in ("url", "urledit"):
             xdo("key", "--delay", "120", "ctrl+q")     # (EPLAY.INF is written as EPlay quits)
             time.sleep(4)
             inf = open(os.path.join(hd, "eplay.inf"), errors="replace").read() if os.path.exists(
                 os.path.join(hd, "eplay.inf")) else ""
-            kept = ("URL1=" + url) in inf
+            want = url if case == "url" else url[:-4] + "ZliYve"
+            kept = ("URL1=" + want) in inf and (case == "url" or ("URLTYPED=" + want) in inf)
             note += "; EPLAY.INF %s it" % ("keeps" if kept else "doesn't keep")
             ok = ok and gaps == 0 and kept
         return ok, m.describe(), note
