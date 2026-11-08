@@ -40,10 +40,11 @@ LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/at
 
 OWN     := main bar art draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u netsrc urldlg \
            stream plat_tos
-# (util, conn, net_tos, sting: phase 7's streams; tls_none until https takes TLS.OVL)
-CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn tls_none
+# (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
+# Direct connection through TLS.OVL, beside the program with CACERT.PEM)
+CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn ovl
 CTP     := tjpgd
-CATARI  := libc tos gem crash dspjpeg net_tos sting
+CATARI  := libc tos gem crash dspjpeg net_tos sting tls_ovl
 CUI     := mbar aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(OBJDIR)/sting_s.o \
@@ -217,15 +218,18 @@ binary/eplay.hyp: docs/GUIDE.md common/tools/mkhelp.py VERSION docs/front.json d
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
-DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref
+DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
+           common/tlsovl/tls.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all help
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	cp $(DIST) $(ICONS) dist/
 	cp NOTICES.TXT dist/notices.txt
+	cp common/certs/CACERT.PEM dist/cacert.pem
 	cp $(DIST) dist/zip/
 	cp NOTICES.TXT dist/zip/notices.txt
+	cp common/certs/CACERT.PEM dist/zip/cacert.pem
 	cp $(ICONS) dist/zip/icons/
 	cd dist/zip && zip -q -9 -r ../eplay-$(VERSION_STR).zip .
 	rm -rf dist/zip

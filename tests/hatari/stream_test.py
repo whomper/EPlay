@@ -21,6 +21,10 @@ Cases:
   gateway   Through the Gateway (EPLAY.INF: FALCON=0) to radio/radiogate.py
             on this computer, an AAC station converted to MP3: the tone,
             no gap, its titles
+  https     the address is http, and the station sends EPlay to its https
+            one (a 302, as many do): a Direct connection through TLS.OVL,
+            the rig's own root certificate as CACERT.PEM beside EPlay; the
+            tone, no gap, its titles
   url       File > Open URL... (Shift+Control+O) with nothing given: the
             address typed and Return: it plays, the row and the bar show
             the station, EPLAY.INF keeps it as the first of the last
@@ -30,6 +34,7 @@ import math
 import os
 import shutil
 import socket
+import ssl
 import struct
 import subprocess
 import sys
@@ -44,7 +49,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "aac", "gateway", "url"]
+CASES = ["live", "drop", "pls", "aac", "gateway", "https", "url"]
 METAINT = 8192
 KBPS = 128
 
@@ -63,16 +68,33 @@ class Station(threading.Thread):
         self.conns = 0
         self.log = []
 
+        self.tls = None                 # (the https case: a second port, TLS)
+
     def run(self):
+        if self.tls:
+            threading.Thread(target=self.accept, args=(self.tls[0], self.tls[1]), daemon=True).start()
+        self.accept(self.sock, None)
+
+    def accept(self, sock, ctx):
         while True:
             try:
-                c, _ = self.sock.accept()
+                c, _ = sock.accept()
             except OSError:
                 return
+            if ctx:
+                try:
+                    c.settimeout(60)
+                    c = ctx.wrap_socket(c, server_side=True)
+                    c.settimeout(None)
+                    self.log.append("TLS " + c.version() + " " + c.cipher()[0])
+                except (OSError, ssl.SSLError) as e:
+                    self.log.append("TLS failed: %s" % e)
+                    c.close()
+                    continue
             self.conns += 1
-            threading.Thread(target=self.serve, args=(c, self.conns), daemon=True).start()
+            threading.Thread(target=self.serve, args=(c, self.conns, ctx is not None), daemon=True).start()
 
-    def serve(self, c, n):
+    def serve(self, c, n, secure=False):
         try:
             req = b""
             while b"\r\n\r\n" not in req and len(req) < 4096:
@@ -83,6 +105,10 @@ class Station(threading.Thread):
             line = req.split(b"\r\n")[0].decode(errors="replace")
             self.log.append(line)
             path = line.split()[1] if len(line.split()) > 1 else "/"
+            if self.case == "https" and not secure:
+                c.sendall(("HTTP/1.1 302 Found\r\nLocation: https://radio.test:%d/live\r\n"
+                           "Content-Length: 0\r\n\r\n" % self.tls[0].getsockname()[1]).encode())
+                return
             if path == "/go":
                 c.sendall(b"HTTP/1.1 302 Found\r\nLocation: /list.pls\r\nContent-Length: 0\r\n\r\n")
                 return
@@ -150,6 +176,52 @@ class Station(threading.Thread):
 
     def stop(self):
         self.sock.close()
+        if self.tls:
+            self.tls[0].close()
+
+
+class Dns(threading.Thread):
+    """the rig's name server (fakesting's FAKESTING_DNS): every A query is
+    127.0.0.1, so the https station has a name for its certificate"""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("127.0.0.1", 0))
+        self.port = self.sock.getsockname()[1]
+
+    def run(self):
+        while True:
+            try:
+                q, a = self.sock.recvfrom(512)
+            except OSError:
+                return
+            end = 12
+            while end < len(q) and q[end]:
+                end += 1 + q[end]
+            question = q[12:end + 5]
+            self.sock.sendto(q[:2] + b"\x81\x80" + q[4:6] + b"\x00\x01\x00\x00\x00\x00" + question +
+                             b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04" +
+                             socket.inet_aton("127.0.0.1"), a)
+
+
+def make_certs(w):
+    """a root certificate of the rig's own, and radio.test's from it (RSA)"""
+    def ossl(*a):
+        subprocess.run(["openssl", *a], check=True, capture_output=True)
+    ca, key = os.path.join(w, "ca.pem"), os.path.join(w, "ca.key")
+    ossl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", ca, "-days", "30",
+         "-subj", "/CN=EPlay rig root")
+    srv, skey, csr = os.path.join(w, "srv.pem"), os.path.join(w, "srv.key"), os.path.join(w, "srv.csr")
+    ext = os.path.join(w, "srv.ext")
+    with open(ext, "w") as fh:
+        fh.write("subjectAltName=DNS:radio.test\nbasicConstraints=CA:FALSE\n")
+    ossl("req", "-newkey", "rsa:2048", "-nodes", "-keyout", skey, "-out", csr, "-subj", "/CN=radio.test")
+    ossl("x509", "-req", "-in", csr, "-CA", ca, "-CAkey", key, "-CAcreateserial", "-out", srv, "-days", "30",
+         "-extfile", ext)
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(srv, skey)
+    return ca, ctx
 
 
 def analyse(rec, skip_s, secs):
@@ -201,6 +273,18 @@ def run(work, case, spec):
                         "%dk" % KBPS, "-f", "adts", aac], check=True)
         mp3 = aac                       # (the station sends AAC at the same pace)
     st = Station(open(mp3, "rb").read(), case)
+    if case == "https":
+        ca, ctx = make_certs(w)
+        shutil.copy(ca, os.path.join(hd, "CACERT.PEM"))
+        shutil.copy(os.path.join(TOP, "common", "tlsovl", "tls.ovl"), os.path.join(hd, "TLS.OVL"))
+        ts = socket.socket()
+        ts.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        ts.bind(("127.0.0.1", 0))
+        ts.listen(4)
+        st.tls = (ts, ctx)
+        dns = Dns()
+        dns.start()
+        os.environ["FAKESTING_DNS"] = "127.0.0.1:%d" % dns.port
     gate = None
     if case == "gateway":
         # the Gateway's radio service, EPlay's own (radio/), on this computer
@@ -285,8 +369,11 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "drop":
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
-        elif case == "gateway":
+        elif case in ("gateway", "https"):
             ok = ok and gaps == 0 and len(titles) >= 2
+            if case == "https":
+                note += "; " + ", ".join(l for l in st.log if l.startswith("TLS"))
+                ok = ok and any(l.startswith("TLS ") for l in st.log)
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
         elif case == "url":

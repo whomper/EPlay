@@ -120,7 +120,8 @@ STinG or MiNTnet.
 Only for web radio (File > Open URL…), through STinG or MiNTnet:
 - **Direct connection** (the Options menu; the default): EPlay asks the station itself, over HTTP,
   with `Icy-MetaData: 1` for the songs' titles; redirects and `.pls`/`.m3u` station lists are
-  followed. MP3 stations only; HTTPS, AAC, Ogg and HLS need the Gateway.
+  followed. MP3 stations, at http and https addresses (https through the family's `TLS.OVL`,
+  beside the program with `CACERT.PEM`); AAC, Ogg and HLS need the Gateway.
 - **Through the Gateway**: EPlay asks the AERA Gateway (`GET /stream?url=…`, its address and port in
   Settings), which fetches the station and sends it on as MP3. The Gateway's stream service comes
   with a later release.

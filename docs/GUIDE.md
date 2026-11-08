@@ -10,12 +10,14 @@ after another, and the music goes on while you work in other dialogs and menus.
 |---|---|
 | `eplay.prg` | the program, for the Falcon |
 | `eplay.hyp`, `eplay.ref` | this guide, for EHypView or ST-Guide |
+| `tls.ovl`, `CACERT.PEM` | the family's secure connections and the root certificates, for web radio stations at https addresses |
 | `notices.txt` | the licences of the parts EPlay is made with |
 | `icons/` | the desktop icons: `eplay.rsc` (`eplaynv.rsc` under NVDI with its own palette), or `eplay.icn` and `eplaymk.icn` for desktops that take them |
 
 - **Install:** copy `eplay.prg` into a folder of its own, such as `C:\EPLAY\`. It keeps its
   settings (`EPLAY.INF`), its log (`EPLAY.LOG`), the album art it has unpacked (`cache\`) and any
-  `CRASH.LOG` beside itself.
+  `CRASH.LOG` beside itself. Copy `tls.ovl` and `CACERT.PEM` beside it too, for stations at
+  https addresses.
 - **This guide:** copy `eplay.hyp` and `eplay.ref` into `C:\GUIDES\`, or beside `eplay.prg`.
   **Help** in EPlay opens it in EHypView or ST-Guide.
 - **Play something:** start EPlay and choose **File > Open...** (^O), or drop MP3, WAV or AIFF
@@ -114,9 +116,10 @@ playlist play as its files do.
 The **Options** menu chooses how a station is reached:
 
 - **Direct connection** (the default): EPlay connects to the station itself. It plays MP3
-  stations over plain HTTP, which most are.
+  stations, at http and https addresses (https with `tls.ovl` and `CACERT.PEM` beside EPlay;
+  the secure connection takes a few seconds more to start).
 - **Through the Gateway:** the AERA Gateway fetches the station and passes it on as MP3, so
-  stations that send AAC or Ogg, HLS, or only HTTPS play too. Give the Gateway's address and port
+  stations that send AAC or Ogg, or HLS, play too. Give the Gateway's address and port
   in **Settings**. (The Gateway's stream service comes with a later release.)
 
 Web radio needs a network: STinG or MiNTnet with a network card. With STinG, set the **Delay** in
@@ -183,6 +186,8 @@ at the nearest rate instead.
   MiNTnet). Through the Gateway: **"The Gateway doesn't answer: is it on?"**
 - **"The station sends AAC: play it through the Gateway."** (or Ogg, or HLS) EPlay plays MP3
   stations directly; choose **Options > Through the Gateway** for these.
+- **"A secure station needs TLS.OVL and CACERT.PEM beside EPlay."** The station's address is
+  https (or it sends EPlay there): copy both from EPlay's release beside `eplay.prg`.
 - **"There's no network: EPlay needs STinG or MiNTnet."** Web radio needs a TCP/IP stack and a
   network card.
 - **A station stops now and then.** The network fell behind for longer than the three seconds

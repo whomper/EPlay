@@ -18,3 +18,13 @@ EPlay includes or uses, under their own licences (compatible with the GPL):
   commercial products UNDER YOUR RESPONSIBILITY. Redistributions of source
   code must retain the above copyright notice." It decodes the album art's
   JPEGs (common/src/pic.c), in EPLAY.PRG.
+
+- tls.ovl (common/tlsovl/): the AERA family's secure connections, for web
+  radio stations at https addresses on a Direct connection. It is made with
+  BearSSL 0.6 by Thomas Pornin (common/third_party/bearssl/, MIT licence:
+  "Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software ... THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+  WARRANTY OF ANY KIND"; the whole text in its LICENSE.txt).
+
+- CACERT.PEM (common/certs/): Mozilla's root certificates, as curl's
+  project publishes them, under the Mozilla Public License 2.0.

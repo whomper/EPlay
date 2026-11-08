@@ -12,6 +12,9 @@
 #include <string.h>
 #include "plat.h"
 #include "conn.h"
+#include "tls.h"
+#include "tlsovl.h"
+#include "gem.h"
 #include "stream.h"
 #include "netsrc.h"
 #include "settings.h"
@@ -124,11 +127,19 @@ static int ask(char *u, char *err, int n)
 		return 0;
 	}
 	ns_close();
+	if (s.tls && !tls_available) {
+		elog("the station %s:%u: https, and this build has no TLS", s.host, s.port);
+		snprintf(err, (size_t)n, "The station needs a secure connection: play it through the Gateway.");
+		return 0;
+	}
 	c = conn_open("HTTP", s.host, s.port, 0, s.tls ? SEC_TLS : SEC_PLAIN, err, n);
 	if (!c) {
 		/* (conn's own words to the log; the user's are the station's) */
 		elog("the station %s:%u: %s", s.host, s.port, err[0] ? err : "no connection");
-		snprintf(err, (size_t)n, "The station doesn't answer.");
+		if (s.tls && !conn_stop && strstr(err, "TLS.OVL"))
+			snprintf(err, (size_t)n, "A secure station needs TLS.OVL and CACERT.PEM beside EPlay.");
+		else
+			snprintf(err, (size_t)n, "The station doesn't answer.");
 		return 0;
 	}
 	snprintf(req, sizeof(req),
@@ -266,10 +277,31 @@ static int via_gateway(const char *url, char *out, int omax, char *err, int n)
 	return 1;
 }
 
+/* a Direct https station: TLS.OVL, CACERT.PEM and what TLS keeps between
+   sessions (ROOTS.DAT, SEED.DAT, SIGS.DAT), all beside EPlay. The DSP is
+   EPlay's music's: the handshake is the 68030's (tls_ovl_dsp never asked) */
+static void tls_paths(void)
+{
+	static int done;
+	const char *d = app_dir();
+	if (done)
+		return;
+	done = 1;
+	snprintf(tls_ovl_path, sizeof(tls_ovl_path), "%sTLS.OVL", d);
+	snprintf(conn_cacert, sizeof(conn_cacert), "%sCACERT.PEM", d);
+	snprintf(tls_roots_cache, sizeof(tls_roots_cache), "%sROOTS.DAT", d);
+	snprintf(tls_seed_path, sizeof(tls_seed_path), "%sSEED.DAT", d);
+	snprintf(tls_sigs_path, sizeof(tls_sigs_path), "%sSIGS.DAT", d);
+	tls_file_stamp = pf_stamp;
+	tls_read_at = pf_read_at;
+	tls_file_info = pf_info;
+}
+
 static int open_url(const char *url, char *err, int n)
 {
 	int hops, gw = settings_gateway();
 	err[0] = 0;
+	tls_paths();
 	if (net_ok < 0)
 		net_ok = net_init();
 	if (!net_ok) {

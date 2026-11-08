@@ -1610,6 +1610,14 @@ where it was. The station's titles go to the log
   port and any package on it (ffmpeg, to convert AAC) are Erez's to decide.
 - **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
   as Erez decides them.
+- **7e, https on a Direct connection (8 Nov 2026):** common's `atari/tls_ovl.c` and `src/ovl.c`
+  in place of `tls_none` (whose words, "this is the ST edition", reached Erez's log from
+  EPLAY.PRG with an https station). `TLS.OVL` and `CACERT.PEM` beside the program (the release
+  carries both); `ROOTS.DAT`, `SEED.DAT` and `SIGS.DAT` beside it too. The handshake is the
+  68030's: EPlay never hands TLS.OVL the DSP (`tls_ovl_dsp`), which is the music's. Without
+  TLS.OVL: "A secure station needs TLS.OVL and CACERT.PEM beside EPlay." `stream_test https`: a
+  302 from http to https, a root certificate of the rig's own and a name server of its own for
+  `radio.test`: TLS 1.2, ECDHE-RSA with ChaCha20, the tone with no gap.
 
 **7d, the window, as built (8 Nov 2026):** File > Open URL... on **⇧^O**, not ^U: ^U is the
 family's Close (3.2: a key never gets another meaning; related commands take ⇧^), put to Erez with
