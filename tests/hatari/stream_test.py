@@ -29,6 +29,9 @@ Cases:
             address typed and Return: it plays, the row and the bar show
             the station, EPLAY.INF keeps it as the first of the last
             stations, the Options menu ticks Direct connection
+
+RADIOGATE=DIR takes radiogate.py (and aeragate.py) from DIR in place of
+radio/: the Gateway's own copy, as its release will carry it.
 """
 import math
 import os
@@ -288,7 +291,7 @@ def run(work, case, spec):
     gate = None
     if case == "gateway":
         # the Gateway's radio service, EPlay's own (radio/), on this computer
-        sys.path.insert(0, os.path.join(TOP, "radio"))
+        sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
         import radiogate
         radiogate.Config.allow_local = True     # (the station is on 127.0.0.1)
         gate = radiogate.ThreadingHTTPServer(("127.0.0.1", 0), radiogate.Handler)
