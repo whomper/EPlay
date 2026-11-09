@@ -19,7 +19,7 @@ extern const char app_version[];
 void dlg_about(void)
 {
 	static char what[80], mem[80];
-	ABOUT a = { "EPlay", app_version, "An audio player for the Atari Falcon",
+	ABOUT a = { "EPlay", app_version, "An audio player for the Falcon, TT and STE",
 		    { what, mem, 0 }, { "MP3 decoded on the Falcon's DSP.", 0, 0 },
 		    icon_bits, icon16_px, icon16_rgb, icon256_px, icon256_rgb };
 	if (play_state() == PS_PLAYING)
