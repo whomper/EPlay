@@ -2023,6 +2023,12 @@ int app_main(void)
 	short work_out[57], d;
 	const char *why;
 
+	{
+		/* first: a 68060 takes div64.c's 32-bit way (no 64-bit mulu.l
+		   or divu.l there), anything before it the one instruction */
+		extern int div64_cpu60;
+		div64_cpu60 = get_cookie(0x5F435055L) >= 60;	/* '_CPU' */
+	}
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
