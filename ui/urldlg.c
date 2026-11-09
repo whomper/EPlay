@@ -11,7 +11,7 @@
 #include "gem.h"
 #include "dialog.h"
 #include "field.h"
-#include "settings.h"
+#include "prefs.h"
 #include "stream.h"
 #include "urldlg.h"
 

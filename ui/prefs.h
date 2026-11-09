@@ -1,14 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * settings.h - EPlay's Settings (Options > Settings..., ^,) and EPLAY.INF,
+ * prefs.h - (once settings.h: common has its settings.c, the Settings engine) EPlay's Settings (Options > Settings..., ^,) and EPLAY.INF,
  * next to the program (a PRG-only app: the guidelines' 6.1). Output: how
  * EPlay plays (Erez, 2 Nov 2026): Auto, FDI or DSP (the 68030 dropped: Erez,
  * 3 Nov 2026). A change takes
  * effect at the next Play; what plays goes on as it is.
  */
-#ifndef EPLAY_SETTINGS_H
-#define EPLAY_SETTINGS_H
+#ifndef EPLAY_PREFS_H
+#define EPLAY_PREFS_H
 
 enum { OUT_AUTO, OUT_FDI, OUT_DSP };
 /* (Quality is no longer a setting: Erez, 4 Nov 2026. An MP3 plays at High

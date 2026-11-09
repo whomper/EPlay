@@ -21,7 +21,7 @@
 #include "plat.h"
 #include "conn.h"
 #include "stream.h"
-#include "settings.h"
+#include "prefs.h"
 #include "art.h"
 #include "play.h"
 #include "elog.h"

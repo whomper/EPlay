@@ -17,7 +17,7 @@
 #include "gem.h"
 #include "stream.h"
 #include "netsrc.h"
-#include "settings.h"
+#include "prefs.h"
 #include "elog.h"
 
 extern const char app_version[];

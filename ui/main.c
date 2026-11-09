@@ -26,7 +26,7 @@
 #include "offdraw.h"
 #include "click.h"
 #include "play.h"
-#include "settings.h"
+#include "prefs.h"
 #include "list.h"
 #include "dd.h"
 #include "popup.h"

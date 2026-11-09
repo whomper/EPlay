@@ -37,7 +37,7 @@
 #include "../src/pcm.h"
 #include "mp3frame.h"
 #include "elog.h"
-#include "settings.h"
+#include "prefs.h"
 #include "mp3dsp.h"
 #include "tags.h"
 #include "netsrc.h"

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * settings.c - Settings and EPLAY.INF (settings.h). One page, so no sidebar:
+ * prefs.c - (once settings.c) Settings and EPLAY.INF (settings.h). One page, so no sidebar:
  * a sentence on what Output is, then its three choices as radio buttons
  * (Erez, 2 Nov 2026: the choices need no notes). (Quality, Normal and
  * High, was the second: chosen by itself since 4 Nov 2026, Erez.) A
@@ -22,7 +22,7 @@
 #include "inf.h"
 #include "snd.h"
 #include "elog.h"
-#include "settings.h"
+#include "prefs.h"
 #include "rgain.h"
 #include "alert.h"
 
