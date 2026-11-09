@@ -289,6 +289,7 @@ static unsigned long part_from;
 #endif
 
 static int open_due;		/* a file to open the next turn (file[]): a row's answer first */
+static int chain_due;		/* gapless: the next file to open, at the next turn */
 static int chain_row = -1;	/* gapless: the next row, chosen as the file's last bytes went
 				   into the queue (followed on, or opened at its end) */
 static int shown_due;		/* what plays to draw whole the next turn: 2 the bar, 1 Play/Pause and
@@ -712,6 +713,7 @@ static char pending_play[320];
 static void play_file(const char *f)
 {
 	chain_row = -1;			/* (a file chosen: gapless's next forgotten) */
+	chain_due = 0;
 	play_log_stop();		/* (the one playing gives the DSP back) */
 	play_stop();
 	if (art_begin(f) == ART_FIRST) {
@@ -1396,10 +1398,13 @@ static void step(int playing)
 			nf_debug(line);
 		}
 	}
-	if (playing && play_wants_next() && list_cur >= 0 && order_has_next(&list_order, list_cur)) {
+	if (playing && !chain_due && play_wants_next() && list_cur >= 0 && order_has_next(&list_order, list_cur))
+		chain_due = 1;		/* (opened in a turn of its own: not a Return's) */
+	else if (playing && chain_due) {
 		/* gapless: the next row chosen now, as at the end (Shuffle,
 		   Repeat), and followed on in the queue where it can be */
 		ENTRY *e;
+		chain_due = 0;
 		if (chain_row < 0)	/* (chosen once: Pause or a seek asks again) */
 			chain_row = playable_from(list_cur, 1, 0);
 		if (chain_row >= 0 && (e = list_at(chain_row)) != 0 && !play_chain(e->path))

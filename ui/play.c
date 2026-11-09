@@ -201,6 +201,7 @@ static unsigned long ms_now(void)
 }
 
 /* the buffer topped up from the file: what is left moved to its start */
+static long refill_cap = 32768;	/* a read's most (play_chain's: 8 KB, its turn short) */
 static void refill(void)
 {
 	long n;
@@ -211,8 +212,8 @@ static void refill(void)
 		fend -= fpos;
 		fpos = 0;
 	}
-	n = net ? ns_read(fbuf + fend, (FBUF - fend) > 32768 ? 32768 : FBUF - fend, 1) :
-		  Fread(fh, (FBUF - fend) > 32768 ? 32768 : FBUF - fend, fbuf + fend);
+	n = net ? ns_read(fbuf + fend, (FBUF - fend) > refill_cap ? refill_cap : FBUF - fend, 1) :
+		  Fread(fh, (FBUF - fend) > refill_cap ? refill_cap : FBUF - fend, fbuf + fend);
 	if (n <= 0)
 		eof = 1;
 	else
@@ -1361,6 +1362,8 @@ int play_chain(const char *path)
 		Fseek(0, (short)h2, 0);
 		fpos = fend = 0;
 		eof = 0;
+		refill_cap = 8192;	/* (a header, the Xing frame, a frame or two: the
+					   speed rig's Return held 345 ms with 32 KB here) */
 		refill();
 		if (dsp) {
 			MP3HDR h;
@@ -1373,6 +1376,7 @@ int play_chain(const char *path)
 				fend = wend;
 				eof = weof;
 				Fclose((short)h2);
+				refill_cap = 32768;
 				elog("gapless: %s is no MP3 at %ld Hz: it opens at this one's end", base_name(path), rate);
 				return 0;
 			}
@@ -1421,6 +1425,7 @@ int play_chain(const char *path)
 				fend = wend;
 				eof = weof;
 				Fclose((short)h2);
+				refill_cap = 32768;
 				elog("gapless: %s is not this file's format: it opens at this one's end", base_name(path));
 				return 0;
 			}
@@ -1435,6 +1440,7 @@ int play_chain(const char *path)
 					 f2.bits, kr, f2.channels == 2 ? "stereo" : "mono");
 			}
 		}
+		refill_cap = 32768;
 		if (was >= 0)
 			Fclose((short)was);	/* (its bytes are all in the queue) */
 	}
