@@ -495,7 +495,12 @@ Erez's first try, an 8-minute MP3 with the FDI on:
 
 `EPLAY.LOG` (next to the program) says what EPlay measured and did: the machine, the FDI's driver,
 the clock as measured and as taken, each file's header, the output, how playing ended. It is
-written whole when a file ends or is stopped, when the DSP fails, and at the end.
+written when a file ends or is stopped, when the DSP fails, and at the end. Since 1.12 it is
+common's conn.c log, as the family's (the hub, 9 Nov 2026; Erez: "just like the other
+applications"): each run added to the file, each line with its time, held in memory (16 KB,
+`conn_log_hold`) between writes, a crash's report in it, and the connections' lines (once
+EPLAYNET.LOG) in the same file. A size cap and a line at each start will come from common, for
+every app.
 
 Also: the DSP's program goes in from the tick (32 words a tick, 0.7 s), not from GEM's steps,
 which the file selector held up on a stock Falcon (the rig's new timing showed it). It starts once

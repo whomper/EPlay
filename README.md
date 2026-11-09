@@ -101,7 +101,8 @@ contains (every name in lowercase, as the family's are, so that MiNT finds them 
 **EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
 found and how it set the FDI, each file's format and length, how playing ended, and how the DSP
 and the 68030 kept up (the DSP's time to spare a frame, the share of the 68030 that playing
-took). While EPlay is young, please send it with any report.
+took), and how each connection to a station went. Each run adds to it, as the family's logs do
+(common's conn.c). While EPlay is young, please send it with any report.
 
 **Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS,
 a TT (WAV and AIFF), or an STE or Mega STE with `eplayst.prg` (WAV and AIFF); a screen 640 pixels

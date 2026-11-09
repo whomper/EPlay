@@ -22,6 +22,10 @@ void settings_dialog(void);	/* the dialog; saved on OK when it changed */
 int settings_output(void);	/* OUT_...: as set, or Auto where the machine hasn't it */
 const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
 
+/* ReplayGain (phase 8b, Erez, 9 Nov 2026): RG_OFF, RG_TRACK, RG_ALBUM or
+   RG_AUTO (rgain.h; REPLAYGAIN= in the INF, AUTO when not given) */
+int settings_rgain(void);
+
 /* the volume (0 silent to VOL_FULL, steps of 1.5 dB), VOLUME= in the INF,
    saved by settings_flush at the end when it changed */
 #define VOL_FULL 16

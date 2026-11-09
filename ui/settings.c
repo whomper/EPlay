@@ -23,6 +23,7 @@
 #include "snd.h"
 #include "elog.h"
 #include "settings.h"
+#include "rgain.h"
 
 static int output = OUT_AUTO;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
@@ -40,6 +41,11 @@ static const char *const labels[NOUT] = { "Auto", "FDI", "DSP" };
    port (Settings), and the last stations opened (Open URL). The INF's keys
    are the family's: FALCON= (1: Direct connection), GATE=, GATEPORT= */
 static int gateway, gateway_saved;
+/* ReplayGain (phase 8b, Erez, 9 Nov 2026): Auto by default */
+#define NRG 4
+static int rgain = RG_AUTO;
+static const char *const rg_names[NRG] = { "OFF", "TRACK", "ALBUM", "AUTO" };
+static const char *const rg_labels[NRG] = { "Off", "Track", "Album", "Auto" };
 static char gate[64];
 static long gateport = 8580;	/* (the radio service's port: Erez, 8 Nov 2026) */
 static char urls[URL_RECENT][URL_MAX];
@@ -121,6 +127,12 @@ void settings_load(void)
 		inf_get(inf, inf_n, k, urls[i], URL_MAX);
 	}
 	inf_get(inf, inf_n, "URLTYPED", url_typed, URL_MAX);
+	if (inf_get(inf, inf_n, "REPLAYGAIN", v, sizeof(v))) {
+		int i;
+		for (i = 0; i < NRG; i++)
+			if (!strcmp(v, rg_names[i]))
+				rgain = i;
+	}
 }
 
 int settings_qlate(void)
@@ -195,6 +207,15 @@ static void save_in(void)
 		n = inf_set(inf2, n, "REPEAT", rnames[repeat], rnote, inf3, INF_MAX);
 		if (n < 0)
 			return;
+	}
+	{
+		static const char gnote[] =
+		    "; ReplayGain: OFF, TRACK, ALBUM or AUTO (the album's in order, the track's\r\n"
+		    "; shuffled); louder only as far as the peak lets it go\r\n";
+		n = inf_set(inf3, n, "REPLAYGAIN", rg_names[rgain], gnote, inf2, INF_MAX);
+		if (n < 0)
+			return;
+		memcpy(inf3, inf2, (size_t)n);
 	}
 	{
 		/* the stations' keys, a key at a time between the two buffers,
@@ -302,7 +323,8 @@ void settings_dialog(void)
 	static TEDINFO t_addr, t_port;
 	static char a_text[sizeof(gate)], a_tmpl[25], a_valid[25], p_text[6], p_tmpl[6], p_valid[6];
 	static LFIELD lf;
-	short radio[NOUT], ok, cancel, r, g, fa, fp;
+	static const char rgline[] = "ReplayGain:";
+	short radio[NOUT], rgr[NRG], ok, cancel, r, g, fa, fp;
 	int i, eff = settings_output(), chose = eff;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
@@ -312,7 +334,7 @@ void settings_dialog(void)
 	tree[0].ob_state = OUTLINED;
 	tree[0].ob_spec = 0x00021100L;
 	tree[0].ob_width = 62;
-	tree[0].ob_height = 11;
+	tree[0].ob_height = 13;
 	add(0, G_STRING, 0, 0, (long)sentence, 2, 1, (short)strlen(sentence), 1);
 	g = add(0, G_IBOX, 0, 0, 0L, 2, 3, 28, 1);
 	for (i = 0; i < NOUT; i++)
@@ -352,8 +374,14 @@ void settings_dialog(void)
 	t_port.te_txtlen = 6;
 	t_port.te_tmplen = 6;
 	fp = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_port, 41, 6, 5, 1);
-	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 9, 9, 1);
-	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 9, 9, 1);
+	/* ReplayGain (phase 8b): its four as radio buttons, in a box of their own */
+	add(0, G_STRING, 0, 0, (long)rgline, 2, 8, (short)strlen(rgline), 1);
+	g = add(0, G_IBOX, 0, 0, 0L, 14, 8, 38, 1);
+	for (i = 0; i < NRG; i++)
+		rgr[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)(i == rgain ? SELECTED : 0), (long)rg_labels[i],
+			     (short)(10 * i), 0, 8, 1);
+	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 11, 9, 1);
+	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 11, 9, 1);
 	tree[nobj - 1].ob_flags |= LASTOB;
 	rsrc_obfix_all(tree, nobj);
 	lf_init(&lf, tree, fa, a_text, (short)(sizeof(a_text) - 1), 0);
@@ -375,6 +403,13 @@ void settings_dialog(void)
 		}
 	}
 	(void)fp;
+	for (i = 0; i < NRG; i++)
+		if ((tree[rgr[i]].ob_state & SELECTED) && i != rgain) {
+			rgain = i;
+			save();
+			elog("Settings: ReplayGain %s", rg_labels[rgain]);
+			break;
+		}
 	for (i = 0; i < NOUT; i++)
 		if (tree[radio[i]].ob_state & SELECTED)
 			chose = i;
@@ -385,6 +420,11 @@ void settings_dialog(void)
 		save();
 		elog("Settings: output %s (from the next Play)", labels[settings_output()]);
 	}
+}
+
+int settings_rgain(void)
+{
+	return rgain;
 }
 
 int settings_volume(void)

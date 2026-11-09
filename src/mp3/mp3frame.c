@@ -354,8 +354,22 @@ int mp3_info_lame(const unsigned char *f, const MP3HDR *h, MP3LAME *l)
 		l->delay = (int)(t[21] << 4 | t[22] >> 4);
 		l->padding = (int)((t[22] & 15) << 8 | t[23]);
 		l->radio_gain = (int)(t[15] << 8 | t[16]);	/* (ReplayGain's track gain, as LAME writes it) */
+		l->audiophile_gain = (int)(t[17] << 8 | t[18]);
 		l->peak = (long)be32(t + 11);
 		return 1;
 	}
 	return 0;
+}
+
+void mp3_packet_gain(unsigned long *pk, int up)
+{
+	int g, n;
+	unsigned long *gc = pk + 2 + 2;
+	if (!up || (pk[0] & PK_MUTE))
+		return;
+	n = ((pk[0] & PK_LSF) ? 1 : 2) * ((pk[0] & PK_STEREO) ? 2 : 1);
+	for (g = 0; g < n; g++, gc += PK_GC) {
+		long v = (long)*gc + up;
+		*gc = (unsigned long)(v < 0 ? 0 : v > 255 ? 255 : v);
+	}
 }

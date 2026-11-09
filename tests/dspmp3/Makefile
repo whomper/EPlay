@@ -32,6 +32,10 @@ run: $(B)/sim $(B)/stream
 	for f in mix320 infocbr mix48; do for d in 30:745:1512 30:936:1512; do \
 		SIMLOAD=75 SIMDROP=$$d ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 80 && \
 		SIMLOAD=75 SIMDROP=$$d SIMRS=1 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 80 || exit 1; done; done
+	@echo "STREAM, ReplayGain (SIMGAIN: global_gain up to +12 dB, held at full; and down), as the model, bit for bit:"
+	for f in tones mix320 lsf22 mixvbr; do for g in 8 4 -6; do \
+		SIMGAIN=$$g ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 80 && \
+		SIMGAIN=$$g SIMRS=1 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 80 || exit 1; done; done
 	@echo "STREAM, a slow 68030 (SIMLAT=300: a word each 9 us) and a DSP 3 % slower (SIMLOAD=103):"
 	for f in mix320 mixvbr lsf22; do SIMRS=1 SIMLAT=300 SIMLOAD=103 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 120 || exit 1; done
 $(B)/mp3tab.h: $(TOP)/tools/mkmp3tab.py | $(B)

@@ -85,18 +85,102 @@ static const unsigned short gain_tab[VOL_MAX] = {
 	8192, 6889, 5793, 4871, 4096, 3444, 2896, 2435
 };
 
+/* ReplayGain (phase 8b, Erez, 9 Nov 2026: Auto by default, louder only
+   as far as the peak lets it): in the volume's steps, on top of it. Kept
+   digital where the samples are touched anyway (an MP3's global_gain, WAV
+   and AIFF scaled by the tick), so that the gapless join changes it where
+   the next file's first sound is made, not when it is heard; on the STE's
+   68000 (no gain on its samples) the LMC1992 takes the cut, and nothing is
+   made louder. rg_now the file the queue is in, rg_next the next's (once
+   the tick has passed into it, rg_crossed: rg_next is what it makes) */
+static RGAIN rgv_now, rgv_next;
+static MP3LAME open_lt;
+static int open_has_lt;
+static int rg_now, rg_next;
+static volatile int rg_crossed;
+static volatile long t_gain_nx = 32768;
+static volatile int t_gsub_nx;
+static const long boost_tab[RG_BOOST + 1] = {
+	32768, 38968, 46341, 55109, 65536, 77936, 92682, 110218, 131072
+};
+
+/* d steps down (less than 0: up) as Q15 and as global_gain's */
+static void gain_at(int d, long *g, int *sub)
+{
+	if (d < 0) {
+		*g = boost_tab[-d > RG_BOOST ? RG_BOOST : -d];
+		*sub = d;
+	} else {
+		*g = d >= 60 ? 0 : (long)(gain_tab[d & 3] >> (d >> 2));
+		*sub = d;
+	}
+}
+
 static void apply_volume(void)
 {
 	int a = VOL_MAX - vol;		/* 0..15 steps down, while vol is 1 or more */
+	int sub, subn, digital = !(snd_dma8 && !snd_dma8_interp);	/* (not the STE's 68000) */
+	long g, gn;
 	if ((s_ext || (snd_dma8 && snd_dma8_interp)) && play_is_open()) {
 		snd_dac_volume(0, 0);
-		t_gain = vol ? gain_tab[a] : 0;
-		t_gsub = vol ? a : 255;
+		gain_at(a - rg_now, &g, &sub);
+		gain_at(a - rg_next, &gn, &subn);
 	} else {
-		snd_dac_volume(vol ? a : VOL_MAX - 1, !vol);
-		t_gain = 32768;
-		t_gsub = 0;
+		int cut = !digital && rg_now < 0 ? -rg_now : 0;
+		snd_dac_volume(vol ? a + cut : VOL_MAX - 1, !vol);
+		gain_at(digital ? -rg_now : 0, &g, &sub);
+		gain_at(digital ? -rg_next : 0, &gn, &subn);
 	}
+	if (!vol) {
+		g = gn = 0;
+		sub = subn = 255;
+	}
+	/* (the tick may pass into the next file between: asked again after) */
+	t_gain_nx = gn;
+	t_gsub_nx = subn;
+	t_gain = rg_crossed ? gn : g;
+	t_gsub = rg_crossed ? subn : sub;
+	if (rg_crossed) {
+		t_gain = gn;
+		t_gsub = subn;
+	}
+}
+
+/* the tick's: the queue has passed into the next file */
+static void rg_cross(void)
+{
+	if (rg_crossed)
+		return;
+	t_gain = t_gain_nx;
+	t_gsub = t_gsub_nx;
+	rg_crossed = 1;
+}
+
+/* the file's gain: its tags', else LAME's tag's (l: 0 where none) */
+static void rg_take(RGAIN *r, const TAGS *t, const MP3LAME *l)
+{
+	*r = t->rg;
+	if (l) {
+		if (r->track == RG_NONE)
+			r->track = rg_lame(l->radio_gain, 1);
+		if (r->album == RG_NONE)
+			r->album = rg_lame(l->audiophile_gain, 2);
+		if (!r->tpeak)
+			r->tpeak = rg_float_q16((unsigned long)l->peak);
+	}
+}
+
+static int rg_of(const RGAIN *r)
+{
+	return rg_pick(r, settings_rgain(), settings_shuffle());
+}
+
+/* Settings or Shuffle changed: the gain again, as it glides */
+void play_rgain_changed(void)
+{
+	rg_now = rg_of(&rgv_now);
+	rg_next = rg_of(&rgv_next);
+	apply_volume();
 }
 
 void play_set_volume(int v)
@@ -329,6 +413,8 @@ static void tick_pcm(void)
 				t_end = 1;
 			return;
 		}
+		if (chain_q >= 0 && q_r >= chain_q)
+			rg_cross();
 		if (hb > tail)
 			hb = tail;
 		if (raw8) {
@@ -440,6 +526,7 @@ static void next_packet(void)
 			q_base = chain_at - chain_q;
 			chain_cross = 1;
 			pk_chain = 2;		/* (the next packet made is its first) */
+			rg_cross();
 		}
 		if (have < 4) {
 			if (src_done)
@@ -463,13 +550,8 @@ static void next_packet(void)
 		{
 			long at = q_base + q_r;	/* (the frame's place, before it is passed) */
 			adv(h.length);
-			if (np > 0 && t_gsub && !(pk[0] & PK_MUTE)) {
-				/* the volume: each granule's and channel's global_gain */
-				int g, n = ((pk[0] & PK_LSF) ? 1 : 2) * ((pk[0] & PK_STEREO) ? 2 : 1);
-				unsigned long *gc = pk + 2 + 2;
-				for (g = 0; g < n; g++, gc += PK_GC)
-					*gc = *gc > (unsigned long)t_gsub ? *gc - t_gsub : 0;
-			}
+			if (np > 0 && t_gsub)
+				mp3_packet_gain(pk, -t_gsub);	/* (the volume and ReplayGain: global_gain) */
 			if (np > 0 && chain_q >= 0 && !drop_set && nx_delay >= 0) {
 				/* gapless: the join's silence left out on the DSP
 				   (LAME's tag: this file's padding past the decoder's
@@ -526,6 +608,8 @@ static void next_pcm_packet(void)
 		long hb = q_w - q_r, tail = q_size - q_roff, k = 576 - pcm_got, kb;
 		if (hb < fmt.bytes)
 			break;
+		if (chain_q >= 0 && q_r >= chain_q)
+			rg_cross();
 		if (hb > tail)
 			hb = tail;
 		kb = FR2B(k);
@@ -642,6 +726,8 @@ static void tick_xs(void)
 			need = XS_BUF;
 		if (s_end == 0) {
 			long hb = q_w - q_r, tail = q_size - q_roff;
+			if (chain_q >= 0 && q_r >= chain_q)
+				rg_cross();
 			if (hb < fmt.bytes) {
 				if (src_done) {
 					s_end = 1;
@@ -944,6 +1030,7 @@ int play_open(const char *path, char *err, int n)
 
 	play_log_stop();		/* (another file while one plays: what the first did) */
 	play_stop();
+	open_has_lt = 0;
 	if (path != cur_path) {
 		snprintf(cur_path, sizeof(cur_path), "%s", path);
 		q_normal = 0;		/* (a file starts at High; a seek or Play keeps its own) */
@@ -1059,7 +1146,9 @@ int play_open(const char *path, char *err, int n)
 			if (nf > 0) {
 				long fs = nf * h.samples;
 				MP3LAME lt;
-				cur_pad = mp3_info_lame(fbuf + first_at, &h, &lt) ? lt.padding : -1;
+				open_has_lt = mp3_info_lame(fbuf + first_at, &h, &lt);
+				cur_pad = open_has_lt ? lt.padding : -1;
+				open_lt = lt;
 				has_toc = mp3_info_toc(fbuf + first_at, &h, xtoc);
 				xing_at = at;
 				at += h.length;
@@ -1269,8 +1358,14 @@ int play_open(const char *path, char *err, int n)
 	khz(kr, sizeof(kr), out_rate);
 	play_via = ext ? "FDI" : dsp ? "DSP" : "DMA";
 	s_ext = ext;
+	rg_take(&rgv_now, &play_tags, open_has_lt ? &open_lt : 0);
+	rgv_next = rgv_now;
+	rg_now = rg_next = rg_of(&rgv_now);
+	rg_crossed = 0;
 	apply_volume();
 	pcm_gain_set(&gs, t_gain);	/* (a file starts at its volume: no glide) */
+	if (rg_now)
+		elog("ReplayGain: %+d.%d dB", rg_now * 3 / 2, (rg_now * 3 % 2 ? 5 : 0));
 	play_nosig = 0;
 	if (snd_dma8 && out_rate != rate) {	/* (the TT's or STE's DMA, resampled by the 68030 or 68000) */
 		char fr[16];
@@ -1347,6 +1442,8 @@ int play_chain(const char *path)
 	int h2 = (int)Fopen(path, 0);
 	long size, at, left;
 	TAGS t;
+	MP3LAME nx_lt;
+	int nx_has_lt = 0;
 	if (h2 < 0)
 		return 0;
 	size = Fseek(0, (short)h2, 2);
@@ -1389,6 +1486,8 @@ int play_chain(const char *path)
 				if (mp3_info_lame(fbuf + first_at, &h, &lt)) {
 					nx_delay = lt.delay;
 					nx_pad = lt.padding;
+					nx_lt = lt;
+					nx_has_lt = 1;
 				}
 				nx.has_toc = mp3_info_toc(fbuf + first_at, &h, nx.xtoc);
 				at += h.length;		/* (the Xing frame holds no sound) */
@@ -1446,6 +1545,11 @@ int play_chain(const char *path)
 	}
 	Fseek(at, (short)h2, 0);
 	nx.tags = t;
+	/* its ReplayGain, for the tick to change to where its bytes begin */
+	rg_take(&rgv_next, &t, nx_has_lt ? &nx_lt : 0);
+	rg_next = rg_of(&rgv_next);
+	rg_crossed = 0;
+	apply_volume();
 	snprintf(nx.path, sizeof(nx.path), "%s", path);
 	snprintf(nx.name, sizeof(nx.name), "%s", base_name(path));
 	chain_cross = 0;
@@ -1500,6 +1604,10 @@ static void chain_check(void)
 	play_kbps = nx.kbps;
 	base_ms = 0;
 	chain_q = -1;
+	rgv_now = rgv_next;		/* (the tick passed into it already: its gain made) */
+	rg_now = rg_next;
+	rg_crossed = 0;
+	apply_volume();			/* (the STE's LMC1992 takes its cut now) */
 	chain_asked = 0;
 	chain_heard = 1;
 	q_normal = 0;

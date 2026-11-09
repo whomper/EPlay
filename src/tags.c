@@ -16,6 +16,17 @@ void tags_clear(TAGS *t)
 {
 	memset(t, 0, sizeof(*t));
 	t->pic_type = -1;
+	rg_clear(&t->rg);
+}
+
+static int same_ci(const char *a, const char *b)
+{
+	for (; *a && *b; a++, b++) {
+		int x = *a >= 'a' && *a <= 'z' ? *a - 32 : *a, y = *b >= 'a' && *b <= 'z' ? *b - 32 : *b;
+		if (x != y)
+			return 0;
+	}
+	return *a == *b;
 }
 
 /* ---- the bytes, unsynchronised or not ---- */
@@ -388,6 +399,23 @@ int tags_id3v2(TAGS *t, TAG_READ rd, void *u, long base)
 						frame_text(&f, enc, dst);
 				} else if (!strcmp(id, "APIC") || !strcmp(id, "PIC"))
 					frame_pic(t, &f, ver == 2);
+				else if (!strcmp(id, "TXXX") || !strcmp(id, "TXX")) {
+					/* ReplayGain: the description, then the value */
+					char d[TAG_TEXT], v[TAG_TEXT];
+					int enc = fgetb(&f);
+					if (enc >= 0) {
+						frame_text(&f, enc, d);
+						frame_text(&f, enc, v);
+						if (same_ci(d, "REPLAYGAIN_TRACK_GAIN") && t->rg.track == RG_NONE)
+							t->rg.track = rg_parse_db(v);
+						else if (same_ci(d, "REPLAYGAIN_ALBUM_GAIN") && t->rg.album == RG_NONE)
+							t->rg.album = rg_parse_db(v);
+						else if (same_ci(d, "REPLAYGAIN_TRACK_PEAK") && !t->rg.tpeak)
+							t->rg.tpeak = rg_parse_peak(v);
+						else if (same_ci(d, "REPLAYGAIN_ALBUM_PEAK") && !t->rg.apeak)
+							t->rg.apeak = rg_parse_peak(v);
+					}
+				}
 			}
 			fskip(&f);
 			s->unsync = saved;
@@ -485,6 +513,7 @@ int tags_chunks(TAGS *t, TAG_READ rd, void *u, long size)
 					strcpy(t->artist, t2.artist);
 				if (t2.album[0])
 					strcpy(t->album, t2.album);
+				t->rg = t2.rg;
 				if (t2.pic_end) {
 					t->pic_at = t2.pic_at;
 					t->pic_end = t2.pic_end;

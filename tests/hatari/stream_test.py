@@ -355,6 +355,8 @@ def run(work, case, spec):
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", wav, "-c:a", "aac", "-b:a",
                         "%dk" % KBPS, "-f", "adts", aac], check=True)
         mp3 = aac                       # (the station sends AAC at the same pace)
+    if os.environ.get("STATION_FILE"):
+        mp3 = os.environ["STATION_FILE"]    # (a real station's MP3, captured: its times only)
     st = Station(open(mp3, "rb").read(), case)
     if case in ("cover", "gwcover"):
         jpg = os.path.join(w, "cover.jpg")

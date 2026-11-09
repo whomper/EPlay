@@ -291,7 +291,9 @@ def session(work, spec, kind):
             for n in ("eplay.log", "EPLAY.LOG"):
                 if os.path.exists(os.path.join(r.hd, n)):
                     log = open(os.path.join(r.hd, n), errors="replace").read()
-            art = [l for l in log.split("\n") if l.startswith("album art")]
+            # (each line "hh:mm:ss.cc EPlay -- ...": common's conn.c logger)
+            lines_log = [re.sub(r"^\d\d:\d\d:\d\d\.\d\d EPlay -- ", "", l) for l in log.split("\n")]
+            art = [l for l in lines_log if l.startswith("album art")]
             # the job rule while a cover is unpacked (the hub, 3 Nov 2026):
             # no turn over 50 ms; EPlay logs its longest between the
             # decoder's polls (the rig's start row can't see them all)

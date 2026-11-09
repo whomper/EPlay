@@ -323,8 +323,9 @@ static void tls_paths(void)
 	tls_file_info = pf_info;
 	tls_ovl_dsp(0, 1);
 	tls_ovl_dsp(1, 1);
-	/* the connections' own steps (TLS's included), beside EPLAY.LOG */
-	snprintf(conn_logfile, sizeof(conn_logfile), "%sEPLAYNET.LOG", d);
+	/* the connections' own steps (TLS's included): in EPLAY.LOG with
+	   EPlay's own (elog.c), as the family's logs */
+	elog_init();
 }
 
 static int open_url(const char *url, char *err, int n)

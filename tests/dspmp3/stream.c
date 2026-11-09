@@ -14,7 +14,8 @@
  * SIMLAT=N has the 68030 ready with each word N cycles after the last.
  * And what the SSI sends, word by word, against the model's decoding of
  * the same packets (mp3dsp.c: copied at the file's rate, or resampled),
- * bit for bit. SIMDROP=F:AT:N puts a drop (gapless, PK_DROP) on frame F's
+ * bit for bit. SIMGAIN=N moves every packet's global_gain by N steps
+ * (ReplayGain: louder or quieter). SIMDROP=F:AT:N puts a drop (gapless, PK_DROP) on frame F's
  * packet: after AT of its samples, N left out, the model the same.
  *
  *     stream FILE.MP3 [FRAMES]
@@ -92,6 +93,7 @@ int main(int argc, char **argv)
 	static dw pcm[2][1152], mo[2][MP3RS_MAX];
 	static unsigned short *exp_w;
 	long nexp = 0, nfr = 0, drop_f = -1, drop_at = 0, drop_n = 0;
+	int sim_gain = getenv("SIMGAIN") ? atoi(getenv("SIMGAIN")) : 0;
 	if (getenv("SIMDROP"))
 		sscanf(getenv("SIMDROP"), "%ld:%ld:%ld", &drop_f, &drop_at, &drop_n);
 	exp_w = malloc(CAP_MAX * sizeof(*exp_w));
@@ -184,6 +186,8 @@ int main(int argc, char **argv)
 				if (np < 0)
 					continue;
 				pkn = np;
+				if (sim_gain)
+					mp3_packet_gain(pk, sim_gain);	/* (ReplayGain louder or quieter) */
 				if (nfr == drop_f) {
 					pk[0] |= PK_DROP | (unsigned long)drop_n << 12;
 					pk[1] |= (unsigned long)drop_at << 11;
@@ -225,6 +229,24 @@ int main(int argc, char **argv)
 				dsp_core.pc, sent, isr, have, pki, pkn);
 			dead = 1;
 		}
+	}
+	if (sim_gain > 0) {
+		/* louder: what reaches full scale held there, never wrapped (a
+		   jump of more than 3/4 of the range between two frames of a
+		   channel, from near one end to near the other) */
+		long k, full = 0, wraps = 0;
+		for (k = 0; k < nexp; k++) {
+			short v = (short)exp_w[k];
+			full += v == 32767 || v == -32768;
+			if (k >= 2) {
+				short w = (short)exp_w[k - 2];
+				if (labs((long)v - w) > 49152 && labs(v) > 24576 && labs(w) > 24576)
+					wraps++;
+			}
+		}
+		printf("SIMGAIN=%d: %ld words at full scale, %ld wrapped\n", sim_gain, full, wraps);
+		if (wraps)
+			return 1;
 	}
 	{
 		/* the sound: the model's first sound found in what the SSI sent,

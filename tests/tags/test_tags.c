@@ -466,6 +466,98 @@ int main(int argc, char **argv)
 	ok("an AIFF's NAME and AUTH");
 	rough("AIFF", &f);
 
+	/* ReplayGain (phase 8b): TXXX in 2.4 (UTF-8, its description in
+	   lowercase, as foobar2000 writes it) and 2.3 (UTF-16 with BOMs) */
+	f.n = 0;
+	body = begin_tag(&f, 4, 0);
+	{
+		static const char a[] = "\x03replaygain_track_gain\x00-6.54 dB";
+		static const char b[] = "\x03REPLAYGAIN_TRACK_PEAK\x00" "0.988547";
+		static const char c[] = "\x03REPLAYGAIN_ALBUM_GAIN\x00+1.20 dB";
+		static const char e[] = "\x03REPLAYGAIN_ALBUM_PEAK\x00" "1.0";
+		frame(&f, 4, "TXXX", a, sizeof(a) - 1, 0);
+		frame(&f, 4, "TXXX", b, sizeof(b) - 1, 0);
+		frame(&f, 4, "TXXX", c, sizeof(c) - 1, 0);
+		frame(&f, 4, "TXXX", e, sizeof(e) - 1, 0);
+	}
+	end_tag(&f, body, 10);
+	tags_read(&t, mem_read, &f, f.n);
+	same_n("RG 2.4 track gain", t.rg.track, -654);
+	same_n("RG 2.4 track peak", t.rg.tpeak, 64785);
+	same_n("RG 2.4 album gain", t.rg.album, 120);
+	same_n("RG 2.4 album peak", t.rg.apeak, 65536);
+	ok("ReplayGain from 2.4's TXXX");
+	rough("RG 2.4", &f);
+	f.n = 0;
+	body = begin_tag(&f, 3, 0);
+	{
+		/* UTF-16 LE with BOM: "REPLAYGAIN_TRACK_GAIN" NUL NUL, BOM "-3.00 dB" */
+		unsigned char u[200];
+		const char *d1 = "REPLAYGAIN_TRACK_GAIN", *v1 = "-3.00 dB";
+		long k = 0;
+		size_t i;
+		u[k++] = 1;
+		u[k++] = 0xff;
+		u[k++] = 0xfe;
+		for (i = 0; i < strlen(d1); i++) {
+			u[k++] = (unsigned char)d1[i];
+			u[k++] = 0;
+		}
+		u[k++] = 0;
+		u[k++] = 0;
+		u[k++] = 0xff;
+		u[k++] = 0xfe;
+		for (i = 0; i < strlen(v1); i++) {
+			u[k++] = (unsigned char)v1[i];
+			u[k++] = 0;
+		}
+		frame(&f, 3, "TXXX", u, k, 0);
+	}
+	end_tag(&f, body, 10);
+	tags_read(&t, mem_read, &f, f.n);
+	same_n("RG 2.3 UTF-16 track gain", t.rg.track, -300);
+	same_n("RG 2.3 no album gain", t.rg.album, RG_NONE);
+	same_n("RG 2.3 no peak", t.rg.tpeak, 0);
+	ok("ReplayGain from 2.3's TXXX in UTF-16");
+	rough("RG 2.3", &f);
+
+	/* the steps: rounded, the peak's limit, no boost without a peak */
+	same_n("RG -6.54 dB", rg_steps(-654, 64785), -4);	/* (-6.02: 4 steps) */
+	same_n("RG +1.20 dB, peak 1.0", rg_steps(120, 65536), 0);
+	same_n("RG +6.00 dB, peak 0.5", rg_steps(600, 32768), 4);
+	same_n("RG +6.00 dB, peak 0.6", rg_steps(600, 39322), 2);	/* (3: 0.6 * 2^0.75 = 1.009) */
+	same_n("RG +6.00 dB, no peak", rg_steps(600, 0), 0);
+	same_n("RG -0.70 dB", rg_steps(-70, 0), 0);
+	same_n("RG -0.80 dB", rg_steps(-80, 0), -1);
+	same_n("RG +20 dB, peak 0.1", rg_steps(2000, 6554), RG_BOOST);
+	same_n("RG -30 dB", rg_steps(-3000, 65536), -RG_CUT);
+	same_n("RG 0 dB, peak 1.2", rg_steps(0, 78643), -2);
+	{
+		RGAIN g;
+		rg_clear(&g);
+		same_n("RG none", rg_pick(&g, RG_AUTO, 0), 0);
+		g.track = -600;
+		g.tpeak = 65536;
+		same_n("RG album asked, track only", rg_pick(&g, RG_ALBUM, 0), -4);
+		g.album = -300;
+		same_n("RG Auto in order: album", rg_pick(&g, RG_AUTO, 0), -2);
+		same_n("RG Auto shuffled: track", rg_pick(&g, RG_AUTO, 1), -4);
+		same_n("RG Track", rg_pick(&g, RG_TRACK, 0), -4);
+		same_n("RG Off", rg_pick(&g, RG_OFF, 0), 0);
+	}
+	same_n("RG parse 'x'", rg_parse_db("x"), RG_NONE);
+	same_n("RG parse '-12.345 dB'", rg_parse_db("-12.345 dB"), -1235);
+	same_n("RG parse ' +0.5'", rg_parse_db(" +0.5"), 50);
+	same_n("RG parse huge", rg_parse_db("123456"), RG_NONE);
+	same_n("RG peak huge", rg_parse_peak("1000"), 0);
+	same_n("RG LAME -6.5 radio", rg_lame(0x2000 | 0x0400 | 0x200 | 65, 1), -650);
+	same_n("RG LAME album asked of radio", rg_lame(0x2000 | 65, 2), RG_NONE);
+	same_n("RG LAME +2.0 audiophile", rg_lame(0x4000 | 20, 2), 200);
+	same_n("RG float 1.0", rg_float_q16(0x3f800000UL), 65536);
+	same_n("RG float 0.5", rg_float_q16(0x3f000000UL), 32768);
+	same_n("RG float 0", rg_float_q16(0), 0);
+	ok("ReplayGain's steps, choice and parsing");
+
 	/* nothing at all */
 	f.n = 0;
 	put(&f, "\xff\xfb\x90\x00\x00\x00", 6);

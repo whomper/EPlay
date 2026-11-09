@@ -1251,6 +1251,7 @@ static void command(int c)
 		break;
 	case C_SETTINGS:
 		settings_dialog();
+		play_rgain_changed();	/* (ReplayGain: at once, gliding) */
 		break;
 	case C_CLEAR:
 		list_clear_but_playing();
@@ -1280,6 +1281,7 @@ static void command(int c)
 		/* a random order from here on: a round begun at the file playing */
 		list_order.shuffle = !list_order.shuffle;
 		settings_set_shuffle(list_order.shuffle);
+		play_rgain_changed();	/* (Auto: the album's in order, the track's shuffled) */
 		order_clear(&list_order);
 		order_played(&list_order, list_cur);
 		play_menu_shown();

@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, list, m3u, tree, repeat, shuffle, save, mini (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
 by default; Falcon (Erez's, with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
@@ -146,6 +146,44 @@ INFS = {"repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44"
 CASES["mini"] = CASES["mp3"]
 # and on a machine without a DSP (a TT, an STE), a WAV in it
 CASES["miniwav"] = CASES["wav"]
+# ReplayGain (phase 8b): the file tagged (ID3v2.3's TXXX; a WAV's in its
+# "id3 " chunk) and its level against the untagged file's, in dB: -6.02 dB
+# is 4 steps down; +6.00 dB with a peak of 0.502 (sox's -6 dB tone) is held
+# by the peak to 3 steps up, +4.5 dB, and never clips
+CASES["wavrg"] = CASES["wav"]
+CASES["wavrgup"] = CASES["wav"]
+CASES["mp3rg"] = CASES["mp3"]
+RG_TAG = {"wavrg": ("-6.02 dB", None), "wavrgup": ("+6.00 dB", "0.502"), "mp3rg": ("-6.02 dB", None)}
+RG_WANT = {"wavrg": ("wav", -6.0), "wavrgup": ("wav", 4.5), "mp3rg": ("mp3", -6.0)}
+
+
+def id3_rg(gain, peak):
+    """an ID3v2.3 tag with REPLAYGAIN_TRACK_GAIN (and _PEAK) in TXXX frames"""
+    body = b""
+    for k, v in (("REPLAYGAIN_TRACK_GAIN", gain), ("REPLAYGAIN_TRACK_PEAK", peak)):
+        if v is None:
+            continue
+        d = b"\x00" + k.encode() + b"\x00" + v.encode()
+        body += b"TXXX" + len(d).to_bytes(4, "big") + b"\x00\x00" + d
+    n = len(body)
+    size = bytes([(n >> 21) & 127, (n >> 14) & 127, (n >> 7) & 127, n & 127])
+    return b"ID3\x03\x00\x00" + size + body
+
+
+def add_rg(path, case):
+    gain, peak = RG_TAG[case]
+    tag = id3_rg(gain, peak)
+    data = open(path, "rb").read()
+    if data[:4] == b"RIFF":
+        if len(tag) & 1:
+            tag += b"\x00"
+        data += b"id3 " + len(tag).to_bytes(4, "little") + tag
+        data = data[:4] + (len(data) - 8).to_bytes(4, "little") + data[8:]
+    else:
+        data = tag + data
+    open(path, "wb").write(data)
+
+
 # the level of the middle (RMS), each case's, for wavvol's against wav's
 LEVEL = {}
 
@@ -162,6 +200,8 @@ def make_file(hd, case):
                        [src, out], check=True)
     else:
         subprocess.run(["sox", "-n"] + fmt + [out] + synth + ["gain", "-6"], check=True)
+    if case in RG_TAG:
+        add_rg(out, case)
     return f
 
 
@@ -275,6 +315,15 @@ def analyse(rec, case):
         db = 20 * math.log10(level / full) if level > 0 and full > 0 else -99
         vol_ok = abs(db + 12) < 1
         vol_note = "; the level %.1f dB from full volume (12 dB down wanted)" % db
+    if case in RG_WANT:
+        ref, want_db = RG_WANT[case]
+        full = LEVEL.get(ref, WAV_LEVEL if ref == "wav" else 0)
+        if full > 0:
+            db = 20 * math.log10(level / full) if level > 0 else -99
+            vol_ok = abs(db - want_db) < 1
+            vol_note = "; ReplayGain: the level %+.1f dB from %s's (%+.1f dB wanted)" % (db, ref, want_db)
+        else:
+            vol_note = "; ReplayGain: no %s run to measure against (run %s first)" % (ref, ref)
     fl, ql = tone([v / 32768 for v in left[seg]], rate)
     fr, qr = tone([v / 32768 for v in right[seg]], rate)
     want = CASES[case][4]

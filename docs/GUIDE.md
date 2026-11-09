@@ -205,11 +205,11 @@ at the nearest rate instead.
   network card.
 - **A station stops now and then.** The network fell behind for longer than the three seconds
   EPlay gathered. With STinG, check the Delay in `STING.CPX` (10 on a Falcon).
-- **`EPLAYNET.LOG`**, beside the program, says how each connection to a station went (the secure
-  connection's steps among them): please send it with a report about web radio.
 - **`EPLAY.LOG`**, beside the program, says what EPlay found and did: the external clock and how it
-  set the FDI, each file's format and length, how playing ended, and how the DSP and the 68030 kept
-  up. Please send it, and any `CRASH.LOG`, with a report.
+  set the FDI, each file's format and length, how playing ended, how the DSP and the 68030 kept
+  up, and how each connection to a station went (the secure connection's steps among them). Each
+  run adds to it, as in the family's other programs, each line with its time. Please send it, and
+  any `CRASH.LOG`, with a report.
 
 ## About
 

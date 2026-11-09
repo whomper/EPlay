@@ -12,6 +12,8 @@
 #ifndef EPLAY_TAGS_H
 #define EPLAY_TAGS_H
 
+#include "rgain.h"
+
 #define TAG_TEXT 64
 
 /* n bytes of the file from at into buf: how many (0 or less: none) */
@@ -23,6 +25,8 @@ typedef struct {
 	int pic_unsync;		/* its bytes unsynchronised (each $FF $00 is $FF) */
 	int pic_type;		/* ID3's picture type: 3 the front cover */
 	long id3_len;		/* the bytes an ID3v2 tag at the start takes (0: none) */
+	RGAIN rg;		/* ReplayGain: ID3v2's TXXX REPLAYGAIN_TRACK_GAIN, _PEAK,
+				   REPLAYGAIN_ALBUM_GAIN, _PEAK (RG_NONE, 0: none) */
 } TAGS;
 
 void tags_clear(TAGS *t);

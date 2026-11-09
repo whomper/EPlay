@@ -403,6 +403,24 @@ void pcm_gain(PCMGAIN *s, long to, short *p, long n, int step)
 		s->d = (to - s->g) / PCM_RAMP;	/* (a shift: no division in the tick) */
 	}
 	g = s->g;
+	if (g > 32768 || to > 32768) {
+		/* louder (ReplayGain, to 4.0: 131072): a quarter of the gain, so
+		   that the product keeps to 32 bits, and the sum held to a word */
+		for (i = 0; i < n; i++, p += step) {
+			long a, b;
+			if (s->left) {
+				g += s->d;
+				if (!--s->left)
+					g = s->to;
+			}
+			a = ((long)p[0] * (g >> 2)) >> 13;
+			b = ((long)p[1] * (g >> 2)) >> 13;
+			p[0] = (short)(a > 32767 ? 32767 : a < -32768 ? -32768 : a);
+			p[1] = (short)(b > 32767 ? 32767 : b < -32768 ? -32768 : b);
+		}
+		s->g = g;
+		return;
+	}
 	for (i = 0; i < n; i++, p += step) {
 		if (s->left) {
 			g += s->d;

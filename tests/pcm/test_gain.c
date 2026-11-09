@@ -59,5 +59,39 @@ int main(void)
 	for (i = 0; i < 8000; i++)
 		alone &= (i & 7) < 2 ? b[i] == (short)(((long)(short)(i * 7) * 16384L) >> 15) : b[i] == (short)(i * 7);
 	check(alone, "a step of 8: the frame's other words left alone");
+	/* louder (ReplayGain to the peak): +6 dB exact, +12 dB held to a word */
+	{
+		int up = 1, held = 1;
+		for (i = 0; i < 4000; i++) {
+			a[2 * i] = 10000;
+			a[2 * i + 1] = -10000;
+		}
+		pcm_gain_set(&g, 65536);
+		pcm_gain(&g, 65536, a, 4000, 2);
+		for (i = 0; i < 4000; i++)
+			up &= a[2 * i] == 20000 && a[2 * i + 1] == -20000;
+		check(up, "louder: +6 dB doubles the samples");
+		for (i = 0; i < 4000; i++) {
+			a[2 * i] = 30000;
+			a[2 * i + 1] = -30000;
+		}
+		pcm_gain_set(&g, 131072);
+		pcm_gain(&g, 131072, a, 4000, 2);
+		for (i = 0; i < 4000; i++)
+			held &= a[2 * i] == 32767 && a[2 * i + 1] == -32768;
+		check(held, "louder past full: held at the word's ends, never wrapped");
+		/* a glide from 0 dB up to +6 dB: no jump */
+		for (i = 0; i < 4000; i++)
+			a[2 * i] = a[2 * i + 1] = 10000;
+		pcm_gain_set(&g, 32768);
+		pcm_gain(&g, 65536, a, 4000, 2);
+		worst = 0;
+		for (i = 1; i < 4000; i++) {
+			long d = labs((long)a[2 * i] - a[2 * i - 2]);
+			if (d > worst)
+				worst = d;
+		}
+		check(worst <= 64 && a[2 * 3999] == 20000, "louder glides there, and ends exact");
+	}
 	return bad != 0;
 }

@@ -38,7 +38,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play settings snd feed hostirq dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -153,15 +153,15 @@ $(B)/test_info: tests/mp3/test_info.c src/mp3/mp3frame.c src/mp3/mp3frame.h
 	$(HOSTCC) $(HCFLAGS) -o $@ tests/mp3/test_info.c src/mp3/mp3frame.c
 $(B)/test_inf: tests/inf/test_inf.c src/inf.c src/inf.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/inf/test_inf.c src/inf.c
-$(B)/test_tags: tests/tags/test_tags.c src/tags.c src/tags.h common/src/charset.c common/src/bidi.c
-	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/tags/test_tags.c src/tags.c \
+$(B)/test_tags: tests/tags/test_tags.c src/tags.c src/tags.h src/rgain.c src/rgain.h common/src/charset.c common/src/bidi.c
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/tags/test_tags.c src/tags.c src/rgain.c \
 		common/src/charset.c common/src/bidi.c
 $(B)/test_gain: tests/pcm/test_gain.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_gain.c src/pcm.c
-$(B)/test_probe: tests/probe/test_probe.c src/probe.c src/probe.h src/tags.c src/pcm.c src/mp3/mp3frame.c \
+$(B)/test_probe: tests/probe/test_probe.c src/probe.c src/probe.h src/tags.c src/rgain.c src/pcm.c src/mp3/mp3frame.c \
 		common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Isrc/mp3 -Icommon/src -o $@ tests/probe/test_probe.c \
-		src/probe.c src/tags.c src/pcm.c src/mp3/mp3frame.c common/src/charset.c common/src/bidi.c
+		src/probe.c src/tags.c src/rgain.c src/pcm.c src/mp3/mp3frame.c common/src/charset.c common/src/bidi.c
 $(B)/test_m3u: tests/m3u/test_m3u.c src/m3u.c src/m3u.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_m3u.c src/m3u.c
 $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h

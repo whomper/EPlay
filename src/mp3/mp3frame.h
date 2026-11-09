@@ -100,6 +100,7 @@ typedef struct {
 	char encoder[10];	/* "LAME3.100", "Lavc61.3." */
 	int delay, padding;	/* samples */
 	int radio_gain;		/* the track gain's 16 bits as written (0: none) */
+	int audiophile_gain;	/* the album's, the same way */
 	long peak;		/* the peak, 32-bit float's bits (0: none) */
 } MP3LAME;
 int mp3_info_lame(const unsigned char *f, const MP3HDR *h, MP3LAME *l);
@@ -107,5 +108,9 @@ int mp3_info_lame(const unsigned char *f, const MP3HDR *h, MP3LAME *l);
 /* the frame at f, of h->length bytes, as a packet: its words, or -1 if the
  * frame is bad (the reservoir is kept) */
 int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned long *pk);
+/* the packet's global_gain moved by up steps of 2^(1/4) (less than 0:
+   quieter), held to 0..255: the volume and ReplayGain on an MP3, with no
+   DSP time. A muted packet is left as it is */
+void mp3_packet_gain(unsigned long *pk, int up);
 
 #endif
