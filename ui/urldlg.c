@@ -50,7 +50,8 @@ int url_dialog(char *out, int omax)
 	static char text[URL_MAX], tmpl[SHOW + 1], valid[SHOW + 1], lines[URL_RECENT][SHOW + 1];
 	static LFIELD lf;
 	char (*urls)[URL_MAX] = settings_urls();
-	short field, open, cancel, row[URL_RECENT], r;
+	static TEDINFO t_band;
+	short field, open, cancel, row[URL_RECENT], r, band;
 	int i, nurl = 0, h;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
@@ -62,10 +63,19 @@ int url_dialog(char *out, int omax)
 	tree[0].ob_width = SHOW + 13;
 	for (i = 0; i < URL_RECENT; i++)
 		nurl += urls[i][0] != 0;
-	h = 8 + (nurl ? nurl : 1);	/* (as tall as the stations it has) */
+	h = 9 + (nurl ? nurl : 1);	/* (as tall as the stations it has) */
 	tree[0].ob_height = (short)h;
 	nurl = 0;
-	add(0, G_STRING, 0, 0, (long)aword, 2, 1, (short)strlen(aword), 1);
+	/* the title band (D22): hidden in a dialog window, whose title names it */
+	memset(&t_band, 0, sizeof(t_band));
+	t_band.te_ptext = (char *)"Open URL";
+	t_band.te_ptmplt = (char *)"";
+	t_band.te_pvalid = (char *)"";
+	t_band.te_font = 3;
+	t_band.te_just = 2;
+	t_band.te_color = 0x1071;	/* (white text, transparent, on black) */
+	band = add(0, G_BOXTEXT, 0, 0, (long)&t_band, 0, 0, SHOW + 13, 1);
+	add(0, G_STRING, 0, 0, (long)aword, 2, 2, (short)strlen(aword), 1);
 	memset(tmpl, '_', SHOW);
 	tmpl[SHOW] = 0;
 	memset(valid, 'X', SHOW);
@@ -80,8 +90,8 @@ int url_dialog(char *out, int omax)
 	t.te_thickness = -1;
 	t.te_txtlen = SHOW + 1;
 	t.te_tmplen = SHOW + 1;
-	field = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t, 11, 1, SHOW, 1);
-	add(0, G_STRING, 0, 0, (long)lword, 2, 3, (short)strlen(lword), 1);
+	field = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t, 11, 2, SHOW, 1);
+	add(0, G_STRING, 0, 0, (long)lword, 2, 4, (short)strlen(lword), 1);
 	for (i = 0; i < URL_RECENT; i++) {
 		row[i] = -1;
 		if (!urls[i][0])
@@ -89,17 +99,19 @@ int url_dialog(char *out, int omax)
 		snprintf(lines[i], sizeof(lines[i]), "%s", urls[i]);
 		if (strlen(urls[i]) > SHOW)
 			memcpy(lines[i] + SHOW - 3, "...", 3);	/* (cut: the whole address is kept) */
-		row[i] = add(0, G_STRING, SELECTABLE | EXIT, 0, (long)lines[i], 4, (short)(4 + nurl), SHOW + 4, 1);
+		row[i] = add(0, G_STRING, SELECTABLE | EXIT, 0, (long)lines[i], 4, (short)(5 + nurl), SHOW + 4, 1);
 		nurl++;
 	}
 	if (!nurl)
-		add(0, G_STRING, 0, DISABLED, (long)none, 4, 4, (short)strlen(none), 1);
-	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", (short)(SHOW + 13 - 22), (short)(h - 2), 9, 1);
-	open = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"Open", (short)(SHOW + 13 - 11), (short)(h - 2), 9, 1);
+		add(0, G_STRING, 0, DISABLED, (long)none, 4, 5, (short)strlen(none), 1);
+	/* Cancel then Open, 10 wide (C1, D26) */
+	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", (short)(SHOW + 13 - 23), (short)(h - 2), 10, 1);
+	open = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"Open", (short)(SHOW + 13 - 12), (short)(h - 2), 10, 1);
 	tree[nobj - 1].ob_flags |= LASTOB;
 	rsrc_obfix_all(tree, nobj);
 	lf_init(&lf, tree, field, text, URL_MAX - 1, 0);
 	dlg_name("Open URL");
+	dlg_band(band);
 	r = dlg_modal(tree, field, cancel);
 	lf_forget(tree);
 	for (i = 0; i < URL_RECENT; i++)

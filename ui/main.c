@@ -44,7 +44,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -59,7 +59,7 @@ static const MBAR_ITEM m_file[] = {
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_edit[] = {
-	{ "Remove from the list", "Delete", C_REMOVE },
+	{ "Remove from the list", "Del", C_REMOVE },	/* (MENUS 1.2: Del; MD14) */
 	{ "Clear the list", 0, C_CLEAR },
 	{ 0, 0, 0 }
 };
@@ -77,15 +77,19 @@ static const MBAR_ITEM m_play[] = {
 	{ "Repeat: off", 0, C_REPEAT },	/* (its text order_repeat_name's: the same length each) */
 	{ 0, 0, 0 }
 };
+/* Settings first, a line, then the ticks (MENUS 1.5); the connection's two
+   ticks a pair (D9) */
 static const MBAR_ITEM m_options[] = {
+	{ "Settings...", "^,", C_SETTINGS },
+	{ "-", 0, 0 },
 	{ "Direct connection", 0, C_DIRECT },	/* (how a station is reached: Erez, 8 Nov 2026) */
 	{ "Through the Gateway", 0, C_GATEWAY },
-	{ "-", 0, 0 },
-	{ "Settings...", "^,", C_SETTINGS },
 	{ 0, 0, 0 }
 };
+/* NAME help and Keys... (MENUS 1.5, D10): eplay.hyp at its first page */
 static const MBAR_ITEM m_help[] = {
-	{ "EPlay guide", "Help", C_GUIDE },	/* (eplay.hyp: the guidelines, 4.3) */
+	{ "EPlay help", "Help", C_GUIDE },
+	{ "Keys...", 0, C_KEYS },
 	{ 0, 0, 0 }
 };
 static const MBAR_TITLE bar[] = {
@@ -123,19 +127,101 @@ static void play_menu_shown(void)
 }
 static short wh = -1;
 static GRECT work;
-static int quit;
+static int list_has_sel(void)
+{
+	return list_sel >= 0 && list_sel < list_count();
+}
 static char file[320];		/* the file playing */
+
+/* what can apply now (MENUS 1.3): greyed in the menu, and its key does
+   nothing (command() asks the same) */
+static int can(int c)
+{
+	switch (c) {
+	case C_SAVE:
+	case C_CLEAR:
+		return list_count() > 0;
+	case C_REMOVE:
+		return list_has_sel();
+	case C_PLAY:
+		return play_is_open() || play_paused() || play_name[0] || list_count() > 0;
+	case C_STOP:
+		return play_state() == PS_PLAYING || play_paused();
+	case C_PREV:
+		return order_has_prev(&list_order, list_cur);
+	case C_NEXT:
+		return order_has_next(&list_order, list_cur);
+	}
+	return 1;
+}
+
+/* the bar's greyed items as can() says, the AES asked only for a change
+   (MENUS 1.3: EMail measured 40 calls at 40 ms on an 8 MHz ST) */
+static void menu_update(void)
+{
+	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_PLAY, C_STOP, C_PREV, C_NEXT };
+	static signed char was[sizeof(grey) / sizeof(grey[0])];
+	unsigned i;
+	for (i = 0; i < sizeof(grey) / sizeof(grey[0]); i++) {
+		int on = can(grey[i]);
+		if (was[i] != on + 1) {
+			short o = mbar_object(&mb, grey[i]);
+			was[i] = (signed char)(on + 1);
+			if (o > 0)
+				menu_ienable(mb.tree, o, on);
+		}
+	}
+}
+
+/* Help > Keys... (D10): EPlay's keys, as the menus and the guide have them */
+static void keys_box(void)
+{
+	text_box("Keys",
+		 "Space          Play or pause\n"
+		 "ClrHome        Stop\n"
+		 "Left, Right    10 seconds back, on\n"
+		 "Shift+Left     The previous file\n"
+		 "Shift+Right    The next file\n"
+		 "+  -           Louder, softer\n"
+		 "\n"
+		 "Up, Down       Select a row\n"
+		 "Return         Play the selected row\n"
+		 "Del            Remove it from the list\n"
+		 "Insert         Its menu\n"
+		 "\n"
+		 "^O             Open...\n"
+		 "Shift+^O       Open URL...\n"
+		 "^S             Save playlist...\n"
+		 "^,             Settings...\n"
+		 "Help           EPlay help\n"
+		 "Esc, Undo      Stop connecting to a station\n"
+		 "^Q             Quit");
+}
+static int quit;
 static int press_draw;		/* drawn while the button is held: press_update_begin's lock */
 
+/* the info line: set only when it changed, and not in the mini player,
+   which has none (WINDOWS 1.1); status_again() after a window is made */
+static char info[90], info_set[90];
 static void status(const char *s)
 {
-	static char info[90];
 	char line[100];
 	snprintf(info, sizeof(info), " %s", s);
 	snprintf(line, sizeof(line), "EPLAY status: %s\n", s);
 	nf_debug(line);			/* the rigs read it (no-op on hardware) */
-	if (wh > 0)
-		wind_set_str(wh, WF_INFO, info);
+	if (wh > 0 && !bar_mini && strcmp(info, info_set)) {
+		strcpy(info_set, info);
+		wind_set_str(wh, WF_INFO, info_set);
+	}
+}
+
+static void status_again(void)
+{
+	info_set[0] = 0;
+	if (wh > 0 && !bar_mini && info[0]) {
+		strcpy(info_set, info);
+		wind_set_str(wh, WF_INFO, info_set);
+	}
 }
 
 /* the window's parts again (bar.h's BP_...), through the AES's
@@ -192,11 +278,13 @@ static void open_window(void)
 		x = at_x + w > desk_x + desk_w ? desk_x + desk_w - w : at_x;
 		y = at_y + h > desk_y + desk_h ? desk_y + desk_h - h : at_y;
 	}
+	x = wind_x8(KIND, x, y, w, h);	/* (the work area on a multiple of 8: text on a byte) */
 	wh = wind_create(KIND, desk_x, desk_y, desk_w, desk_h);
 	if (wh <= 0)
 		return;
 	wind_set_str(wh, WF_NAME, " EPlay ");
 	wind_open(wh, x, y, w, h);
+	status_again();			/* (the info line, the full window's only) */
 	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 	bar_layout(&work);
 	{
@@ -336,7 +424,7 @@ static void play_now(const char *f)
 		/* a station: the bee while it connects, Esc or Undo stops it
 		   (the guidelines, 7.1) */
 		conn_stop = 0;
-		status("Connecting to the station...");
+		status("Connecting to the station...   (Esc stops)");
 		busy_bee(1);
 		opened = play_open(f, err, sizeof(err));
 		busy_bee(0);
@@ -359,7 +447,7 @@ static void play_now(const char *f)
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
 		nf_debug(line);
-		alert(1, "[1][%s][ OK ]", err);
+		alert(1, "[3][%s][ OK ]", err);
 		redraw(&work, BP_ALL);
 		return;
 	}
@@ -860,7 +948,7 @@ static void command(int c);
 static void row_menu(short x, short y)
 {
 	static const char *const lab[] = { "  Play                  Return ", "-",
-					   "  Remove from the list  Delete ", "  Clear the list " };
+					   "  Remove from the list  Del ", "  Clear the list " };
 	switch (popup(x, y, lab, 4)) {
 	case 0:
 		play_index(list_sel);
@@ -880,8 +968,8 @@ static int list_keys(short kr)
 {
 	short scan = (kr >> 8) & 0xff;
 	int n = list_count();
-	if (!n)
-		return 0;
+	if (!n || bar_mini)
+		return 0;		/* (the mini player: no list shown, no list keys) */
 	switch (scan) {
 	case 0x48:			/* Up */
 		select_row(list_sel > 0 ? list_sel - 1 : 0);
@@ -895,7 +983,7 @@ static int list_keys(short kr)
 			play_index(list_sel);
 		return 1;
 	case 0x53:			/* Delete */
-		list_remove_sel();
+		command(C_REMOVE);
 		return 1;
 	case 0x52:			/* Insert: the selected row's menu (3.3) */
 		if (list_sel >= 0) {
@@ -1153,10 +1241,8 @@ static void save_playlist(void)
 	short button = 0;
 	long h, n = 0, k;
 	int i, ok = 1;
-	if (!list_count()) {
-		alert(1, "[1][The list is empty: there is|nothing to save.][ OK ]");
-		return;
-	}
+	if (!list_count())
+		return;			/* (greyed: menu_update) */
 	if (!path[0])
 		snprintf(path, sizeof(path), "%s*.M3U", settings_add_dir()[0] ? settings_add_dir() : app_dir());
 	if (!fsel_exinput(path, name, &button, "Save the list as a playlist") || !button || !name[0])
@@ -1171,11 +1257,11 @@ static void save_playlist(void)
 		strncat(name, ".M3U", sizeof(name) - strlen(name) - 1);
 	snprintf(full, sizeof(full), "%s%s", dir, name);
 	if (Fattrib(full, 0, 0) >= 0 &&
-	    alert(2, "[2][%s is there already.|Replace it?][ Replace | Cancel ]", name) != 1)
+	    alert(2, "[2][%s is there already.|Replace it?][Replace|Cancel]", name) != 1)
 		return;
 	h = Fcreate(full, 0);
 	if (h < 0) {
-		alert(1, "[1][The playlist couldn't be saved|(%s).][ OK ]", name);
+		alert(1, "[3][The playlist couldn't be saved|(%s).][ OK ]", name);
 		return;
 	}
 	memcpy(buf, M3U_HEAD, sizeof(M3U_HEAD) - 1);
@@ -1200,7 +1286,7 @@ static void save_playlist(void)
 	Fclose((short)h);
 	if (!ok) {
 		Fdelete(full);
-		alert(1, "[1][The playlist couldn't be saved|(%s): the disk is full?][ OK ]", name);
+		alert(1, "[3][The playlist couldn't be saved|(%s): the disk is full?][ OK ]", name);
 		return;
 	}
 	{
@@ -1215,15 +1301,20 @@ static void save_playlist(void)
 
 static void command(int c)
 {
+	if (!can(c))
+		return;			/* (greyed: its key does nothing too) */
 	switch (c) {
 	case C_ABOUT:
 		dlg_about();
 		break;
 	case C_GUIDE:
 		/* eplay.hyp in the viewer that runs, else how to get one, with
-		   About for what EPlay shows itself (the guidelines, 4.3) */
-		if (help_key(app_dir(), "eplay.hyp", 0, "About"))
-			dlg_about();
+		   the keys for what EPlay shows itself (the guidelines, 4.3; D10) */
+		if (help_key(app_dir(), "eplay.hyp", 0, "Keys"))
+			keys_box();
+		break;
+	case C_KEYS:
+		keys_box();
 		break;
 	case C_OPEN:
 		open_file();
@@ -1309,7 +1400,7 @@ static void command(int c)
 			if (play_is_net()) {
 				/* a station: connected again, live (Erez, 8 Nov 2026) */
 				conn_stop = 0;
-				status("Connecting to the station...");
+				status("Connecting to the station...   (Esc stops)");
 				busy_bee(1);
 				ok = play_resume(err, sizeof(err));
 				busy_bee(0);
@@ -1319,7 +1410,7 @@ static void command(int c)
 			} else
 				ok = play_resume(err, sizeof(err));
 			if (!ok) {
-				alert(1, "[1][%s][ OK ]", err);
+				alert(1, "[3][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
 				pic_begin("resume");
@@ -1568,7 +1659,7 @@ static void do_seek(void)
 	seek_to = -1;
 	bar_drag = -1;
 	if (!play_seek(to, err, sizeof(err))) {
-		alert(1, "[1][%s][ OK ]", err);
+		alert(1, "[3][%s][ OK ]", err);
 		status("Stopped.");
 		redraw(0, BP_PLAY | BP_TIME);
 		return;
@@ -1650,6 +1741,7 @@ static void message(short *msg)
 		quit = 1;
 		break;
 	case WM_MOVED:
+		msg[4] = wind_x8(KIND, msg[4], msg[5], msg[6], msg[7]);
 		wind_set(msg[3], WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 		wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 		bar_layout(&work);
@@ -1660,10 +1752,10 @@ static void message(short *msg)
 	case WM_ARROWED:
 		switch (msg[4]) {
 		case WA_UPPAGE:
-			scroll_to(list_top - bar_rows());
+			scroll_to(list_top - (bar_rows() > 1 ? bar_rows() - 1 : 1));	/* (W5) */
 			break;
 		case WA_DNPAGE:
-			scroll_to(list_top + bar_rows());
+			scroll_to(list_top + (bar_rows() > 1 ? bar_rows() - 1 : 1));
 			break;
 		case WA_UPLINE:
 			scroll_to(list_top - 1);
@@ -1796,6 +1888,7 @@ static void turn(int nested)
 	   opens: the next turn stops this one, so its frames would be wasted,
 	   and Next's rows would wait for them) */
 	step(playing && !piece && !open_due && !next_due);
+	menu_update();			/* (greyed as things are now: MENUS 1.3) */
 }
 
 #ifdef EPLAY_ST

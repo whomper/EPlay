@@ -23,7 +23,7 @@ B       := build
 OBJDIR  := build/atari
 INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icommon/ui \
            -Icommon/third_party/tjpgd -Icommon/third_party/nsgif/include -Iatari/include -DPIC_NO_GIF \
-           -DPIC_TJPGD_DSP
+           -DPIC_TJPGD_DSP -DDLG_CLICK
 # CPU: 68030 (EPLAY.PRG), or 68000 for the STE's EPLAYST.PRG (make st, with
 # the family's 68000 rules: no bswap or store merging, oddaccess.py after)
 CPU     ?= 68030

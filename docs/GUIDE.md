@@ -79,15 +79,19 @@ A right click, or Insert, opens the row's menu. Make the window taller for more 
 
 - **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
   Save playlist... (^S) writes the list as an `.M3U`; Quit (^Q).
-- **Edit:** Remove from the list (Delete); Clear the list keeps only the file that plays.
+- **Edit:** Remove from the list (Del); Clear the list keeps only the file that plays.
 - **View:** Mini player: the window becomes the bar alone, and back. `EPLAY.INF` keeps it.
 - **Play:** Play/Pause (Space), Stop (Clr Home), Previous (Shift+Left), Next (Shift+Right);
   **Shuffle** plays the list in a random order, each file once a round, the list itself left as
   it is; **Repeat** goes round Off, All (the list again from its start) and One (the file again).
   `EPLAY.INF` keeps both.
-- **Options:** Direct connection or Through the Gateway, how a station is reached (see **Web
-  radio**); Settings... (^,).
-- **Help:** this guide.
+- **Options:** Settings... (^,); Direct connection or Through the Gateway, how a station is
+  reached (see **Web radio**).
+- **Help:** EPlay help (Help), this guide; Keys..., EPlay's keys in a box.
+
+A command that can't act now is greyed, and its key does nothing: Save playlist and Clear the list
+with an empty list, Remove from the list with no row selected, Stop with nothing playing,
+Previous and Next with nothing before or after.
 
 **Add files** is EPlay's own file dialog. Choose the drive and the folder (or one of the last ten
 from **Folders**), narrow the list by type and by a name mask (`*` and `?`), and sort it. Select
@@ -150,18 +154,18 @@ DSP: on a TT or an STE a station's row shows dim and is passed over.
 | + and - | The volume, 3 dB a press |
 | Up, Down | Select the row above or below |
 | Return, Enter | Play the selected row |
-| Delete | Take the selected row out of the list |
+| Del | Take the selected row out of the list |
 | Insert | The selected row's menu |
 | ^O | Open: Add files |
 | Shift+^O | Open URL: a web radio station |
 | ^S | Save playlist |
 | ^, | Settings |
 | ^Q, ^U | Quit |
-| Help | This guide |
+| Help | This guide (without a help viewer: the keys) |
 
-In a dialog, Esc and Undo cancel (in a text field, Esc empties it and Undo cancels), Return
+While a station connects, Esc or Undo stops it. In a dialog, Esc and Undo cancel (in a text field, Esc empties it and Undo cancels), Return
 chooses the default button. The same keys work in the
-mini player.
+mini player, but for the list's (Up, Down, Return, Del, Insert): it shows no list.
 
 ## Settings
 
@@ -175,7 +179,15 @@ mini player.
   rate.
 
 **Through the Gateway: address, port** are the AERA Gateway's, for stations reached through it
-(the Options menu).
+(the Options menu). The port is a number from 1 to 65535 (the Gateway's radio service: 8580);
+left empty it is 8580.
+
+**ReplayGain** evens out the loudness of the files from the gain their tags give (ReplayGain's
+values, or LAME's own): **Off**; **Track**, each file evened out on its own; **Album**, an album's
+own quiet and loud songs kept; **Auto** (the start), the album's gain while the list plays in
+order and the track's while it is shuffled. A file is made louder only as far as its peak lets it
+go without clipping, and not at all when its tags give no peak; on an STE it is only made
+quieter. A file with no ReplayGain values plays as it is.
 
 A change takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
 the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and

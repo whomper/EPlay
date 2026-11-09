@@ -24,6 +24,7 @@
 #include "elog.h"
 #include "settings.h"
 #include "rgain.h"
+#include "alert.h"
 
 static int output = OUT_AUTO;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
@@ -318,13 +319,13 @@ static short add(short parent, short type, short flags, short state, long spec, 
 
 void settings_dialog(void)
 {
-	static const char sentence[] = "Output: how EPlay plays the music.";
+	static const char oline[] = "Output:";
 	static const char gline[] = "Through the Gateway:", aword[] = "address", pword[] = "port";
-	static TEDINFO t_addr, t_port;
+	static TEDINFO t_addr, t_port, t_band;
 	static char a_text[sizeof(gate)], a_tmpl[25], a_valid[25], p_text[6], p_tmpl[6], p_valid[6];
 	static LFIELD lf;
 	static const char rgline[] = "ReplayGain:";
-	short radio[NOUT], rgr[NRG], ok, cancel, r, g, fa, fp;
+	short radio[NOUT], rgr[NRG], ok, cancel, r, g, fa, fp, band;
 	int i, eff = settings_output(), chose = eff;
 	memset(tree, 0, sizeof(tree));
 	nobj = 1;
@@ -334,17 +335,26 @@ void settings_dialog(void)
 	tree[0].ob_state = OUTLINED;
 	tree[0].ob_spec = 0x00021100L;
 	tree[0].ob_width = 62;
-	tree[0].ob_height = 13;
-	add(0, G_STRING, 0, 0, (long)sentence, 2, 1, (short)strlen(sentence), 1);
-	g = add(0, G_IBOX, 0, 0, 0L, 2, 3, 28, 1);
+	tree[0].ob_height = 12;
+	/* the title band (D22): hidden in a dialog window, whose title names it */
+	memset(&t_band, 0, sizeof(t_band));
+	t_band.te_ptext = (char *)"Settings";
+	t_band.te_ptmplt = (char *)"";
+	t_band.te_pvalid = (char *)"";
+	t_band.te_font = 3;
+	t_band.te_just = 2;
+	t_band.te_color = 0x1071;	/* (white text, transparent, on black) */
+	band = add(0, G_BOXTEXT, 0, 0, (long)&t_band, 0, 0, 62, 1);
+	add(0, G_STRING, 0, 0, (long)oline, 2, 2, (short)strlen(oline), 1);
+	g = add(0, G_IBOX, 0, 0, 0L, 14, 2, 28, 1);
 	for (i = 0; i < NOUT; i++)
 		radio[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)((i == eff ? SELECTED : 0) |
 									(has(i) ? 0 : DISABLED)),
 			       (long)labels[i], (short)(10 * i), 0, 8, 1);
 	/* stations through the Gateway (phase 7): its address and port, as the
 	   family's Settings have them (7.3); the address a long field (5.4) */
-	add(0, G_STRING, 0, 0, (long)gline, 2, 5, (short)strlen(gline), 1);
-	add(0, G_STRING, 0, 0, (long)aword, 2, 6, (short)strlen(aword), 1);
+	add(0, G_STRING, 0, 0, (long)gline, 2, 4, (short)strlen(gline), 1);
+	add(0, G_STRING, 0, 0, (long)aword, 2, 5, (short)strlen(aword), 1);
 	memset(a_tmpl, '_', 24);
 	a_tmpl[24] = 0;
 	memset(a_valid, 'X', 24);
@@ -359,8 +369,8 @@ void settings_dialog(void)
 	t_addr.te_thickness = -1;
 	t_addr.te_txtlen = 25;
 	t_addr.te_tmplen = 25;
-	fa = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_addr, 10, 6, 24, 1);
-	add(0, G_STRING, 0, 0, (long)pword, 36, 6, (short)strlen(pword), 1);
+	fa = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_addr, 10, 5, 24, 1);
+	add(0, G_STRING, 0, 0, (long)pword, 36, 5, (short)strlen(pword), 1);
 	strcpy(p_tmpl, "_____");
 	strcpy(p_valid, "99999");
 	snprintf(p_text, sizeof(p_text), "%ld", gateport > 0 ? gateport : 8580L);
@@ -373,27 +383,38 @@ void settings_dialog(void)
 	t_port.te_thickness = -1;
 	t_port.te_txtlen = 6;
 	t_port.te_tmplen = 6;
-	fp = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_port, 41, 6, 5, 1);
+	fp = add(0, G_FBOXTEXT, EDITABLE, 0, (long)&t_port, 41, 5, 5, 1);
 	/* ReplayGain (phase 8b): its four as radio buttons, in a box of their own */
-	add(0, G_STRING, 0, 0, (long)rgline, 2, 8, (short)strlen(rgline), 1);
-	g = add(0, G_IBOX, 0, 0, 0L, 14, 8, 38, 1);
+	add(0, G_STRING, 0, 0, (long)rgline, 2, 7, (short)strlen(rgline), 1);
+	g = add(0, G_IBOX, 0, 0, 0L, 14, 7, 38, 1);
 	for (i = 0; i < NRG; i++)
 		rgr[i] = add(g, G_BUTTON, SELECTABLE | RBUTTON, (short)(i == rgain ? SELECTED : 0), (long)rg_labels[i],
 			     (short)(10 * i), 0, 8, 1);
-	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 40, 11, 9, 1);
-	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 51, 11, 9, 1);
+	/* Cancel then OK, 10 wide (C1, D26) */
+	cancel = add(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 39, 10, 10, 1);
+	ok = add(0, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)"OK", 50, 10, 10, 1);
 	tree[nobj - 1].ob_flags |= LASTOB;
 	rsrc_obfix_all(tree, nobj);
 	lf_init(&lf, tree, fa, a_text, (short)(sizeof(a_text) - 1), 0);
 	dlg_name("Settings");
-	r = dlg_modal(tree, fa, cancel);
+	for (;;) {
+		long pv;
+		dlg_band(band);
+		r = dlg_modal(tree, fa, cancel);
+		if (r != ok)
+			break;
+		/* an out-of-range port refused, saying what to type (D30, C21);
+		   left empty: the radio service's port */
+		pv = atol(p_text);
+		if (!p_text[0] || (pv > 0 && pv <= 65535))
+			break;
+		alert(1, "[1][The port is a number from 1 to 65535.|The Gateway's radio service listens|on 8580.][ OK ]");
+	}
 	lf_forget(tree);
 	if (r != ok)
 		return;
 	{
-		long pv = atol(p_text);
-		if (pv <= 0 || pv > 65535)
-			pv = 8580;	/* (left empty: the radio service's port again) */
+		long pv = p_text[0] ? atol(p_text) : 8580;
 		if (strcmp(a_text, gate) || pv != gateport) {
 			snprintf(gate, sizeof(gate), "%s", a_text);
 			gateport = pv;

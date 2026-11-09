@@ -688,7 +688,7 @@ static void draw_list(void)
 	text(c_time + cw, y + 2, "Time", 4, p_hdr);
 	box(w_list.x, y + row_h - 1, w_list.w, 1, mono ? 1 : p_dim, 0);
 	if (!list_count()) {
-		text(c_title, y + row_h + 2, "File > Add... (^O), or drag files here", 40, mono ? 1 : p_dim);
+		text(c_title, y + row_h + 2, "File > Open... (^O), or drag files here", 40, mono ? 1 : p_dim);
 		return;
 	}
 	for (r = 0; r < bar_rows(); r++)
