@@ -459,10 +459,12 @@ def run(work, case, spec):
                     break
                 time.sleep(0.2)
             fx, fy = [int(v) for v in os.environ.get("FIND_AT", "96,8,96,59,0,0").split(",")[:4]], None
+            # (GEM's menus drop on the pointer over the title, not on a click)
             xdo("mousemove", "--window", win[0], str(fx[0]), str(fx[1]))
-            xdo("click", "1")
-            time.sleep(1)
+            time.sleep(1.5)
             cmd(fifo, "hatari-shortcut", "screenshot")
+            xdo("mousemove", "--window", win[0], str(fx[0]), str(fx[3]))
+            time.sleep(0.5)
             xdo("mousemove", "--window", win[0], str(fx[2]), str(fx[3]))
             time.sleep(0.5)
             xdo("click", "1")

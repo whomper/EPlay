@@ -262,7 +262,7 @@ int find_dialog(char *url, int un, char *name, int nn, void (*add)(const char *u
 	tree[0].ob_state = OUTLINED;
 	tree[0].ob_spec = 0x00021100L;
 	tree[0].ob_width = W;
-	tree[0].ob_height = 21;
+	tree[0].ob_height = 22;
 	memset(&t_band, 0, sizeof(t_band));
 	t_band.te_ptext = (char *)"Find station";
 	t_band.te_ptmplt = (char *)"";
@@ -304,9 +304,9 @@ int find_dialog(char *url, int un, char *name, int nn, void (*add)(const char *u
 	o_up = add_obj(0, G_BOXCHAR, TOUCHEXIT, 0, 0x01FF1100L, W - 5, 9, 3, 1);
 	o_dn = add_obj(0, G_BOXCHAR, TOUCHEXIT, 0, 0x02FF1100L, W - 5, 9 + ROWS - 1, 3, 1);
 	/* Close, then what it does, 10 wide (C1, D26) */
-	o_close = add_obj(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Close", 29, 19, 10, 1);
-	o_add = add_obj(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Add", 40, 19, 10, 1);
-	o_play = add_obj(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Play", 51, 19, 10, 1);
+	o_close = add_obj(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Close", 29, 20, 10, 1);
+	o_add = add_obj(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Add", 40, 20, 10, 1);
+	o_play = add_obj(0, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Play", 51, 20, 10, 1);
 	tree[nobj - 1].ob_flags |= LASTOB;
 	rows_text();
 	rsrc_obfix_all(tree, nobj);
