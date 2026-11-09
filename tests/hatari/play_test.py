@@ -484,12 +484,18 @@ def run(work, case, spec):
             time.sleep(2)
             cmd(fifo, "hatari-shortcut", "screenshot")
             time.sleep(3)
-            # Esc: closed, nothing added (Return adds the highlighted file:
-            # on TOS 4.04 LONG.MP3 again, so it never ended: the hub, 5 Nov)
+            # Esc empties the filter and leaves it open (D28); Undo cancels:
+            # closed, nothing added (Return adds the highlighted file: on
+            # TOS 4.04 LONG.MP3 again, so it never ended: the hub, 5 Nov)
             cmd(fifo, "hatari-event", "keypress", "0x01")
+            time.sleep(1)
+            early = wait_line(log, lambda l: l.startswith("EPLAY list: "), 2)
+            if early:
+                return False, m.describe(), "Esc closed Add files: %s (it only empties the filter: D28)" % early
+            cmd(fifo, "hatari-event", "keypress", "0x61")
             added = wait_line(log, lambda l: l.startswith("EPLAY list: "), 10) or "EPLAY list: ? files"
             if added.split()[2] != "1":
-                return False, m.describe(), "Esc in Add files: %s (wanted 1 file, nothing added)" % added
+                return False, m.describe(), "Undo in Add files: %s (wanted 1 file, nothing added)" % added
         if case == "settings":
             # (once the music is heard: the DSP's program is sent first, and
             # Control+comma's key click before the music reads as a gap)
