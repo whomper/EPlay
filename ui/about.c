@@ -11,6 +11,7 @@
 #include "aboutline.h"
 #include "icon.h"
 #include "icon16.h"
+#include "iconify.h"
 #include "icon256.h"
 #include "play.h"
 
@@ -28,4 +29,11 @@ void dlg_about(void)
 		snprintf(what, sizeof(what), "Not playing");
 	about_mem_line(mem, sizeof(mem));
 	about_show(&a);
+}
+
+/* the iconified window: EPlay's icon, and under it what it does (WM_REDRAW's
+   area, 0 for all of it) */
+void about_icon_redraw(short h, const GRECT *area, const char *status)
+{
+	icon_redraw(h, area, icon_bits, icon16_px, status);
 }

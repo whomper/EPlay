@@ -40,6 +40,10 @@ int settings_repeat(void);
 void settings_set_repeat(int r);
 /* the mini player (MINI= in the INF), saved by settings_flush too */
 int settings_mini(void);
+/* the full window's place (WINDOW=x,y,w,h in the INF: D43), saved by
+   settings_flush: 1 with it, 0 with none kept */
+int settings_window(short *x, short *y, short *w, short *h);
+void settings_set_window(short x, short y, short w, short h);
 void settings_set_mini(int on);
 
 /* the Add files dialog's folder and its last folders (ADDDIR=, FOLDER1=

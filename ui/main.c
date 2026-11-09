@@ -15,6 +15,7 @@
 #include "stream.h"
 #include "urldlg.h"
 #include "ui.h"
+#include "iconify.h"
 #include "mbar.h"
 #include "alert.h"
 #include "av.h"
@@ -103,9 +104,13 @@ static const MBAR_TITLE bar[] = {
 	{ 0, 0 }
 };
 
-#define KIND_FULL (NAME | CLOSER | MOVER | INFO | SIZER | VSLIDE | UPARROW | DNARROW)
+/* the full window has the fuller and, where the AES can, the iconifier
+   (D47, W13); the mini player stays without (Erez, 9 Nov 2026) */
+#define KIND_FULL (NAME | CLOSER | FULLER | MOVER | INFO | SIZER | VSLIDE | UPARROW | DNARROW)
 #define KIND_MINI (NAME | CLOSER | MOVER)	/* the mini player: the bar alone */
-#define KIND (bar_mini ? KIND_MINI : KIND_FULL)
+static short kind_full;			/* KIND_FULL with SMALLER where the AES has it */
+#define KIND (bar_mini ? KIND_MINI : kind_full)
+static int iconified;			/* the window shown as EPlay's icon (WM_ICONIFY) */
 
 static MBAR mb;
 
@@ -151,6 +156,8 @@ static int can(int c)
 		return order_has_prev(&list_order, list_cur);
 	case C_NEXT:
 		return order_has_next(&list_order, list_cur);
+	case C_MINI:
+		return !iconified;	/* (uniconified first: the icon is the full window's) */
 	}
 	return 1;
 }
@@ -159,7 +166,7 @@ static int can(int c)
    (MENUS 1.3: EMail measured 40 calls at 40 ms on an 8 MHz ST) */
 static void menu_update(void)
 {
-	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_PLAY, C_STOP, C_PREV, C_NEXT };
+	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_PLAY, C_STOP, C_PREV, C_NEXT, C_MINI };
 	static signed char was[sizeof(grey) / sizeof(grey[0])];
 	unsigned i;
 	for (i = 0; i < sizeof(grey) / sizeof(grey[0]); i++) {
@@ -209,7 +216,7 @@ static void status(const char *s)
 	snprintf(info, sizeof(info), " %s", s);
 	snprintf(line, sizeof(line), "EPLAY status: %s\n", s);
 	nf_debug(line);			/* the rigs read it (no-op on hardware) */
-	if (wh > 0 && !bar_mini && strcmp(info, info_set)) {
+	if (wh > 0 && !bar_mini && !iconified && strcmp(info, info_set)) {
 		strcpy(info_set, info);
 		wind_set_str(wh, WF_INFO, info_set);
 	}
@@ -234,6 +241,14 @@ static void redraw(GRECT *area, int parts)
 	int small = area == 0 && !(parts & (BP_TEXT | BP_LIST)), took;
 	if (wh <= 0)
 		return;
+	if (iconified) {
+		/* the icon, and under it Playing or Paused: again when that
+		   changes (BP_PLAY) or the AES asks; nothing else is drawn */
+		if (area || (parts & BP_PLAY))
+			about_icon_redraw(wh, area, play_state() == PS_PLAYING ? "Playing" :
+						      play_paused() ? "Paused" : "");
+		return;
+	}
 	if (!area) {
 		bar_area(parts, &a);
 		area = &a;
@@ -265,9 +280,14 @@ static void redraw(GRECT *area, int parts)
    mini player switched: its corner stays where it was) */
 static short at_x = -1, at_y = -1;
 
+static void sized(short w, short h);
+
 static void open_window(void)
 {
-	short x, y, w, h, ww, wh_;
+	short x, y, w, h, ww, wh_, sx, sy, sw, sh;
+	int saved = 0;
+	if (!kind_full)
+		kind_full = icon_kind(KIND_FULL);
 	bar_size(&ww, &wh_);
 	wind_calc(WC_BORDER, KIND, desk_x, desk_y, ww, wh_, &x, &y, &w, &h);
 	if (w > desk_w)
@@ -277,6 +297,14 @@ static void open_window(void)
 	if (at_x >= 0) {
 		x = at_x + w > desk_x + desk_w ? desk_x + desk_w - w : at_x;
 		y = at_y + h > desk_y + desk_h ? desk_y + desk_h - h : at_y;
+	} else if (!bar_mini && settings_window(&sx, &sy, &sw, &sh)) {
+		/* the place it was left at (WINDOW=: D43), kept on the desk; its
+		   width is the bar's, its height whole rows (sized, below) */
+		if (sh > desk_h)
+			sh = desk_h;
+		x = sx + w > desk_x + desk_w ? desk_x + desk_w - w : sx < desk_x ? desk_x : sx;
+		y = sy + sh > desk_y + desk_h ? desk_y + desk_h - sh : sy < desk_y ? desk_y : sy;
+		saved = sh != h ? sh : 0;
 	}
 	x = wind_x8(KIND, x, y, w, h);	/* (the work area on a multiple of 8: text on a byte) */
 	wh = wind_create(KIND, desk_x, desk_y, desk_w, desk_h);
@@ -284,9 +312,12 @@ static void open_window(void)
 		return;
 	wind_set_str(wh, WF_NAME, " EPlay ");
 	wind_open(wh, x, y, w, h);
+	iconified = 0;
 	status_again();			/* (the info line, the full window's only) */
 	wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 	bar_layout(&work);
+	if (saved)
+		sized(w, saved);	/* (the saved height, in whole rows) */
 	{
 		/* (the rigs' clicks go by it: an STE's screen puts it elsewhere) */
 		char l[60];
@@ -1202,11 +1233,23 @@ static void list_press(short mx, short my, int right)
 	}
 }
 
+/* the full window's place, for EPLAY.INF (WINDOW=: D43): not the mini
+   player's, nor an icon's */
+static void remember_place(void)
+{
+	short x, y, w, h;
+	if (wh <= 0 || bar_mini || iconified)
+		return;
+	wind_get(wh, WF_CURRXYWH, &x, &y, &w, &h);
+	settings_set_window(x, y, w, h);
+}
+
 /* View > Mini player: the window again, the bar alone or with the list,
    its top left corner where it was */
 static void mini_switch(void)
 {
 	short x, y, w, h;
+	remember_place();
 	if (wh > 0) {
 		wind_get(wh, WF_CURRXYWH, &x, &y, &w, &h);
 		at_x = x;
@@ -1741,14 +1784,69 @@ static void message(short *msg)
 	case WM_CLOSED:
 		quit = 1;
 		break;
+	case WM_BOTTOMED:
+		wind_set(msg[3], WF_BOTTOM, 0, 0, 0, 0);
+		break;
+	case WM_ICONIFY:
+	case WM_ALLICONIFY:
+		/* EPlay's icon, the music going on (D47; the guidelines, 5.1) */
+		if (iconified || bar_mini)
+			break;
+		remember_place();
+		iconified = 1;
+		wind_set(wh, WF_ICONIFY, msg[4], msg[5], msg[6], msg[7]);
+		wind_set_str(wh, WF_NAME, "EPlay");	/* (the icon's title: no room for its spaces) */
+		nf_debug("EPLAY iconified\n");		/* (the rigs) */
+		break;
+	case WM_UNICONIFY:
+		if (!iconified)
+			break;
+		wind_set(wh, WF_UNICONIFY, msg[4], msg[5], msg[6], msg[7]);
+		wind_set_str(wh, WF_NAME, " EPlay ");
+		iconified = 0;
+		wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
+		bar_layout(&work);
+		status_again();
+		redraw(0, BP_ALL);
+		nf_debug("EPLAY uniconified\n");
+		break;
+	case WM_FULLED: {
+		/* as tall as the desk, and back: the width is the bar's */
+		static short uy = -1, uh;	/* (the place before it was made full) */
+		short x, y, w, h;
+		if (iconified || bar_mini)
+			break;
+		wind_get(wh, WF_CURRXYWH, &x, &y, &w, &h);
+		if (y == desk_y && h >= desk_h - 2 * bar_row_h() && uy >= 0 && uh < h) {
+			wind_set(wh, WF_CURRXYWH, x, uy, w, h);
+			sized(w, uh);
+			uy = -1;
+		} else {
+			uy = y;
+			uh = h;
+			wind_set(wh, WF_CURRXYWH, x, desk_y, w, h);
+			sized(w, desk_h);
+		}
+		redraw(0, BP_ALL);
+		remember_place();
+		break;
+	}
 	case WM_MOVED:
+		if (iconified) {	/* (the icon goes where it is put, as it is) */
+			wind_set(msg[3], WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
+			break;
+		}
 		msg[4] = wind_x8(KIND, msg[4], msg[5], msg[6], msg[7]);
 		wind_set(msg[3], WF_CURRXYWH, msg[4], msg[5], msg[6], msg[7]);
 		wind_get(wh, WF_WORKXYWH, &work.x, &work.y, &work.w, &work.h);
 		bar_layout(&work);
+		remember_place();
 		break;
 	case WM_SIZED:
+		if (iconified)
+			break;
 		sized(msg[6], msg[7]);
+		remember_place();
 		break;
 	case WM_ARROWED:
 		switch (msg[4]) {
@@ -1837,6 +1935,8 @@ static void turn(int nested)
 	}
 	if (which & MU_MESAG)
 		message(msg);
+	if (iconified)
+		which &= ~(MU_KEYBD | MU_BUTTON);	/* (an icon takes no keys or clicks: taken, not kept) */
 	if (which & MU_KEYBD) {
 		short a = ev.kreturn & 0xff;
 		if (key_ctrl(ev.kstate, ev.kreturn)) {
@@ -2044,6 +2144,7 @@ int app_main(void)
 
 	play_log_stop();
 	play_stop();
+	remember_place();
 	settings_flush();		/* (the volume, if it changed) */
 	snd_exit();
 	elog("quit");

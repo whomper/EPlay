@@ -75,7 +75,11 @@ it plays: **FDI**, **DSP** or **DMA**.
 
 **The list** under the bar holds the files to play, with their title, artist, album and length (read
 in the background, a file at a time). A click selects a row; a double click, or Return, plays it.
-A right click, or Insert, opens the row's menu. Make the window taller for more rows.
+A right click, or Insert, opens the row's menu. Make the window taller for more rows; its
+fuller makes it as tall as the screen, and back. Where the AES can (MagiC, XaAES, N.AES), its
+iconifier shows EPlay as its icon, with Playing or Paused under it, while the music goes on.
+`EPLAY.INF` keeps the window's place and height for the next start. (The mini player has
+neither: it stays as small as it is.)
 
 - **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
   Save playlist... (^S) writes the list as an `.M3U`; Quit (^Q).
@@ -190,7 +194,7 @@ go without clipping, and not at all when its tags give no peak; on an STE it is 
 quieter. A file with no ReplayGain values plays as it is.
 
 A change takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
-the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and
+the window's place, the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and
 the last ten stations.
 
 EPlay holds the DSP only while it plays through it, and gives it back on Pause and Stop. When

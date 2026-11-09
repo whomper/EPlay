@@ -184,6 +184,11 @@ def add_rg(path, case):
     open(path, "wb").write(data)
 
 
+# the window's saved place (WINDOW=: D43): it opens there, the height
+# taken in whole rows
+CASES["place"] = CASES["wav"]
+INFS["place"] = "WINDOW=24,96,480,330\r\n\r\n"
+
 # the level of the middle (RMS), each case's, for wavvol's against wav's
 LEVEL = {}
 
@@ -477,6 +482,11 @@ def run(work, case, spec):
             return False, m.describe(), played or "nothing played"
         time.sleep(1.5)
         cmd(fifo, "hatari-shortcut", "screenshot")
+        if case == "place":
+            wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
+            v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]
+            if not (24 <= v[0] <= 40 and 96 < v[1] <= 140 and 250 <= v[3] <= 330):
+                return False, m.describe(), "WINDOW=24,96,480,330: the work area at %s" % wl
         if case == "fsel":
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x18")

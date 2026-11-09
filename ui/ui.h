@@ -37,5 +37,7 @@ void *st_ram(long n);
 int rc_intersect(const GRECT *a, GRECT *b);
 
 void dlg_about(void);
+/* the iconified window drawn: the icon and a word under it (about.c) */
+void about_icon_redraw(short h, const GRECT *area, const char *status);
 
 #endif
