@@ -26,7 +26,11 @@ INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icom
            -DPIC_TJPGD_DSP -DDLG_CLICK
 # CPU: 68030 (EPLAY.PRG), or 68000 for the STE's EPLAYST.PRG (make st, with
 # the family's 68000 rules: no bswap or store merging, oddaccess.py after)
-CPU     ?= 68030
+# 68020-60 for EPLAY.PRG: code that runs on every CPU from the 68020 to the
+# 68060, with none of the 64-bit mulu.l/divu.l the 68060 lacks (a CT60
+# trapped on them: a tester, 9 Nov 2026); atari/div64.c gives libgcc's
+# 64-bit helpers without them
+CPU     ?= 68020-60
 ifeq ($(CPU),68000)
 STFLAGS := -fdisable-tree-bswap -fno-store-merging -DEPLAY_ST
 endif
@@ -38,7 +42,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play prefs snd feed hostirq term dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
