@@ -474,7 +474,7 @@ def run(work, case, spec):
             wait_line(log, lambda l: "Find station:" in l, 60)
             time.sleep(2)
             cmd(fifo, "hatari-shortcut", "screenshot")
-            px, py = [int(v) for v in os.environ.get("FIND_PLAY", "512,392").split(",")]
+            px, py = [int(v) for v in os.environ.get("FIND_PLAY", "512,408").split(",")]
             xdo("mousemove", "--window", win[0], str(px), str(py))
             time.sleep(0.5)
             xdo("click", "1")
