@@ -82,6 +82,7 @@ iconifier shows EPlay as its icon, with Playing or Paused under it, while the mu
 neither: it stays as small as it is.)
 
 - **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
+  Find station... finds one by name, genre, country or language;
   Save playlist... (^S) writes the list as an `.M3U`; Quit (^Q).
 - **Edit:** Remove from the list (Del); Clear the list keeps only the file that plays.
 - **View:** Mini player: the window becomes the bar alone, and back. `EPLAY.INF` keeps it.
@@ -121,6 +122,15 @@ last ten stations under it. The field keeps what was last typed in it. The stati
 gathers about three seconds of it first, so the network's pauses aren't heard, and connects again
 by itself if the line drops, while what it gathered plays on. Esc or Undo stops a connection that
 takes too long.
+
+**File > Find station...** finds stations in radio-browser.info's directory: type words of a
+station's name, choose a **Genre**, a **Country** or a **Language** (or leave them at Any), choose how
+to **Sort** them (most votes, most listened, or by name), and press **Search** (or Return). Ten
+stations show at a time, with their country, codec and bit rate; the arrows show the next ten. A
+double click or **Play** plays the selected station; **Add** puts it in the list and leaves the
+dialog open for more. On a Direct connection EPlay asks the directory itself and lists MP3
+stations only; Through the Gateway the Gateway asks, and any station is listed (the Gateway
+converts what isn't MP3). The last search is kept for the next time.
 
 The bar shows the song playing (the station sends its titles) and the station's name under it;
 **Live** and the time listened stand where a file's length would. Where the station names a picture

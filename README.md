@@ -15,7 +15,7 @@ and web radio, in a GEM window. Written in C and DSP56001 assembly.
 - **Steady sound:** fed by an interrupt from memory, so menus, dialogs and other programs don't break it up.
 - **Gapless:** an album encoded with LAME plays from one track into the next with no gap.
 - **ReplayGain:** evens out the loudness of tracks or albums from their tags.
-- **Web radio:** Icecast and Shoutcast stations, http or https, with titles and the station's picture.
+- **Web radio:** Icecast and Shoutcast stations, http or https, with titles and pictures; Find station searches by genre, country and language.
 - **Playlists:** files, folders and `.M3U`; reorder by dragging; Shuffle and Repeat.
 - **Mini player:** the bar alone, in a small window.
 - **Falcon, TT and STE:** WAV and AIFF on the TT's and STE's DMA sound too.
