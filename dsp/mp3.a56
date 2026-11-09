@@ -151,6 +151,7 @@ PKP	equ	OV0		; a PCM packet (1 + 1152 words): over the overlap (and
 				; the gap after it), which PCM doesn't use
 RSZ	equ	3352		; the ring, resampled (PCM's words: mkmp3tab.py's)
 RSREG	equ	1290		; a granule's outputs at most, and some (words)
+DLEAD	equ	512		; gapless: the SSI's lead a drop keeps (words)
 V_SVH	equ	$a3		; hri: r0 kept
 V_PKP	equ	$a4		; where the host's next packet word goes (hri)
 V_IDLE	equ	$a5		; waits this frame (the decoder ahead of the sound)
@@ -702,6 +703,60 @@ so2
 	rts
 
 
+; ---- a slot's samples into the ring at V_OUT on, streaming at the file's
+; rate (gapless, 9 Nov 2026): as slout, modulo the ring, but for a drop
+; (PK_DROP: DROPV its samples first, DROPV+1 how many), the samples in it
+; left out, one at a time
+ringout	move	x:V_OUT,r6
+	movec	#RSZ-1,m6
+	move	#>T0+7,r1
+	move	#>T1+7,r2
+	jset	#0,x:V_FLAGS,rg1
+	move	#>T0+7,r2
+rg1	move	x:DROPV+1,b
+	tst	b
+	jeq	rg0
+	move	x:DROPV,b		; the drop under way: the SSI's lead kept
+	tst	b
+	jne	rg5
+	jsr	dropchk
+	jlt	rg5
+	clr	b			; too little: the rest of it played instead
+	move	b,x:DROPV+1
+	jmp	rg0
+rg0	move	x:DROPV+1,b
+	tst	b
+	jne	rg5
+	move	x:(r1)+,a
+	do	#32,rg2
+	move	x:(r2)+,b	a,y:(r6)+
+	move	x:(r1)+,a	b,y:(r6)+
+rg2
+rg9	movec	#$ffff,m6
+	move	r6,x:V_OUT
+	rts
+rg5	move	#>1,y0
+	do	#32,rg8
+	move	x:(r1)+,x0
+	move	x:(r2)+,x1
+	move	x:DROPV,b
+	tst	b
+	jne	rg6			; a sample before the drop: out
+	move	x:DROPV+1,a
+	tst	a
+	jeq	rg7			; the drop over: out
+	sub	y0,a
+	move	a1,x:DROPV+1		; in it: left out
+	jmp	rg8b
+rg6	sub	y0,b
+	move	b1,x:DROPV
+rg7	move	x0,y:(r6)+
+	move	x1,y:(r6)+
+rg8b	nop
+rg8
+	jmp	rg9
+
+
 ; ---- XSTREAM's receive (P:$0C, P:$0E): each word the SSI takes from the
 ; matrix (the sound DMA's ring) into RXB's ring, modulo 2048. r6 is the
 ; resampler's: kept; m6 is linear in a PCM stream (the synthesis filter's
@@ -899,12 +954,8 @@ stm0	move	#>0,x1			; (x1: 1 for XSTREAM's receive)
 stm1	move	x0,x:V_PKB
 	clr	a
 	move	#>PCM,r0
-	move	#>2304,x0		; the ring: a frame, or resampled RSZ
-	move	x:V_RSTB,b
-	tst	b
-	jeq	stc0
-	move	#>RSZ,x0
-stc0	do	x0,stc
+	move	#>RSZ,x0		; the ring: RSZ, resampled or not (gapless)
+	do	x0,stc
 	move	a,y:(r0)+
 stc
 	move	#>PCM,x0
@@ -923,12 +974,10 @@ stc
 	move	x0,x:RXP
 	move	x0,x:RXR
 stc2	move	#>PCM,r7
-	movec	#2303,m7
-	move	x:V_RSTB,b
-	tst	b
-	jeq	stc1
 	movec	#RSZ-1,m7
-stc1
+	clr	b			; (no drop yet)
+	move	b,x:DROPV
+	move	b,x:DROPV+1
 	movep	#$1f8,x:PCC		; port C: the SSI
 	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
 	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
@@ -1386,6 +1435,19 @@ decode	move	x:V_PKB,r0
 	nop
 	move	y:(r0)+,x0		; the flags
 	move	x0,x:V_FLAGS
+	jclr	#11,x0,dcd		; gapless (PK_DROP): from this frame's output,
+	move	#>$000800,y0		; after word 1's bits 11-21 of its samples, the
+	mpy	x0,y0,a			; flags' bits 12-22 left out (the encoder's
+	move	#>$7ff,x1		; padding, then the next file's delay)
+	and	x1,a
+	move	a1,x:DROPV+1
+	move	y:(r0),x0
+	move	#>$001000,y0
+	mpy	x0,y0,a
+	and	x1,a
+	move	a1,x:DROPV
+	move	x:V_FLAGS,x0
+dcd
 	move	#>1,a
 	jclr	#0,x0,dc1
 	move	#>2,a
@@ -1480,15 +1542,8 @@ dgo	jsr	gout			; reorder, alias reduction, the transform
 	jlt	dgo
 	jsr	gsyn			; the synthesis filter, both channels
 dlate	jclr	#0,x:V_SF,dgl
-	move	x:V_RSTB,b
-	tst	b
-	jne	dgr2
-	jsr	inhalf			; the SSI came into it before it was done: late
-	jne	dgl
-	jmp	dgr3
-dgr2	jsr	rslate			; resampled: the SSI into its outputs
+	jsr	rslate			; streaming: the SSI into its outputs, late
 	jge	dgl
-dgr3
 	move	x:V_LATE,b
 	move	#>1,x0
 	add	x0,b
@@ -1536,19 +1591,22 @@ smute	jsr	pkfree			; (nothing more read from PKT)
 	move	x:V_RSTB,b
 	tst	b
 	jne	smr0
+	clr	a			; at the file's rate: silence into the ring
+	move	#>T0+7,r0		; (a drop's samples left out as ever)
+	move	#>T1+7,r1
+	do	#32,smu1
+	move	a,x:(r0)+
+	move	a,x:(r1)+
+smu1
 	move	x:V_NGR,x0
 	do	x0,smu2
-	jsr	waitsyn
-	move	#>PCM,a
-	jclr	#1,x:V_SF,smu1
-	move	#>1152,x0
-	add	x0,a
-smu1	move	a1,r0
-	clr	a
-	do	#1152,smu3
-	move	a,y:(r0)+
+	jsr	waitrs
+	move	x:V_OUT,x0
+	move	x0,x:V_WS
+	do	#18,smu3
+	jsr	ringout
+	nop
 smu3
-	bchg	#1,x:V_SF
 	nop
 smu2
 	rts
@@ -2869,15 +2927,16 @@ bf2
 gsyn	move	x:V_RSTB,b		; resampling: the outputs run on from V_OUT,
 	tst	b			; and each channel's last 7 inputs come back
 	jne	gsr
-	move	#>PCM,a
-	jclr	#1,x:V_SF,gs1
+	jset	#0,x:V_SF,gsc		; streaming at the file's rate: the ring too
+	move	#>PCM,a			; (FRAME, PLAY: a half)
+	jclr	#1,x:V_SF,gs2
 	move	#>1152,x0
 	add	x0,a
-gs1	jclr	#0,x:V_SF,gs2		; streaming: the SSI out of this half first
-	move	a1,x:V_SVA
-	jsr	waitsyn
-	move	x:V_SVA,a
 gs2	move	a1,x:V_OUT
+	jmp	gs4
+gsc	jsr	waitrs			; the SSI out of the region the outputs go to
+	move	x:V_OUT,x0		; (gapless: a drop leaves out some, so the
+	move	x0,x:V_WS		; outputs run on as resampled ones do)
 	jmp	gs4
 gsr	jclr	#0,x:V_SF,gsr1		; streaming: the SSI out of the region
 	jsr	waitrs			; the outputs go to
@@ -2895,6 +2954,8 @@ gs5
 gs4	clr	a
 	move	a,x:V_T
 	do	#18,gs9
+	jsr	dskip			; gapless: a slot deep in a drop, nothing made
+	jge	gs7
 	move	#>RING0,a		; channel 0
 	move	x:V_RP0,x0
 	move	a1,x:V_RING
@@ -2919,7 +2980,10 @@ gs4	clr	a
 gs3	move	x:V_RSTB,b
 	tst	b
 	jne	gs6
+	jset	#0,x:V_SF,gsc2
 	jsr	slout
+	jmp	gs7
+gsc2	jsr	ringout			; (streaming: into the ring, a drop left out)
 	jmp	gs7
 gs6	jsr	rsslot
 gs7	move	x:V_T,a
@@ -3099,24 +3163,15 @@ rsc7	move	r4,x0
 
 rsslot	move	x:V_RSN,a
 	move	x:V_RSF,a0
-	jsr	rscount			; (first: it takes y, b and r4)
-	move	x:V_RSTB,r0
-	move	#>T0+4,r2
-	move	#>16,y1
-	move	#>32,n4
-	move	#>32,n6
-	move	#>V_RSI,r3
-	movec	#1,m3
-	move	x:V_OUT,r5
-	movec	#RSZ-1,m5		; (the ring, modulo its size: from PCM, a
-	move	#>31,n1			; multiple of 4096)
-	jset	#0,x:V_FLAGS,rss1
-	move	#>-8,n1			; mono: the left again
-rss1	jsr	rsl
-	movec	#$ffff,m3
-	movec	#$ffff,m5
-	move	r5,x:V_OUT
-	move	#>32,x1
+	move	x:DROPV+1,b		; gapless: a drop to come
+	tst	b
+	jne	rsd
+	move	x:V_RS28,x1
+	cmp	x1,a
+	jge	rsp			; (past this slot, after a drop: none here)
+rsn	jsr	rscount			; (first: it takes y, b and r4)
+	jsr	rsrun
+rst	move	#>32,x1
 	sub	x1,a
 	move	a1,x:V_RSN
 	move	a0,x:V_RSF
@@ -3132,6 +3187,144 @@ rss2
 	move	x:(r1)+,x0
 	move	x0,x:(r2)+
 rss3
+	rts
+
+; a drop's inputs passed (the position past the slot): the SSI's lead
+; kept; too little, the position back to this slot's first, its inputs
+; played (a short silence, the encoder's padding, not the old ring again)
+rsp	jsr	dropchk
+	jlt	rst
+	clr	a
+	jmp	rsn
+
+; gapless: a slot all in a drop and 16 or more before its end (17
+; resampled: the synthesis filter's window is 16 slots, and the resampler
+; takes 7 inputs before its position): neither the filter nor
+; the outputs made, the drop a slot on; ge then. While the SSI has the lead
+; for it (dropchk); without, the rest of the drop played (lt)
+dskip	jclr	#0,x:V_SF,dsk0		; (streaming only)
+	move	x:V_RSTB,b
+	tst	b
+	jne	dsk5
+	move	x:DROPV,b		; at the file's rate: DROPV+1 still to drop
+	tst	b
+	jne	dsk0
+	move	x:DROPV+1,b		; (16 slots or more of it left: the filter's
+	move	#>512,x0		; window, which the first sample kept needs)
+	cmp	x0,b
+	jlt	dsk0
+	jsr	dropchk
+	jge	dsk6
+	move	x:DROPV+1,b
+	move	#>32,x0
+	sub	x0,b
+	move	b1,x:DROPV+1
+	jmp	dsk9
+dsk6	clr	b			; too little lead: played
+	move	b,x:DROPV+1
+	jmp	dsk0
+dsk5	move	x:V_RSN,b		; resampled: the position past 17 more slots
+	move	#>604,x0		; (the window, and the last 7 inputs before it)
+	cmp	x0,b
+	jlt	dsk0
+	jsr	dropchk
+	jge	dsk7
+	move	x:V_RSN,b
+	move	#>32,x0
+	sub	x0,b
+	move	b1,x:V_RSN
+	jmp	dsk9
+dsk7	clr	b			; too little lead: this slot's inputs played
+	move	b,x:V_RSN
+	move	b,x:V_RSF
+dsk0	clr	b			; lt: made as ever
+	move	#>1,x0
+	cmp	x0,b
+	rts
+dsk9	move	#>1,b			; ge: passed
+	move	#>0,x0
+	cmp	x0,b
+	rts
+
+; gapless: lt while the SSI has enough left to play ahead of V_OUT: at
+; least DLEAD words (b, x0 used)
+dropchk	move	x:V_OUT,x0
+	move	r7,b
+	sub	x0,b			; (the SSI's distance on from V_OUT)
+	jge	dch1
+	move	#>RSZ,x0
+	add	x0,b
+dch1	move	#>RSZ-DLEAD,x0		; free space this much: the lead too small
+	cmp	x0,b
+	rts
+
+; x0 outputs (1 or more) of the slot, from position a, into the ring at V_OUT
+rsrun	move	x:V_RSTB,r0
+	move	#>T0+4,r2
+	move	#>16,y1
+	move	#>32,n4
+	move	#>32,n6
+	move	#>V_RSI,r3
+	movec	#1,m3
+	move	x:V_OUT,r5
+	movec	#RSZ-1,m5		; (the ring, modulo its size: from PCM, a
+	move	#>31,n1			; multiple of 4096)
+	jset	#0,x:V_FLAGS,rsr1
+	move	#>-8,n1			; mono: the left again
+rsr1	jsr	rsl
+	movec	#$ffff,m3
+	movec	#$ffff,m5
+	move	r5,x:V_OUT
+	rts
+
+; gapless (PK_DROP): the outputs before the drop's first input (DROPV on
+; from this slot's first), then the position on by DROPV+1 inputs, and the
+; outputs from there to 28; a slot before the drop as ever
+rsd	move	x:DROPV,b
+	move	#>28,x1			; (at 28 to 31, its outputs before it want the
+	cmp	x1,b			; next slot's inputs: there, at -4 to -1)
+	jlt	rsd2
+	move	#>32,x1
+	sub	x1,b			; not in this slot
+	move	b1,x:DROPV
+	move	x:V_RS28,x1
+	cmp	x1,a
+	jge	rst
+	jsr	rscount
+	jsr	rsrun
+	jmp	rst
+rsd2	move	b1,x1			; up to the drop
+	jsr	rscl
+	move	x0,b
+	tst	b
+	jeq	rsd3
+	jsr	rsrun
+rsd3	clr	b
+	move	x:DROPV+1,b1		; the position on, past it
+	add	b,a
+	clr	b
+	move	b,x:DROPV
+	move	b,x:DROPV+1
+	move	x:V_RS28,x1		; then up to 28 as ever
+	jsr	rscl
+	move	x0,b
+	tst	b
+	jeq	rst
+	jsr	rsrun
+	jmp	rst
+
+; x0 = the outputs from position a before it reaches x1 (0 if there): one
+; by one (b, y and r4 used)
+rscl	move	#0,r4
+	tfr	a,b
+	move	x:V_RSI,y1
+	move	x:V_RSS,y0
+rscl1	cmp	x1,b
+	jge	rscl9
+	add	y,b
+	move	(r4)+
+	jmp	rscl1
+rscl9	move	r4,x0
 	rts
 
 rgz	move	x:V_TMP,x0		; table 0: zeros, no bits (seldom: in external P)

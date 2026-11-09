@@ -55,6 +55,7 @@ typedef struct {
 	int n;			/* and its sample, from the block's first */
 	int down;		/* (goes down) */
 	dw hist[2][7];		/* each channel's last 7 inputs */
+	long drop_at, drop_n;	/* gapless (PK_DROP): inputs before a drop, and its length */
 } MP3RS;
 
 /* from rate rin to rout; the step as the 68030 works it out for the DSP */
@@ -67,6 +68,13 @@ void mp3rs_mute(MP3RS *r);
 /* ns samples of nch channels in (a multiple of 32), the outputs into out;
  * gives how many */
 int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX]);
+/* gapless: a frame's packet with PK_DROP: from its output, after its first
+   at samples, n left out (the resampler's inputs, or a stream's samples at
+   the file's rate), as dsp/mp3.a56's DROPV does */
+void mp3_drop_set(MP3RS *r, const unsigned long *pk);
+/* a stream at the file's rate (no resampling): the frame's ns samples out,
+   less a drop's (r: its drop only) */
+int mp3_copy_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX]);
 
 #ifdef MP3DSP_HUFF_HOOK
 /* the tests' look at each granule's Huffman part: its side information,

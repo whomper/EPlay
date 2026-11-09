@@ -43,6 +43,13 @@
 #define PK_LSF		0x100
 #define PK_PCM		0x400	/* WAV, AIFF through the DSP: 576 frames (PK_LSF too),
 				   each sample a word, (s + 32768) << 7: no bit 23 */
+#define PK_DROP		0x800	/* gapless: from this frame's output, after word 1's
+				   bits 11-21 of its samples, the flags' bits 12-22
+				   left out (the encoder's padding, the next file's
+				   delay); word 1's bits 0-10 are N as ever */
+#define PK_DROP_N(f)	(((f) >> 12) & 0x7ff)
+#define PK_DROP_AT(w1)	(((w1) >> 11) & 0x7ff)
+#define PK_N(w1)	((w1) & 0x7ff)
 #define PK_RATE(f)	(((f) >> 4) & 15)	/* 0-2: 44.1, 48, 32 kHz; 3-5: 22.05,
 						 * 24, 16; 6-8: 11.025, 12, 8 */
 #define PK_GC		9

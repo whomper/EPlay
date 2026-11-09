@@ -579,7 +579,7 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 		return nch;
 	}
 	b.w = pk + 2 + ngr * nch * PK_GC;
-	b.n = (long)pk[1];
+	b.n = (long)PK_N(pk[1]);	/* (its high bits: a drop's place, PK_DROP) */
 	b.pos = 0;
 	for (gr = 0; gr < ngr; gr++) {
 		for (ch = 0; ch < nch; ch++) {
@@ -676,6 +676,54 @@ void mp3rs_mute(MP3RS *r)
 	memset(r->hist, 0, sizeof(r->hist));
 }
 
+void mp3_drop_set(MP3RS *r, const unsigned long *pk)
+{
+	if (pk[0] & PK_DROP) {
+		r->drop_n = (long)PK_DROP_N(pk[0]);
+		r->drop_at = (long)PK_DROP_AT(pk[1]);
+	}
+}
+
+int mp3_copy_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
+{
+	int i, k = 0;
+	for (i = 0; i < ns; i++) {
+		if (r->drop_n) {
+			if (r->drop_at)
+				r->drop_at--;
+			else {
+				r->drop_n--;	/* (left out) */
+				continue;
+			}
+		}
+		out[0][k] = pcm[0][i];
+		out[1][k] = pcm[nch == 2 ? 1 : 0][i];
+		k++;
+	}
+	return k;
+}
+
+/* the slot's outputs while the position is below lim (dsp/mp3.a56's rsl) */
+static int rs_outs(MP3RS *r, dw x[2][39], int nch, int lim, dw out[2][MP3RS_MAX], int k)
+{
+	const unsigned long *tab = r->tab;
+	int ch, j;
+	while (r->n < lim) {
+		const unsigned long *h = &tab[((r->f >> 19) + 16) & 31];
+		for (ch = 0; ch < nch; ch++) {
+			da a = 0;
+			for (j = 0; j < 8; j++)
+				a += d_mpy(x[ch][r->n + 4 + j], sx(h[32 * j]));
+			out[ch][k] = d_a2w_out(d_rnd(a));
+		}
+		k++;
+		r->f += r->sf;
+		r->n += (int)r->si + (int)(r->f >> 24);
+		r->f &= 0xffffff;
+	}
+	return k;
+}
+
 int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
 {
 	const unsigned long *tab = r->tab;
@@ -686,6 +734,19 @@ int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
 			memcpy(x[ch], r->hist[ch], sizeof(r->hist[ch]));
 			memcpy(x[ch] + 7, &pcm[ch][b], 32 * sizeof(dw));
 			memcpy(r->hist[ch], x[ch] + 32, sizeof(r->hist[ch]));
+		}
+		if (r->drop_n) {
+			/* gapless: the outputs before the drop's first input, the
+			   position on past it, then on as ever (the a56's rsd) */
+			if (r->drop_at >= 28) {
+				/* (its outputs before it need the next slot's
+				   inputs: there, at -4 to -1, as the position) */
+				r->drop_at -= 32;
+			} else {
+				k = rs_outs(r, x, nch, (int)r->drop_at, out, k);
+				r->n += (int)r->drop_n;
+				r->drop_at = r->drop_n = 0;
+			}
 		}
 		while (r->n <= 27) {	/* (its taps up to n + 4, in the block) */
 			const unsigned long *h = &tab[((r->f >> 19) + 16) & 31];

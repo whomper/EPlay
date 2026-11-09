@@ -185,6 +185,10 @@ static struct {
 	unsigned char xtoc[100];
 } nx;					/* the next file's, until it is heard */
 static volatile int pk_chain;		/* MP3: the packet made is the next file's first */
+/* gapless, LAME's tag (mp3_info_lame): this file's padding and the next's
+   delay, in samples (-1: no tag); the drop (PK_DROP) put on a packet once */
+static volatile int cur_pad = -1, nx_delay = -1, nx_pad = -1;
+static volatile int drop_set;
 
 /* the tick's own */
 static volatile int t_end, t_dsp, t_failed;
@@ -464,6 +468,36 @@ static void next_packet(void)
 				unsigned long *gc = pk + 2 + 2;
 				for (g = 0; g < n; g++, gc += PK_GC)
 					*gc = *gc > (unsigned long)t_gsub ? *gc - t_gsub : 0;
+			}
+			if (np > 0 && chain_q >= 0 && !drop_set && nx_delay >= 0) {
+				/* gapless: the join's silence left out on the DSP
+				   (LAME's tag: this file's padding past the decoder's
+				   529, then the next's delay and the 529): from this
+				   file's last frame, or the next's first */
+				long k = (long)nx_delay + (cur_pad >= 0 ? cur_pad : 529), off = -1;
+				if (!chain_cross && q_r >= chain_q && cur_pad >= 529) {
+					off = (long)h.samples - (cur_pad - 529);
+					if (off < 0) {
+						k += off;	/* (padding past a frame: what is left of it played) */
+						off = 0;
+					}
+				} else if (pk_chain == 2) {
+					/* (the next's first frame: the padding reaching into
+					   it, else its delay alone, as the last frame here
+					   wasn't found where it should end) */
+					off = cur_pad >= 0 && cur_pad < 529 ? 529 - cur_pad : 0;
+					if (cur_pad < 0 || cur_pad >= 529)
+						k = (long)nx_delay + 529;
+				}
+				if (off >= 0) {
+					if (k > 2047)
+						k = 2047;
+					if (k > 0) {
+						pk[0] |= PK_DROP | (unsigned long)k << 12;
+						pk[1] |= (unsigned long)off << 11;
+					}
+					drop_set = 1;
+				}
 			}
 			if (np > 0) {
 				pk_n = np;
@@ -1023,6 +1057,8 @@ int play_open(const char *path, char *err, int n)
 			long bytes = file_size - at;
 			if (nf > 0) {
 				long fs = nf * h.samples;
+				MP3LAME lt;
+				cur_pad = mp3_info_lame(fbuf + first_at, &h, &lt) ? lt.padding : -1;
 				has_toc = mp3_info_toc(fbuf + first_at, &h, xtoc);
 				xing_at = at;
 				at += h.length;
@@ -1032,6 +1068,7 @@ int play_open(const char *path, char *err, int n)
 					bitrate = bytes / len_ms * 8 + (bytes % len_ms) * 8 / len_ms;
 			} else {
 				vbr = 0;
+				cur_pad = -1;
 				has_toc = 0;
 				xing_at = at;
 				len_ms = h.bitrate && !net ? bytes * 8 / h.bitrate : 0;	/* (a station: Live) */
@@ -1089,6 +1126,13 @@ int play_open(const char *path, char *err, int n)
 			}
 		}
 		data_left = file_size - at;
+		if (!net && file_size >= 128) {
+			/* (an ID3v1 tag at its end isn't sound: out of the queue, so
+			   its last frame ends where the next file's begins: gapless) */
+			unsigned char tg[3];
+			if (Fseek(file_size - 128, fh, 0) == file_size - 128 && Fread(fh, 3, tg) == 3 && !memcmp(tg, "TAG", 3))
+				data_left -= 128;
+		}
 		q_base = at;
 		fr_sent = 0;
 		if (net) {
@@ -1272,6 +1316,8 @@ int play_open(const char *path, char *err, int n)
 	chain_q = chain_frame = -1;
 	chain_cross = chain_asked = chain_heard = 0;
 	pk_chain = 0;
+	nx_delay = nx_pad = -1;
+	drop_set = 0;
 	fr_base = pcm_base = 0;
 	return 1;
 }
@@ -1304,6 +1350,8 @@ int play_chain(const char *path)
 		return 0;
 	size = Fseek(0, (short)h2, 2);
 	memset(&nx, 0, sizeof(nx));
+	nx_delay = nx_pad = -1;
+	drop_set = 0;
 	{
 		int was = fh;		/* (tag_read and refill read fh: the next file's here) */
 		long wpos = fpos, wend = fend;
@@ -1333,6 +1381,11 @@ int play_chain(const char *path)
 			left = size - at;
 			if (nf > 0) {
 				long fs = nf * h.samples;
+				MP3LAME lt;
+				if (mp3_info_lame(fbuf + first_at, &h, &lt)) {
+					nx_delay = lt.delay;
+					nx_pad = lt.padding;
+				}
 				nx.has_toc = mp3_info_toc(fbuf + first_at, &h, nx.xtoc);
 				at += h.length;		/* (the Xing frame holds no sound) */
 				left -= h.length;
@@ -1422,6 +1475,8 @@ static void chain_check(void)
 		if (fr <= chain_frame)
 			return;
 		fr_base = chain_frame;
+		cur_pad = nx_pad;		/* (its padding: the next join's) */
+		nx_delay = -1;
 		bitrate = nx.bitrate;
 		xing_at = nx.xing_at;
 		has_toc = nx.has_toc;

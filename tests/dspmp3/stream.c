@@ -12,6 +12,10 @@
  * SIMRS=1 resampled to the Falcon's clock above it (sim.c's falcon_rate).
  * SIMLOAD=P plays the output P % fast, as a DSP P % slower than Hatari's;
  * SIMLAT=N has the 68030 ready with each word N cycles after the last.
+ * And what the SSI sends, word by word, against the model's decoding of
+ * the same packets (mp3dsp.c: copied at the file's rate, or resampled),
+ * bit for bit. SIMDROP=F:AT:N puts a drop (gapless, PK_DROP) on frame F's
+ * packet: after AT of its samples, N left out, the model the same.
  *
  *     stream FILE.MP3 [FRAMES]
  */
@@ -29,6 +33,9 @@
 /* 32 MHz cycles a time slot (two a frame): the output's rate's */
 static unsigned long long slot_cycles = 325, next_slot;
 static int slot0 = 1;
+#define CAP_MAX (1L << 22)
+static unsigned short cap[CAP_MAX];	/* what the SSI sent, a word each slot */
+static long ncap;
 
 /* the matrix: a time slot when its time comes */
 static void clock_ssi(void)
@@ -36,14 +43,27 @@ static void clock_ssi(void)
 	while (cycles >= next_slot) {
 		dsp_core_ssi_Receive_SC2(slot0);
 		dsp_core_ssi_Receive_SCK();
+		if (ncap < CAP_MAX)
+			cap[ncap++] = (unsigned short)dsp_core.ssi.transmit_value;
 		slot0 = !slot0;
 		next_slot += slot_cycles;
 	}
 }
 
+static unsigned dropchk_pc;	/* SIMLEAD=1: the lead each time the drop looks */
 static int sstep(void)
 {
-	int r = step();
+	int r;
+	if (dropchk_pc && dsp_core.pc == dropchk_pc) {
+		long out = (long)dsp_core.ramint[DSP_SPACE_X][0x9c], r7 = (long)dsp_core.registers[DSP_REG_R7];
+		long fr = r7 - out;
+		if (fr < 0)
+			fr += 3352;
+		if (3352 - fr < 512)
+			fprintf(stderr, "lead %ld words: the drop's %ld samples left played\n", 3352 - fr,
+				(long)(dsp_core.ramext[0x999] & 0xffffff));
+	}
+	r = step();
 	clock_ssi();
 	return r;
 }
@@ -67,6 +87,17 @@ int main(int argc, char **argv)
 	long n, off = 0, want = argc > 2 ? atol(argv[2]) : 200, sent = 0, frames = 0, late = 0, rsy = 0;
 	long pkn = 0, pki = -1;		/* the packet going: its words, the next (-1: its count) */
 	int have = 0, i, rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0, f4 = 0, l6 = 0, r4 = 0;
+	static MP3DSP md;		/* the model, the same packets */
+	static MP3RS mrs;
+	static dw pcm[2][1152], mo[2][MP3RS_MAX];
+	static unsigned short *exp_w;
+	long nexp = 0, nfr = 0, drop_f = -1, drop_at = 0, drop_n = 0;
+	if (getenv("SIMDROP"))
+		sscanf(getenv("SIMDROP"), "%ld:%ld:%ld", &drop_f, &drop_at, &drop_n);
+	exp_w = malloc(CAP_MAX * sizeof(*exp_w));
+	if (getenv("SIMLEAD"))
+		dropchk_pc = (unsigned)strtoul(getenv("SIMLEAD"), 0, 16);
+	mp3dsp_reset(&md);
 	unsigned long long quiet = 0, next_word = 0, lat = getenv("SIMLAT") ? strtoull(getenv("SIMLAT"), 0, 10) : 0;
 	FILE *f;
 	if (argc < 2 || !(f = fopen(argv[1], "rb"))) {
@@ -99,6 +130,7 @@ int main(int argc, char **argv)
 		   Hatari's would be (a real Falcon's: external memory, the bus) */
 		slot_cycles = 32000000ULL * 100 / (2ULL * (unsigned long long)rout *
 						     (unsigned long long)(getenv("SIMLOAD") ? atoi(getenv("SIMLOAD")) : 100));
+		mp3rs_set(&mrs, rin, rout);
 		if (rsmode) {
 			MP3RS rs;
 			mp3rs_set(&rs, rin, rout);
@@ -152,6 +184,21 @@ int main(int argc, char **argv)
 				if (np < 0)
 					continue;
 				pkn = np;
+				if (nfr == drop_f) {
+					pk[0] |= PK_DROP | (unsigned long)drop_n << 12;
+					pk[1] |= (unsigned long)drop_at << 11;
+				}
+				{
+					/* the model: this packet's output, as the DSP's should be */
+					int ns, nch = mp3dsp_frame(&md, pk, pcm, &ns), k, j;
+					mp3_drop_set(&mrs, pk);
+					k = rsmode ? mp3rs_run(&mrs, pcm, ns, nch, mo) : mp3_copy_run(&mrs, pcm, ns, nch, mo);
+					for (j = 0; j < k && nexp + 2 <= CAP_MAX; j++) {
+						exp_w[nexp++] = (unsigned short)((mo[0][j] >> 8) & 0xffff);
+						exp_w[nexp++] = (unsigned short)((mo[nch == 2 ? 1 : 0][j] >> 8) & 0xffff);
+					}
+				}
+				nfr++;
 				break;
 			}
 			pki = -1;
@@ -177,6 +224,37 @@ int main(int argc, char **argv)
 				"%ld packets sent, ISR $%02x, a packet going %d (word %ld of %ld)\n",
 				dsp_core.pc, sent, isr, have, pki, pkn);
 			dead = 1;
+		}
+	}
+	{
+		/* the sound: the model's first sound found in what the SSI sent,
+		   then every word after it the same, to the end of either */
+		long e0 = 0, at = -1, k, bad = 0, first_bad = -1, cmpn;
+		while (e0 < nexp && !exp_w[e0])
+			e0++;
+		e0 &= ~1L;
+		for (k = 0; k + 64 <= ncap && at < 0; k++)
+			if (!memcmp(cap + k, exp_w + e0, 64 * sizeof(*cap)))
+				at = k - e0;
+		if (at < 0) {
+			printf("%s: the model's sound not found in what the SSI sent\n", argv[1]);
+			dead = 1;
+		} else {
+			cmpn = nexp < ncap - at ? nexp : ncap - at;
+			cmpn -= 2304;		/* (the end: the last granule's, played or not yet) */
+			for (k = e0; k < cmpn; k++)
+				if (cap[at + k] != exp_w[k]) {
+					if (first_bad < 0)
+						first_bad = k;
+					bad++;
+				}
+			printf("%s: %ld words of sound, as the model's%s", argv[1] && strrchr(argv[1], '/') ?
+			       strrchr(argv[1], '/') + 1 : argv[1], cmpn - e0, bad ? "" : "\n");
+			if (bad) {
+				printf(": %ld differ, the first at word %ld (%04x, the model %04x)\n", bad, first_bad,
+				       cap[at + first_bad], exp_w[first_bad]);
+				dead = 1;
+			}
 		}
 	}
 	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld packets sent; "

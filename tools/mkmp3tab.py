@@ -448,6 +448,7 @@ MAP = [  # space, name, address, size, table (None: a buffer)
     ("X", "BWID", 0x0938, 40, None),
     ("X", "BPOS", 0x0960, 40, None),
     ("X", "RST", 0x0990, 5, None),      # the resampler's counts: (c - 1) S, c S (48 bits each), c
+    ("X", "DROPV", 0x0998, 2, None),    # gapless: a drop's samples first, then how many (PK_DROP)
     ("X", "LT", 0x09d0, 14, "t_ltx"),
     ("X", "SPAIR", DSP_SPAIR, 961, "t_dsx"),
     ("X", "PAIR", DSP_PAIR, 256, "t_dpx"),
