@@ -947,9 +947,10 @@ static void command(int c);
    what the menu bar has for it, with the keys */
 static void row_menu(short x, short y)
 {
-	static const char *const lab[] = { "  Play                  Return ", "-",
-					   "  Remove from the list  Del ", "  Clear the list " };
-	switch (popup(x, y, lab, 4)) {
+	/* (popup_m: the words alone, the box adds the margin: D15) */
+	static const char *const lab[] = { "Play                  Return", "-",
+					   "Remove from the list  Del   ", "Clear the list" };
+	switch (popup_m(x, y, lab, 4)) {
 	case 0:
 		play_index(list_sel);
 		break;

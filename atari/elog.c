@@ -5,7 +5,9 @@
  * family's logs (the hub, 9 Nov 2026; Erez: "just like the other
  * applications"): one file beside the program, added to across runs, each
  * line with its time; the network's lines (conn, TLS) in the same file.
- * The lines held in memory (16 KB, conn_log_hold) and written in one go
+ * A line at each start (conn_log_start), the file capped at 256 KB and
+ * rolled over to EPLAY.OLD (common's). The lines held in memory (16 KB,
+ * conn_log_hold) and written in one go
  * (the guidelines, 6.5) at elog_save, when the buffer is full and at an
  * error; a crash's report goes in it too. Each line also goes to the
  * emulator's console (nf_debug), for the rigs.
@@ -18,6 +20,9 @@
 #include "conn.h"
 #include "crash.h"
 #include "elog.h"
+#include "plat.h"
+
+extern const char app_version[];
 
 static int ready;
 
@@ -30,6 +35,12 @@ void elog_init(void)
 	conn_log_hold_bytes = 16384;
 	conn_log_hold(1);		/* (for the whole run: written at elog_save) */
 	crash_report = conn_log_append;	/* (a crash's report in EPLAY.LOG) */
+	conn_log_size = pf_handle_size;	/* (the cap's size from the open file: no look) */
+	{
+		char v[24];
+		snprintf(v, sizeof(v), "EPlay %s", app_version);
+		conn_log_start(v);	/* (one line a run: the version, the date and time) */
+	}
 }
 
 void elog(const char *fmt, ...)
