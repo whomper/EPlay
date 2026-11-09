@@ -1282,7 +1282,7 @@ int play_open(const char *path, char *err, int n)
 int play_wants_next(void)
 {
 	if (chain_asked || !src_done || net || paused || state != PS_PLAYING || chain_q >= 0 || t_end ||
-	    (dsp && xs) || (!dsp && raw8))
+	    (dsp && xs))
 		return 0;
 	if (q_w - q_r < 32768L)
 		return 0;		/* (too near the end to begin anything) */
