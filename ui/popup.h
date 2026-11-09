@@ -24,7 +24,10 @@
  * For a choice pop-up: "\x08" in front of the current choice only (in C,
  * "\x08" "At start": a word starting with 0-9, A-F or a-f would be read
  * into the escape). No
- * leading spaces, no trailing space. A greyed item is not ticked.
+ * leading spaces, no trailing space after the words. A greyed item is not
+ * ticked. popup_m does not align keys: an app that shows a key in the label
+ * ("Open   ^O") pads its labels to one length itself, so spaces after an
+ * item without a key are the app's column, not a trailing space.
  *
  * OLD CONTRACT, popup() (until an app drops its padding): the label carries
  * the margin itself, two spaces ("  Open", "\x08 Hidden"), and the text is 4
