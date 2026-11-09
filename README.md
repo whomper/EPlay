@@ -3,189 +3,128 @@
 <img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
 An audio player for the Atari Falcon, TT and STE: MP3 decoded on the Falcon's DSP, WAV and AIFF,
-and web radio, in a GEM window. Written in C and DSP56001 assembly for GEM.
+and web radio, in a GEM window. Written in C and DSP56001 assembly.
 
-**Highlights**
+![EPlay on a Falcon in 256 colours (Hatari): an album of five tracks in the list, the first playing, its cover, title and artist in the bar with the position, the volume and DSP as the output](docs/player.png)
 
-- **Steady sound:** the music is fed by an interrupt from a queue of seconds to minutes held in
-  memory, so menus, dialogs, the file selector and other programs don't break it up. Every word to
-  and from the DSP waits for the host port's flag, so an accelerated Falcon (a DFB1 at 50 MHz)
-  plays exactly as a stock one.
-- **MP3 on the DSP:** the whole decoder (MPEG-1, 2 and 2.5 layer III) runs on the Falcon's
-  DSP56001, checked bit for bit against a model that meets ISO 11172-4's full accuracy, and the
-  DSP plays what it decodes itself (its SSI port to the DAC or the FDI): the 68030 only hands it
-  the file's frames, when the DSP asks.
+## Highlights
+
+- **MP3 on the DSP:** the whole decoder (MPEG-1, 2 and 2.5 layer III, constant or variable bit
+  rate) runs on the Falcon's DSP56001, checked bit for bit against a model that meets ISO
+  11172-4's full accuracy. The 68030 only hands it the file's frames.
+- **Steady sound:** the music is fed by an interrupt from a queue held in memory, so menus,
+  dialogs and other programs don't break it up. An accelerated Falcon plays exactly as a stock one.
 - **Through the FDI:** with a SoundPool FDI on the DSP port, EPlay sets it to the file's rate
-  (44.1 or 48 kHz, as Cubase Audio does) and the DSP plays into it on its clock, bit for bit.
-- **At its own pitch:** an MP3 at a rate the clock hasn't (44.1 kHz on a stock Falcon, which has
-  49,170 Hz) is resampled on the DSP, and so is a WAV or AIFF at any rate below the DSP's
-  output: the sound DMA carries its samples to the DSP through the matrix, so a stock Falcon's
-  68030 only fills a ring (a 24-bit CD-rate AIFF takes about a quarter of it). Only a file faster
-  than 49,170 Hz (96 kHz) plays at the nearest rate the Falcon has, unless an FDI gives its rate.
-- **Shares the DSP:** EPlay holds the DSP only while it plays through it: an MP3, or a WAV or AIFF
-  it resamples. When another program has it, that WAV plays at the nearest rate instead.
-- **Web radio:** File > Open URL… (⇧^O) plays a station, Icecast or Shoutcast, MP3 on the
-  Falcon's DSP: its songs' titles in the bar, "Live" for the length. It gathers a few seconds before
-  it plays, so the network's pauses aren't heard, and connects again by itself if the line drops.
-  A Direct connection or Through the Gateway, chosen in the Options menu.
-- **On a TT:** WAV and AIFF on its 8-bit DMA sound, at 50 kHz for CD's 44.1 kHz: the 68030
-  interpolates between the file's samples and dithers them down to 8 bits. MP3 files show dim and
-  are passed over (MP3 needs a Falcon's DSP).
-- **On an STE:** `eplayst.prg`, the 68000's edition: WAV and AIFF on its 8-bit DMA sound, a CD's
-  44.1 kHz at 50 kHz (the nearest sample), the volume on the STE's own volume control. While a
-  CD-rate file plays, the music takes about half of the 68000, so the window answers slowly then
-  (EPlay is being made faster there).
+  (44.1 or 48 kHz), as Cubase Audio does, and the music goes out bit for bit.
+- **At its own pitch:** a file at a rate the Falcon's clock hasn't (44.1 kHz on a stock Falcon)
+  is resampled on the DSP, MP3, WAV and AIFF alike.
+- **Gapless:** an album encoded with LAME plays from one track into the next with no gap.
+- **ReplayGain:** evens out the loudness of tracks or albums from their tags, louder only as far
+  as each file's peak allows.
+- **Web radio:** Icecast and Shoutcast stations, http or https, with the songs' titles and the
+  station's picture; a Direct connection, or Through the AERA Gateway for AAC, Ogg and HLS.
+- **Playlists:** add files, folders and `.M3U` playlists; reorder by dragging; Shuffle and Repeat;
+  save the list as an `.M3U`.
+- **The TT and the STE:** WAV and AIFF on their 8-bit DMA sound, CD's 44.1 kHz at 50 kHz;
+  `eplayst.prg` is the STE's edition.
 
-*Phase 1 (releases 0.1 to 0.3) was the first try on a real Falcon: the sound core and a minimal
-window. Phase 2 (0.4 to 0.17) plays MP3 on the Falcon's DSP or through the FDI as Cubase Audio
-does (the FDI set to the file's rate), chosen in the settings, with resampling on the DSP. (MP3 on
-the 68030 was dropped: no 68030 keeps up with it.) Phase 3 (0.18 to 0.24) is the player window;
-phase 4 (0.25) playlists and folders; phase 5 (0.26 to 0.32) the keys, the guide, MiNT, MP3 on a
-stock Falcon's DSP and the FDI's rate; phase 6 (0.33 to 1.0) the TT and the STE (their 8-bit DMA
-sound: WAV and AIFF). Next: phase 7, web radio and streams; phase 8, gapless playback,
-ReplayGain, search, lyrics, more formats and the family's links.*
+<img src="docs/mini.png" alt="The mini player: the bar alone, with the cover, title, transport, position and volume">
 
 ## Getting started
 
-Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** and unpack it. It
-contains (every name in lowercase, as the family's are, so that MiNT finds them on an ext2 drive):
+Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** and unpack it:
 
 | File | What it is |
 |---|---|
 | `eplay.prg` | the program, for the Falcon and the TT |
-| `eplayst.prg` | the program for an STE (the 68000's edition) |
-| `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it (copy them to `C:\GUIDES\` or beside the program) |
-| `icons/` | its desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn` for desktops that take them) |
+| `eplayst.prg` | the program for an STE |
+| `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it |
+| `tls.ovl`, `cacert.pem` | secure (https) stations on a Direct connection: keep them beside the program |
+| `icons/` | the desktop icon (`eplay.rsc`, or `eplay.icn` and `eplaymk.icn`) |
 | `notices.txt` | what EPlay includes under other licences |
 
-1. Copy `eplay.prg` anywhere, and start it; or drop `.MP3`, `.WAV` or `.AIF` files, a folder
-   (its subfolders too, in path order) or an `.M3U` playlist on it: they go into the list, and
-   play one after another.
-2. **File > Open…** (Control+O) opens **Add files**: choose the drive and the folder (or one
-   of the last ten from **Folders**), narrow the list by type and by a name mask (`*` and `?`),
-   sort it, and select files and folders with a click, Shift-click or a drag (**All** for every
-   file). **Add** puts them at the list's end: a folder's music with its subfolders', a playlist's
-   files in its order. Files dragged onto the window from an AV desktop (Thing, Jinnee,
-   Teradesk) or under MiNT and MagiC are added too. A double click or **Return** plays a row,
-   **Up** and **Down** choose one, **Delete** takes it out; a right click (or **Insert**) on a
-   row opens its menu; **Edit > Clear the list** keeps only the file playing. Previous and Next
-   go through the list. **File > Save playlist…** (Control+S) writes it as an `.M3U` (paths
-   relative to the playlist's folder where they are in it), which other players read too.
-   **Play > Shuffle** plays the list in a random order, each file once a round, the list left as
-   it is; **Play > Repeat** goes from Off to All (the list again from its start) to One (the file
-   again). EPLAY.INF keeps both. The window can be made taller for more rows. The list needs memory left
-   over after NVDI and the accessories (a Falcon with TT RAM has plenty; EPlay always leaves
-   40 KB of ST RAM for the AES): where there is none, the info line says "The list is full: no
-   memory for more files." The bar shows the file's
-   album art (unpacked on the DSP, then kept in `cache\` next to the program), its title
-   and artist (from its tags), its bit rate and rate, and where it plays (FDI, DSP or DMA). The
-   round button, or **Space**, plays and pauses (Play/Pause and Stop are in the Play menu too); a
-   click or a drag on the position bar goes to that place in the file. The **volume** at the
-   right is set the same way, or with **+** and **−** (3 dB a press); EPLAY.INF keeps it.
-3. **File > Open URL…** (⇧^O) opens a web radio station: type its address (`http://…`, or a
-   `.pls` or `.m3u` station list), or choose one of the last ten. It goes into the list and plays;
-   the bar shows the song playing and the station, and **Live** with the time listened. **Pause**
-   ends the connection, and **Play** connects again, live. Station addresses in a playlist play as
-   its files do. **Options** chooses how a station is reached: **Direct connection** (the
-   default; EPlay connects to it itself, MP3 over plain HTTP) or **Through the Gateway** (the
-   Gateway's address and port in **Settings**). A station that sends AAC or Ogg, or HLS, needs the
-   Gateway. The network is STinG's or MiNTnet's; with STinG, set the Delay in `STING.CPX` to 10 on
-   a Falcon (it polls the network card that often).
-4. **View > Mini player** makes the window the bar alone, and back; EPLAY.INF keeps it.
-5. **Options > Settings…** (Control+,) chooses the **Output**: Auto (the FDI if its driver
-   answers, else the DSP), FDI or DSP. A change takes effect at the next Play. `EPLAY.INF`, next
-   to the program, keeps it. Without the FDI an MP3 plays at 49,170 Hz; one the DSP can't keep
-   up with there goes on by itself at 32,780 Hz, up to about 15 kHz (the info line shows the
-   rate). Through the FDI the music is always whole.
+1. Start `eplay.prg`, or drop `.MP3`, `.WAV` or `.AIF` files, a folder or an `.M3U` playlist on it.
+2. **File > Open...** (^O) adds files and folders to the list; a double click or Return plays a
+   row. **Space** plays and pauses, **Left** and **Right** skip 10 seconds, **Shift+Left** and
+   **Shift+Right** go to the previous and next file, **+** and **-** set the volume. **Help >
+   Keys...** lists them all.
+3. **File > Open URL...** (Shift+^O) plays a web radio station: type its address, or choose one of
+   the last ten. **Options** chooses a **Direct connection** or **Through the Gateway**.
+4. **View > Mini player** makes the window the bar alone.
+5. **Options > Settings...** (^,) chooses the output (Auto, FDI or DSP), the Gateway's address and
+   port, and ReplayGain.
 
-**EPLAY.LOG**, next to the program, says what EPlay measured and did: the external clock it
-found and how it set the FDI, each file's format and length, how playing ended, and how the DSP
-and the 68030 kept up (the DSP's time to spare a frame, the share of the 68030 that playing
-took), and how each connection to a station went. Each run adds to it, as the family's logs do
-(common's conn.c). While EPlay is young, please send it with any report.
+![Settings: the output (Auto, FDI, DSP), the Gateway's address and port, and ReplayGain (Off, Track, Album, Auto)](docs/settings.png)
 
-**Needs:** a Falcon030 (MP3 needs its DSP; WAV and AIFF its sound DMA) with TOS 4.0x or EmuTOS,
-a TT (WAV and AIFF), or an STE or Mega STE with `eplayst.prg` (WAV and AIFF); a screen 640 pixels
-wide or more (MagiC and MiNT not tried yet). Web radio: a Falcon with a network card (Ethernet) and
-STinG or MiNTnet.
+`EPLAY.INF`, beside the program, keeps the settings, the volume and the last folders and
+stations. `EPLAY.LOG` says what EPlay found and did; please send it with any report.
 
-**What it plays:**
-- WAV (PCM, 8 to 32 bits, mono or stereo) and AIFF/AIFC (uncompressed);
-- MP3: MPEG-1, 2 and 2.5 layer III, every bit rate, constant or variable;
-- at the file's own rate where the Falcon has it: 44.1 or 48 kHz through an external clock, or
-  the Falcon's own 49170, 32780, 24585 Hz and lower. A file at another rate plays at the nearest
-  of those, so a little fast or slow, until phase 2 resamples it.
+**Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP), a TT, or an STE or Mega STE
+with `eplayst.prg` (WAV and AIFF), and a screen 640 pixels wide or more. Web radio needs a network
+card and STinG or MiNTnet.
 
 ## How it reaches the servers
 
-Only for web radio (File > Open URL…), through STinG or MiNTnet:
-- **Direct connection** (the Options menu; the default): EPlay asks the station itself, over HTTP,
-  with `Icy-MetaData: 1` for the songs' titles; redirects and `.pls`/`.m3u` station lists are
-  followed. MP3 stations, at http and https addresses (https through the family's `TLS.OVL`,
-  beside the program with `CACERT.PEM`); AAC, Ogg and HLS need the Gateway.
-- **Through the Gateway**: EPlay asks the AERA Gateway (`GET /stream?url=…`, its address and port in
-  Settings), which fetches the station and sends it on as MP3. The Gateway's stream service comes
-  with a later release.
+Only for web radio, through STinG or MiNTnet:
 
-EPlay sends nothing else anywhere.
+- **Direct connection** (the default): EPlay asks the station itself, over HTTP with
+  `Icy-MetaData: 1` for the songs' titles, or HTTPS through the family's `TLS.OVL`. Redirects and
+  `.pls`/`.m3u` station lists are followed. MP3 stations only.
+- **Through the Gateway:** EPlay asks the [AERA Gateway](https://github.com/whomper/AERA-Gateway)
+  (`GET /stream?url=...`), which fetches the station and sends it on as MP3; AAC, Ogg and HLS
+  stations need it. Install its radio service on the Pi (`sudo aera-gateway install radio`) and
+  give its address and port (8580) in Settings. With a Gateway given, EPlay also asks it for a
+  station's logo.
+
+A picture a station names with its titles is fetched from where it is. EPlay sends nothing else
+anywhere.
 
 ## Building
 
 ```sh
 sudo apt install gcc-m68k-linux-gnu a56 python3 sox lame   # Debian/Ubuntu; no MiNTLib needed
-make            # binary/eplay.prg, with the DSP's program (a56) built in
-make test       # the MP3 model against minimp3, WAV and AIFF against sox
+make            # binary/eplay.prg, with the DSP's program built in
+make st         # binary/eplayst.prg, the STE's
+make test       # the host tests
 make dsptest    # the DSP's program against the model, bit for bit, on Hatari's DSP core
-make help HCP=/path/to/hcp   # binary/eplay.hyp from docs/GUIDE.md (hcp: common/tools/build-hcp.sh DIR)
-make dist       # dist/eplay-x.y.zip, as on the Releases page (with the guide: HCP as for help)
-make rig        # the Hatari rigs (below)
+make help HCP=/path/to/hcp   # binary/eplay.hyp from docs/GUIDE.md
+make dist       # dist/eplay-x.y.zip, as on the Releases page
 ```
 
-`binary/` and `dist/` are what make builds; they are never committed, and a build changes no tracked
-file. A release: `tools/bump.py`, commit and push, then **Actions > Release > Run workflow** on `main`
-with what is new. The workflow tests, builds, tags the commit `vX.Y` and publishes the
-files and the zip on the Releases page. Builds in between are never handed out: to try a change, release it.
+`binary/` and `dist/` are never committed. Releases are made by the Release workflow on `main`
+(`tools/bump.py`, then **Actions > Release > Run workflow**).
 
 ## Source
 
 ```
-src/        WAV and AIFF (pcm.c), tags, playlists (m3u.c), the play order (order.c), web radio's
-            parsing (stream.c: URLs, the station's answer, its titles, .pls); the MP3 frame
-            parser and the decoder's C model (src/mp3)
+src/        WAV and AIFF, tags and ReplayGain, playlists, the play order, web radio's parsing;
+            the MP3 frame parser and the decoder's C model (src/mp3)
 dsp/        the MP3 decoder for the DSP56001 (mp3.a56)
-atari/      the Falcon's sound: the ring and the matrix (snd.c), the tick (feed.c), the DSP (dspmp3.c)
-ui/         GEM: the window, the menus, the player (play.c), web radio (netsrc.c, urldlg.c)
+atari/      the sound hardware: the ring and the matrix, the tick, the DSP, the log
+ui/         GEM: the window, the menus, the player, Settings, web radio
+radio/      radiogate, the Gateway's radio service (handed to AERA-Gateway)
 common/     the AERA library (from AERA-Atari, by git subtree)
 data/       the standard's tables (Huffman codes, the synthesis window)
 tools/      the table generators, the version bump
-tests/      the model's and the parsers' tests, the DSP's, and the Hatari rigs (tests/hatari)
-docs/       the user guide (GUIDE.md, the source of eplay.hyp), the design (DESIGN.md), the icons
+tests/      the host tests, the DSP's, and the Hatari rigs (tests/hatari)
+docs/       the guide (GUIDE.md, the source of eplay.hyp), the design (DESIGN.md), the pictures
 ```
 
 ## Tests
 
-- `make test`: the decoder's C model against minimp3 on 20 files made with sox and lame (MPEG-1,
-  2 and 2.5; tones, sweeps, noise, clicks, short blocks, joint stereo), within ISO 11172-4's
-  limits for full accuracy; WAV and AIFF converted against sox, sample for sample.
-- `make dsptest`: `dsp/mp3.a56` on Hatari's DSP core against the model, bit for bit, with the
-  DSP's share of each file.
-- `tests/hatari/play_test.py`: EPlay in Hatari on `Falcon` (as Erez's, with the DFB1) and
-  `Falcon-4` (a stock Falcon), with Hatari's sound recorded and checked: the tone at the right
-  pitch in both channels, no gap, the length, silence after the end. A WAV, an AIFF, two MP3s,
-  the file selector and Settings held open while it plays; the list, a playlist, a folder tree,
-  Repeat, Shuffle and Save playlist; and (not by default) 1,000 files as a folder, a tree and a
-  playlist.
-- `make test` also runs `tests/stream` (web radio's parsing, under AddressSanitizer) and replays
-  `tests/fuzz`; `make fuzz` runs its libFuzzer target.
-- `tests/hatari/stream_test.py`: EPlay playing web radio in Hatari through common's fakesting (the
-  Atari's TCP connections become this computer's), from a station of its own: the sound checked as
-  play_test's, the songs' titles, the connection dropped and made again, a `.pls` behind a
-  redirect, an AAC station refused, and File > Open URL… typed in.
-- `tests/hatari/pcm_test.py`: the sound's 68030 loops (16-bit WAV, 24-bit AIFF and WAV) against
-  their C, bit for bit, on Hatari's 68030 (`make` in `tests/hatari` first).
-- `tests/hatari/speed.py`: the family's speed rig, the longest stretch between event calls of
-  each action, on a stock Falcon (`make prof` first), and each picture's time from when it is due
-  to its last piece ("EPLAY picture"). The figures are in `docs/DESIGN.md`.
+- `make test`: the decoder's C model against minimp3 within ISO 11172-4's limits; WAV and AIFF
+  against sox; tags and ReplayGain; web radio's parsing under AddressSanitizer, with its fuzz
+  corpus replayed (`make fuzz` runs the fuzzer).
+- `make dsptest`: `dsp/mp3.a56` on Hatari's DSP core against the model, bit for bit, gapless joins
+  and ReplayGain included.
+- `tests/hatari/play_test.py`: EPlay in Hatari on a stock Falcon and others, its sound recorded
+  and checked (pitch, gaps, length, level): files, playlists, folders, Shuffle, Repeat, gapless,
+  ReplayGain, the dialogs and the mini player.
+- `tests/hatari/stream_test.py`: web radio in Hatari from a station of its own: titles,
+  reconnecting, redirects, chunked answers, https, pictures, and the Gateway.
+- `tests/hatari/speed.py`: the family's speed rig, each action's longest stretch between event
+  calls; the figures are in `docs/DESIGN.md`.
+- `tests/hatari/docs_shots.py`: the pictures above.
 
 ## Licence
 
@@ -202,6 +141,7 @@ It includes, under their own licences (compatible with the GPL; see `NOTICES.TXT
 
 - the MP3 standard's Huffman codes and synthesis window as FFmpeg transcribes them
   (`data/`, GNU LGPL 2.1 or later);
+- BearSSL and Mozilla's root certificates, in `TLS.OVL` and `CACERT.PEM` (common's);
 - for the tests only, not in `EPLAY.PRG`: minimp3 by Lion (lieff), CC0 1.0.
 
 ---
