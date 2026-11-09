@@ -41,6 +41,11 @@ own pitch.
 
 ## What EPlay does
 
+- **Gapless.** One file follows the next without a break where their sound is the same (MP3s at
+  the same rate, or WAVs or AIFFs of the same format), as an album's live or mixed tracks need:
+  the next goes on in the same stream, and an MP3's encoder's own silence at the join (its delay
+  and padding, from LAME's header) is left out on the DSP. Where the DSP has no time to spare for
+  it (a 320 kbit/s file resampled, say), a few milliseconds of that silence may still be heard.
 - **Steady sound.** The music is fed by an interrupt from a queue of seconds to minutes held in
   memory, so menus, dialogs, the file selector and other programs don't break it up. An
   accelerated Falcon (a DFB1 at 50 MHz) plays exactly as a stock one.

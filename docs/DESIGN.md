@@ -1741,3 +1741,42 @@ From the list put to Erez:
    and AAC (DSP projects; AAC first, for web radio on a Direct connection: Erez, 8 Nov 2026);
 6. working with the family: a "now playing" message to the other AERA programs, remote control
    from a phone through the gateway, scrobbling (Last.fm) through the gateway.
+
+### 8a, gapless (9 Nov 2026)
+
+**Step 1, 1.10: the next file follows on.** Before, a file's end tore everything down (feed, host
+port, the DMA or SSI, the DSP unlocked) and the next opened from nothing: the DSP's program sent
+again (2/3 s), the stream begun again. Now, as a file's last bytes go into the queue
+(`play_wants_next`, 32 KB or more still to play), main.c chooses the next row as at an end
+(Shuffle, Repeat: once) and `play_chain` opens it there when its sound is the same: an MP3 at the
+same rate (its ID3v2 and Xing frame passed, an ID3v1 left out), or a WAV or AIFF of the same
+format. Its bytes follow on in the queue (`chain_q`); the tick begins the parser again there and
+notes the DSP frame of its first packet; when that is heard (the DSP's frames, or the DMA's
+samples, past it) it is what plays: name, tags, length, the time from 0, the list's row, its album
+art unpacked by the 68030 (the DSP plays). Otherwise it opens at the end, as before. Not for a
+station or XSTREAM. play_test `gapless` (two WAVs of one tone: 6.005 s, not a 5 ms block
+without sound; Falcon-4, TT, STE).
+
+**Step 2, 1.11: the join's silence left out on the DSP.** LAME's tag (`mp3_info_lame`, after the
+Xing fields; test_info: lame's files of 6 s give 264,600 samples exactly) gives the encoder's
+delay and padding: a decoder's output has the delay plus 529 before the sound and the padding less
+529 after it. At a join, `P + D` samples are left out from the old file's last frame (`P - 529`
+before its end) or the new file's first. `PK_DROP` carries it (flags bits 12-22 the count, word 1's
+bits 11-21 where). On the DSP:
+
+- streaming at the file's own rate now goes into the resampler's ring with a copy (`ringout`),
+  not the 1152-word halves, so a granule may give fewer outputs; late granules counted on the ring
+  for every stream. Bit for bit the same (stream.c's comparison, below);
+- `ringout` leaves the drop's samples out; `rsslot` moves the resampler's position past it;
+- the drop is decoding without output, which spends the SSI's lead (the ring holds about 1,000
+  samples ahead at most): `dskip` makes neither the synthesis filter nor outputs for a slot 16 or
+  more slots before the drop's end (17 resampled), the first kept sample needing only the
+  filter's window; `dropchk` keeps 512 words of lead, and without it the rest of the drop is
+  played (its silence) rather than the ring's old samples again.
+
+tests/dspmp3/stream.c now compares what the SSI sends, word for word, with the model's decoding
+of the same packets (`mp3_drop_set`, `mp3_copy_run`, the resampler's drop): 65 streams in `make
+dsptest`. A 2,047-sample drop on a 192 kbit/s file resampled at the stock DSP's full load runs out
+of lead and is partly played. play_test `gaplessmp3` (two LAME halves of one tone, resampled to
+49,170 Hz on Falcon-4): 6.005 s of sound, not a 5 ms block without it.
+
