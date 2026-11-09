@@ -84,6 +84,19 @@ long mp3_info_frames(const unsigned char *f, const MP3HDR *h, int *vbr);
    256ths of the file's frames' bytes; 1, or 0 when it has none */
 int mp3_info_toc(const unsigned char *f, const MP3HDR *h, unsigned char *toc);
 
+/* LAME's tag, after the Xing or Info frame's own fields (ffmpeg's encoders
+   write it too): the encoder's delay at the start and its padding at the
+   end, in samples (gapless: the file's own sound is the frames' samples
+   less both, past the decoder's 529); its ReplayGain fields as written. 1
+   with l filled, 0 if the frame has none */
+typedef struct {
+	char encoder[10];	/* "LAME3.100", "Lavc61.3." */
+	int delay, padding;	/* samples */
+	int radio_gain;		/* the track gain's 16 bits as written (0: none) */
+	long peak;		/* the peak, 32-bit float's bits (0: none) */
+} MP3LAME;
+int mp3_info_lame(const unsigned char *f, const MP3HDR *h, MP3LAME *l);
+
 /* the frame at f, of h->length bytes, as a packet: its words, or -1 if the
  * frame is bad (the reservoir is kept) */
 int mp3_packet(MP3PARSE *ps, const MP3HDR *h, const unsigned char *f, unsigned long *pk);

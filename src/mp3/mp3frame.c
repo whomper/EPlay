@@ -322,3 +322,40 @@ long mp3_info_frames(const unsigned char *f, const MP3HDR *h, int *vbr)
 	}
 	return 0;
 }
+
+int mp3_info_lame(const unsigned char *f, const MP3HDR *h, MP3LAME *l)
+{
+	int side = h->version == 1 ? (h->channels == 2 ? 32 : 17) : (h->channels == 2 ? 17 : 9);
+	int k;
+	memset(l, 0, sizeof(*l));
+	for (k = 0; k < 2; k++) {
+		const unsigned char *x = f + 4 + side + (k && h->crc ? 2 : 0), *t;
+		unsigned long fl;
+		long at;
+		int i;
+		if (k && !h->crc)
+			break;
+		if (h->length < (x - f) + 8 || (memcmp(x, "Xing", 4) && memcmp(x, "Info", 4)))
+			continue;
+		fl = be32(x + 4);
+		at = 8 + ((fl & 1) ? 4 : 0) + ((fl & 2) ? 4 : 0) + ((fl & 4) ? 100 : 0) + ((fl & 8) ? 4 : 0);
+		if (h->length < (x - f) + at + 24)
+			return 0;
+		t = x + at;
+		/* the encoder's name: letters and digits (LAME3.100, Lavc61.3) */
+		for (i = 0; i < 4; i++)
+			if (!((t[i] >= 'A' && t[i] <= 'Z') || (t[i] >= 'a' && t[i] <= 'z')))
+				return 0;
+		memcpy(l->encoder, t, 9);
+		l->encoder[9] = 0;
+		for (i = 0; i < 9; i++)
+			if ((unsigned char)l->encoder[i] < 32 || (unsigned char)l->encoder[i] > 126)
+				l->encoder[i] = 0;
+		l->delay = (int)(t[21] << 4 | t[22] >> 4);
+		l->padding = (int)((t[22] & 15) << 8 | t[23]);
+		l->radio_gain = (int)(t[15] << 8 | t[16]);	/* (ReplayGain's track gain, as LAME writes it) */
+		l->peak = (long)be32(t + 11);
+		return 1;
+	}
+	return 0;
+}

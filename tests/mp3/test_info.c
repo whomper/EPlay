@@ -8,7 +8,10 @@
  * bit rate made an 8-minute file 22:10, Erez's Falcon, 31 Oct 2026).
  * And a Xing frame's table (mp3_info_toc), which going to a place in a VBR
  * file follows: each per cent's place, from the Xing frame on, within
- * 2/256 and a frame of where its frame begins.
+ * 2/256 and a frame of where its frame begins. And LAME's tag
+ * (mp3_info_lame): its delay and padding give the file's own samples,
+ * the frames' less both: 6 s at 44.1 kHz for the files lame made of the
+ * 6 s test sounds (gapless, phase 8a).
  */
 #include <stdio.h>
 #include <string.h>
@@ -23,7 +26,8 @@ int main(int argc, char **argv)
 	for (a = 1; a < argc; a++) {
 		FILE *f = fopen(argv[a], "rb");
 		long n, off = 0, frames = 0, info = -1;
-		int vbr = 0, has, toc_ok = -1;
+		int vbr = 0, has, toc_ok = -1, lame = -1;
+		MP3LAME lt;
 		unsigned char toc[100];
 		MP3HDR h, h0;
 		if (!f) {
@@ -40,6 +44,7 @@ int main(int argc, char **argv)
 					info = mp3_info_frames(b + off, &h, &vbr);
 					h0 = h;
 					toc_ok = mp3_info_toc(b + off, &h, toc);
+					lame = mp3_info_lame(b + off, &h, &lt);
 				}
 				if (frames < (long)(sizeof(at) / sizeof(at[0])))
 					at[frames] = off;
@@ -76,6 +81,20 @@ int main(int argc, char **argv)
 			bad++;
 		}
 		(void)h0;
+		if (strstr(argv[a], "/xingvbr") || strstr(argv[a], "/infocbr") || strstr(argv[a], "/crcvbr")) {
+			/* lame's from the 6 s sounds at 44.1 kHz: their samples whole */
+			long own = (frames - 1) * h0.samples - lt.delay - lt.padding;
+			if (lame != 1 || own != 6L * 44100) {
+				printf("%-32s LAME's tag %s: delay %d, padding %d: %ld samples, not %ld\n", argv[a],
+				       lame == 1 ? lt.encoder : "missing", lt.delay, lt.padding, own, 6L * 44100);
+				bad++;
+			} else
+				printf("%-32s LAME's tag (%s): delay %d, padding %d: %ld samples, its own\n", argv[a],
+				       lt.encoder, lt.delay, lt.padding, own);
+		} else if (!has && lame == 1) {
+			printf("%-32s a LAME tag where there is no header frame\n", argv[a]);
+			bad++;
+		}
 		if (has ? info != frames - 1 : info != 0) {
 			printf("%-32s %ld frames, the header says %ld: wrong\n", argv[a], frames, info);
 			bad++;
