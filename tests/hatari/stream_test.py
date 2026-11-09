@@ -74,7 +74,8 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit"]
+CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
+         "find"]
 METAINT = 8192
 KBPS = 128
 
@@ -140,7 +141,16 @@ class Station(threading.Thread):
                            "Content-Length: 0\r\n\r\n" % self.tls[0].getsockname()[1]).encode())
                 return
             if path.startswith("/json/stations/"):
-                # (radio-browser.info's stand-in: this station by its address)
+                # (radio-browser.info's stand-in: Find station's search, this station
+                # and one more; else this station by its address)
+                if path.startswith("/json/stations/search?") and "hidebroken" in path:
+                    self.log.append("search asked: " + path)
+                    body = ('[{"name":"The rig\'s station","url_resolved":"http://127.0.0.1:%d/live",'
+                            '"countrycode":"DE","codec":"MP3","bitrate":128},'
+                            '{"name":"Another station","url_resolved":"http://127.0.0.1:%d/live",'
+                            '"countrycode":"NL","codec":"AAC","bitrate":64}]' % (self.port, self.port))
+                    c.sendall(("HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n" + body).encode())
+                    return
                 body = ('[{"name": "The rig\'s station", "favicon": "http://127.0.0.1:%d/logo.png"}]' % self.port
                         if "byurl" in path else "[]").encode()
                 c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n" + body)
@@ -384,7 +394,7 @@ def run(work, case, spec):
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=0x00c000:s=128x128",
                         "-frames:v", "1", png], check=True)
         st.logo = open(png, "rb").read()
-    if case in ("gateway", "gwcover", "logo"):
+    if case in ("gateway", "gwcover", "logo", "find"):
         # the Gateway's radio service, EPlay's own (radio/), on this computer
         sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
         import radiogate
@@ -394,7 +404,7 @@ def run(work, case, spec):
         threading.Thread(target=gate.serve_forever, daemon=True).start()
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
             fh.write("FALCON=%d\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\n\r\n" % (case == "logo", gate.server_address[1]))
-        if case == "logo":
+        if case in ("logo", "find"):
             radiogate.Config.rb_api = ["http://127.0.0.1:%d" % st.port]
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
@@ -408,7 +418,7 @@ def run(work, case, spec):
                            "https://radio.test:%d/live" % st.tls[0].getsockname()[1])
         url = "https://radio.test:%d/musickoeln" % nport
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
-        fh.write(("" if case in ("url", "urledit") else url) + "\r\n")
+        fh.write(("" if case in ("url", "urledit", "find") else url) + "\r\n")
     m = machines.Machine(spec, hd)
     net = m.network(40000)
     margs = m.args()                    # (makes Hatari's home and its config folder)
@@ -423,7 +433,7 @@ def run(work, case, spec):
                                           "--statusbar", "no", "--auto", "C:\\LAUNCH.PRG"]
     env = m.env()
     x = None
-    if case in ("url", "urledit"):
+    if case in ("url", "urledit", "find"):
         # (a screen to type into: xdotool, as common's speed rig)
         disp = ":%d" % (60 + os.getpid() % 30)
         x = machines.xvfb(disp)
@@ -435,6 +445,37 @@ def run(work, case, spec):
         if case == "aac":
             got = wait_line(log, said, 90)
             return bool(got) and "AAC" in got and "Gateway" in got, m.describe(), got or "nothing said"
+        if case == "find":
+            # File > Find station... by the mouse (no key), Return searches, the
+            # first station (selected) played with Play
+            def xdo(*a):
+                return subprocess.run(["xdotool", *a], env=env, capture_output=True, text=True).stdout
+            wait_line(log, lambda l: l.startswith("EPLAY window"), 60)
+            time.sleep(4)
+            win = ""
+            for _ in range(50):
+                win = (xdo("search", "--name", "Hatari") or xdo("search", "--class", "hatari")).split()
+                if win:
+                    break
+                time.sleep(0.2)
+            fx, fy = [int(v) for v in os.environ.get("FIND_AT", "96,8,96,59,0,0").split(",")[:4]], None
+            xdo("mousemove", "--window", win[0], str(fx[0]), str(fx[1]))
+            xdo("click", "1")
+            time.sleep(1)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            xdo("mousemove", "--window", win[0], str(fx[2]), str(fx[3]))
+            time.sleep(0.5)
+            xdo("click", "1")
+            time.sleep(2)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            xdo("key", "Return")
+            wait_line(log, lambda l: "Find station:" in l, 60)
+            time.sleep(2)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            px, py = [int(v) for v in os.environ.get("FIND_PLAY", "512,392").split(",")]
+            xdo("mousemove", "--window", win[0], str(px), str(py))
+            time.sleep(0.5)
+            xdo("click", "1")
         if case in ("url", "urledit"):
             def xdo(*a):
                 return subprocess.run(["xdotool", *a], env=env, capture_output=True, text=True).stdout
@@ -489,6 +530,11 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "drop":
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
+        elif case == "find":
+            found = [l for l in text.split("\n") if "Find station:" in l]
+            note += "; " + " | ".join(l[4:] for l in found)
+            ok = ok and gaps == 0 and any("2 stations" in l for l in found) and \
+                any(l.startswith("search asked") for l in st.log)
         elif case in ("gateway", "https", "nginx"):
             ok = ok and gaps == 0 and len(titles) >= (1 if case == "nginx" else 2)
             if case in ("https", "nginx"):

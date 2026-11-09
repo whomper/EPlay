@@ -66,5 +66,8 @@ char (*settings_urls(void))[URL_MAX];
 void settings_url_used(const char *url);
 const char *settings_url_typed(void);
 void settings_set_url_typed(const char *t);
+/* Find station's last search (FIND= "genre,country,language,sort,words") */
+const char *settings_find(void);
+void settings_set_find(const char *f);
 
 #endif

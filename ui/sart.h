@@ -17,5 +17,10 @@ void sart_station(const char *url, const char *name);
 /* from the main loop: the picture wanted fetched and handed to art.c (its
    art_step's unpack it); 1 when the art square should be drawn again */
 int sart_step(void);
+/* a document (Find station's answers too): of the type ("image/", "" any),
+   up to max bytes, redirects followed. 1 with it in *data (malloc'ed: the
+   caller frees it) and *len, 0 with why */
+int sart_fetch(const char *url, const char *accept, const char *type, long max, unsigned char **data, long *len,
+	       char *why, int wn);
 
 #endif

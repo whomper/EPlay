@@ -1705,6 +1705,8 @@ void play_start(void)
 	}
 }
 
+static int give_due;
+
 void play_stop(void)
 {
 	paused = 0;
@@ -1724,7 +1726,19 @@ void play_stop(void)
 	close_file();
 	free_queue();
 	state = PS_IDLE;
-	snd_give();			/* (the sound system for other programs while none plays) */
+	give_due = 1;			/* (the sound system given back at the turn's end, if
+					   nothing plays by then: play_idle_give) */
+}
+
+/* the end of a turn (main.c): the sound system for other programs while
+   nothing plays; kept from one file to the next (a Stop and an open in the
+   same turn: no Unlocksnd and Locksnd between) */
+void play_idle_give(void)
+{
+	if (give_due && state != PS_PLAYING && !play_is_open()) {
+		snd_give();
+		give_due = 0;
+	}
 }
 
 int play_state(void)

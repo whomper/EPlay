@@ -52,6 +52,7 @@ static char gate[64];
 static long gateport = 8580;	/* (the radio service's port: Erez, 8 Nov 2026) */
 static char urls[URL_RECENT][URL_MAX];
 static char url_typed[URL_MAX];	/* Open URL's field as last typed (URLTYPED=) */
+static char find[96];			/* Find station's last search (FIND=) */
 static int urls_dirty, gate_dirty;
 
 #define INF_MAX 8192		/* (ten stations' addresses: up to 2.5 KB) */
@@ -144,6 +145,7 @@ void settings_load(void)
 		inf_get(inf, inf_n, k, urls[i], URL_MAX);
 	}
 	inf_get(inf, inf_n, "URLTYPED", url_typed, URL_MAX);
+	inf_get(inf, inf_n, "FIND", find, sizeof(find));
 	if (inf_get(inf, inf_n, "REPLAYGAIN", v, sizeof(v))) {
 		int i;
 		for (i = 0; i < NRG; i++)
@@ -252,9 +254,11 @@ static void save_in(void)
 		char *a = inf3, *b = inf2, *t, ps[8];
 		int i;
 		snprintf(ps, sizeof(ps), "%ld", gateport);
-		for (i = -4; i < URL_RECENT && n >= 0; i++) {
+		for (i = -5; i < URL_RECENT && n >= 0; i++) {
 			char k[12];
-			if (i == -4)
+			if (i == -5)
+				n = inf_set(a, n, "FIND", find, 0, b, INF_MAX);
+			else if (i == -4)
 				n = inf_set(a, n, "URLTYPED", url_typed, 0, b, INF_MAX);
 			else if (i == -3)
 				n = inf_set(a, n, "FALCON", gateway ? "0" : "1", cnote, b, INF_MAX);
@@ -581,6 +585,20 @@ long settings_gateport(void)
 char (*settings_urls(void))[URL_MAX]
 {
 	return urls;
+}
+
+/* Find station's last search: "genre,country,language,sort,words" */
+const char *settings_find(void)
+{
+	return find;
+}
+
+void settings_set_find(const char *f)
+{
+	if (strlen(f) >= sizeof(find) || !strcmp(find, f))
+		return;
+	snprintf(find, sizeof(find), "%s", f);
+	urls_dirty = 1;
 }
 
 /* Open URL's field: what was last typed in it, given back next time */

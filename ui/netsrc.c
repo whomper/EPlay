@@ -328,10 +328,9 @@ static void tls_paths(void)
 	elog_init();
 }
 
-static int open_url(const char *url, char *err, int n)
+/* the network ready (STinG or MiNTnet, TLS.OVL's paths): 1, or 0 with err */
+int ns_net(char *err, int n)
 {
-	int hops, gw = settings_gateway();
-	err[0] = 0;
 	tls_paths();
 	if (net_ok < 0)
 		net_ok = net_init();
@@ -339,6 +338,20 @@ static int open_url(const char *url, char *err, int n)
 		snprintf(err, (size_t)n, "There's no network: EPlay needs STinG or MiNTnet.");
 		return 0;
 	}
+	return 1;
+}
+
+int ns_tls(void)
+{
+	return tls_available;
+}
+
+static int open_url(const char *url, char *err, int n)
+{
+	int hops, gw = settings_gateway();
+	err[0] = 0;
+	if (!ns_net(err, n))
+		return 0;
 	if (gw) {
 		if (!via_gateway(url, url_now, sizeof(url_now), err, n))
 			return 0;

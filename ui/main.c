@@ -17,6 +17,8 @@
 #include "ui.h"
 #include "iconify.h"
 #include "term.h"
+#include "finddlg.h"
+#include "stsearch.h"
 #include "mbar.h"
 #include "alert.h"
 #include "av.h"
@@ -46,7 +48,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -55,6 +57,7 @@ static const MBAR_ITEM m_desk[] = {
 static const MBAR_ITEM m_file[] = {
 	{ "Open...", "^O", C_OPEN },
 	{ "Open URL...", "\x01^O", C_URL },	/* (a station: phase 7; ^U is the family's Close) */
+	{ "Find station...", 0, C_FIND },	/* (radio-browser.info's: Erez, 9 Nov 2026) */
 	{ "Save playlist...", "^S", C_SAVE },
 	{ "-", 0, 0 },
 	{ "Quit", "^Q", C_QUIT },
@@ -1346,6 +1349,14 @@ static void save_playlist(void)
 	}
 }
 
+/* Find station's Add: the station in the list, under its name */
+static void find_add(const char *url, const char *name)
+{
+	int i = list_add(url);
+	if (i >= 0)
+		list_set_title(i, name);
+}
+
 static void command(int c)
 {
 	if (!can(c))
@@ -1378,6 +1389,23 @@ static void command(int c)
 			redraw(0, BP_LIST);
 			if (i >= 0)
 				play_index(i);
+		}
+		break;
+	}
+	case C_FIND: {
+		/* File > Find station...: one played, others added meanwhile */
+		static char u[SS_URL], name[64];
+		if (find_dialog(u, sizeof(u), name, sizeof(name), find_add)) {
+			int i = list_add(u);
+			if (i >= 0)
+				list_set_title(i, name);
+			sliders();
+			redraw(0, BP_LIST);
+			if (i >= 0)
+				play_index(i);
+		} else {
+			sliders();
+			redraw(0, BP_LIST);
 		}
 		break;
 	}
@@ -2008,6 +2036,7 @@ static void turn(int nested)
 	   and Next's rows would wait for them) */
 	step(playing && !piece && !open_due && !next_due);
 	menu_update();			/* (greyed as things are now: MENUS 1.3) */
+	play_idle_give();		/* (the sound system for others while nothing plays) */
 }
 
 #ifdef EPLAY_ST

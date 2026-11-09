@@ -78,7 +78,33 @@ static void idle(void)
 
 /* one GET: 1 with the bytes in *data (*len), 2 with a redirect's address
    in u, 0 with why */
+static int get_as(char *u, unsigned char **data, long *len, char *why, int wn, const char *accept,
+		  const char *type, long max);
+
 static int get(char *u, unsigned char **data, long *len, char *why, int wn)
+{
+	return get_as(u, data, len, why, wn, "image/jpeg, image/png", "image/", PIC_MAX);
+}
+
+/* a document of the type (its prefix: "image/", "" any), up to max bytes,
+   redirects followed (five): 1 with it (malloc'ed), 0 with why (sart.h) */
+int sart_fetch(const char *url, const char *accept, const char *type, long max, unsigned char **data, long *len,
+	       char *why, int wn)
+{
+	char u[ICY_URL + 512];
+	int hops, r = 0;
+	snprintf(u, sizeof(u), "%s", url);
+	for (hops = 0; hops < 6; hops++) {
+		r = get_as(u, data, len, why, wn, accept, type, max);
+		if (r != 2)
+			return r;
+	}
+	snprintf(why, (size_t)wn, "sent from one address to another too often");
+	return 0;
+}
+
+static int get_as(char *u, unsigned char **data, long *len, char *why, int wn, const char *accept,
+		  const char *type, long max)
 {
 	SURL s;
 	SHEAD hd;
@@ -97,8 +123,8 @@ static int get(char *u, unsigned char **data, long *len, char *why, int wn)
 		return 0;
 	c->timeout_ms = 10000;
 	snprintf(req, sizeof(req),
-		 "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: EPlay/%s (Atari)\r\nAccept: image/jpeg, image/png\r\n"
-		 "Connection: close\r\n\r\n", s.path, s.host, app_version);
+		 "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: EPlay/%s (Atari)\r\nAccept: %s\r\n"
+		 "Connection: close\r\n\r\n", s.path, s.host, app_version, accept);
 	if (!conn_write(c, req, (long)strlen(req))) {
 		snprintf(why, (size_t)wn, "the request not sent");
 		conn_close(c);
@@ -137,8 +163,8 @@ static int get(char *u, unsigned char **data, long *len, char *why, int wn)
 		conn_close(c);
 		return 0;
 	}
-	if (hd.type[0] && strncmp(hd.type, "image/", 6)) {
-		snprintf(why, (size_t)wn, "not a picture (%s)", hd.type);
+	if (type[0] && hd.type[0] && strncmp(hd.type, type, strlen(type))) {
+		snprintf(why, (size_t)wn, "not what was asked for (%s)", hd.type);
 		conn_close(c);
 		return 0;
 	}
@@ -158,8 +184,8 @@ static int get(char *u, unsigned char **data, long *len, char *why, int wn)
 		long r;
 		if (n + 4096 > cap) {
 			unsigned char *nb;
-			if (cap >= PIC_MAX) {
-				snprintf(why, (size_t)wn, "over %ld KB, left out", PIC_MAX / 1024);
+			if (cap >= max) {
+				snprintf(why, (size_t)wn, "over %ld KB, left out", max / 1024);
 				free(b);
 				conn_close(c);
 				return 0;

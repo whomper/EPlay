@@ -837,12 +837,8 @@ int snd_init(const char **why)
 	/* the sound system only while EPlay plays (snd_take, snd_give: a
 	   tester, 9 Nov 2026, found it held while nothing played, so no other
 	   player could have it): taken now for the clock's measure, given back */
-	if (snd_take()) {
-		Supexec(read_gpio);
-		snd_ext_rate = measure_ext();
-		ext_measured = 1;
+	if (snd_take())		/* (it measures the clock, once) */
 		snd_give();
-	}
 	return 1;
 }
 

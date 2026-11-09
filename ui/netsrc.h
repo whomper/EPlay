@@ -27,6 +27,10 @@ long ns_read(void *buf, long max, int wait);
 int ns_reopen(char *err, int n);
 
 void ns_close(void);
+/* the network ready for a request of EPlay's own (Find station): 1, or 0
+   with err; ns_tls 1 where https can be asked directly (TLS.OVL) */
+int ns_net(char *err, int n);
+int ns_tls(void);
 int ns_is_open(void);
 
 /* the station's name (icy-name, else the host), its kbit/s (0: not given),

@@ -67,6 +67,8 @@ long play_len_ms(void);
 void play_set_volume(int v);
 /* ReplayGain's mode (Settings) or Shuffle changed: the gain again, gliding */
 void play_rgain_changed(void);
+/* the turn's end: the sound system given back while nothing plays */
+void play_idle_give(void);
 int play_volume(void);		/* how long it is (an MP3's: from its Xing or VBRI frame, else its first frame's bit rate) */
 
 #endif

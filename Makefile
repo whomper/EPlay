@@ -42,7 +42,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 stsearch finddlg dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -177,6 +177,9 @@ $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_order.c src/order.c
 $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/pcm/test_pcm.c src/pcm.c
+$(B)/test_stsearch: tests/stsearch/test_stsearch.c src/stsearch.c src/stsearch.h common/src/charset.c common/src/bidi.c
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/stsearch/test_stsearch.c \
+		src/stsearch.c common/src/charset.c common/src/bidi.c
 $(B)/test_stream: tests/stream/test_stream.c src/stream.c src/stream.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/stream/test_stream.c src/stream.c
 # the stream parser's fuzz target (the guidelines, 7.1): make fuzz runs
@@ -190,9 +193,10 @@ fuzz: tests/fuzz/fuzz_stream.c src/stream.c src/stream.h | $(B)
 	mkdir -p $(B)/fuzzcorpus
 	./$(B)/fuzz_stream -max_total_time=$(FUZZ_S) -artifact_prefix=tests/fuzz/found/ $(B)/fuzzcorpus tests/fuzz/seeds
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/fuzz_replay
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/fuzz_replay
 	./$(B)/test_inf
 	./$(B)/test_stream
+	./$(B)/test_stsearch
 	./$(B)/fuzz_replay tests/fuzz/seeds/* tests/fuzz/found/*
 	./$(B)/test_gain
 	./$(B)/test_m3u
