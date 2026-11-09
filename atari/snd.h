@@ -15,6 +15,11 @@
    or another program holds the sound system (Locksnd), with why in why */
 int snd_init(const char **why);
 void snd_exit(void);
+/* the sound system (Locksnd) while EPlay plays: 1, or 0 when another
+   program has it; snd_give puts the matrix back and lets it go */
+int snd_take(void);
+void snd_term(void);	/* (supervisor mode: term.c) */
+void snd_give(void);
 
 /* the external clock on the DSP port as the DMA measures it: 0 if none
    (the FDI's 44100 or 48000 Hz) */

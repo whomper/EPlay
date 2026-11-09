@@ -68,6 +68,22 @@ void hostirq_off(void)
 	}
 }
 
+static long spur_give(void);
+
+/* the host port's interrupt and the spurious one given back, from
+   supervisor mode (term.c) */
+void hostirq_term(void)
+{
+	if (on) {
+		give_back();
+		on = 0;
+	}
+	if (spur_on_) {
+		spur_give();
+		spur_on_ = 0;
+	}
+}
+
 /* vector 24, the spurious interrupt, answered by counting it (hirq_spur)
    while EPlay plays, and given back */
 static long spur_take(void)

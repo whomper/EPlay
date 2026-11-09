@@ -15,5 +15,6 @@
    slower where it is enough */
 void feed_on(void (*tick)(void), int hz);
 void feed_off(void);			/* given back as they were */
+void feed_term(void);			/* (the same, from supervisor mode: term.c) */
 
 #endif

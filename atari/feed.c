@@ -72,6 +72,16 @@ static long give_back(void)
 	return 0;
 }
 
+/* the tick taken away from supervisor mode (term.c: EPlay ending however
+   it ends, killed too) */
+void feed_term(void)
+{
+	if (on) {
+		give_back();
+		on = 0;
+	}
+}
+
 void feed_on(void (*tick)(void), int hz)
 {
 	if (on)

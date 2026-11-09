@@ -17,6 +17,7 @@
 extern volatile unsigned char hirq_want;
 void hostirq_on(void (*fn)(void));	/* (GEM's side) */
 void hostirq_off(void);
+void hostirq_term(void);	/* (supervisor mode: term.c) */
 
 /* vector 24 (a spurious interrupt) counted and let go while playing, in
    place of TOS's bombs; hirq_spur: how many */

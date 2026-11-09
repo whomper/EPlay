@@ -38,7 +38,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play prefs snd feed hostirq dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play prefs snd feed hostirq term dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -59,11 +59,16 @@ st: binary/eplayst.prg
 binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h | binary
 	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/st build/st/eplay.elf
 	python3 common/tools/oddaccess.py build/st/eplay.elf
-	python3 common/tools/elf2tos.py build/st/eplay.elf $@
+	PRGFLAGS=0x10 python3 common/tools/elf2tos.py build/st/eplay.elf $@
 .PHONY: st
 
+# PRGFLAGS 0x17: fast load, the program and its memory in TT RAM, and
+# under MiNT's memory protection Global: the sound's interrupts (the tick,
+# the host port's) run while other programs' are current, and reach
+# EPlay's code, data and buffers then (a tester on MiNT, 9 Nov 2026: with
+# 7, private, the Falcon halted as the music began)
 binary/eplay.prg: $(OBJDIR)/eplay.elf common/tools/elf2tos.py | binary
-	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+	PRGFLAGS=0x17 python3 common/tools/elf2tos.py $< $@
 
 VERSION_STR := $(shell cat VERSION)
 $(OBJDIR)/version.c: FORCE | $(OBJDIR)
@@ -133,10 +138,10 @@ prof: $(B)/mp3tab.h $(B)/mp3_prog.h
 # the STE's, for the speed rig on an STE (speed.py takes it there)
 profst: $(B)/mp3tab.h $(B)/mp3_prog.h
 	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/profst PROF=20 build/profst/eplay.elf
-	python3 common/tools/elf2tos.py build/profst/eplay.elf build/profst/eplay.prg
+	PRGFLAGS=0x10 python3 common/tools/elf2tos.py build/profst/eplay.elf build/profst/eplay.prg
 .PHONY: profst
 build/prof/eplay.prg: build/prof/eplay.elf common/tools/elf2tos.py
-	PRGFLAGS=7 python3 common/tools/elf2tos.py $< $@
+	PRGFLAGS=0x17 python3 common/tools/elf2tos.py $< $@
 
 HOSTCC  := cc
 HCFLAGS := -O2 -Wall -Wextra -DDSP_COUNT_LIMIT -I$(B) -Isrc/mp3 -Itests/mp3

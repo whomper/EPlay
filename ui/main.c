@@ -16,6 +16,7 @@
 #include "urldlg.h"
 #include "ui.h"
 #include "iconify.h"
+#include "term.h"
 #include "mbar.h"
 #include "alert.h"
 #include "av.h"
@@ -225,7 +226,9 @@ static void status(const char *s)
 static void status_again(void)
 {
 	info_set[0] = 0;
-	if (wh > 0 && !bar_mini && info[0]) {
+	if (!info[0])
+		strcpy(info, " ");	/* (set at once: XaAES drew garbage in an info line never set) */
+	if (wh > 0 && !bar_mini) {
 		strcpy(info_set, info);
 		wind_set_str(wh, WF_INFO, info_set);
 	}
@@ -1873,6 +1876,21 @@ static void message(short *msg)
 	}
 }
 
+/* the window drawn again under a dialog window (Settings, About, Open
+   URL in XaAES or MagiC): without it the AES's requests waited for the
+   dialog to close (a tester, 9 Nov 2026) */
+static void redraw_under(const short *m)
+{
+	GRECT r;
+	if (m[0] != WM_REDRAW || m[3] != wh)
+		return;
+	r.x = m[4];
+	r.y = m[5];
+	r.w = m[6];
+	r.h = m[7];
+	redraw(&r, BP_ALL);
+}
+
 /* a crash: the sound stopped and the matrix put back before EPlay goes */
 static void crash_quit(const char *what)
 {
@@ -2034,9 +2052,11 @@ int app_main(void)
 	bar_colours();
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
+	term_install();			/* (the sound's interrupts taken away however EPlay ends) */
 	pf_idle = busy_idle;		/* (Esc or Undo while a station connects: busy.h) */
 	sart_init(fetch_message);
 	crash_cleanup = crash_quit;
+	dlg_redraw_hook = redraw_under;
 	av_init("EPLAY|EPLAYST");	/* (the name the AES knows: EPLAYST.PRG on an STE) */
 	/* the VDI's ST RAM block taken now, not at the first draw that wants
 	   it: Erez's 0.12, DFB1X off, took it while the first file played,

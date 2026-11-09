@@ -1278,6 +1278,12 @@ int play_open(const char *path, char *err, int n)
 			     (long)(ms_now() - t0));
 		}
 	}
+	if (!snd_take()) {
+		snd_fdi_note[0] = 0;
+		snprintf(err, n, "Another program is using the sound.");
+		play_stop();
+		return 0;
+	}
 	/* Settings' Output, as it is at this Play (Erez, 2 Nov 2026): Auto and
 	   FDI put the FDI at the file's rate where they can; FDI then plays on
 	   its clock as it is, resampled; DSP leaves the FDI and its clock out */
@@ -1364,8 +1370,11 @@ int play_open(const char *path, char *err, int n)
 	rg_crossed = 0;
 	apply_volume();
 	pcm_gain_set(&gs, t_gain);	/* (a file starts at its volume: no glide) */
-	if (rg_now)
-		elog("ReplayGain: %+d.%d dB", rg_now * 3 / 2, (rg_now * 3 % 2 ? 5 : 0));
+	if (rg_now) {
+		/* (steps of 1.5 dB; common's printf has no %+d) */
+		int a = rg_now < 0 ? -rg_now : rg_now;
+		elog("ReplayGain: %c%d.%d dB", rg_now < 0 ? '-' : '+', a * 3 / 2, a * 3 % 2 ? 5 : 0);
+	}
 	play_nosig = 0;
 	if (snd_dma8 && out_rate != rate) {	/* (the TT's or STE's DMA, resampled by the 68030 or 68000) */
 		char fr[16];
@@ -1715,6 +1724,7 @@ void play_stop(void)
 	close_file();
 	free_queue();
 	state = PS_IDLE;
+	snd_give();			/* (the sound system for other programs while none plays) */
 }
 
 int play_state(void)

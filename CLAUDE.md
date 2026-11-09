@@ -91,7 +91,8 @@ accessory (Erez, 31 Oct 2026). The design, and the order of the work, are in `do
 read it first, and change it with the code when a decision changes.
 
 - **The sound hardware reads ST RAM only.** The ring the DMA plays is taken with `Mxalloc` mode 0
-  and checked; code and the rest of the data are in TT RAM (`PRGFLAGS=7`).
+  and checked; code and the rest of the data are in TT RAM, Global under MiNT's memory protection (`PRGFLAGS=0x17`:
+  the interrupts run while other programs are current).
 - **Every host-port word waits for its flag** (`HISR` TXDE/RXDF). Never time a transfer by the
   68030's speed: Erez's DFB1 runs it at 50 MHz.
 - **The sound is fed by interrupts from memory**; GEM only refills the buffers, in bgwork steps.

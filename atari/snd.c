@@ -51,7 +51,7 @@ static long x_setbuffer(short reg, void *beg, void *end)
 
 long snd_ext_rate;
 
-static int locked;
+static int locked, ext_measured;
 /* four stereo tracks a frame, the music in the first: with one, the DMA
    put the left channel in the DSP port's other six slots as well, heard on
    the Analog 8's channels 3 to 8 (Erez's lrtest.wav, 0.19). The other
@@ -804,6 +804,17 @@ void snd_dsp_off(void)
 	Supexec(put_regs);
 }
 
+/* the sound stopped and the matrix put back from supervisor mode, no
+   XBIOS (term.c: EPlay ending however it ends) */
+void snd_term(void)
+{
+	*(volatile unsigned char *)0xffff8901L = 0;	/* the DMA's play off */
+	if (snd_dma8)
+		return;
+	if (locked)
+		put_regs();
+}
+
 int snd_init(const char **why)
 {
 	long snd = get_cookie(0x5F534E44L);	/* _SND: bit 2 the codec, 4 the matrix */
@@ -822,16 +833,45 @@ int snd_init(const char **why)
 		Supexec(keep_regs8);
 		return 1;
 	}
-	if (Locksnd() != 1) {
-		*why = "Another program is using the sound.";
-		return 0;
+	snd_fdi = trap14_ww(140, 0xDD02) == 0x4711;	/* Sndstatus: the FDI driver's sign */
+	/* the sound system only while EPlay plays (snd_take, snd_give: a
+	   tester, 9 Nov 2026, found it held while nothing played, so no other
+	   player could have it): taken now for the clock's measure, given back */
+	if (snd_take()) {
+		Supexec(read_gpio);
+		snd_ext_rate = measure_ext();
+		ext_measured = 1;
+		snd_give();
 	}
+	return 1;
+}
+
+/* the sound system (Locksnd) for EPlay alone, the matrix as found kept to
+   put back: 1, or 0 when another program has it */
+int snd_take(void)
+{
+	if (snd_dma8 || locked)
+		return 1;
+	if (Locksnd() != 1)
+		return 0;
 	locked = 1;
 	Supexec(keep_regs);
-	snd_fdi = trap14_ww(140, 0xDD02) == 0x4711;	/* Sndstatus: the FDI driver's sign */
-	Supexec(read_gpio);
-	snd_ext_rate = measure_ext();
+	if (!ext_measured) {		/* (another program had it at the start) */
+		Supexec(read_gpio);
+		snd_ext_rate = measure_ext();
+		ext_measured = 1;
+	}
 	return 1;
+}
+
+/* the matrix as EPlay found it, and the sound system given back */
+void snd_give(void)
+{
+	if (snd_dma8 || !locked)
+		return;
+	Supexec(put_regs);
+	Unlocksnd();
+	locked = 0;
 }
 
 void snd_exit(void)
@@ -846,11 +886,7 @@ void snd_exit(void)
 		Gpio(2, snd_gpio_data);
 		snd_fdi_changed = 0;
 	}
-	if (locked) {
-		Supexec(put_regs);
-		Unlocksnd();
-		locked = 0;
-	}
+	snd_give();
 }
 
 /* Settings' Output (play.c sets them for each play): DSP leaves the
