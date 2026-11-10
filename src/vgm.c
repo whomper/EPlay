@@ -260,6 +260,16 @@ static void sn_shadow(VGMRUN *r, int v)
 		r->sn_period[ch] = (r->sn_period[ch] & 15) | ((v & 0x3f) << 4);
 }
 
+/* a YM2612 register: kept (a seek writes them again), and passed on */
+static void opn_write(VGMRUN *r, int port, int reg, int val)
+{
+	r->opn[port][reg & 0xff] = (unsigned char)val;
+	if (port == 0 && reg == 0x28)
+		r->opn_key[val & 7] = (unsigned char)val;
+	if (r->opn_fn)
+		r->opn_fn(r->u, port, reg, val);
+}
+
 /* the commands until one waits; 0 at the end */
 static int commands(VGMRUN *r)
 {
@@ -295,6 +305,17 @@ static int commands(VGMRUN *r)
 			sn_shadow(r, b[p + 1]);
 			if (r->sn_fn)
 				r->sn_fn(r->u, b[p + 1]);
+		} else if (c == 0x52 || c == 0x53) {
+			opn_write(r, c & 1, b[p + 1], b[p + 2]);
+		} else if (c == 0x67 && k >= 7) {
+			/* a data block: the YM2612's samples (type 0), the first kept */
+			if (b[p + 2] == 0 && !r->pcm_len) {
+				r->pcm_at = p + 7;
+				r->pcm_len = k - 7;
+			}
+		} else if (c == 0xe0) {
+			r->pcm_pos = (long)((unsigned long)b[p + 1] | (unsigned long)b[p + 2] << 8 |
+					    (unsigned long)b[p + 3] << 16 | (unsigned long)b[p + 4] << 24);
 		} else if (c == 0x61)
 			r->wait += (long)b[p + 1] | (long)b[p + 2] << 8;
 		else if (c == 0x62)
@@ -303,8 +324,12 @@ static int commands(VGMRUN *r)
 			r->wait += 882;
 		else if (c >= 0x70 && c <= 0x7f)
 			r->wait += (c & 15) + 1;
-		else if (c >= 0x80 && c <= 0x8f)
+		else if (c >= 0x80 && c <= 0x8f) {
+			/* the DAC: the data block's next sample, then the wait */
+			if (r->pcm_pos >= 0 && r->pcm_pos < r->pcm_len)
+				opn_write(r, 0, 0x2a, b[r->pcm_at + r->pcm_pos++]);
 			r->wait += c & 15;
+		}
 	}
 	return 1;
 }
@@ -353,6 +378,7 @@ void vgm_seek(VGMRUN *r, long to)
 {
 	VGM_AY ay = r->ay_fn;
 	VGM_SN sn = r->sn_fn;
+	VGM_OPN opn = r->opn_fn;
 	VGMHEAD h = r->h;
 	int att = r->att;
 	vgm_begin(r, r->b, r->n, &h, 0, 0, r->u);
@@ -369,6 +395,7 @@ void vgm_seek(VGMRUN *r, long to)
 	}
 	r->ay_fn = ay;
 	r->sn_fn = sn;
+	r->opn_fn = opn;
 	fade_to(r);
 	vgm_resend(r);
 }
@@ -388,6 +415,31 @@ void vgm_resend(VGMRUN *r)
 	if (r->ay_fn)
 		for (reg = 0; reg <= 13; reg++)
 			ay_write(r, reg, r->ay[reg]);
+	if (r->opn_fn && r->h.ym2612_clock) {
+		/* the YM2612: the channels' and operators' registers, the
+		   frequencies' high byte before the low, then the keys */
+		int port, reg, ch;
+		for (port = 0; port < 2; port++) {
+			for (reg = 0x30; reg < 0xa0; reg++)
+				r->opn_fn(r->u, port, reg, r->opn[port][reg]);
+			for (reg = 0xa4; reg < 0xa8; reg++) {
+				r->opn_fn(r->u, port, reg, r->opn[port][reg]);
+				r->opn_fn(r->u, port, reg - 4, r->opn[port][reg - 4]);
+			}
+			for (reg = 0xac; reg < 0xb0; reg++) {
+				r->opn_fn(r->u, port, reg, r->opn[port][reg]);
+				r->opn_fn(r->u, port, reg - 4, r->opn[port][reg - 4]);
+			}
+			for (reg = 0xb0; reg < 0xb8; reg++)
+				r->opn_fn(r->u, port, reg, r->opn[port][reg]);
+		}
+		r->opn_fn(r->u, 0, 0x22, r->opn[0][0x22]);
+		r->opn_fn(r->u, 0, 0x27, r->opn[0][0x27]);
+		r->opn_fn(r->u, 0, 0x2b, r->opn[0][0x2b]);
+		for (ch = 0; ch < 8; ch++)
+			if (ch != 3 && ch != 7)
+				r->opn_fn(r->u, 0, 0x28, r->opn_key[ch] ? r->opn_key[ch] : ch);
+	}
 	if (r->sn_fn && r->h.sn_clock) {
 		int ch;
 		for (ch = 0; ch < 3; ch++) {

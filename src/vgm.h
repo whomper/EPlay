@@ -52,6 +52,9 @@ long vgm_length(const VGMHEAD *h);
 
 typedef void (*VGM_AY)(void *u, int reg, int val);
 typedef void (*VGM_SN)(void *u, int val);
+/* the YM2612 (phase 10): a register of port 0 or 1 written; reg $2A of
+   port 0 is its DAC's sample (the drums), from the file's data block */
+typedef void (*VGM_OPN)(void *u, int port, int reg, int val);
 
 typedef struct {
 	const unsigned char *b;
@@ -69,6 +72,11 @@ typedef struct {
 	int att;		/* the AY's volumes this many steps (about 3 dB) down: 15 silent */
 	VGM_AY ay_fn;
 	VGM_SN sn_fn;
+	VGM_OPN opn_fn;		/* (set after vgm_begin; 0: the YM2612 passed over) */
+	unsigned char opn[2][256];	/* the YM2612's registers as written (for a seek) */
+	unsigned char opn_key[8];	/* each channel's key on/off byte ($28's), as written */
+	long pcm_at, pcm_len;	/* the data block of the YM2612's samples (type 0): in b, its bytes */
+	long pcm_pos;		/* the next of them (the 0x8n commands, 0xE0 sets it) */
 	void *u;
 } VGMRUN;
 
