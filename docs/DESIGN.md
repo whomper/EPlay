@@ -1834,3 +1834,22 @@ much of the VGM archive they open: the YM2612 (the Mega Drive, the largest share
 above), the YM2151 (arcade, X68000: heavier still), the OPN family (PC-88/98), OPL2/OPL3 (DOS:
 likely feasible), the NES and the Game Boy (cheap, as the SN76489 was). Nothing starts before he
 chooses.
+
+## A FireBee edition (Erez, 10 Nov 2026)
+
+Erez asked for one, "just like the EWeb plan". The hub's order (AERA-Atari's standards/PARKED.md):
+after the family rework and EWeb 1.0, EWeb first (it builds common's ColdFire layer: crt0, crash,
+inflate_fast, mont030, sting, nf, the FPU), then EPDF, then EPlay; nothing of the build before.
+What EPlay needs beyond common's layer:
+
+- **No DSP56001.** MP3 decoded on the ColdFire (264 MHz) from EPlay's C model of its DSP
+  decoder (`src/mp3/mp3dsp.c`, ISO full accuracy); its 64-bit arithmetic on the C path (the V4e
+  has no 64-bit `mulu.l`/`divu.l`), checked against the model's bit-exact tests under QEMU's
+  cfv4e once the layer exists. The SN76489 likewise on the ColdFire.
+- **The sound.** The FireBee's codec is a Cirrus Logic CS4299 (AC'97: Erez found it, 10 Nov
+  2026), not the Falcon's DMA sound, and no YM2149 is implied. Whether FireTOS gives Falcon XBIOS
+  sound calls over it (a ring to feed, its rates), an MFP Timer A, or a PSG at $FF8800 decides a
+  small port or a new audio driver (and a software AY for VGM). `FBPROBE.PRG` (1.16,
+  `tools/fbprobe`) asks the machine, for its tester through Erez.
+- **EPlay's own assembly:** `feed.S` (the tick), `hostirq.S` (the DSP's: not built), `term.c`'s
+  trap 13, `div64.c`'s 64-bit forms (the C path).
