@@ -1,0 +1,103 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; fm.a56 - a measurement, not a player (phase 9, step 3: can the YM2612 run
+; on the Falcon's DSP?). Each output sample does what the YM2612 does in
+; one: for each of its 6 voices, 4 operators in a chain (algorithm 0, the
+; heaviest: each operator modulated by the one before), each its phase on
+; by its step, its sine looked up at phase plus the modulation (a table of
+; 1,024 in external Y), its envelope a step on and held at its ends, the
+; output its sine times its level; the voice's last operator added to the
+; sum. The 68030 says the samples (a word); the program answers 1, makes
+; them, then answers 2: sim.c counts the cycles between.
+
+PBC	equ	$ffe0
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+HTX	equ	$ffeb
+BCR	equ	$fffe
+
+OPS	equ	$00		; X: 24 operators, 5 words each: phase, step, level, env step, out
+STAB	equ	$1000		; Y: the sine table, 1,024 words (external)
+
+	org	p:$0
+	jmp	start
+
+	org	p:$40
+start	movep	#1,x:PBC
+	movep	#0,x:BCR
+	ori	#3,mr
+	movec	#$ffff,m0
+	movec	#$ffff,m1
+	movec	#$ffff,m4
+	; the operators: steps, levels, envelope steps (any values: their time is the same)
+	move	#OPS,r0
+	move	#>$012345,x0
+	move	#>$400000,x1
+	move	#>$000100,y0
+	do	#24,io
+	move	#0,a
+	move	a,x:(r0)+
+	move	x0,x:(r0)+
+	move	x1,x:(r0)+
+	move	y0,x:(r0)+
+	move	a,x:(r0)+
+io
+	; the table: a ramp (its values don't change the time)
+	move	#STAB,r4
+	clr	a
+	move	#>$002000,x0
+	do	#1024,it
+	add	x0,a
+	move	a1,y:(r4)+
+it
+	move	#STAB,r4
+	move	#>$000200,y1		; 2^-14: the phase's top 10 bits by a multiply
+	move	#>$3ff,x0
+	move	x0,x:$7f		; (the mask)
+hw	jclr	#0,x:HSR,hw
+	movep	x:HRX,x0		; the samples
+	move	x0,x:$7e
+hs	jclr	#1,x:HSR,hs
+	movep	#1,x:HTX
+	move	x:$7e,x0
+	do	x0,smp
+	jsr	sample
+	nop
+smp
+hd	jclr	#1,x:HSR,hd
+	movep	#2,x:HTX
+halt	jmp	halt
+
+; one sample: b the sum of the 6 voices
+sample	clr	b
+	move	#OPS,r0
+	do	#6,voice
+	clr	a			; (the first operator's modulation: none)
+	move	a,x1
+	do	#4,oper
+	move	r0,r1			; (the operator's first word: what is kept)
+	move	x:(r0)+,a		; phase
+	move	x:(r0)+,x0		; step
+	add	x0,a	x:(r0)+,y0	; phase on; y0 = level
+	move	a1,x:(r1)+		; (kept)
+	add	x1,a			; + the modulation
+	move	a1,x0
+	mpy	x0,y1,a			; >> 14: the index in a1
+	move	x:$7f,x0
+	and	x0,a	(r1)+
+	move	a1,n4
+	move	x:(r0)+,a		; the envelope's step
+	add	y0,a			; the level on by it (each sample, as the
+	move	#>$7fff00,x0		; chip's attack, decay or release)
+	cmp	x0,a
+	tgt	x0,a			; held at full
+	move	a1,x:(r1)
+	move	y:(r4+n4),x0		; the sine
+	mpy	x0,y0,a			; times the level
+	move	a1,x1			; the next operator's modulation
+	move	a1,x:(r0)+		; its out
+oper
+	add	x1,b			; the voice's last
+voice
+	rts
