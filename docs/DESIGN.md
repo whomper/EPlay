@@ -1900,6 +1900,7 @@ What EPlay needs beyond common's layer:
     matrix's and the codec's $FFFF, the DSP's port a bus error: no Falcon sound hardware at its
     addresses. So EPlay 1.18 takes a FireBee for an STE (bit 1 without bit 4) and plays
     silently into registers that aren't there.
+    No "not supported yet" message meanwhile (Erez, 10 Nov 2026: it will be supported soon).
   - The XBIOS sound calls answer: `Locksnd` 1, `Sndstatus` 0, the attenuations 32 and gains
     240, `Buffptr` 0; `Soundcmd(4, -1)` 439 is no ADDERIN a Falcon gives. The sound is the
     XBIOS's (GSXB's over the AC'97), not the registers': the edition feeds a ring through
