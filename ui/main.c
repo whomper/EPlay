@@ -670,7 +670,7 @@ static void select_range(int i)
 
 /* the row playing selected, as it was when one row at most is: a
    selection of several is left as it is */
-static void select_follow(int i)
+static void select_follow(int i, int drawn)
 {
 	int old = list_sel;
 	if (list_nsel > 1)
@@ -678,8 +678,8 @@ static void select_follow(int i)
 	list_select_none();
 	list_select(i, 1);
 	list_sel = i;
-	if (old != i)
-		row_redraw(old);
+	if (old != i && old != drawn)
+		row_redraw(old);	/* (drawn: a row the caller draws again anyway) */
 }
 
 /* the next (or the one before) from cur that EPlay can play here: rows
@@ -708,7 +708,7 @@ static void play_index(int i)
 	if (!e)
 		return;
 	list_cur = i;
-	select_follow(i);
+	select_follow(i, old);
 	snprintf(file, sizeof(file), "%s", e->path);
 	show_row(i);
 	row_redraw(old);
@@ -1689,7 +1689,7 @@ static void step(int playing)
 		if (e) {
 			order_played(&list_order, i);
 			list_cur = i;
-			select_follow(i);
+			select_follow(i, old);
 			snprintf(file, sizeof(file), "%s", e->path);
 			show_row(i);
 			row_redraw(old);

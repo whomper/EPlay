@@ -408,7 +408,8 @@ def add_session(r, src):
     r.results[-1] = ("started, nothing given", "AESSTART", speed.START)
     r.act("Add files opened (^O)", speed.DIALOG, lambda: r.key("ctrl+o"))
     r.shot("add-start")
-    r.act("Add files closed (Esc)", speed.WINDOW, lambda: r.key("Escape"))
+    # (Undo: Esc empties the filter and never closes it, D28)
+    r.act("Add files closed (Undo)", speed.WINDOW, lambda: r.key("Undo"))
     r.act("Add files opened again", speed.DIALOG, lambda: r.key("ctrl+o"))
     row = lambda i: (300, 206 + 16 * i)     # the dialog's list rows (Falcon-4's 640 x 480)
 
