@@ -1860,3 +1860,17 @@ After the YM2612 (phase 10's first part), a design for Erez: EPlay browsing and 
 Jellyfin server's music (its JSON API on the home network, its tracks sent as MP3 at a rate
 EPlay asks, its cover art resized), with the browser's layout, a Settings page and the steps.
 Design only; nothing before he decides.
+
+## MP3 on the CPU (Erez, 10 Nov 2026)
+
+A user's note (Erez relayed it): 68060 machines (the Raven clone, others) and the FireBee decode MP3
+on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474's EMAC). Erez:
+"68060 support with the YM2612 and FireBee release". So:
+
+- **With the YM2612's release:** where there is no Falcon DSP but a 68060, MP3 decodes on the CPU
+  from EPlay's C model of its DSP decoder (`src/mp3/mp3dsp.c`), chosen at run time (the `_CPU`
+  cookie, as `div64_cpu60`). Never on a 68030 or slower (Erez, 3 Nov 2026). Measured first on
+  Hatari's 68060; the Raven's DSP56303 is not the 56001 (another host port and sound wiring), so
+  it is not used.
+- **With the FireBee's release:** the same decoder in the ColdFire edition, its synthesis filter
+  and IMDCT on the EMAC later.
