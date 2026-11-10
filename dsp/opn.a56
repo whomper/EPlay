@@ -32,7 +32,7 @@
 ;	   first halfway from the one before (the FDI's 44.1 or 48 kHz: the
 ;	   chip made at half of it)
 ;	13 DACRATE: the file's DAC samples an output sample, whole, Q23
-;	15 STATUS: one word back, the ring's least lead since PLAY (words,
+;	15 STATUS: one word back, the ring's least lead since it first filled (words,
 ;	   2,048 at most; near 0: the DSP fell behind)
 ;	20-31 SN v: the Mega Drive's SN76489, sn.a56's commands 0-11 (+ 20):
 ;	   from the first, its three tones and its noise each sample too,
@@ -86,7 +86,8 @@ DCNT	equ	$35
 DSI	equ	$36
 DSF	equ	$37
 ALGT	equ	$38		; the algorithms' handlers (8)
-MINLD	equ	$1e		; (PLAY) the ring's least lead since PLAY (words): STATUS's
+MINLD	equ	$1e		; (PLAY) the ring's least lead since it first filled (words): STATUS's
+PFULL	equ	$1f		; (PLAY) the ring has filled to LEAD once
 SNON	equ	$16		; the SN76489 sounding (a command came); its sample's sum
 SNOUT	equ	$17
 SPH	equ	$70		; the SN76489 (sn.a56's): the phases, tones 0-2 and the noise,
@@ -1347,6 +1348,7 @@ c_play	jsr	rd			; k: 1, or 2 (each sample twice)
 	move	a,y:<PREVR
 	move	#>2047,x1
 	move	x1,x:<MINLD
+	bclr	#0,x:<PFULL
 	movec	#$1fff,m4
 	move	#STAB,r4
 	clr	a
@@ -1378,10 +1380,16 @@ pgen	move	r6,a
 	and	x1,a
 	move	a1,y1
 	move	y1,a
-	move	x:<MINLD,x1		; (its least)
+	jclr	#0,x:<PFULL,pg0		; (its least, once it has filled: not the start)
+	move	x:<MINLD,x1
 	cmp	x1,a
 	jge	pg1
 	move	a1,x:<MINLD
+	jmp	pg1
+pg0	move	#>LEAD,x0
+	cmp	x0,a
+	jlt	pg1
+	bset	#0,x:<PFULL
 pg1	move	#>LEAD,x0
 	cmp	x0,a
 	jge	ploop
