@@ -430,13 +430,6 @@ static void build(SETTINGS *s)
 
 /* ---------------- the dialog ---------------- */
 
-/* where a pop-up goes to have its row `sel` over the button at y, as the AES's own pop-ups do (5.7): its
-   rows are a line and 2 pixels high, from 2 pixels down, their text a pixel in */
-static short over_button(const SETTINGS *s, short y, short sel)
-{
-	return (short)(y - 3 - sel * (s->b.hc + 2));
-}
-
 /* an object of the dialog drawn again, or all of it where the screen under a pop-up wasn't kept */
 static void drawn_again(SETTINGS *s)
 {
@@ -761,7 +754,7 @@ static void pop_run(SETTINGS *s, SET_W *p)
 		lab[i] = name[i];
 	}
 	objc_offset(tree, p->obj, &x, &y);
-	r = popup_m(x, over_button(s, y, sel), lab, p->n);
+	r = popup_over(x, y, lab, p->n, sel);
 	tree[p->obj].ob_state &= ~SELECTED;
 	if (!popup_put_back && settings_uncover)
 		settings_uncover(popup_area.x, popup_area.y, popup_area.w, popup_area.h);
