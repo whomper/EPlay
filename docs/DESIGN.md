@@ -1906,6 +1906,14 @@ A user's note (Erez relayed it): 68060 machines (the Raven clone, others) and th
 on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474's EMAC). Erez:
 "68060 support with the YM2612 and FireBee release". So:
 
+- **Decided (Erez, 10 Nov 2026): B as two overlays.** After the YM2612's release (1.17, which
+  goes out first: Erez, 10 Nov), two decoders, each an overlay beside the program (common's
+  `ovl.c`, as `TLS.OVL`), loaded only when an MP3 is to play on a 68060 with no Falcon DSP
+  (`_CPU`), the one the `_FPU` cookie says: `MP3FPU.OVL`, EPlay's decoder steps in floating
+  point on the 68060's FPU, and `MP3INT.OVL`, in integers on its 32-bit multiply, for the
+  68LC060 and 68EC060 (no FPU). Each built for the 68060 alone and held to minimp3 by the
+  existing tests. `EPLAY.PRG` keeps its size; every other machine never reads them. A missing
+  overlay is said ("MP3 on a 68060 needs MP3FPU.OVL beside EPlay").
 - **With the YM2612's release:** where there is no Falcon DSP but a 68060, MP3 decodes on the CPU
   from EPlay's C model of its DSP decoder (`src/mp3/mp3dsp.c`), chosen at run time (the `_CPU`
   cookie, as `div64_cpu60`). Never on a 68030 or slower (Erez, 3 Nov 2026). Measured first on
