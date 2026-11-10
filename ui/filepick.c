@@ -583,15 +583,14 @@ static void open_row(int r)
    button, the AES's own pop-ups' way and Settings' (settings.c
    over_button): rows are a line and 2 pixels high from 2 pixels down, their
    text a pixel in, so the top is `sel` rows and 3 pixels above the button.
-   popup() will learn "over this button" itself (hub item 6); then only this
-   function changes. The button is drawn again after: the pop-up covered it. */
+   popup_over() does it now (hub item 6). The button is drawn again after: the pop-up covered it. */
 static short pop_over(short o, const char *const *lab, short n, short sel)
 {
 	short x, y, r;
 	if (sel < 0 || sel >= n)
 		sel = 0;
 	objc_offset(tree, o, &x, &y);
-	r = popup_m(x, (short)(y - 3 - sel * (gl_hchar + 2)), lab, n);
+	r = popup_over(x, y, lab, n, sel);
 	tree[o].ob_state &= ~SELECTED;
 	if (dlg_in_window() || popup_put_back) {
 		draw_obj(o);		/* the screen under it is back, or the AES draws it */
