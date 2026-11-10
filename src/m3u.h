@@ -5,8 +5,8 @@
  * folders). A line is a file: a whole path (C:\MUSIC\A.MP3, \MUSIC\A.MP3
  * on the playlist's drive) or one relative to the playlist's folder
  * (A.MP3, LIVE\A.MP3, ..\B.MP3), with '\' or '/'. Lines starting '#' are
- * notes (#EXTM3U, #EXTINF:seconds,artist - title); a URL (http:// and the
- * like) is passed over; CR/LF, LF and a UTF-8 BOM are taken. Written:
+ * notes (#EXTM3U, #EXTINF:seconds,artist - title); a station's address
+ * (http:// or https://, phase 7) is taken as it is, other URLs passed over; CR/LF, LF and a UTF-8 BOM are taken. Written:
  * #EXTM3U, then each file's #EXTINF and its path, relative to the
  * playlist's folder where it is in it, CR/LF ends.
  */
@@ -18,6 +18,9 @@
 /* each file of the playlist text t (n bytes) to add(path, ctx); dir is the
    playlist's folder ("C:\MUSIC\", ending in '\'). The files given */
 int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *path, void *ctx), void *ctx);
+/* while add() runs: the name of the #EXTINF line before it ("" none; as
+   the file has it), a station's row's name */
+extern char m3u_extinf[M3U_PATH];
 
 /* path as a playlist in dir would hold it: relative where it is in dir
    (its case aside), else whole */

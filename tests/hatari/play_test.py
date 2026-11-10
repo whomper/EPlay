@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
 by default; Falcon (Erez's, with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
@@ -87,6 +87,7 @@ CASES = {
 # 4 Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
 # queue's lead (3 s) never runs out
 CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 14)
+SQUARE = set()
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # three files given at the start (as the desktop gives files dropped on the
@@ -139,6 +140,10 @@ CASES["save"] = CASES["list"]
 # (20 s on), Left once (back to about 10 s), Shift+Right (the next file),
 # Shift+Left (back to the first), Clr Home (stopped)
 CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 30)
+# several rows (D21, 1.14): the three files given; Down selects the second
+# and Del takes it out (2 left); ^A selects both, Del takes them out, the
+# one playing stopped (none left)
+CASES["selall"] = CASES["keys"]
 # the cases' eplay.inf
 INFS = {"repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
         "miniwav": "MINI=1\r\n\r\n"}
@@ -357,8 +362,11 @@ def analyse(rec, case):
     _, fmt, lame, out, _, length = CASES[case]
     if not lame and case not in RESAMPLED:
         length = length * int(fmt[1]) / out  # (the DMA: at the Falcon's rate, if not the file's)
-    ok = (vol_ok and abs(secs - length) < 0.1 and not gaps and pitch and ql > 0.9 and qr > 0.9
-          and max(rms[b + 2:] or [0]) < 50)     # (silence after: past the block the end falls in)
+    pure = 0.75 if case in SQUARE else 0.9
+    ok = (vol_ok and abs(secs - length) < 0.1 and not gaps and pitch and ql > pure and qr > pure
+          and max(rms[b + (4 if case in SQUARE else 2):] or [0]) < 50)
+    # (silence after: past the block the end falls in; the YM2149's output
+    # in Hatari dies away over a few ms more)
     return ok, ("%.2f s of sound, %d gaps; left %d Hz (%.0f %% of its power), right %d Hz (%.0f %%); "
                 "wanted %.2f s, %.0f and %.0f Hz%s%s; level %.0f" % (secs, len(gaps), fl, 100 * ql, fr, 100 * qr,
                                                              length, want[0], want[1], note, vol_note, level))
@@ -410,7 +418,7 @@ def run(work, case, spec):
         subprocess.run(["sox", whole, os.path.join(hd, "G1.WAV"), "trim", "0", "3"], check=True)
         subprocess.run(["sox", whole, os.path.join(hd, "G2.WAV"), "trim", "3"], check=True)
         tail = "C:\\G1.WAV C:\\G2.WAV"
-    if case == "keys":
+    if case in ("keys", "selall"):
         for n in ("K2.WAV", "K3.WAV"):
             shutil.copy(os.path.join(hd, "K1.WAV"), os.path.join(hd, n))
         tail = "C:\\K1.WAV C:\\K2.WAV C:\\K3.WAV"
@@ -552,6 +560,23 @@ def run(work, case, spec):
                   10000 <= went[2] <= 16000 and names == ["K1.WAV", "K2.WAV", "K1.WAV"] and stopped)
             return ok, m.describe(), "went to %s ms; played %s; %s" % (
                 went, " ".join(names), "stopped" if stopped else "never stopped")
+        if case == "selall":
+            cmd(fifo, "hatari-event", "keypress", "0x50")     # Down: the second row
+            time.sleep(0.5)
+            cmd(fifo, "hatari-event", "keypress", "0x53")     # Del
+            one = wait_line(log, lambda l: l.startswith("EPLAY removed "), 10) or "EPLAY removed nothing"
+            time.sleep(0.5)
+            cmd(fifo, "hatari-event", "keydown", "0x1d")
+            cmd(fifo, "hatari-event", "keypress", "0x1e")     # ^A: Select all
+            cmd(fifo, "hatari-event", "keyup", "0x1d")
+            time.sleep(1)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            cmd(fifo, "hatari-event", "keypress", "0x53")     # Del
+            time.sleep(2)
+            lines = [l.strip() for l in open(log, errors="replace") if l.startswith("EPLAY removed ")]
+            stopped = any(l.startswith("EPLAY stopped") or "Stopped." in l for l in open(log, errors="replace"))
+            ok = lines == ["EPLAY removed 1, list: 2 files", "EPLAY removed 2, list: 0 files"]
+            return ok, m.describe(), "%s; stopped %s" % (" / ".join(lines) or one, stopped)
         if case == "save":
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x1f")     # ^S

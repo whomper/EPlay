@@ -36,6 +36,7 @@
 #include "popup.h"
 #include "filepick.h"
 #include "m3u.h"
+#include "charset.h"
 #include "elog.h"
 #include "snd.h"
 #include "bar.h"
@@ -48,7 +49,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -66,6 +67,8 @@ static const MBAR_ITEM m_file[] = {
 static const MBAR_ITEM m_edit[] = {
 	{ "Remove from the list", "Del", C_REMOVE },	/* (MENUS 1.2: Del; MD14) */
 	{ "Clear the list", 0, C_CLEAR },
+	{ "-", 0, 0 },
+	{ "Select all", "^A", C_SELALL },	/* (D21: several rows) */
 	{ 0, 0, 0 }
 };
 static const MBAR_ITEM m_view[] = {
@@ -138,7 +141,7 @@ static short wh = -1;
 static GRECT work;
 static int list_has_sel(void)
 {
-	return list_sel >= 0 && list_sel < list_count();
+	return list_nsel > 0;
 }
 static char file[320];		/* the file playing */
 
@@ -152,6 +155,8 @@ static int can(int c)
 		return list_count() > 0;
 	case C_REMOVE:
 		return list_has_sel();
+	case C_SELALL:
+		return list_count() > 0 && !bar_mini;
 	case C_PLAY:
 		return play_is_open() || play_paused() || play_name[0] || list_count() > 0;
 	case C_STOP:
@@ -170,7 +175,7 @@ static int can(int c)
    (MENUS 1.3: EMail measured 40 calls at 40 ms on an 8 MHz ST) */
 static void menu_update(void)
 {
-	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_PLAY, C_STOP, C_PREV, C_NEXT, C_MINI };
+	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_SELALL, C_PLAY, C_STOP, C_PREV, C_NEXT, C_MINI };
 	static signed char was[sizeof(grey) / sizeof(grey[0])];
 	unsigned i;
 	for (i = 0; i < sizeof(grey) / sizeof(grey[0]); i++) {
@@ -196,9 +201,12 @@ static void keys_box(void)
 		 "+  -           Louder, softer\n"
 		 "\n"
 		 "Up, Down       Select a row\n"
+		 "Shift+click    Add a row, or take it out\n"
+		 "^click         Add the rows up to it\n"
+		 "^A             Select all\n"
 		 "Return         Play the selected row\n"
-		 "Del            Remove it from the list\n"
-		 "Insert         Its menu\n"
+		 "Del            Remove the selected rows\n"
+		 "Insert         The row's menu\n"
 		 "\n"
 		 "^O             Open...\n"
 		 "Shift+^O       Open URL...\n"
@@ -576,15 +584,61 @@ static void row_redraw(int i)
 	wind_update(END_UPDATE);
 }
 
+static void rows_redraw(int i);
+
+/* row i selected alone (a click, Up and Down): the rows that change drawn */
 static void select_row(int i)
 {
-	int old = list_sel;
-	if (i == old)
+	int old = list_sel, many = list_nsel > 1;
+	ENTRY *e = list_at(i);
+	if (i == old && e && e->sel && !many)
 		return;
+	list_select_none();
+	list_select(i, 1);
 	list_sel = i;
-	row_redraw(old);
 	show_row(i);
+	if (many)
+		rows_redraw(list_top);	/* (the rows shown, in one go) */
+	else {
+		row_redraw(old);
+		row_redraw(i);
+	}
+}
+
+/* Shift+click: row i in or out of the selection (5.8); the anchor there */
+static void select_toggle(int i)
+{
+	ENTRY *e = list_at(i);
+	if (!e)
+		return;
+	list_select(i, !e->sel);
+	list_sel = i;
 	row_redraw(i);
+}
+
+/* Control+click: the rows from the anchor to i added */
+static void select_range(int i)
+{
+	int a = list_sel >= 0 ? list_sel : i, k, lo = a < i ? a : i, hi = a < i ? i : a;
+	for (k = lo; k <= hi; k++)
+		if (!list_at(k)->sel) {
+			list_select(k, 1);
+			row_redraw(k);
+		}
+}
+
+/* the row playing selected, as it was when one row at most is: a
+   selection of several is left as it is */
+static void select_follow(int i)
+{
+	int old = list_sel;
+	if (list_nsel > 1)
+		return;
+	list_select_none();
+	list_select(i, 1);
+	list_sel = i;
+	if (old != i)
+		row_redraw(old);
 }
 
 /* the next (or the one before) from cur that EPlay can play here: rows
@@ -613,7 +667,7 @@ static void play_index(int i)
 	if (!e)
 		return;
 	list_cur = i;
-	list_sel = i;
+	select_follow(i);
 	snprintf(file, sizeof(file), "%s", e->path);
 	show_row(i);
 	row_redraw(old);
@@ -707,8 +761,18 @@ static int m3u_name(const char *f)
 
 static void m3u_add(const char *path, void *ctx)
 {
+	int i;
 	(void)ctx;
-	list_add(path);
+	i = list_add(path);
+	if (i >= 0 && surl_is(path) && m3u_extinf[0]) {
+		/* a station: its row named as the playlist names it (UTF-8
+		   where it is, as stations' lists are written) */
+		long ol;
+		char *a = has_8bit(m3u_extinf, (long)strlen(m3u_extinf)) ?
+			  cs_to_atari(m3u_extinf, (long)strlen(m3u_extinf), cs_id("utf-8"), &ol) : 0;
+		list_set_title(i, a ? a : m3u_extinf);
+		free(a);
+	}
 }
 
 /* (read a piece at a time, a line cut by a piece's end carried into the
@@ -953,20 +1017,29 @@ static void rows_redraw(int i)
 	redraw(&a, BP_LIST);
 }
 
-/* the selected file out of the list (the one playing stopped first) */
+/* the selected files out of the list (the one playing stopped first);
+   the row after the first of them selected */
 static void list_remove_sel(void)
 {
-	int i = list_sel;
-	if (i < 0)
+	int i;
+	ENTRY *e = list_at(list_cur);
+	if (!list_nsel)
 		return;
-	if (i == list_cur) {
+	if (e && e->sel) {
 		play_log_stop();
 		play_stop();
 		status("Stopped.");
 	}
-	list_remove(i);
+	{
+		int was = list_count();
+		char line[60];
+		i = list_remove_selected();
+		snprintf(line, sizeof(line), "EPLAY removed %d, list: %d files\n", was - list_count(), list_count());
+		nf_debug(line);			/* (the rigs) */
+	}
 	pic_begin("rows");
 	list_sel = i < list_count() ? i : list_count() - 1;
+	list_select(list_sel, 1);
 	if (list_top > 0 && list_top + bar_rows() > list_count()) {
 		scroll_to(list_count() - bar_rows());	/* (the whole list: one draw) */
 		pic_end();
@@ -975,6 +1048,11 @@ static void list_remove_sel(void)
 		pic_end();
 	}
 	sliders();
+	if (play_state() == PS_PLAYING) {	/* ("Playing 1 of 2": fewer now) */
+		char st[100];
+		playing_status(st, sizeof(st));
+		status(st);
+	}
 	redraw(0, BP_NAV);
 }
 
@@ -1045,7 +1123,7 @@ static long seek_to = -1;		/* the position bar let go: where, for the next turn 
 static int music_keys(short kr, short ks)
 {
 	short scan = (kr >> 8) & 0xff;
-	int shift = (ks & 3) != 0;
+	int shift = key_shift(ks, kr);	/* (common's: a Shift held while EPlay was busy, from the key itself) */
 	long len, at;
 	switch (scan) {
 	case 0x62:			/* Help */
@@ -1214,15 +1292,29 @@ static void drag_row(int from, short mx, short my)
 
 /* a press on the list: the row selected at once; a double click plays it
    (guidelines 5.8: the second press's release) */
-static void list_press(short mx, short my, int right)
+static void list_press(short mx, short my, short ks, int right)
 {
 	int i = bar_row_at(my), dbl;
+	ENTRY *e = list_at(i);
 	GRECT r;
 	short dx, dy;
-	if (i < 0)
+	if (i < 0 || !e)
 		return;
+	if (!right && (ks & 3)) {	/* Shift+click: the row in or out (WINDOWS 2.2, D21) */
+		select_toggle(i);
+		return;
+	}
+	if (!right && (ks & 4)) {	/* Control+click: the rows from the anchor */
+		select_range(i);
+		return;
+	}
 	dbl = press_double((short)i, mx, my);
-	select_row(i);
+	/* (a row in a selection of several keeps it: the right button's menu
+	   acts on them all) */
+	if (!e->sel || list_nsel < 2)
+		select_row(i);
+	else
+		list_sel = i;
 	if (right) {			/* (a right press: the row's menu) */
 		row_menu(mx, my);
 		return;
@@ -1234,6 +1326,7 @@ static void list_press(short mx, short my, int right)
 			play_index(i);
 		break;
 	case PRESS_DRAG:
+		select_row(i);		/* (a row moves by itself) */
 		drag_row(i, dx, dy);
 		break;
 	}
@@ -1416,7 +1509,7 @@ static void command(int c)
 		elog("stations: %s", c == C_GATEWAY ? "through the Gateway" : "a Direct connection");
 		break;
 	case C_SETTINGS:
-		settings_dialog();
+		prefs_dialog();
 		play_rgain_changed();	/* (ReplayGain: at once, gliding) */
 		break;
 	case C_CLEAR:
@@ -1424,6 +1517,10 @@ static void command(int c)
 		break;
 	case C_REMOVE:
 		list_remove_sel();
+		break;
+	case C_SELALL:
+		list_select_all();
+		rows_redraw(list_top);
 		break;
 	case C_SAVE:
 		save_playlist();
@@ -1551,7 +1648,7 @@ static void step(int playing)
 		if (e) {
 			order_played(&list_order, i);
 			list_cur = i;
-			list_sel = i;
+			select_follow(i);
 			snprintf(file, sizeof(file), "%s", e->path);
 			show_row(i);
 			row_redraw(old);
@@ -1986,12 +2083,14 @@ static void turn(int nested)
 	if (which & MU_KEYBD) {
 		short a = ev.kreturn & 0xff;
 		if (key_ctrl(ev.kstate, ev.kreturn)) {
-			if ((a == 15 || (a | 0x20) == 'o') && (ev.kstate & 3))
+			if ((a == 15 || (a | 0x20) == 'o') && key_shift(ev.kstate, ev.kreturn))
 				command(C_URL);		/* (Shift+Control+O: Open URL) */
 			else if (a == 15 || (a | 0x20) == 'o')
 				command(C_OPEN);
 			else if (a == 19 || (a | 0x20) == 's')
 				command(C_SAVE);
+			else if (a == 1 || (a | 0x20) == 'a')
+				command(C_SELALL);
 			else if (a == 17 || a == 21 || (a | 0x20) == 'q' || (a | 0x20) == 'u')
 				command(C_QUIT);
 			else if (((ev.kreturn >> 8) & 0xff) == 0x33)	/* ^, (the comma's key) */
@@ -2011,7 +2110,7 @@ static void turn(int nested)
 		}
 	}
 	if ((which & MU_BUTTON) && ev.mbutton == 2 && bar_hit(ev.mx, ev.my) == BH_LIST)
-		list_press(ev.mx, ev.my, 1);
+		list_press(ev.mx, ev.my, ev.kstate, 1);
 	if ((which & MU_BUTTON) && ev.mbutton == 1) {
 		/* (Play/Pause only where it would act: with a file; the
 		   playlist's controls come with phase 4) */
@@ -2027,7 +2126,7 @@ static void turn(int nested)
 		else if (hit == BH_NEXT && order_has_next(&list_order, list_cur) && track(BH_NEXT, BP_TEXT))
 			command(C_NEXT);
 		else if (hit == BH_LIST)
-			list_press(ev.mx, ev.my, 0);
+			list_press(ev.mx, ev.my, ev.kstate, 0);
 	}
 	/* (a turn that drew a piece of the window reads no more of the file:
 	   a 32 KB read after it went past the 50 ms between event calls; the

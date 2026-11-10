@@ -1555,6 +1555,7 @@ the queue's ring and the list both taken).
 6. 1.0: phase 6 closed as EPlay 1.0 (Erez, 8 Nov 2026).
 7. **Phase 7, streaming** (below).
 8. **Phase 8, the player's features** (below).
+9. **Phase 9, VGM and VGZ** (below), after 1.14 (Erez, 9 Nov 2026).
 
 ## Phase 6 closed: EPlay 1.0 (Erez, 8 Nov 2026)
 
@@ -1785,3 +1786,19 @@ dsptest`. A 2,047-sample drop on a 192 kbit/s file resampled at the stock DSP's 
 of lead and is partly played. play_test `gaplessmp3` (two LAME halves of one tone, resampled to
 49,170 Hz on Falcon-4): 6.005 s of sound, not a 5 ms block without it.
 
+
+## Phase 9: VGM and VGZ (Erez, 9 Nov 2026)
+
+A VGM file is a game machine's sound chips' register writes, timed in samples of 44,100 Hz; a VGZ
+is one gzipped (common's `inflate.c`). What the chip is decides the way, as proposed and approved:
+
+1. **YM2149 / AY-3-8910** (the ST's, Amstrad CPC, MSX, Spectrum): the writes go to the Atari's own
+   YM2149, the real chip, on the Falcon, TT and STE; an AY's clock other than 2 MHz is put right
+   by its periods. Barely any CPU.
+2. **SN76489** (Master System, Game Gear, BBC Micro): on the Falcon's DSP, a small program.
+3. The bar shows the game and the track from GD3; a file with a loop plays it (once, then a fade,
+   as players do; to be put to Erez with the step).
+4. Then a measurement: **YM2612** (Mega Drive) on the DSP. Six FM voices at 44.1 kHz is near the
+   DSP's whole time; the rate it reaches is reported, and Erez decides.
+
+OPL, YM2151 and the arcade chips are not part of it.

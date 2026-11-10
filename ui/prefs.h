@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * prefs.h - (once settings.h: common has its settings.c, the Settings engine) EPlay's Settings (Options > Settings..., ^,) and EPLAY.INF,
+ * prefs.h - (once settings.h: common has its settings.c, the Settings engine, which builds the dialog) EPlay's Settings (Options > Settings..., ^,) and EPLAY.INF,
  * next to the program (a PRG-only app: the guidelines' 6.1). Output: how
  * EPlay plays (Erez, 2 Nov 2026): Auto, FDI or DSP (the 68030 dropped: Erez,
  * 3 Nov 2026). A change takes
@@ -18,7 +18,7 @@ enum { OUT_AUTO, OUT_FDI, OUT_DSP };
 int settings_qlate(void);
 
 void settings_load(void);	/* EPLAY.INF, at the start */
-void settings_dialog(void);	/* the dialog; saved on OK when it changed */
+void prefs_dialog(void);	/* the dialog (Settings); saved on OK when it changed */
 int settings_output(void);	/* OUT_...: as set, or Auto where the machine hasn't it */
 const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
 

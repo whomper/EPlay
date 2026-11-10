@@ -75,7 +75,9 @@ it plays: **FDI**, **DSP** or **DMA**.
 
 **The list** under the bar holds the files to play, with their title, artist, album and length (read
 in the background, a file at a time). A click selects a row; a double click, or Return, plays it.
-A right click, or Insert, opens the row's menu. Make the window taller for more rows; its
+Shift+click adds a row to the selection or takes it out, Control+click adds the rows from the last
+one clicked, and **Edit > Select all** (^A) selects them all; Del takes the selected rows out.
+A right click, or Insert, opens the row's menu (for all the selected rows, when the row is one of them). Make the window taller for more rows; its
 fuller makes it as tall as the screen, and back. Where the AES can (MagiC, XaAES, N.AES), its
 iconifier shows EPlay as its icon, with Playing or Paused under it, while the music goes on.
 `EPLAY.INF` keeps the window's place and height for the next start. (The mini player has
@@ -84,7 +86,8 @@ neither: it stays as small as it is.)
 - **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
   Find station... finds one by name, genre, country or language;
   Save playlist... (^S) writes the list as an `.M3U`; Quit (^Q).
-- **Edit:** Remove from the list (Del); Clear the list keeps only the file that plays.
+- **Edit:** Remove from the list (Del), the selected rows; Clear the list keeps only the file that
+  plays; Select all (^A).
 - **View:** Mini player: the window becomes the bar alone, and back. `EPLAY.INF` keeps it.
 - **Play:** Play/Pause (Space), Stop (Clr Home), Previous (Shift+Left), Next (Shift+Right);
   **Shuffle** plays the list in a random order, each file once a round, the list itself left as
@@ -112,7 +115,9 @@ MagiC.
 **Playlists** are `.M3U` files, which other players read and write too. A line is a file, its path
 whole (`C:\MUSIC\A.MP3`) or relative to the playlist's folder (`LIVE\A.MP3`, `..\B.MP3`). EPlay
 saves each file's length and tags with it, and its path relative to the playlist's folder where it
-is in it, so the playlist and its music can move together.
+is in it, so the playlist and its music can move together. A line can be a station's address
+(`http://` or `https://`) too: it goes into the list as a station, named by the `#EXTINF` line
+before it, and Save playlist keeps it.
 
 ## Web radio
 
@@ -168,7 +173,8 @@ DSP: on a TT or an STE a station's row shows dim and is passed over.
 | + and - | The volume, 3 dB a press |
 | Up, Down | Select the row above or below |
 | Return, Enter | Play the selected row |
-| Del | Take the selected row out of the list |
+| ^A | Select every row |
+| Del | Take the selected rows out of the list |
 | Insert | The selected row's menu |
 | ^O | Open: Add files |
 | Shift+^O | Open URL: a web radio station |
@@ -183,7 +189,10 @@ mini player, but for the list's (Up, Down, Return, Del, Insert): it shows no lis
 
 ## Settings
 
-**Options > Settings...** (^,) chooses the **Output**, how EPlay plays the music:
+**Options > Settings...** (^,) has three pages, chosen in the list at its left (or Tab to the
+list and Up or Down):
+
+**Playing** chooses the **Output**, how EPlay plays the music:
 
 - **Auto:** the FDI if its driver answers, else the DSP.
 - **FDI:** a SoundPool FDI on the DSP port, set to each file's rate (44.1 or 48 kHz), as Cubase
@@ -192,18 +201,22 @@ mini player, but for the list's (Up, Down, Return, Del, Insert): it shows no lis
   keep up with there goes on by itself at 32,780 Hz, up to about 15 kHz; the info line shows the
   rate.
 
-**Through the Gateway: address, port** are the AERA Gateway's, for stations reached through it
+**Stations: Through the Gateway, Address and Port** are the AERA Gateway's, for stations reached through it
 (the Options menu). The port is a number from 1 to 65535 (the Gateway's radio service: 8580);
 left empty it is 8580.
 
-**ReplayGain** evens out the loudness of the files from the gain their tags give (ReplayGain's
+**ReplayGain** (on the Playing page too) evens out the loudness of the files from the gain their tags give (ReplayGain's
 values, or LAME's own): **Off**; **Track**, each file evened out on its own; **Album**, an album's
 own quiet and loud songs kept; **Auto** (the start), the album's gain while the list plays in
 order and the track's while it is shuffled. A file is made louder only as far as its peak lets it
 go without clipping, and not at all when its tags give no peak; on an STE it is only made
 quieter. A file with no ReplayGain values plays as it is.
 
-A change takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
+**Files: Use the system file selector** (off at the start): Open... opens the system's own file
+selector (TOS's, or Selectric, FreeMiNT's, MagiC's) instead of **Add files**. It gives one file at
+a time and shows every file in the folder.
+
+A change of Output takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
 the window's place, the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and
 the last ten stations.
 

@@ -16,18 +16,21 @@ static void check(int ok, const char *what)
 	bad += !ok;
 }
 
-static char got[2000];
+static char got[2000], names[2000];
 static void add(const char *path, void *ctx)
 {
 	(void)ctx;
 	if (got[0])
 		strcat(got, "|");
 	strcat(got, path);
+	strcat(names, "[");
+	strcat(names, m3u_extinf);
+	strcat(names, "]");
 }
 
 static const char *read(const char *t, const char *dir)
 {
-	got[0] = 0;
+	got[0] = names[0] = 0;
 	m3u_read(t, (long)strlen(t), dir, add, 0);
 	return got;
 }
@@ -45,9 +48,15 @@ int main(void)
 		      "C:\\MUSIC\\SHARED\\C.MP3|C:\\MUSIC\\LISTS\\D.MP3|C:\\MUSIC\\LISTS\\LIVE\\E.MP3"),
 	      "'/' as '\\', ..\\ and .\\");
 	check(!strcmp(read("..\\..\\..\\F.MP3\n", "C:\\A\\"), "C:\\F.MP3"), "..\\ past the root stays at the root");
-	check(!strcmp(read("\xef\xbb\xbf  G.MP3  \r\n\r\n\r\nhttp://radio.example/s.mp3\r\n# a note\r\nH.WAV", "C:\\M\\"),
+	check(!strcmp(read("\xef\xbb\xbf  G.MP3  \r\n\r\n\r\nftp://radio.example/s.mp3\r\n# a note\r\nH.WAV", "C:\\M\\"),
 		      "C:\\M\\G.MP3|C:\\M\\H.WAV"),
-	      "a BOM, spaces, empty lines, a URL passed over, the last line without an end");
+	      "a BOM, spaces, empty lines, a URL not a station's passed over, the last line without an end");
+	/* stations (Erez, 9 Nov 2026: Open... of an .M3U of stations added none) */
+	check(!strcmp(read("#EXTM3U\r\n#EXTINF:-1,Radio One\r\nhttp://radio.example:8000/s.mp3\r\n"
+			   "HTTPS://Secure.example/live\r\nA.MP3\r\n#EXTINF:12,Tone\r\nB.MP3\r\n", "C:\\M\\"),
+		      "http://radio.example:8000/s.mp3|HTTPS://Secure.example/live|C:\\M\\A.MP3|C:\\M\\B.MP3"),
+	      "a station's address taken as it is");
+	check(!strcmp(names, "[Radio One][][][Tone]"), "its #EXTINF name with it, none where there is none");
 	m3u_rel("C:\\MUSIC\\LIVE\\A.MP3", "c:\\music\\", rel, sizeof(rel));
 	check(!strcmp(rel, "LIVE\\A.MP3"), "written relative where in the folder (the case aside)");
 	m3u_rel("D:\\X\\B.MP3", "C:\\MUSIC\\", rel, sizeof(rel));

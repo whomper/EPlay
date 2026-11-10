@@ -49,7 +49,7 @@ OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 s
 CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn ovl
 CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg net_tos sting tls_ovl
-CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip
+CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip settings dlgbuild
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))

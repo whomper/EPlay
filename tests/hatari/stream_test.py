@@ -75,7 +75,7 @@ import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
 CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
-         "find"]
+         "find", "m3u"]
 METAINT = 8192
 KBPS = 128
 
@@ -417,8 +417,13 @@ def run(work, case, spec):
         ngx, nport = nginx(w, os.path.join(w, "srv.pem"), os.path.join(w, "srv.key"),
                            "https://radio.test:%d/live" % st.tls[0].getsockname()[1])
         url = "https://radio.test:%d/musickoeln" % nport
+    if case == "m3u":
+        # (Erez, 9 Nov 2026: Open... of an .M3U holding a station added
+        # nothing) the playlist given, the station in it, named by #EXTINF
+        with open(os.path.join(hd, "RADIO.M3U"), "w", newline="") as fh:
+            fh.write("#EXTM3U\r\n#EXTINF:-1,The rig radio\r\n%s\r\n" % url)
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
-        fh.write(("" if case in ("url", "urledit", "find") else url) + "\r\n")
+        fh.write(("" if case in ("url", "urledit", "find") else "C:\\RADIO.M3U" if case == "m3u" else url) + "\r\n")
     m = machines.Machine(spec, hd)
     net = m.network(40000)
     margs = m.args()                    # (makes Hatari's home and its config folder)
@@ -570,6 +575,8 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
+        elif case == "m3u":
+            ok = ok and gaps == 0 and "playlist C:\\RADIO.M3U: 1 files" in open(log, errors="replace").read()
         elif case in ("url", "urledit"):
             xdo("key", "--delay", "120", "ctrl+q")     # (EPLAY.INF is written as EPlay quits)
             time.sleep(4)

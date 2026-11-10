@@ -9,7 +9,8 @@ or art), its Settings, and the mini player.
   python3 tests/hatari/docs_shots.py WORK [--update]
 
 WORK holds the runs; --update copies the pictures to docs/ (player.png,
-settings.png, mini.png). make in tests/hatari first (LAUNCH.PRG), and make.
+settings.png, mini.png; settings2.png and settings3.png, its other pages, are
+not copied). make in tests/hatari first (LAUNCH.PRG), and make.
 """
 import os
 import shutil
@@ -163,6 +164,12 @@ def run(work, mini):
             cmd(fifo, "hatari-event", "keyup", "0x1d")
             time.sleep(3)
             out["settings.png"] = shot(fifo, shots, 1)
+            # its other pages (Stations, Files): Down in the list of pages,
+            # where the dialog opens on a page without a text field
+            for k, name in enumerate(("settings2.png", "settings3.png")):
+                cmd(fifo, "hatari-event", "keypress", "0x50")
+                time.sleep(2)
+                out[name] = shot(fifo, shots, 2 + k)
             cmd(fifo, "hatari-event", "keypress", "0x61")   # Undo: Cancel
             time.sleep(1)
     finally:
@@ -182,7 +189,7 @@ def main():
         dst = os.path.join(work, name)
         crop(path, dst)
         print("%s: %s" % (name, dst))
-        if "--update" in sys.argv:
+        if "--update" in sys.argv and name in ("player.png", "settings.png", "mini.png"):
             shutil.copy(dst, os.path.join(TOP, "docs", name))
 
 

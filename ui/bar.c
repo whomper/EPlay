@@ -646,14 +646,14 @@ static void draw_row(int i)
 	if (e && i == list_cur) {
 		box(w_list.x, ry, w_list.w, row_h, p_bar, 0);
 		fg = p_acc;
-	} else if (e && i == list_sel && !mono) {
+	} else if (e && e->sel && !mono) {
 		box(w_list.x, ry, w_list.w, row_h, p_dim, 0);
 		fg = p_bar;
 	} else
 		box(w_list.x, ry, w_list.w, row_h, (i - list_top) & 1 ? p_alt : 0, 0);
 	if (!e)
 		return;
-	if (i == list_sel && mono && i != list_cur) {	/* (mono: lines over and under) */
+	if (e->sel && mono && i != list_cur) {	/* (mono: lines over and under) */
 		box(w_list.x, ry, w_list.w, 1, 1, 0);
 		box(w_list.x, ry + row_h - 1, w_list.w, 1, 1, 0);
 	}

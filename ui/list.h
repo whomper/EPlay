@@ -26,6 +26,7 @@ typedef struct {
 	long len_ms;		/* 0: not known */
 	unsigned char read;	/* its tags and length read */
 	unsigned char bad;	/* not a file EPlay plays */
+	unsigned char sel;	/* selected (D21: several may be) */
 } ENTRY;
 
 int list_count(void);
@@ -35,6 +36,7 @@ ENTRY *list_at(int i);
 int list_add(const char *path);
 void list_set_title(int i, const char *t);	/* a station's name for its row (phase 7) */
 void list_remove(int i);
+int list_remove_selected(void);	/* the selected rows out: the first of them, -1 none */
 void list_move(int from, int to);	/* row from to row to, the rows between closing up */
 void list_clear(void);
 void list_keep_only(int i);	/* all but file i out (it stays, as the first) */
@@ -47,7 +49,14 @@ long list_memory(void);		/* the bytes it takes (the log) */
 
 extern int list_full;		/* a file was left out: no memory but the reserve (cleared by list_clear) */
 extern int list_cur;		/* the one playing (or last played), -1 none */
-extern int list_sel;		/* the one selected, -1 none */
+extern int list_sel;		/* the row last clicked or moved to (the anchor of a
+				   range, the one Return plays), -1 none */
+/* the selection (D21, the guidelines' 5.8): any rows, each its sel; how
+   many are (kept here, as rows come and go) */
+extern int list_nsel;
+void list_select(int i, int on);	/* row i selected or not */
+void list_select_none(void);
+void list_select_all(void);
 extern int list_top;		/* the first row shown */
 
 #endif

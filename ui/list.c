@@ -21,7 +21,7 @@ static char *pool[64];			/* the names' and tags' blocks */
 static int npool;
 static long pool_left;			/* bytes left in the last of them */
 static int n;
-int list_cur = -1, list_sel = -1, list_top;
+int list_cur = -1, list_sel = -1, list_top, list_nsel;
 
 /* memory for the list: TT RAM where there is some; ST RAM only while its
    largest free block keeps LIST_RESERVE after it (a stock Falcon under
@@ -146,6 +146,8 @@ void list_remove(int i)
 	int k;
 	if (i < 0 || i >= n)
 		return;
+	if (list_at(i)->sel)
+		list_nsel--;
 	for (k = i; k + 1 < n; k++)
 		*list_at(k) = *list_at(k + 1);
 	n--;
@@ -158,6 +160,39 @@ void list_remove(int i)
 		list_sel = n - 1;
 	if (list_top > 0 && list_top >= n)
 		list_top = n - 1;
+}
+
+/* the selected rows out, the rest closed up in one pass (a long list
+   at a time on an 8 MHz ST): the first row taken out, -1 none */
+int list_remove_selected(void)
+{
+	int k, j, first = -1;
+	for (k = n - 1; k >= 0; k--)
+		if (list_at(k)->sel) {
+			order_removed(&list_order, k);	/* (from the end: the indices stay) */
+			if (list_cur == k)
+				list_cur = -1;
+			else if (list_cur > k)
+				list_cur--;
+			first = k;
+		}
+	if (first < 0)
+		return -1;
+	for (k = j = first; k < n; k++) {
+		ENTRY *e = list_at(k);
+		if (e->sel)
+			continue;
+		if (j != k)
+			*list_at(j) = *e;
+		j++;
+	}
+	n = j;
+	list_nsel = 0;
+	if (list_sel >= n)
+		list_sel = n - 1;
+	if (list_top > 0 && list_top >= n)
+		list_top = n > 0 ? n - 1 : 0;
+	return first;
 }
 
 void list_move(int from, int to)
@@ -195,7 +230,32 @@ static void give_back(void)
 			blk[k] = 0;
 		}
 	n = 0;
+	list_nsel = 0;
 	order_size(&list_order, 0);
+}
+
+void list_select(int i, int on)
+{
+	ENTRY *e = list_at(i);
+	if (!e || e->sel == (on != 0))
+		return;
+	e->sel = on != 0;
+	list_nsel += on ? 1 : -1;
+}
+
+void list_select_none(void)
+{
+	int k;
+	for (k = 0; k < n && list_nsel; k++)
+		list_select(k, 0);
+	list_nsel = 0;
+}
+
+void list_select_all(void)
+{
+	int k;
+	for (k = 0; k < n; k++)
+		list_select(k, 1);
 }
 
 void list_clear(void)
@@ -232,6 +292,7 @@ void list_keep_only(int i)
 	e->read = was.read;
 	e->bad = was.bad;
 	list_cur = list_sel = j;
+	list_select(j, 1);
 }
 
 const char *list_name(const ENTRY *e)

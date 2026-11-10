@@ -53,10 +53,30 @@ static int join(char *out, int omax, const char *base, const char *s, int k)
 	return n > 0;
 }
 
+char m3u_extinf[M3U_PATH];
+
+/* "http://" or "https://", in any case, at t (k bytes) */
+static int web(const char *t, int k)
+{
+	static const char *const s[2] = { "http://", "https://" };
+	int j, c;
+	for (j = 0; j < 2; j++) {
+		int m = (int)strlen(s[j]);
+		if (k <= m)
+			continue;
+		for (c = 0; c < m && (t[c] | (t[c] >= 'A' && t[c] <= 'Z' ? 0x20 : 0)) == s[j][c]; c++)
+			;
+		if (c == m)
+			return 1;
+	}
+	return 0;
+}
+
 int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *path, void *ctx), void *ctx)
 {
 	long i = 0;
 	int files = 0;
+	m3u_extinf[0] = 0;
 	if (n >= 3 && (unsigned char)t[0] == 0xef && (unsigned char)t[1] == 0xbb && (unsigned char)t[2] == 0xbf)
 		i = 3;				/* (a UTF-8 BOM) */
 	while (i < n) {
@@ -72,9 +92,38 @@ int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *pat
 			a++;
 		while (b > a && (t[b - 1] == ' ' || t[b - 1] == '\t'))
 			b--;
-		if (a == b || t[a] == '#')
+		if (a == b)
 			continue;
 		k = (int)(b - a);
+		if (t[a] == '#') {
+			/* #EXTINF:secs,name: the name, for the line after it */
+			if (k > 8 && !memcmp(t + a, "#EXTINF:", 8)) {
+				long c = a + 8;
+				int m;
+				while (c < b && t[c] != ',')
+					c++;
+				c++;
+				while (c < b && t[c] == ' ')
+					c++;
+				m = c < b ? (int)(b - c) : 0;
+				if (m >= M3U_PATH)
+					m = M3U_PATH - 1;
+				memcpy(m3u_extinf, t + c, (size_t)m);
+				m3u_extinf[m] = 0;
+			}
+			continue;
+		}
+		if (web(t + a, k)) {
+			/* a station (phase 7): its address as it is */
+			if (k < M3U_PATH) {
+				memcpy(path, t + a, (size_t)k);
+				path[k] = 0;
+				add(path, ctx);
+				files++;
+			}
+			m3u_extinf[0] = 0;
+			continue;
+		}
 		{
 			/* a URL: "x://" (but not a drive, "C:\") */
 			int c = 0;
@@ -104,6 +153,7 @@ int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *pat
 			add(path, ctx);
 			files++;
 		}
+		m3u_extinf[0] = 0;
 	}
 	return files;
 }
