@@ -422,6 +422,13 @@ def run(work, case, spec):
         # nothing) the playlist given, the station in it, named by #EXTINF
         with open(os.path.join(hd, "RADIO.M3U"), "w", newline="") as fh:
             fh.write("#EXTM3U\r\n#EXTINF:-1,The rig radio\r\n%s\r\n" % url)
+    # (the window at 1.15's first place: the picture cases look for the
+    # art there, and 1.16 opens a first start at the desk's height)
+    inf = os.path.join(hd, "eplay.inf")
+    old_inf = open(inf, newline="").read() if os.path.exists(inf) else ""
+    if "WINDOW=" not in old_inf:
+        with open(inf, "w", newline="") as fh:
+            fh.write(old_inf + "WINDOW=87,89,472,251\r\n\r\n")
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
         fh.write(("" if case in ("url", "urledit", "find") else "C:\\RADIO.M3U" if case == "m3u" else url) + "\r\n")
     m = machines.Machine(spec, hd)
