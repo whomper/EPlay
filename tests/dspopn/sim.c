@@ -29,6 +29,8 @@ static long pend;		/* samples to RUN before the next command */
 static long bad_at = -1, nsamp;
 static unsigned long long run_cycles;
 
+static unsigned long long cmd_t0, cmd_cycles;	/* (OPNPEAK: the commands' share, between RUNs) */
+
 static void flush(void)
 {
 	static long lr[2 * 4096];
@@ -40,6 +42,7 @@ static void flush(void)
 	put(OPNC_RUN);
 	put((unsigned long)n);
 	t = cycles;
+	cmd_cycles += t - cmd_t0;
 	profiling = getenv("SIMPROF") != NULL;
 	opnf_words(&model, lr, (int)n);
 	for (i = 0; i < 2 * n; i++) {
@@ -74,8 +77,32 @@ static void flush(void)
 			}
 		}
 	}
-	profiling = 0;
+	profiling = getenv("OPNALLPROF") != NULL;
 	run_cycles += cycles - t;
+	cmd_t0 = cycles;
+	{
+		/* (OPNPEAK: the busiest stretches, in windows of about 128 samples:
+		   the ring's lead) */
+		static unsigned long long wc;
+		static long wn;
+		static double peak;
+		static int peak_set;
+		wc += cycles - t;
+		wn += n;
+		if (wn >= (getenv("OPNWIN") ? atol(getenv("OPNWIN")) : 128)) {
+			wc += cmd_cycles;	/* (the commands' time too) */
+			cmd_cycles = 0;
+			double per = (double)wc / wn;
+			if (per > peak && nsamp > 24585) {
+				peak = per;
+				if (getenv("OPNPEAK"))
+					fprintf(stderr, "busiest so far: %.0f cycles a sample at sample %ld\n", per, nsamp);
+			}
+			wc = 0;
+			wn = 0;
+		}
+		(void)peak_set;
+	}
 	nsamp += n;
 }
 
@@ -235,6 +262,8 @@ int main(int argc, char **argv)
 	double most = 0, per;
 	sim_start(dsp_opn_prog);
 	load(6, DSP_OPN_PROG_EXT_AT, dsp_opn_prog_ext, DSP_OPN_PROG_EXT_N);
+	if (getenv("OPNALLPROF"))
+		profiling = 1;	/* (everything: the commands' too) */
 	for (i = 1; i < argc && !dead; i++)
 		bad |= play(argv[i]);
 	for (i = getenv("OPNALG") ? atoi(getenv("OPNALG")) : 0; i < (getenv("OPNALG") ? atoi(getenv("OPNALG")) + 1 : 8) && !dead; i++) {

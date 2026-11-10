@@ -66,7 +66,7 @@ static int cmd_len(const OPNF *f)
 {
 	long c = f->cw[0];
 	if (c == OPNC_DACS)
-		return f->cn < 2 ? 2 : 2 + (int)((f->cw[1] + 2) / 3);
+		return f->cn < 2 ? 2 : 2 + (int)f->cw[1];
 	if (c >= OPNC_SN)
 		return 2;
 	switch (c) {
@@ -163,13 +163,17 @@ static void cmd(OPNF *f, const long *w)
 		break;
 	case OPNC_DACS: {
 		long n = w[1], k;
+		if (n <= 0)
+			break;
 		for (k = 0; k < n; k++) {
-			int b = (int)(w[2 + k / 3] >> (8 * (k % 3)) & 255);
-			if (f->dcnt >= 1000)
-				continue;
-			f->dq[f->dwp] = (long)(b - 128) << 16;
+			f->dq[f->dwp] = S24(w[2 + k]);
 			f->dwp = (f->dwp + 1) & 1023;
-			f->dcnt++;
+		}
+		f->dcnt += (int)n;
+		if (f->dcnt > 1000) {
+			/* (too many: the oldest dropped) */
+			f->dcnt = 1000;
+			f->drp = (f->dwp - 1000) & 1023;
 		}
 		break;
 	}
@@ -181,19 +185,9 @@ static void cmd(OPNF *f, const long *w)
 static long dac_next(OPNF *f)
 {
 	if (f->dcnt > 0) {
-		long adv = f->dsi;
 		f->dac = f->dq[f->drp];
-		f->drf += f->dsf;
-		if (f->drf & 0x800000L) {
-			f->drf &= 0x7fffff;
-			adv++;
-		}
-		f->drp = (int)((f->drp + adv) & 1023);
-		f->dcnt -= (int)adv;
-		if (f->dcnt < 0) {
-			f->dcnt = 0;
-			f->drp = f->dwp;
-		}
+		f->drp = (f->drp + 1) & 1023;
+		f->dcnt--;
 	}
 	return f->dac;
 }

@@ -15,6 +15,7 @@
 #include "sncmd.h"
 #include "opn_prog.h"
 #include "opntab.h"
+#include "elog.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
@@ -22,6 +23,7 @@
 #define HICR (*(volatile unsigned char *)0xffffa200L)
 #define HISR (*(volatile unsigned char *)0xffffa202L)
 #define HTX32 (*(volatile unsigned long *)0xffffa204L)
+#define HRX32 (*(volatile unsigned long *)0xffffa204L)
 
 #define Dsp_Lock() trap14_w(104)
 #define Dsp_Unlock() trap14_w(105)
@@ -219,8 +221,32 @@ void dspopn_volume(int att, int mute)
 	psg_att = att & 15;
 }
 
+/* the ring's least lead since PLAY (STATUS: words; -1 no answer) */
+static long least;
+
+static long status(void)
+{
+	unsigned long t0;
+	least = -1;
+	put(0, OPNC_STATUS);
+	t0 = HZ200;
+	while (!(HISR & 1))
+		if (HZ200 - t0 > 40)
+			return 0;
+	least = (long)(HRX32 & 0xffffff);
+	return 0;
+}
+
 void dspopn_close(void)
 {
+	if (on && !failed) {
+		Supexec(status);
+		if (least >= 0)
+			elog("VGM: the DSP's ring's least lead %ld words (%ld ms)%s", least,
+			     least * 500 / (rate ? rate : 24585), least < 64 ? ": it fell behind" : "");
+		else
+			elog("VGM: the DSP didn't say how it kept up");
+	}
 	if (on) {
 		/* (HF0 is down: the tick puts it back after each burst, and it is
 		   off by now; the host port isn't reachable here, in user mode) */

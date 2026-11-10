@@ -14,7 +14,7 @@
 #ifndef EPLAY_OPND_H
 #define EPLAY_OPND_H
 
-#define OPN_UPD 16		/* samples between the envelopes' updates */
+#define OPN_UPD 32		/* samples between the envelopes' updates */
 #define OPN_Q 4096L		/* the attenuation's fraction: 1 step (0.094 dB) */
 
 typedef struct {
@@ -59,6 +59,7 @@ typedef struct {
 	long base;
 	unsigned char dbuf[96];
 	int dfill;
+	long dpos, dstep;	/* the DAC's next output sample in the tick's (Q16), the file's a sample */
 } OPND;
 
 /* a channel's level in the mix (Q23: the chip's 14 bits through its 9-bit
@@ -74,10 +75,12 @@ typedef struct {
 	OPNC_LFO its step an update (2^24: 128 steps), its phase reset (1)
 	OPNC_DAC on (1), its sample (Q23): sent as it turns on or off
 	OPNC_DRATE the file's DAC samples an output sample: whole, Q23
-	OPNC_DACS n, then n DAC samples (bytes, as written), three a word,
-		the first in its low byte: a tick's, into the DSP's queue
+	OPNC_DACS n, then n DAC samples at the output's rate (Q23: the
+		file's bytes, linear between them), a tick's, into the DSP's
+		queue, one played each sample
 	OPNC_SN + c, v: the Mega Drive's SN76489, sn.a56's command c (0-11):
 		src/sncmd.c's words with base OPNC_SN
+	OPNC_STATUS: one word back, the ring's least lead since PLAY (words)
 	OPNC_RUN n (tests), OPNC_PLAY k (1; 2 at the FDI's rates), OPNC_RESET
    (1, 4 and 6 are LOADX, LOADY and LOADP) */
 
@@ -88,7 +91,7 @@ typedef struct {
 #define OPN_Y_SIN 0x2000
 
 enum { OPNC_OP = 2, OPNC_CH = 3, OPNC_KEY = 5, OPNC_LFO = 7, OPNC_DAC = 8, OPNC_RUN = 9, OPNC_PLAY = 10,
-       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACS = 14, OPNC_SN = 20 };
+       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACS = 14, OPNC_STATUS = 15, OPNC_SN = 20 };
 
 void opnd_init(OPND *d, unsigned long clock, long rate);
 void opnd_write(OPND *d, int port, int reg, int val);
@@ -100,9 +103,9 @@ void opnd_send(OPND *d, void (*put)(void *u, long w), void *u);
 /* the DACRATE command for the output's rate */
 void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u);
 /* a tick of the file: n of its samples run (run: 0 at the file's end),
-   the DAC's byte at each (from at, the file's place as each is written:
-   while the DAC is on and written in the tick) then sent as a DACS after
-   what else changed; 0 at the end */
+   the DAC's byte at each (from at, the file's place as each is written),
+   then what else changed sent, then (while the DAC is on and written in
+   the tick) its samples at the output's rate as a DACS; 0 at the end */
 int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v, long n,
 	      void (*put)(void *u, long w), void *u);
 

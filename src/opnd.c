@@ -181,6 +181,7 @@ void opnd_init(OPND *d, unsigned long clock, long rate)
 	d->rate = rate;
 	d->outg = OPN_OUTG;
 	rate_tables(d);
+	d->dstep = (long)((44100ULL << 16) / (unsigned long)rate);
 	for (c = 0; c < 6; c++) {
 		d->ch[c].pan = 3;
 		for (i = 0; i < 4; i++) {
@@ -369,12 +370,25 @@ int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v
 	while (d->dfill < nb)
 		d->dbuf[d->dfill++] = (unsigned char)d->dac;
 	opnd_send(d, put, u);
-	if (d->dac_wr && d->dac_on) {
-		const unsigned char *b = d->dbuf;
-		put(u, OPNC_DACS);
-		put(u, nb);
-		for (k = 0; k < nb; k += 3)
-			put(u, (long)b[k] | (k + 1 < nb ? (long)b[k + 1] << 8 : 0) | (k + 2 < nb ? (long)b[k + 2] << 16 : 0));
+	/* the DAC at the output's rate: each output sample's place in the
+	   tick's (dpos, Q16), between its two bytes (linear) */
+	{
+		long out[64];
+		int no = 0;
+		while (d->dpos < (nb << 16)) {
+			long i = d->dpos >> 16, f = (d->dpos >> 8) & 255;
+			int b0 = d->dbuf[i], b1 = i + 1 < nb ? d->dbuf[i + 1] : b0;
+			if (no < 64)
+				out[no++] = ((long)((b0 - 128) * (256 - f) + (b1 - 128) * f) << 8) & 0xffffff;
+			d->dpos += d->dstep;
+		}
+		d->dpos -= nb << 16;
+		if (d->dac_wr && d->dac_on && no) {
+			put(u, OPNC_DACS);
+			put(u, no);
+			for (k = 0; k < no; k++)
+				put(u, out[k]);
+		}
 	}
 	return live;
 }

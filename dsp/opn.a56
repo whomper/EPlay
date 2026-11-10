@@ -32,6 +32,8 @@
 ;	   first halfway from the one before (the FDI's 44.1 or 48 kHz: the
 ;	   chip made at half of it)
 ;	13 DACRATE: the file's DAC samples an output sample, whole, Q23
+;	15 STATUS: one word back, the ring's least lead since PLAY (words,
+;	   2,048 at most; near 0: the DSP fell behind)
 ;	20-31 SN v: the Mega Drive's SN76489, sn.a56's commands 0-11 (+ 20):
 ;	   from the first, its three tones and its noise each sample too,
 ;	   added to left and right (atari/dspsn.c works them out)
@@ -57,7 +59,7 @@ BCR	equ	$fffe
 IPR	equ	$ffff
 
 OPN_Q	equ	4096
-OPN_UPD	equ	16		; samples between updates (src/opnd.h's)
+OPN_UPD	equ	32		; samples between updates (src/opnd.h's)
 
 ; ---- internal X (short addresses: $00-$3F)
 UPD	equ	$00		; samples to the next update
@@ -84,6 +86,7 @@ DCNT	equ	$35
 DSI	equ	$36
 DSF	equ	$37
 ALGT	equ	$38		; the algorithms' handlers (8)
+MINLD	equ	$1e		; (PLAY) the ring's least lead since PLAY (words): STATUS's
 SNON	equ	$16		; the SN76489 sounding (a command came); its sample's sum
 SNOUT	equ	$17
 SPH	equ	$70		; the SN76489 (sn.a56's): the phases, tones 0-2 and the noise,
@@ -109,8 +112,9 @@ CHS	equ	$1600		; each channel's (8 each): amk, dw, live, its algorithm's handler
 TRIT	equ	$1700		; the LFO's tremolo x 2, its vibrato x 2^15, 128 each (modulo 128)
 PMWT	equ	$1780
 ; ---- external Y
-RING	equ	$1000		; the SSI's ring, 512 words
-LEAD	equ	256		; the words written ahead of the SSI
+RING	equ	$1800		; the SSI's ring, 2,048 words (modulo 2,048)
+LEAD	equ	1536		; the words written ahead of the SSI: 31 ms, the busy
+				; passages borrowing from the quieter ones around them
 STAB	equ	$2000		; the sine, 1,024, its 8 copies (modulo 8,192)
 DQ	equ	$1400		; the DAC's queue, 1,024 (modulo 1,024)
 PLX	equ	$30		; (PLAY) 2: each sample twice; the one before (L, R)
@@ -616,35 +620,19 @@ alg7	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
 ; external P: the commands, the update, the start of a play
 	org	p:$7000
 
-; the DAC's handler (channel 6 while it is on): the queue's next, at
-; DACRATE (the last held while it is empty)
+; the DAC's handler (channel 6 while it is on): the queue's next (the
+; 68030's, a sample each output sample), the last held while it is empty
 dach	move	x:<DCNT,a
 	tst	a
 	jle	dhold
 	movec	#1023,m2
-	move	x:<DSI,n2
 	move	x:<DRP,r2
-	nop
-	move	y:(r2)+n2,b		; the sample; on by the whole steps
-	move	b,x:<DACV
-	move	x:<DSF,x1		; the fraction: one more where it carries
-	move	x:<DRF,b
-	add	x1,b	x:<DSI,x1
-	sub	x1,a
-	jclr	#23,b1,dh1
-	bclr	#23,b1
-	move	(r2)+
 	move	#>1,x1
-	sub	x1,a
-dh1	move	b1,x:<DRF
+	sub	x1,a	y:(r2)+,b		; the sample
+	move	a,x:<DCNT
+	move	b,x:<DACV
 	move	r2,x:<DRP
 	movec	#$ffff,m2
-	tst	a
-	jge	dh2
-	clr	a			; (played past the end: held at it)
-	move	x:<DWP,x1
-	move	x1,x:<DRP
-dh2	move	a,x:<DCNT
 dhold	move	x:<DACV,a
 	jmp	dacend
 
@@ -752,9 +740,18 @@ hcmd	move	x0,a
 	move	#>14,x1
 	cmp	x1,a
 	jeq	hc_dacs
+	move	#>15,x1
+	cmp	x1,a
+	jeq	hc_stat
 	move	#>20,x1
 	cmp	x1,a
 	jge	hc_sn
+	rts
+
+; STATUS: the ring's least lead, to the host
+hc_stat	move	x:<MINLD,x1
+hcs1	jclr	#1,x:HSR,hcs1
+	movep	x1,x:HTX
 	rts
 
 ; OP i: its block's step, tl, arf, d1, d2, rr, sl, am; the increment of
@@ -1075,51 +1072,38 @@ hc_drate jsr	rd
 	move	x0,x:<DSF
 	rts
 
-; DACS n w...: n samples, three a word (the first in the low byte), each
-; (byte - 128) x 2^16 into the queue; none while it holds 1,000
+; DACS n w...: n samples (the 68030's, at the output's rate, Q23) into the
+; queue, a word each, taken as they come; while it holds more than 1,000,
+; the oldest dropped
 hc_dacs	jsr	rd
+	move	x0,a
+	tst	a
+	jle	dsx
 	move	x0,x:<DTMP
 	movec	#1023,m1
 	move	x:<DWP,r1
-	move	#>$8000,y1		; (x 2^15: the byte x 2^16, the product's low word)
-dsw	move	x:<DTMP,a
-	tst	a
-	jle	dsx
-	jsr	rd
-	move	x0,x:<DWORD
-	do	#3,dsb
-	move	x:<DTMP,a
-	tst	a
-	jle	dsn
-	move	#>1,x1
-	sub	x1,a
-	move	a,x:<DTMP
-	move	x:<DWORD,a
-	move	#>$ff,x1
-	and	x1,a
-	move	a1,a			; (the byte alone: the word's sign gone)
-	move	#>128,x1
-	sub	x1,a
-	move	a1,x1
-	mpy	x1,y1,b
+	do	x0,dsl
+dsw	jclr	#0,x:HSR,dsw
+	movep	x:HRX,y:(r1)+
+dsl
+	move	r1,x:<DWP
+	movec	#$ffff,m1
 	move	x:<DCNT,a
+	move	x:<DTMP,x1
+	add	x1,a
 	move	#>1000,x1
 	cmp	x1,a
-	jge	dsfull
-	move	b0,y:(r1)+
-	move	#>1,x1
-	add	x1,a
-	move	a,x:<DCNT
-dsfull	move	x:<DWORD,a
-	rep	#8
-	lsr	a
-	move	a1,x:<DWORD
-dsn	nop
-dsb
-	jmp	dsw
-dsx	move	r1,x:<DWP
-	movec	#$ffff,m1
-	rts
+	jle	dsc
+	tfr	x1,a			; (too many: the oldest dropped)
+	move	x:<DWP,b
+	sub	x1,b
+	move	#>1023,x1
+	and	x1,b
+	move	#>DQ,x1
+	or	x1,b
+	move	b1,x:<DRP
+dsc	move	a,x:<DCNT
+dsx	rts
 
 ; each channel's handler: its algorithm's, or the silent one's (none of its
 ; operators live); channel 6's the DAC's while it is on
@@ -1361,15 +1345,17 @@ c_play	jsr	rd			; k: 1, or 2 (each sample twice)
 	clr	a
 	move	a,x:<PREVL
 	move	a,y:<PREVR
+	move	#>2047,x1
+	move	x1,x:<MINLD
 	movec	#$1fff,m4
 	move	#STAB,r4
 	clr	a
 	move	#RING,r6
-	movec	#511,m6
-	rep	#512
+	movec	#2047,m6
+	rep	#2048
 	move	a,y:(r6)+
 	move	#RING,r7
-	movec	#511,m7
+	movec	#2047,m7
 	movep	#$1f8,x:PCC		; port C: the SSI
 	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
 	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
@@ -1388,11 +1374,15 @@ pgen0	jset	#3,x:HSR,ploop		; (HF0: a burst of commands still coming)
 pgen	move	r6,a
 	move	r7,x0
 	sub	x0,a
-	move	#>511,x1
+	move	#>2047,x1
 	and	x1,a
 	move	a1,y1
 	move	y1,a
-	move	#>LEAD,x0
+	move	x:<MINLD,x1		; (its least)
+	cmp	x1,a
+	jge	pg1
+	move	a1,x:<MINLD
+pg1	move	#>LEAD,x0
 	cmp	x0,a
 	jge	ploop
 	jsr	sample
