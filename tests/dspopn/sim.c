@@ -94,9 +94,14 @@ static void sample(void)
 #define TICK_HZ (2457600.0 / 16 / 154)
 #define STEP 2897647UL
 
-static int vstep(void *v)
+static int vstep(void *v, long n)
 {
-	return vgm_run(v, 1);
+	return vgm_run(v, n);
+}
+
+static long at(void *v)
+{
+	return ((VGMRUN *)v)->at;
 }
 
 static void opn(void *u, int port, int reg, int val)
@@ -148,7 +153,7 @@ static int play(const char *path)
 		if (tick >= 1) {
 			tick -= 1;
 			vacc += STEP;
-			if (!opnd_tick(&chip, vstep, &r, (long)(vacc >> 16), both, NULL))
+			if (!opnd_tick(&chip, vstep, at, &r, (long)(vacc >> 16), both, NULL))
 				break;
 			vacc &= 0xffff;
 		}

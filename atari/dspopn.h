@@ -15,9 +15,10 @@
    answer */
 int dspopn_open(unsigned long clock, const char **why);
 void dspopn_write(int port, int reg, int val);	/* (the tick's, or before it runs) a register */
-/* (from the tick: supervisor mode) n of the file's samples, step run for
-   each (0 at its end), then what changed sent; 0 at the end */
-int dspopn_tick(int (*step)(void *v), void *v, long n);
+/* (from the tick: supervisor mode) n of the file's samples run (0 at its
+   end; at: its place, for the DAC's samples), then what changed sent; 0
+   at the end */
+int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long n);
 void dspopn_volume(int att, int mute);	/* att steps of 1.5 dB down (0 to 15): sent by the tick */
 void dspopn_hush(void);		/* (the tick's) every key off */
 void dspopn_close(void);	/* silent, off the matrix, the DSP unlocked */

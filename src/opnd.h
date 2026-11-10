@@ -52,6 +52,13 @@ typedef struct {
 	int dac_sent;		/* the DAC's on, as last sent */
 	int dac_wr;		/* written since the tick began */
 	long outg;		/* a channel's gain in the mix (OPN_OUTG: the volume's 0 dB) */
+	/* (opnd_tick's) the file's place now, the tick's first, the DAC's
+	   byte at each of its samples so far */
+	long (*at_fn)(void *v);
+	void *at_v;
+	long base;
+	unsigned char dbuf[96];
+	int dfill;
 } OPND;
 
 /* a channel's level in the mix (Q23: the chip's 14 bits through its 9-bit
@@ -90,9 +97,11 @@ void opnd_gain(OPND *d, long g);
 void opnd_send(OPND *d, void (*put)(void *u, long w), void *u);
 /* the DACRATE command for the output's rate */
 void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u);
-/* a tick of the file: n of its samples, step run for each (0 at the
-   file's end), the DAC's bytes as they were at each (while it is on and
-   written in it) then sent as a DACS after what else changed; 0 at the end */
-int opnd_tick(OPND *d, int (*step)(void *v), void *v, long n, void (*put)(void *u, long w), void *u);
+/* a tick of the file: n of its samples run (run: 0 at the file's end),
+   the DAC's byte at each (from at, the file's place as each is written:
+   while the DAC is on and written in the tick) then sent as a DACS after
+   what else changed; 0 at the end */
+int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v, long n,
+	      void (*put)(void *u, long w), void *u);
 
 #endif

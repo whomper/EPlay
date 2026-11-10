@@ -27,9 +27,14 @@ static void opn(void *u, int port, int reg, int val)
 #define TICK_HZ (2457600.0 / 16 / 154)
 #define STEP 2897647UL		/* the file's samples a tick, Q16 (vgmplay.c's) */
 
-static int step(void *v)
+static int step(void *v, long n)
 {
-	return vgm_run(v, 1);
+	return vgm_run(v, n);
+}
+
+static long at(void *v)
+{
+	return ((VGMRUN *)v)->at;
 }
 
 static void put(void *u, long w)
@@ -100,7 +105,7 @@ int main(int argc, char **argv)
 		if (tick >= 1) {
 			tick -= 1;
 			vacc += STEP;
-			if (!opnd_tick(&chip, step, &r, (long)(vacc >> 16), put, &dsp))
+			if (!opnd_tick(&chip, step, at, &r, (long)(vacc >> 16), put, &dsp))
 				break;
 			vacc &= 0xffff;
 		}

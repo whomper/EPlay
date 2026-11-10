@@ -70,10 +70,15 @@ static void opn(void *u, int port, int reg, int val)
 	dspopn_write(port, reg, val);
 }
 
-/* (the YM2612's tick: the file a sample at a time, for the DAC's) */
-static int one(void *v)
+/* (the YM2612's tick: the file run, its place for the DAC's samples) */
+static int runn(void *v, long n)
 {
-	return vgm_run(v, 1);
+	return vgm_run(v, n);
+}
+
+static long at(void *v)
+{
+	return ((VGMRUN *)v)->at;
 }
 
 /* both chips silent (the tick's, at the end) */
@@ -105,7 +110,7 @@ static void tick(void)
 	acc += STEP;
 	n = (long)(acc >> 16);
 	acc &= 0xffff;
-	if (!(use_opn ? dspopn_tick(one, &run, n) : vgm_run(&run, n))) {
+	if (!(use_opn ? dspopn_tick(runn, at, &run, n) : vgm_run(&run, n))) {
 		ended = 1;
 		hush();
 	}

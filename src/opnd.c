@@ -235,6 +235,14 @@ void opnd_write(OPND *d, int port, int reg, int val)
 			}
 			break;
 		case 0x2a:
+			if (d->at_fn) {
+				/* (the samples of the tick before this one: the byte before) */
+				long k = d->at_fn(d->at_v) - d->base;
+				if (k > (long)sizeof(d->dbuf))
+					k = (long)sizeof(d->dbuf);
+				while (d->dfill < k)
+					d->dbuf[d->dfill++] = (unsigned char)d->dac;
+			}
 			d->dac = val;
 			d->dac_wr = 1;
 			break;
@@ -346,21 +354,23 @@ void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u)
 	put(u, (long)((((unsigned long long)(44100UL % r) << 23) + r / 2) / r) & 0x7fffff);
 }
 
-int opnd_tick(OPND *d, int (*step)(void *v), void *v, long n, void (*put)(void *u, long w), void *u)
+int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v, long n,
+	      void (*put)(void *u, long w), void *u)
 {
-	unsigned char b[96];
-	long k, nb = 0;
-	int any = 0, live = 1;
+	long k, nb = n < (long)sizeof(d->dbuf) ? n : (long)sizeof(d->dbuf);
+	int live;
 	d->dac_wr = 0;
-	for (k = 0; k < n && live; k++) {
-		live = step(v);
-		if (d->dac_wr)
-			any = 1;
-		if (nb < (long)sizeof(b))
-			b[nb++] = (unsigned char)d->dac;
-	}
+	d->dfill = 0;
+	d->base = at(v);
+	d->at_fn = at;
+	d->at_v = v;
+	live = run(v, n);
+	d->at_fn = 0;
+	while (d->dfill < nb)
+		d->dbuf[d->dfill++] = (unsigned char)d->dac;
 	opnd_send(d, put, u);
-	if (any && d->dac_on) {
+	if (d->dac_wr && d->dac_on) {
+		const unsigned char *b = d->dbuf;
 		put(u, OPNC_DACS);
 		put(u, nb);
 		for (k = 0; k < nb; k += 3)

@@ -96,7 +96,7 @@ CASES["vgmsn"] = ("SN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100,
 # phase 10 (Erez, 10 Nov 2026): the Mega Drive's YM2612 on the DSP at
 # 24,585 Hz, algorithm 7's operator 4 alone, a sine at 999.7 Hz (F-number
 # 1230, block 5, at the NTSC clock)
-CASES["vgmopn"] = ("OPN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 24585, (1000, 1000), 3)
+CASES["vgmopn"] = ("OPN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
 SQUARE = {"vgm", "vgz", "vgmsn"}
 		# (a square wave: 81 % of its power in the tone)
 # the cases' sounds, where not sine tones

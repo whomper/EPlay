@@ -146,17 +146,17 @@ void dspopn_write(int port, int reg, int val)
 		opnd_write(&chip, port, reg, val);
 }
 
-int dspopn_tick(int (*step)(void *v), void *v, long n)
+int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long n)
 {
 	int live;
 	if (!on)
-		return step(v);
+		return run(v, n);
 	if (gain_due >= 0) {
 		opnd_gain(&chip, gain_due);
 		gain_due = -1;
 	}
 	HICR |= 8;		/* (HF0: a burst coming) */
-	live = opnd_tick(&chip, step, v, n, put, 0);
+	live = opnd_tick(&chip, run, at, v, n, put, 0);
 	HICR &= ~8;
 	return live;
 }
