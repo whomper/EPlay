@@ -116,15 +116,9 @@ static void button_text(char *b, int n, const char *lab)
 /* a pop-up over its button, the choice ticked (D27): the new choice */
 static int pop_over(short o, const char *const *lab, short n, int cur)
 {
-	static char t[24][24];
-	const char *p[24];
-	short x, y, r, i;
-	for (i = 0; i < n && i < 24; i++) {
-		snprintf(t[i], sizeof(t[i]), "%s%s", i == cur ? "\x08" : "", lab[i]);
-		p[i] = t[i];
-	}
+	short x, y, r;
 	objc_offset(tree, o, &x, &y);
-	r = popup_m(x, (short)(y - 3 - cur * (gl_hchar + 2)), p, n);
+	r = popup_over(x, y, lab, n, (short)cur);	/* (common's: the ticked row over the button, D27) */
 	tree[o].ob_state &= ~SELECTED;
 	dlg_draw(tree, o);
 	return r >= 0 ? r : cur;
