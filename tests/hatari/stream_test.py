@@ -610,8 +610,9 @@ def main():
     # with NVDI; EmuTOS without NVDI where the container has neither, a
     # stand-in, as describe() says)
     specs = [a for a in sys.argv[2:] if a not in CASES] or [machines.ERZ_MACHINE]
-    if specs == [machines.ERZ_MACHINE]:
-        os.environ.update(machines.erz_env())
+    nvdi_src = os.environ.get("AERA_NVDI", os.path.join(os.path.expanduser("~"), ".aera", "nvdi", "x"))
+    if specs == [machines.ERZ_MACHINE] and os.path.exists(os.path.join(nvdi_src, "auto", "nvdi.prg")):
+        os.environ.update(machines.erz_env())	# (no NVDI here: the same machine without it, a stand-in)
     failed = 0
     for spec in specs:
         for case in cases:
