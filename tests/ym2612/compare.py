@@ -9,7 +9,7 @@ dB where the sound is above -40 dB), the first ten harmonics' levels (the
 timbre: the largest difference, dB, of those within 30 dB of the loudest),
 left against right (the panning). Fails past the limits.
 
-    compare.py DIR [RATE]
+    compare.py DIR [RATE]    (RATE f24585: fast.c's, the DSP's arithmetic)
 """
 import sys
 import wave
@@ -55,7 +55,8 @@ def main():
     bad = 0
     for name in ("SINE", "FM", "CHAIN", "ENV", "DAC", "CHORD", "LFO", "CH3", "DETUNE"):
         rr, ref = load("%s/%s.ref.wav" % (d, name))
-        mr, mod = load("%s/%s.m%s.wav" % (d, name, rate[:2]))
+        # (RATE f24585: the DSP's arithmetic's, fast.c's)
+        mr, mod = load("%s/%s.%s.wav" % (d, name, rate[:3] if rate[0] == "f" else "m" + rate[:2]))
         a, b = int(0.25 * rr), int(0.75 * rr)
         am, bm = int(0.25 * mr), int(0.75 * mr)
         s_ref = (ref[a:b, 0] + ref[a:b, 1]) / 2
