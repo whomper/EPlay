@@ -1835,6 +1835,36 @@ above), the YM2151 (arcade, X68000: heavier still), the OPN family (PC-88/98), O
 likely feasible), the NES and the Game Boy (cheap, as the SN76489 was). Nothing starts before he
 chooses.
 
+## Phase 10: the YM2612, then OPL2 and OPL3 (Erez, 10 Nov 2026)
+
+Erez chose: "Add OPL2 support after the YM2612 and then OPL3", with MP3 on the 68060 in the
+YM2612's release. The YM2612 plays on the DSP at the Falcon's 24,585 Hz, the same way the MP3
+decoder was made: a model first, then the program held to it bit for bit.
+
+1. **The chip, accurately (done).** `src/opn.c`, a C model of the YM2612: its log-sine and
+   exponent tables, the envelope's rates, detune, key scaling, the eight algorithms, the LFO,
+   channel 3's mode, the DAC. `tests/ym2612` holds it against Nuked-OPN2 (LGPL-2.1+, a test's
+   reference only: fetched by `fetch-ref.sh`, never committed or shipped; Erez allowed it, 10 Nov
+   2026) on nine test files: pitch exact, level within 0.1 dB.
+2. **The DSP's arithmetic (done).** The 68030's half, `src/opnd.c`, turns the registers into
+   what the DSP works with. It sends what changed as the DSP's commands (`opnd_send`): each
+   operator's step (2^21 a turn), total level, envelope increments for an update of 8 samples,
+   sustain level; each channel's algorithm, feedback, gains, tremolo, vibrato; the keys; the LFO;
+   the DAC. `src/opnfast.c` is the DSP's arithmetic in C, word for word. It is a sine of 1,024
+   times a gain of 2^(-A/64), each modulation added to the phase as the chip does, the carriers
+   summed and limited. Against the reference at 24,585 Hz all nine files are within the limits:
+   level 0.5 dB, the loudness curve 1.8 dB, timbre 1.3 dB.
+3. **The program (done).** `dsp/opn.a56`. Each sample, each channel's handler (its algorithm's,
+   the silent one's, or the DAC's) runs from internal P; the update every 8 samples (envelopes,
+   gains, the LFO) runs from external P. `tests/dspopn` (in `make dsptest`) plays the nine files
+   through it and the model with the same commands: the same, bit for bit. The worst case (six
+   channels in the heaviest algorithm, feedback 7, tremolo and vibrato on every operator) takes
+   1,125 cycles a sample, 86% of a stock Falcon's DSP at 24,585 Hz (1,301).
+4. **The 68030's side.** `opnd` from the VGM's commands at the tick (its Timer A, as the SN76489),
+   the DAC's samples streamed, the SN76489 of a Mega Drive file mixed in. Then the Hatari rig's
+   case, and the release, with MP3 on the 68060 (below).
+5. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way.
+
 ## A FireBee edition (Erez, 10 Nov 2026)
 
 Erez asked for one, "just like the EWeb plan". The hub's order (AERA-Atari's standards/PARKED.md):

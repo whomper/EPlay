@@ -1,0 +1,1114 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; opn.a56 - the YM2612 (the Mega Drive's FM chip) for a VGM file on the
+; Falcon's DSP (phase 10, Erez, 10 Nov 2026), at the Falcon's 24,585 Hz:
+; src/opnfast.c's arithmetic, word for word (tests/dspopn holds it to it,
+; bit for bit). The 68030 does the chip's registers (src/opnd.c) and sends
+; what changed, as the commands below.
+;
+; Each sample: each channel's handler (X:HND, set at each update: its
+; algorithm's, or the silent one's when every operator is, or the DAC's);
+; an operator its phase (2^21 a turn) on by its step, its modulation added
+; (the outputs it takes, as they are), the index the phase's bits 20-11
+; (mpy by $1000; the sine table's 8 copies, modulo 8,192, take its sign
+; and its octaves), the sine times its gain; the carriers summed in A, the
+; channel A limited; the six mixed by their left and right gains. Each
+; OPN_UPD (8) samples, the update: the LFO, each operator's envelope (its
+; mode a handler's address), its gain from the table, its step with the
+; vibrato's.
+;
+; The host's words, a command's number then its words:
+;	1 LOADX ADDR N w..., 4 LOADY ADDR N w..., 6 LOADP ADDR N w...
+;	2 OP i: step tl arf d1 d2 rr sl am	(src/opnd.h's OPNC_*)
+;	3 CH c: alg kf left right amk dw
+;	5 KEY i: 1 on, 2 off
+;	7 LFO: step, reset
+;	8 DAC: on, sample
+;	9 RUN n: n samples, each its left and right word to the host (tests)
+;	10 PLAY: the SSI on, the samples into its ring; the commands still
+;	   taken between samples
+;	12 RESET: all silent, the sine table's 8 copies made (after its LOADY)
+;
+; Memory: what runs each sample in internal P; the rest from P:$7000
+; (X:$3000), loaded with LOADP.
+
+PBC	equ	$ffe0
+PCC	equ	$ffe1
+HCR	equ	$ffe8
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+HTX	equ	$ffeb
+CRA	equ	$ffec
+CRB	equ	$ffed
+SSISR	equ	$ffee
+TX	equ	$ffef
+BCR	equ	$fffe
+IPR	equ	$ffff
+
+OPN_Q	equ	4096
+
+; ---- internal X (short addresses: $00-$3F)
+UPD	equ	$00		; samples to the next update
+T2	equ	$01		; this sample's operator 2, 3 outputs (modulations)
+T3	equ	$02
+LIVE	equ	$03		; (update) an operator of this channel not silent
+AMT	equ	$04		; (update) the channel's tremolo, its vibrato
+VIB	equ	$05
+TRI2	equ	$06		; (update) the LFO's now
+PMWV	equ	$07
+LFOP	equ	$08		; the LFO's phase (2^24: 128 steps), its step
+LFOS	equ	$09
+DACON	equ	$0a
+DACV	equ	$0b
+JUNK	equ	$0c
+CHSP	equ	$0d		; (update) the channel's block
+HND	equ	$10		; each channel's handler (6)
+VOUT	equ	$18		; each channel's output this sample (6)
+FB	equ	$20		; each channel's: feedback factor, operator 1's last two (3 each)
+ALGT	equ	$38		; the algorithms' handlers (8)
+CHX	equ	$40		; each channel's operators: phase, gain (8 each, to $6F)
+; ---- internal Y
+PAN	equ	$00		; each channel's left, right gains (2 each)
+				; at CHX: each operator's step with the vibrato's (even)
+; ---- external X
+GAIN	equ	$0400		; 2^(-A/64), 3,200 (src/opnd.h's OPN_X_GAIN, ...)
+OPS	equ	$1400		; each operator's (16 each): its mode (its handler), the
+				; mode's increment (its attack's factor in the attack),
+				; sl, att, tl, am, step, arf, d1, d2, rr
+CHS	equ	$1600		; each channel's (8 each): amk, dw, live, its algorithm's handler
+TRIT	equ	$1700		; the LFO's tremolo x 2, its vibrato x 2^15, 128 each (modulo 128)
+PMWT	equ	$1780
+; ---- external Y
+RING	equ	$1000		; the SSI's ring, 512 words
+LEAD	equ	256		; the words written ahead of the SSI
+STAB	equ	$2000		; the sine, 1,024, its 8 copies (modulo 8,192)
+
+O_MODE	equ	0
+O_INC	equ	1
+O_SL	equ	2
+O_ATT	equ	3
+O_TL	equ	4
+O_AM	equ	5
+O_STEP	equ	6
+O_ARF	equ	7
+O_D1	equ	8
+O_D2	equ	9
+O_RR	equ	10
+C_AMK	equ	0
+C_DW	equ	1
+C_LIVE	equ	2
+C_HND	equ	3
+LIM	equ	$7fffff		; the attenuation's top (the limiter's)
+
+	org	p:$0
+	jmp	start
+
+; the SSI's transmit, a fast interrupt: the ring to the matrix
+	org	p:$10
+	movep	y:(r7)+,x:TX
+	nop
+	org	p:$12			; with an underrun: the status read, then the word
+	jsr	tue
+
+	org	p:$14
+start	movep	#1,x:PBC		; port B is the host port
+	movep	#0,x:BCR		; no wait states
+	ori	#3,mr			; no interrupts
+	movec	#$ffff,m0
+	jmp	cmd
+
+; a host word into x0
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+
+; ---- the commands: LOADP here, the rest in the external part (the
+; host's interrupts are never on: their vectors are code)
+cmd	jsr	rd
+	move	x0,a
+	move	#>6,x1
+	cmp	x1,a
+	jne	cmdx
+	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lp
+	jsr	rd
+	movem	x0,p:(r0)+
+lp
+	jmp	cmd
+
+; ---- a sample: A the left, B the right (limited when stored)
+sample	move	x:<UPD,a
+	move	#>1,x1
+	sub	x1,a
+	move	a,x:<UPD
+	jne	smp1
+	jsr	update
+smp1	move	#CHX,r0
+	move	#CHX,r5
+	move	#FB,r1
+	move	#VOUT,r3
+	move	#>$1000,x0
+	move	#8,n0
+	move	#2,n1
+	move	#2,n5
+	move	x:<HND+0,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+1,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+2,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+3,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+4,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+5,r2
+	nop
+	jsr	(r2)
+	move	#VOUT,r0		; the mix
+	move	#PAN,r5
+	clr	a
+	clr	b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b
+	rts
+
+; a channel's end: its output, the next's feedback
+chend	move	a,x:(r3)+
+	move	(r1)+n1
+	rts
+
+; a silent channel: 0, its operators passed over; the DAC's: its sample
+sil	clr	a
+dacend	move	a,x:(r3)+
+	move	(r0)+n0
+	move	r0,r5
+	move	(r1)+n1
+	move	(r1)+
+	rts
+
+; algorithm 0: 1 > 2 > 3 > 4
+alg0	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T2	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b	x:<T2,x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T3	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b	x:<T3,x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	jmp	chend
+
+; algorithm 1: (1 + 2) > 3 > 4
+alg1	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T2	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	x:<T2,x1	; + its modulation
+	add	x1,b
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T3	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b	x:<T3,x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	jmp	chend
+
+; algorithm 2: (1 + (2 > 3)) > 4
+alg2	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T2	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b	x:<T2,x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T3	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	x:<T3,x1	; + its modulation
+	add	x1,b
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	jmp	chend
+
+; algorithm 3: ((1 > 2) + 3) > 4
+alg3	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T2	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T3	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b	x:<T2,x1
+	move	b1,x:(r0)+
+	add	x1,b	x:<T3,x1	; + its modulation
+	add	x1,b
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	jmp	chend
+
+; algorithm 4: (1 > 2) + (3 > 4)
+alg4	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x:<T3	; (its output: a modulation)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b	x:<T3,x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	jmp	chend
+
+; algorithm 5: 1 > (2 + 3 + 4)
+alg5	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	jmp	chend
+
+; algorithm 6: (1 > 2) + 3 + 4
+alg6	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,b	; x its gain
+	move	b,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b	x:(r1),x1
+	move	b1,x:(r0)+
+	add	x1,b	; + its modulation
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a	; (a carrier)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	jmp	chend
+
+; algorithm 7: 1 + 2 + 3 + 4
+alg7	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
+	add	y0,b	x:(r1)+,y0	; on; the feedback's factor
+	move	b1,x:(r0)+	; (kept)
+	move	x:(r1)+,x1	; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r1)+,x1	; x the factor
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0	; the index (bits 20-11); its gain
+	move	b1,n4
+	move	x1,x:(r1)-	; (its last output the one before)
+	move	y:(r4+n4),y1	; the sine
+	mpy	y1,y0,a	; x its gain
+	move	a,x:(r1)	; its output
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 2
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 3
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	move	x:(r0),b	y:(r5)+n5,y0	; operator 4
+	add	y0,b
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mac	y1,y0,a	; (a carrier, summed)
+	jmp	chend
+
+; ===================================================================
+; external P: the commands, the update, the start of a play
+	org	p:$7000
+
+; the DAC's handler (channel 6 while it is on): its sample
+dach	move	x:<DACV,a
+	jmp	dacend
+
+; the SSI's underrun: its status read, then the word
+tue	movep	x:SSISR,x:JUNK
+	movep	y:(r7)+,x:TX
+	rti
+
+cmdx	move	#>1,x1
+	cmp	x1,a
+	jeq	loadx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	loady
+	move	#>2,x1
+	cmp	x1,a
+	jeq	c_op
+	move	#>3,x1
+	cmp	x1,a
+	jeq	c_ch
+	move	#>5,x1
+	cmp	x1,a
+	jeq	c_key
+	move	#>7,x1
+	cmp	x1,a
+	jeq	c_lfo
+	move	#>8,x1
+	cmp	x1,a
+	jeq	c_dac
+	move	#>9,x1
+	cmp	x1,a
+	jeq	c_run
+	move	#>10,x1
+	cmp	x1,a
+	jeq	c_play
+	move	#>12,x1
+	cmp	x1,a
+	jeq	c_reset
+	jmp	cmd
+
+loadx	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lx
+	jsr	rd
+	move	x0,x:(r0)+
+lx
+	jmp	cmd
+loady	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ly
+	jsr	rd
+	move	x0,y:(r0)+
+ly
+	jmp	cmd
+
+; the commands that play takes too: each returns (rts) to its caller
+c_op	jsr	hc_op
+	jmp	cmd
+c_ch	jsr	hc_ch
+	jmp	cmd
+c_key	jsr	hc_key
+	jmp	cmd
+c_lfo	jsr	hc_lfo
+	jmp	cmd
+c_dac	jsr	hc_dac
+	jmp	cmd
+
+; a command (x0 its number) from play's loop: not a load, not RUN
+hcmd	move	x0,a
+	move	#>2,x1
+	cmp	x1,a
+	jeq	hc_op
+	move	#>3,x1
+	cmp	x1,a
+	jeq	hc_ch
+	move	#>5,x1
+	cmp	x1,a
+	jeq	hc_key
+	move	#>7,x1
+	cmp	x1,a
+	jeq	hc_lfo
+	move	#>8,x1
+	cmp	x1,a
+	jeq	hc_dac
+	rts
+
+; OP i: its block's step, tl, arf, d1, d2, rr, sl, am; the increment of
+; its mode again
+hc_op	jsr	opblk
+	move	#O_STEP,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_TL,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_ARF,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_D1,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_D2,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_RR,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_SL,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_AM,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	x:(r0),r3
+	jmp	setinc
+
+; the increment of the mode r3 (the operator's block r0) into its block,
+; with the mode
+setinc	move	#>e_att,a
+	move	#O_ARF,n0
+	move	r3,x1
+	cmp	x1,a
+	jeq	si1
+	move	#>e_dec,a
+	move	#O_D1,n0
+	cmp	x1,a
+	jeq	si1
+	move	#>e_sus,a
+	move	#O_D2,n0
+	cmp	x1,a
+	jeq	si1
+	move	#O_RR,n0		; (the release's; off: its, unused)
+si1	move	r3,x:(r0)
+	move	x:(r0+n0),x1
+	move	#O_INC,n0
+	nop
+	move	x1,x:(r0+n0)
+	rts
+
+; the operator's number: r0 its block, x:JUNK the number
+opblk	jsr	rd
+	move	x0,x:JUNK
+	move	x0,x1
+	move	#>16,y1
+	mpy	x1,y1,a			; (i x 16, x 2: the product's low word)
+	asr	a
+	move	a0,a
+	move	#>OPS,x1
+	add	x1,a
+	move	a,r0
+	rts
+
+; CH c: algorithm, feedback, left, right, amk, dw
+hc_ch	jsr	rd
+	move	x0,x:JUNK
+	move	x0,x1
+	move	#>8,y1			; its block, its PAN pair
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>CHS,x1
+	add	x1,a
+	move	a,r1
+	move	x:JUNK,x1
+	move	#>2,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>PAN,x1
+	add	x1,a
+	move	a,r2
+	move	x:JUNK,x1
+	move	#>3,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>FB,x1
+	add	x1,a
+	move	a,r3
+	jsr	rd			; the algorithm: its handler
+	move	x0,n0
+	move	#ALGT,r0
+	move	#C_HND,n1
+	move	x:(r0+n0),x1
+	move	x1,x:(r1+n1)
+	jsr	rd			; the feedback's factor
+	move	x0,x:(r3)
+	jsr	rd			; left, right
+	move	x0,y:(r2)+
+	jsr	rd
+	move	x0,y:(r2)
+	jsr	rd			; amk, dw
+	move	x0,x:(r1)+
+	jsr	rd
+	move	x0,x:(r1)
+	jmp	sethall
+
+; KEY i, ev: on, its phase 0, its attack (or its decay with no attack), the
+; channel live; off, its release (unless off)
+hc_key	jsr	opblk
+	jsr	rd
+	move	x0,a
+	move	#>1,x1
+	cmp	x1,a
+	jne	koff
+	move	x:JUNK,x1		; the phase: CHX + 2 i
+	move	#>2,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>CHX,x1
+	add	x1,a
+	move	a,r1
+	clr	a
+	move	a,x:(r1)
+	move	#O_ARF,n0
+	nop
+	move	x:(r0+n0),a
+	tst	a
+	jeq	kdec
+	move	#e_att,r3
+	jsr	setinc
+	jmp	klive
+kdec	clr	a
+	move	#O_ATT,n0
+	nop
+	move	a,x:(r0+n0)		; att 0
+	move	#e_dec,r3
+	jsr	setinc
+klive	move	x:JUNK,a		; the channel: i / 4, its block's live
+	lsr	a
+	lsr	a
+	move	a1,x1
+	move	#>8,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>CHS+C_LIVE,x1
+	add	x1,a
+	move	a,r1
+	move	#>1,x1
+	move	x1,x:(r1)
+	jmp	sethall
+koff	move	x:(r0),a
+	move	#>e_off,x1
+	cmp	x1,a
+	jeq	kx
+	move	#e_rel,r3
+	jmp	setinc
+kx	rts
+
+; LFO: its step, its phase reset
+hc_lfo	jsr	rd
+	move	x0,x:LFOS
+	jsr	rd
+	move	x0,a
+	tst	a
+	jeq	lx1
+	clr	a
+	move	a,x:LFOP
+lx1	rts
+
+; DAC: on, its sample
+hc_dac	jsr	rd
+	move	x0,x:DACON
+	jsr	rd
+	move	x0,x:DACV
+	jmp	sethall
+
+; each channel's handler: its algorithm's, or the silent one's (none of its
+; operators live); channel 6's the DAC's while it is on
+sethall	move	#CHS+C_HND,r5
+	move	#CHS+C_LIVE,r2
+	move	#HND,r1
+	move	#8,n5
+	move	#8,n2
+	move	#>sil,x1
+	do	#6,shl
+	move	x:(r5)+n5,b
+	move	x:(r2)+n2,a
+	tst	a
+	teq	x1,b
+	move	b1,x:(r1)+
+shl
+	move	x:DACON,a
+	tst	a
+	jeq	shx
+	move	#>dach,x1
+	move	x1,x:HND+5
+shx	rts
+
+; ---- the update (each OPN_UPD samples): the LFO; each channel's tremolo
+; and vibrato; each operator's envelope (its mode's handler), its gain,
+; its step with the vibrato's; each channel live or not (an operator not
+; off). In the operators' loop: x0 the vibrato, y0 the tremolo, y1 $800,
+; r5 the gains' table, n3 live, n2 10
+update	move	#>8,a
+	move	a,x:<UPD
+	move	x:LFOP,a
+	move	x:LFOS,x1
+	add	x1,a
+	move	a1,x:LFOP
+	move	a1,x1
+	move	#>$40,y1		; x 2^-17: its step, -64..63 (modulo 128)
+	mpy	y1,x1,a
+	move	a1,n3
+	move	#TRIT,r3
+	movec	#$7f,m3
+	nop
+	move	x:(r3+n3),x1
+	move	x1,x:TRI2
+	move	#PMWT,r3
+	nop
+	move	x:(r3+n3),x1
+	move	x1,x:PMWV
+	movec	#$ffff,m3
+	move	#OPS,r2
+	move	#CHX+1,r0		; the gains
+	move	#CHX,r1			; the steps (Y)
+	move	#CHS,r3
+	move	r3,x:CHSP
+	move	#GAIN,r5
+	move	#2,n0
+	move	#2,n1
+	move	#10,n2
+	do	#6,uch
+	move	x:CHSP,r3
+	move	x:TRI2,x1		; the tremolo: tri x 2 x amk
+	move	x:(r3)+,y1
+	mpy	y1,x1,a	x:PMWV,x1
+	move	x:(r3)+,y1		; the vibrato: pmw x dw
+	mpy	y1,x1,a	a,y0
+	move	a,x0
+	move	r3,x:CHSP		; (its live)
+	move	#0,n3
+	move	#>$800,y1
+	do	#4,uop
+	move	x:(r2)+,r3		; its mode
+	move	x:(r2)+,x1		; its increment
+	move	x:(r2)+,b		; sl
+	move	x:(r2),a		; att
+	jmp	(r3)
+e_sus	add	x1,a
+tail	move	a,x1			; (limited)
+	move	x1,x:(r2)+		; att
+	mpy	y1,x1,b	x:(r2)+,x1	; x 2^-12; tl (its steps)
+	add	x1,b
+	jclr	#0,x:(r2)+,tn		; am: the tremolo on it
+	add	y0,b
+tn	move	b1,n5
+	move	x:(r2)+n2,x1		; its step (the next block)
+	move	x:(r5+n5),b		; its gain
+	move	b,x:(r0)+n0
+	mpy	x1,x0,b			; step x vib, + step
+	add	x1,b	r3,n3		; (live)
+	move	b1,y:(r1)+n1
+uend	nop
+uop
+	move	n3,x1			; the channel's live; the next block
+	move	#6,n3
+	move	x:CHSP,r3
+	nop
+	move	x1,x:(r3)+n3
+	move	r3,x:CHSP
+uch
+	jmp	sethall
+
+; the envelope's modes: r2 the block's att, x1 the mode's increment, b sl,
+; a att; a the new att, to tail (r3 the mode)
+e_att	move	a,y1
+	mpy	y1,x1,a	#>OPN_Q,x1	; att x arf
+	move	#>$800,y1
+	cmp	x1,a
+	jge	tail
+	clr	a			; (at the top: the decay)
+	move	#e_dec,r3
+	move	#O_D1-O_ATT,n2
+	jsr	trans
+	jmp	tail
+e_dec	add	x1,a
+	cmp	b,a
+	jlt	tail
+	move	#e_sus,r3		; (the sustain level: the sustain)
+	move	#O_D2-O_ATT,n2
+	jsr	trans
+	jmp	tail
+e_rel	add	x1,a	#>LIM,x1
+	cmp	x1,a
+	jlt	tail
+	move	#e_off,r3		; (at the top: off)
+	move	#O_RR-O_ATT,n2
+	jsr	trans
+	jmp	tail
+e_off	move	(r0)+n0			; (passed over)
+	move	(r1)+n1
+	move	(r2)+n2
+	move	(r2)+
+	move	(r2)+
+	move	(r2)+
+	jmp	uend
+
+; a change of mode: r3 the new, n2 its increment's place from the att;
+; stored with it (r2 the att; n2 10 again)
+trans	move	x:(r2+n2),x1
+	move	#O_INC-O_ATT,n2
+	nop
+	move	x1,x:(r2+n2)
+	move	#O_MODE-O_ATT,n2
+	nop
+	move	r3,x:(r2+n2)
+	move	#10,n2
+	rts
+
+; ---- RUN n: n samples, each its left and right to the host
+c_run	jsr	rd
+	movec	#$1fff,m4
+	move	#STAB,r4
+	do	x0,run1
+	jsr	sample
+	jsr	wr
+	tfr	b,a
+	jsr	wr
+	nop
+run1
+	movec	#$ffff,m4
+	jmp	cmd
+wr	jclr	#1,x:HSR,wr
+	movep	a,x:HTX
+	rts
+
+; ---- RESET: all silent; the sine's 8 copies (from its first, loaded)
+c_reset	clr	a
+	move	#0,r0
+	rep	#$80			; internal X: the state
+	move	a,x:(r0)+
+	move	#0,r0
+	rep	#$80			; internal Y: the gains, the steps
+	move	a,y:(r0)+
+	move	#>1,x1
+	move	x1,x:UPD
+	move	#>sil,x1
+	move	#HND,r0
+	rep	#6
+	move	x1,x:(r0)+
+	move	#ALGT,r0		; the algorithms' handlers
+	move	#>alg0,x1
+	move	x1,x:(r0)+
+	move	#>alg1,x1
+	move	x1,x:(r0)+
+	move	#>alg2,x1
+	move	x1,x:(r0)+
+	move	#>alg3,x1
+	move	x1,x:(r0)+
+	move	#>alg4,x1
+	move	x1,x:(r0)+
+	move	#>alg5,x1
+	move	x1,x:(r0)+
+	move	#>alg6,x1
+	move	x1,x:(r0)+
+	move	#>alg7,x1
+	move	x1,x:(r0)+
+	move	#OPS,r0			; each operator: off, att at the top
+	move	#>LIM,x1
+	move	#>e_off,y1
+	do	#24,rs1
+	move	y1,x:(r0)+
+	rep	#2
+	move	a,x:(r0)+
+	move	x1,x:(r0)+
+	rep	#12
+	move	a,x:(r0)+
+rs1
+	move	#CHS,r0			; each channel: algorithm 0, not live
+	move	#>alg0,x1
+	do	#6,rs2
+	rep	#3
+	move	a,x:(r0)+
+	move	x1,x:(r0)+
+	rep	#4
+	move	a,x:(r0)+
+rs2
+	move	#STAB,r0		; the sine's copies
+	move	#STAB+1024,r1
+	do	#7,rs3
+	do	#1024,rs4
+	move	y:(r0)+,x1
+	move	x1,y:(r1)+
+rs4
+	nop
+rs3
+	jmp	cmd
+
+; ---- PLAY: the SSI on (sn.a56's way), the ring kept LEAD words ahead,
+; the commands taken between samples
+c_play	movec	#$1fff,m4
+	move	#STAB,r4
+	clr	a
+	move	#RING,r6
+	movec	#511,m6
+	rep	#512
+	move	a,y:(r6)+
+	move	#RING,r7
+	movec	#511,m7
+	movep	#$1f8,x:PCC		; port C: the SSI
+	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
+	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
+	movep	#$3000,x:IPR		; the SSI at level 2, the host's off
+	movep	#0,x:TX
+pmt	jclr	#6,x:SSISR,pmt
+	jclr	#2,x:SSISR,pmr
+	movep	#0,x:TX
+pmt2	jclr	#6,x:SSISR,pmt2
+pmr	andi	#$fc,mr			; interrupts on: the left first
+ploop	jclr	#0,x:HSR,pgen
+	jsr	rd
+	jsr	hcmd
+pgen	move	r6,a
+	move	r7,x0
+	sub	x0,a
+	move	#>511,x1
+	and	x1,a
+	move	a1,y1
+	move	y1,a
+	move	#>LEAD,x0
+	cmp	x0,a
+	jge	ploop
+	jsr	sample
+	move	a,y:(r6)+
+	move	b,y:(r6)+
+	jmp	ploop

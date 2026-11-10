@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * opnfast.c - the YM2612 as the DSP plays it (opnfast.h).
+ * opnfast.c - the YM2612 as the DSP plays it (opnfast.h). Each step as
+ * dsp/opn.a56 does it; the comments name its instructions.
  */
 #include <string.h>
 #include <math.h>
@@ -11,248 +12,264 @@ enum { M_ATTACK, M_DECAY, M_SUSTAIN, M_RELEASE, M_OFF };
 
 #define W24(v) ((long)(((unsigned long)(v)) & 0xffffff))
 #define S24(v) ((long)((((unsigned long)(v)) & 0xffffff) ^ 0x800000) - 0x800000)
-#define QMAX (1023L * OPN_Q)
+#define LIM 8388607L	/* the limiter's: the attenuation's top (its gain 0 from 832 steps) */
 
-static const unsigned char lfo_per[8] = { 108, 77, 71, 67, 62, 44, 8, 5 };
-static const unsigned char ams_shift[4] = { 8, 3, 1, 0 };
-static const unsigned short pms_depth[8] = { 0, 2, 4, 6, 8, 12, 23, 46 };
+typedef long long acc_t;	/* an accumulator: here the product's 48 bits, x 2 */
 
-/* the DSP's multiply of two Q23 fractions, the result's top word (as mpy
-   then a1: truncated toward minus infinity) */
-static long mpy(long a, long b)
+/* mpy x,y: the product, as the accumulator holds it (2^47 = 1.0) */
+static acc_t prod(long a, long b)
 {
-	return (long)(((long long)a * b * 2) >> 24);
+	return (acc_t)S24(a) * S24(b) * 2;
 }
 
-static long sat(long v)
+/* its top word (a1: toward minus infinity) */
+static long top(acc_t a)
 {
+	return (long)(a >> 24);
+}
+
+/* move a,x: the limiter */
+static long lim(acc_t a)
+{
+	long v = top(a);
 	return v > 8388607L ? 8388607L : v < -8388608L ? -8388608L : v;
 }
 
-void opnf_init(OPNF *f, const OPND *d)
+void opnf_init(OPNF *f)
 {
 	int i, c, k;
 	memset(f, 0, sizeof(*f));
-	for (i = 0; i < 1024; i++) {
+	for (i = 0; i < 1024; i++)
 		f->sin_tab[i] = (long)floor(sin((i + 0.5) * M_PI / 512) * 8364000.0 + 0.5);
-		/* (below -78 dB the chip's output is 0: its exponent's 13 octaves) */
+	/* (below -78 dB the chip's output is 0: its exponent's 13 octaves) */
+	for (i = 0; i < OPNF_GAINS; i++)
 		f->gain_tab[i] = i >= 832 ? 0 : (long)floor(pow(2, -i / 64.0) * 8388607.0 + 0.5);
+	/* the LFO's step s: the tremolo's triangle x 2, the vibrato's x 2^15 */
+	for (i = 0; i < 128; i++) {
+		f->triw[i] = 2 * (i < 64 ? i * 2 : (127 - i) * 2);
+		f->pmw[i] = W24((long)(i < 32 ? i * 4 : i < 96 ? (64 - i) * 4 : (i - 128) * 4) << 15);
 	}
-	for (c = 0; c < 6; c++) {
-		f->ch[c].panl = f->ch[c].panr = 1;
+	for (c = 0; c < 6; c++)
 		for (k = 0; k < 4; k++) {
-			f->ch[c].op[k].att = QMAX;
+			f->ch[c].op[k].att = LIM;
 			f->ch[c].op[k].mode = M_OFF;
 		}
-	}
 	f->upd = 1;
-	(void)d;
 }
 
-void opnf_take(OPNF *f, OPND *d)
+/* ---- the commands */
+
+static int cmd_len(long c)
 {
-	int c, k;
-	for (c = 0; c < 6; c++) {
-		OPNF_CH *ch = &f->ch[c];
-		if (d->ch_dirty & (1u << c)) {
-			ch->alg = d->ch[c].alg;
-			ch->fb = d->ch[c].fb;
-			ch->panl = (d->ch[c].pan >> 1) & 1;
-			ch->panr = d->ch[c].pan & 1;
-			ch->ams = d->ch[c].ams;
-			ch->pms = d->ch[c].pms;
-		}
-		for (k = 0; k < 4; k++) {
-			int i = c * 4 + k;
-			OPNF_OP *op = &ch->op[k];
-			const OPND_OP *s = &d->ch[c].op[k];
-			if (d->op_dirty & (1UL << i)) {
-				op->step = s->step;
-				op->tl = s->tl;
-				op->arf = s->arf;
-				op->d1 = s->d1;
-				op->d2 = s->d2;
-				op->rr = s->rr;
-				op->sl = s->sl;
-				op->am = s->am;
-			}
-			if (d->key_event[i] == OPND_KEYON) {
-				op->phase = 0;
-				if (op->arf) {
-					op->mode = M_ATTACK;
-				} else {
-					op->att = 0;
-					op->mode = M_DECAY;
-				}
-				ch->live = 1;
-			} else if (d->key_event[i] == OPND_KEYOFF && op->mode != M_OFF)
-				op->mode = M_RELEASE;
-			d->key_event[i] = 0;
-		}
+	switch (c) {
+	case OPNC_OP:
+		return 10;
+	case OPNC_CH:
+		return 8;
+	case OPNC_KEY:
+	case OPNC_LFO:
+	case OPNC_DAC:
+		return 3;
 	}
-	if (d->lfo_dirty) {
-		f->lfo_on = d->lfo_on;
-		f->lfo_step = d->lfo_on ? (long)(d->ratio * OPN_UPD / lfo_per[d->lfo_rate] * 65536 + 0.5) : 0;
-		if (!d->lfo_on)
-			f->lfo_phase = 0;
-	}
-	if (d->dac_dirty) {
-		f->dac_on = d->dac_on;
-		f->dac = (long)(d->dac - 128) << 16;
-	}
-	d->op_dirty = 0;
-	d->ch_dirty = 0;
-	d->lfo_dirty = d->dac_dirty = 0;
+	return 1;
 }
 
-/* the envelopes, the gains, the LFO: each OPN_UPD samples */
+static void cmd(OPNF *f, const long *w)
+{
+	OPNF_CH *ch;
+	OPNF_OP *op;
+	switch (w[0]) {
+	case OPNC_OP:
+		op = &f->ch[w[1] / 4].op[w[1] % 4];
+		op->step = w[2];
+		op->tl = w[3];
+		op->arf = w[4];
+		op->d1 = w[5];
+		op->d2 = w[6];
+		op->rr = w[7];
+		op->sl = w[8];
+		op->am = (int)w[9];
+		break;
+	case OPNC_CH:
+		ch = &f->ch[w[1]];
+		ch->alg = (int)w[2];
+		ch->kf = w[3];
+		ch->pl = w[4];
+		ch->pr = w[5];
+		ch->amk = w[6];
+		ch->dw = w[7];
+		break;
+	case OPNC_KEY:
+		ch = &f->ch[w[1] / 4];
+		op = &ch->op[w[1] % 4];
+		if (w[2] == OPND_KEYON) {
+			op->phase = 0;
+			if (op->arf)
+				op->mode = M_ATTACK;
+			else {
+				op->att = 0;
+				op->mode = M_DECAY;
+			}
+			ch->live = 1;
+		} else if (op->mode != M_OFF)
+			op->mode = M_RELEASE;
+		break;
+	case OPNC_LFO:
+		f->lfo_step = w[1];
+		if (w[2])
+			f->lfo_phase = 0;
+		break;
+	case OPNC_DAC:
+		f->dac_on = (int)w[1];
+		f->dac = S24(w[2]);
+		break;
+	}
+}
+
+void opnf_word(OPNF *f, long w)
+{
+	f->cw[f->cn++] = W24(w);
+	if (f->cn >= cmd_len(f->cw[0])) {
+		cmd(f, f->cw);
+		f->cn = 0;
+	}
+}
+
+/* ---- the envelopes, the gains, the LFO: each OPN_UPD samples */
 static void update(OPNF *f)
 {
-	int c, k, tri = 0;
-	long pm = 0;
-	if (f->lfo_on) {
-		int s;
-		f->lfo_phase += f->lfo_step;
-		s = (int)((f->lfo_phase >> 16) & 127);
-		tri = s < 64 ? s * 2 : (127 - s) * 2;
-		pm = s < 32 ? s * 4 : s < 96 ? (64 - s) * 4 : (s - 128) * 4;
-	}
+	int c, k;
+	long s, tri2, pmw;
+	f->lfo_phase = W24(f->lfo_phase + f->lfo_step);
+	/* (mpy by 2^-17: signed, -64..63, the tables' middle at 0) */
+	s = S24(f->lfo_phase) >> 17;
+	tri2 = f->triw[s & 127];
+	pmw = f->pmw[s & 127];
 	for (c = 0; c < 6; c++) {
 		OPNF_CH *ch = &f->ch[c];
+		long amt = top(prod(tri2, ch->amk));
+		long vib = top(prod(pmw, ch->dw));
 		int live = 0;
 		for (k = 0; k < 4; k++) {
 			OPNF_OP *op = &ch->op[k];
-			long a;
+			acc_t a;
+			long g, v;
+			/* (an operator off passed over: its gain 0 since it went off) */
+			if (op->mode == M_OFF)
+				continue;
+			live = 1;
 			switch (op->mode) {
 			case M_ATTACK:
-				op->att = mpy(op->att, op->arf);
-				if (op->att < OPN_Q) {
-					op->att = 0;
+				v = top(prod(op->att, op->arf));
+				if (v < OPN_Q) {
+					v = 0;
 					op->mode = M_DECAY;
 				}
 				break;
 			case M_DECAY:
-				op->att += op->d1;
-				if (op->att >= op->sl)
+				v = op->att + op->d1;
+				if (v >= op->sl)
 					op->mode = M_SUSTAIN;
-				if (op->att > QMAX)
-					op->att = QMAX;
 				break;
 			case M_SUSTAIN:
-				op->att += op->d2;
-				if (op->att > QMAX)
-					op->att = QMAX;
+				v = op->att + op->d2;
 				break;
-			case M_RELEASE:
-				op->att += op->rr;
-				if (op->att >= QMAX) {
-					op->att = QMAX;
+			default:
+				v = op->att + op->rr;
+				if (v >= LIM)
 					op->mode = M_OFF;
-				}
 				break;
 			}
-			a = (op->att + op->tl) / OPN_Q + (op->am && f->lfo_on ? tri >> ams_shift[ch->ams] : 0);
-			op->gain = f->gain_tab[a > 1023 ? 1023 : a];
-			if (op->mode != M_OFF)
-				live = 1;
+			/* (stored through the limiter) */
+			op->att = v > LIM ? LIM : v;
+			/* the gain: att x 2^-12 + tl (in steps), the tremolo's on it */
+			g = top(prod(op->att, 0x800)) + op->tl;
+			if (op->am)
+				g += amt;
+			op->gain = f->gain_tab[g];
+			/* the vibrato: step + step x vib */
+			a = prod(op->step, vib) + ((acc_t)S24(op->step) << 24);
+			op->step_e = W24(top(a));
 		}
 		ch->live = live;
-		/* the vibrato: the steps x (1 + its depth), an update's worth */
-		for (k = 0; k < 4; k++) {
-			OPNF_OP *op = &ch->op[k];
-			op->step_e = op->step;
-			if (pm && ch->pms)
-				op->step_e = W24(op->step + mpy(op->step, (long)pm * pms_depth[ch->pms] * 8388608L / 128000));
-		}
 	}
 	f->upd = OPN_UPD;
 }
 
-/* an operator's output: its sine at its phase plus mod, times its gain;
-   its phase on */
-static long op_calc(OPNF *f, OPNF_OP *op, long mod)
-{
-	long idx = (W24(op->phase + mod) >> 14) & 1023;
-	long out = mpy(f->sin_tab[idx], op->gain);
-	op->phase = W24(op->phase + op->step_e);
-	return out;
-}
+/* ---- a sample */
 
-/* the modulation of an output: x 8 (the chip's >> 1 in its 10-bit index),
-   in 24 bits */
-#define MOD(v) W24((v) << 3)
+/* an operator: its phase on (stored), its modulation added, the index
+   (mpy by $1000: bits 20-11, signed; the table's 8 copies take it), the
+   sine times its gain */
+static acc_t op_calc(OPNF *f, OPNF_OP *op, long mod1, long mod2, acc_t extra)
+{
+	acc_t b = ((acc_t)S24(op->phase) << 24) + ((acc_t)S24(op->step_e) << 24);
+	long idx;
+	op->phase = W24(top(b));
+	b += ((acc_t)S24(mod1) << 24) + ((acc_t)S24(mod2) << 24) + extra;
+	idx = top(prod(top(b), 0x1000));
+	return prod(f->sin_tab[idx & 1023], op->gain);
+}
 
 static long ch_calc(OPNF *f, OPNF_CH *ch)
 {
 	OPNF_OP *o = ch->op;
-	long m, s, o1, o2, o3, o4;
-	/* operator 1: its feedback, its last two outputs x 2^(FB - 6) */
-	m = 0;
-	if (ch->fb) {
-		long fs = o[0].out + o[0].out1;
-		m = W24(ch->fb >= 6 ? fs << (ch->fb - 6) : fs >> (6 - ch->fb));
-	}
-	o1 = op_calc(f, &o[0], m);
-	o[0].out1 = o[0].out;
-	o[0].out = o1;
+	acc_t a, p1, p2, p3;
+	long o1, o2, o3;
+	/* operator 1: its feedback, its last two outputs x the factor (mac) */
+	p1 = op_calc(f, &o[0], 0, 0, prod(ch->o1, ch->kf) + prod(ch->o1p, ch->kf));
+	ch->o1p = ch->o1;
+	o1 = ch->o1 = lim(p1);
 	switch (ch->alg) {
 	case 0:
-		o2 = op_calc(f, &o[1], MOD(o1));
-		o3 = op_calc(f, &o[2], MOD(o2));
-		s = op_calc(f, &o[3], MOD(o3));
+		o2 = lim(op_calc(f, &o[1], o1, 0, 0));
+		o3 = lim(op_calc(f, &o[2], o2, 0, 0));
+		a = op_calc(f, &o[3], o3, 0, 0);
 		break;
 	case 1:
-		o2 = op_calc(f, &o[1], 0);
-		o3 = op_calc(f, &o[2], MOD(o1 + o2));
-		s = op_calc(f, &o[3], MOD(o3));
+		o2 = lim(op_calc(f, &o[1], 0, 0, 0));
+		o3 = lim(op_calc(f, &o[2], o1, o2, 0));
+		a = op_calc(f, &o[3], o3, 0, 0);
 		break;
 	case 2:
-		o2 = op_calc(f, &o[1], 0);
-		o3 = op_calc(f, &o[2], MOD(o2));
-		s = op_calc(f, &o[3], MOD(o1 + o3));
+		o2 = lim(op_calc(f, &o[1], 0, 0, 0));
+		o3 = lim(op_calc(f, &o[2], o2, 0, 0));
+		a = op_calc(f, &o[3], o1, o3, 0);
 		break;
 	case 3:
-		o2 = op_calc(f, &o[1], MOD(o1));
-		o3 = op_calc(f, &o[2], 0);
-		s = op_calc(f, &o[3], MOD(o2 + o3));
+		o2 = lim(op_calc(f, &o[1], o1, 0, 0));
+		o3 = lim(op_calc(f, &o[2], 0, 0, 0));
+		a = op_calc(f, &o[3], o2, o3, 0);
 		break;
 	case 4:
-		o2 = op_calc(f, &o[1], MOD(o1));
-		o3 = op_calc(f, &o[2], 0);
-		o4 = op_calc(f, &o[3], MOD(o3));
-		s = o2 + o4;
+		a = op_calc(f, &o[1], o1, 0, 0);
+		o3 = lim(op_calc(f, &o[2], 0, 0, 0));
+		a += op_calc(f, &o[3], o3, 0, 0);
 		break;
 	case 5:
-		o2 = op_calc(f, &o[1], MOD(o1));
-		o3 = op_calc(f, &o[2], MOD(o1));
-		o4 = op_calc(f, &o[3], MOD(o1));
-		s = o2 + o3 + o4;
+		a = op_calc(f, &o[1], o1, 0, 0);
+		a += op_calc(f, &o[2], o1, 0, 0);
+		a += op_calc(f, &o[3], o1, 0, 0);
 		break;
 	case 6:
-		o2 = op_calc(f, &o[1], MOD(o1));
-		o3 = op_calc(f, &o[2], 0);
-		o4 = op_calc(f, &o[3], 0);
-		s = o2 + o3 + o4;
+		a = op_calc(f, &o[1], o1, 0, 0);
+		a += op_calc(f, &o[2], 0, 0, 0);
+		a += op_calc(f, &o[3], 0, 0, 0);
 		break;
 	default:
-		o2 = op_calc(f, &o[1], 0);
-		o3 = op_calc(f, &o[2], 0);
-		o4 = op_calc(f, &o[3], 0);
-		s = o1 + o2 + o3 + o4;
+		p2 = op_calc(f, &o[1], 0, 0, 0);
+		p3 = op_calc(f, &o[2], 0, 0, 0);
+		a = p1 + p2 + p3 + op_calc(f, &o[3], 0, 0, 0);
 		break;
 	}
-	return sat(s);
+	return lim(a);
 }
 
-/* a channel's level in the mix: the chip's 14 bits through its 9-bit DAC,
-   at the reference's level (opn.c's x 33 of 16 bits), Q23 */
-#define OUTG 2162688L	/* 0.2578 */
-
-void opnf_run(OPNF *f, short *out, int n)
+void opnf_words(OPNF *f, long *lr, int n)
 {
 	int k, c;
 	for (k = 0; k < n; k++) {
-		long l = 0, r = 0;
+		acc_t l = 0, r = 0;
 		if (!--f->upd)
 			update(f);
 		for (c = 0; c < 6; c++) {
@@ -261,20 +278,26 @@ void opnf_run(OPNF *f, short *out, int n)
 			if (c == 5 && f->dac_on)
 				v = f->dac;
 			else if (!ch->live)
-				continue;
+				v = 0;
 			else
 				v = ch_calc(f, ch);
-			v = mpy(v, OUTG);
-			if (ch->panl)
-				l += v;
-			if (ch->panr)
-				r += v;
+			l += prod(v, ch->pl);
+			r += prod(v, ch->pr);
 		}
-		l = sat(l) >> 8;
-		r = sat(r) >> 8;
-		l += out[2 * k];
-		r += out[2 * k + 1];
-		out[2 * k] = (short)(l > 32767 ? 32767 : l < -32768 ? -32768 : l);
-		out[2 * k + 1] = (short)(r > 32767 ? 32767 : r < -32768 ? -32768 : r);
+		lr[2 * k] = W24(lim(l));
+		lr[2 * k + 1] = W24(lim(r));
+	}
+}
+
+void opnf_run(OPNF *f, short *out, int n)
+{
+	int k, j;
+	for (k = 0; k < n; k++) {
+		long lr[2];
+		opnf_words(f, lr, 1);
+		for (j = 0; j < 2; j++) {
+			long v = (S24(lr[j]) >> 8) + out[2 * k + j];
+			out[2 * k + j] = (short)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+		}
 	}
 }

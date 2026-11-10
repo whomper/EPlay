@@ -2,50 +2,60 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * opnfast.h - the YM2612 as the DSP plays it (phase 10): dsp/opn.a56's
- * arithmetic in C, word for word (24-bit words, the DSP's multiplies and
- * its limiter), so that the program can be held to it bit for bit, as the
- * MP3 decoder is to its model. A sine of 1,024 times a gain from a table of
- * 1,024 (the attenuation's 0.094 dB steps: 2^(-A/64)), one multiply an
- * operator; the modulation the output x 8 (the chip's >> 1 in its 10-bit
- * index), operator 1's feedback its last two x 2^(FB - 6); the envelopes
- * each OPN_UPD samples from the steps opnd.c works out; a channel with
- * every operator silent passed over. Its parameters come only as the
- * 68030 sends them (opnf_take: what opnd.c marked changed).
+ * arithmetic in C, word for word (24-bit words, the DSP's multiplies, its
+ * accumulators and its limiter), so that the program can be held to it bit
+ * for bit, as the MP3 decoder is to its model. It takes only the words the
+ * 68030 sends (opnd_send's commands), as the program does.
+ *
+ * Each operator: its phase (2^21 a turn, in a 24-bit word) on by its step,
+ * plus its modulation (the outputs it takes, as they are: the chip's output
+ * >> 1 in its 10-bit index), the sine at its bits 20-11 (a table of 1,024)
+ * times its gain (a table of 2^(-A/64), A the attenuation's steps). Operator
+ * 1's feedback its last two outputs x 2^(FB - 9). The carriers summed in an
+ * accumulator, the channel the sum limited; the channels mixed into left
+ * and right by their gains, limited: the SSI's words (16 bits at their top).
+ * The envelopes, the gains and the LFO each OPN_UPD samples, an operator
+ * that is off passed over (its attenuation goes up to the limiter's top,
+ * its gain 0 long before); a channel with every operator off passed over.
  */
 #ifndef EPLAY_OPNFAST_H
 #define EPLAY_OPNFAST_H
 
 #include "opnd.h"
 
+#define OPNF_GAINS 3200		/* the gain table: (att + tl) / OPN_Q + tremolo at most, and some */
+
 typedef struct {
-	long phase;		/* 24 bits */
-	long step, tl, arf, d1, d2, rr, sl;	/* as sent */
-	long step_e;		/* the step with the vibrato's (each update) */
-	long att;		/* x OPN_Q */
-	long gain;		/* Q23, from the table */
-	long out, out1;		/* the last two outputs, Q23 */
+	long phase, gain, step_e;	/* (the sample's: internal X and Y) */
+	long att, step, tl, arf, d1, d2, rr, sl;
 	int mode, am;
 } OPNF_OP;
 
 typedef struct {
 	OPNF_OP op[4];
-	int alg, fb, panl, panr, ams, pms;
-	int live;		/* an operator not silent */
+	long kf, pl, pr, amk, dw;
+	long o1, o1p;		/* operator 1's last two outputs */
+	int alg, live;
 } OPNF_CH;
 
 typedef struct {
 	OPNF_CH ch[6];
 	int dac_on;
-	long dac;		/* Q23 */
-	int lfo_on;
-	long lfo_phase, lfo_step;	/* Q16 of its 128 steps an update */
+	long dac;
+	long lfo_phase, lfo_step;	/* 2^24: the LFO's 128 steps */
 	int upd;		/* samples to the next update */
-	long sin_tab[1024], gain_tab[1024];
+	/* the tables the 68030 loads */
+	long sin_tab[1024], gain_tab[OPNF_GAINS], triw[128], pmw[128];
+	/* the words of a command still coming */
+	long cw[12];
+	int cn;
 } OPNF;
 
-void opnf_init(OPNF *f, const OPND *d);
-/* what d marked changed, taken as the 68030 sends it, the marks cleared */
-void opnf_take(OPNF *f, OPND *d);
+void opnf_init(OPNF *f);
+/* a word the 68030 sends (opnd_send's put) */
+void opnf_word(OPNF *f, long w);
+/* n samples: the SSI's words, left and right (2 n) */
+void opnf_words(OPNF *f, long *lr, int n);
 /* n samples, left and right, added into out (2 n shorts) */
 void opnf_run(OPNF *f, short *out, int n);
 

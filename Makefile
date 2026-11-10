@@ -9,7 +9,9 @@
 #   make test       the MP3 decoder's model against minimp3 on files made
 #                   with sox and lame; WAV and AIFF against sox
 #   make dsptest    dsp/mp3.a56 against the model, bit for bit, on Hatari's
-#                   DSP core, with its cycles
+#                   DSP core, with its cycles; dsp/sn.a56; dsp/opn.a56 (the
+#                   YM2612) against src/opnfast.c, bit for bit, its worst case's
+#                   cycles
 #   make prof       build/prof/eplay.prg for the speed rig (tests/hatari)
 #   make rig        the Hatari rigs: playing (tests/hatari/play_test.py) and
 #                   the speed rig (tests/hatari/speed.py)
@@ -238,6 +240,7 @@ clean:
 dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspmp3
 	$(MAKE) -C tests/dspsn
+	$(MAKE) -C tests/dspopn
 
 # eplay.hyp from docs/GUIDE.md with the family's front page (docs/front.json,
 # common/tools/helpfront.py), and eplay.ref, its pages' names for ST-Guide's

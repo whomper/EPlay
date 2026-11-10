@@ -106,8 +106,8 @@ static void ch_steps(OPND *d, int c)
 		fc &= 0x1ffff;
 		inc = (long)fc * (op->mul ? op->mul * 2 : 1) >> 1;
 		inc &= 0xfffff;
-		/* (the chip's 20 bits a turn, 2^24 here: x 16, at the output's rate) */
-		op->step = (long)(inc * 16.0 * d->ratio + 0.5) & 0xffffff;
+		/* (the chip's 20 bits a turn, 2^21 here: x 2, at the output's rate) */
+		op->step = (long)(inc * 2.0 * d->ratio + 0.5) & 0xffffff;
 		if (op->ksr != kc >> (3 - op->ks)) {
 			op->ksr = kc >> (3 - op->ks);
 			op_rates(d, op);
@@ -194,7 +194,7 @@ void opnd_write(OPND *d, int port, int reg, int val)
 			return;
 		case 0x40:
 			op->tlr = val & 127;
-			op->tl = (long)(op->tlr << 3) * OPN_Q;
+			op->tl = (long)op->tlr << 3;
 			break;
 		case 0x50:
 			op->ks = val >> 6;
@@ -257,4 +257,67 @@ void opnd_write(OPND *d, int port, int reg, int val)
 		d->ch_dirty |= 1u << c;
 		break;
 	}
+}
+
+static const unsigned char lfo_per[8] = { 108, 77, 71, 67, 62, 44, 8, 5 };
+static const unsigned char ams_shift[4] = { 8, 3, 1, 0 };
+static const unsigned short pms_depth[8] = { 0, 2, 4, 6, 8, 12, 23, 46 };
+
+void opnd_send_dac(OPND *d, void (*put)(void *u, long w), void *u)
+{
+	if (d->dac_dirty) {
+		put(u, OPNC_DAC);
+		put(u, d->dac_on);
+		put(u, ((long)(d->dac - 128) << 16) & 0xffffff);
+		d->dac_dirty = 0;
+	}
+}
+
+void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
+{
+	int c, k;
+	for (c = 0; c < 6; c++) {
+		OPND_CH *ch = &d->ch[c];
+		if (d->ch_dirty & (1u << c)) {
+			put(u, OPNC_CH);
+			put(u, c);
+			put(u, ch->alg);
+			put(u, ch->fb ? 1L << (ch->fb + 14) : 0);
+			put(u, ch->pan & 2 ? OPN_OUTG : 0);
+			put(u, ch->pan & 1 ? OPN_OUTG : 0);
+			put(u, ch->ams ? 1L << (22 - ams_shift[ch->ams]) : 0);
+			put(u, ch->pms ? (long)(pms_depth[ch->pms] * 8388608.0 / 500 + 0.5) : 0);
+		}
+		for (k = 0; k < 4; k++) {
+			int i = c * 4 + k;
+			const OPND_OP *op = &ch->op[k];
+			if (d->op_dirty & (1UL << i)) {
+				put(u, OPNC_OP);
+				put(u, i);
+				put(u, op->step);
+				put(u, op->tl);
+				put(u, op->arf);
+				put(u, op->d1);
+				put(u, op->d2);
+				put(u, op->rr);
+				put(u, op->sl);
+				put(u, op->am);
+			}
+			if (d->key_event[i]) {
+				put(u, OPNC_KEY);
+				put(u, i);
+				put(u, d->key_event[i]);
+				d->key_event[i] = 0;
+			}
+		}
+	}
+	if (d->lfo_dirty) {
+		put(u, OPNC_LFO);
+		put(u, d->lfo_on ? (long)(d->ratio * OPN_UPD / lfo_per[d->lfo_rate] * 131072 + 0.5) : 0);
+		put(u, !d->lfo_on);
+	}
+	opnd_send_dac(d, put, u);
+	d->op_dirty = 0;
+	d->ch_dirty = 0;
+	d->lfo_dirty = 0;
 }

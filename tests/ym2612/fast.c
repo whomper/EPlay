@@ -3,8 +3,9 @@
 /*
  * fast.c - a VGM's YM2612 as the DSP plays it (src/opnd.c, the 68030's
  * half, and src/opnfast.c, the DSP's arithmetic), at a rate given, to a
- * WAV. The parameters are taken as the 68030 sends them: each 1 ms tick
- * (its Timer A), the DAC's samples as they come (they are streamed).
+ * WAV, the model taking only the DSP's commands (opnd_send's words): the
+ * parameters each 1 ms tick (the 68030's Timer A), the DAC's samples as
+ * they come (they are streamed).
  *
  *	fast FILE.VGM OUT.WAV RATE [seconds]
  */
@@ -22,6 +23,11 @@ static void opn(void *u, int port, int reg, int val)
 {
 	(void)u;
 	opnd_write(&chip, port, reg, val);
+}
+
+static void put(void *u, long w)
+{
+	opnf_word(u, w);
 }
 
 static void put16(FILE *f, unsigned v)
@@ -61,8 +67,8 @@ int main(int argc, char **argv)
 		return 1;
 	fclose(f);
 	opnd_init(&chip, h.ym2612_clock, rate);
-	opnf_init(&dsp, &chip);
-	opnf_take(&dsp, &chip);
+	opnf_init(&dsp);
+	opnd_send(&chip, put, &dsp);
 	vgm_begin(&r, b, n, &h, 0, 0, 0);
 	r.opn_fn = opn;
 	o = fopen(argv[2], "wb");
@@ -89,24 +95,9 @@ int main(int argc, char **argv)
 		tick += 1000.0 / rate;
 		if (tick >= 1) {
 			tick -= 1;
-			opnf_take(&dsp, &chip);
-		} else if (chip.dac_dirty) {
-			/* (the DAC's alone) */
-			unsigned long od = chip.op_dirty;
-			unsigned cd = chip.ch_dirty;
-			unsigned char ke[24];
-			int ld = chip.lfo_dirty;
-			memcpy(ke, chip.key_event, 24);
-			chip.op_dirty = 0;
-			chip.ch_dirty = 0;
-			chip.lfo_dirty = 0;
-			memset(chip.key_event, 0, 24);
-			opnf_take(&dsp, &chip);
-			chip.op_dirty = od;
-			chip.ch_dirty = cd;
-			chip.lfo_dirty = ld;
-			memcpy(chip.key_event, ke, 24);
-		}
+			opnd_send(&chip, put, &dsp);
+		} else
+			opnd_send_dac(&chip, put, &dsp);
 		opnf_run(&dsp, s, 1);
 		put16(o, (unsigned)s[0]);
 		put16(o, (unsigned)s[1]);
