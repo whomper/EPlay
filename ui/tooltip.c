@@ -42,6 +42,15 @@ void tip_hide(void)
 		form_dial(FMD_FINISH, tip_r.x, tip_r.y, tip_r.w, tip_r.h);
 }
 
+int tip_area(GRECT *r)
+{
+	if (!on)
+		return 0;
+	if (r)
+		*r = tip_r;
+	return 1;
+}
+
 unsigned long tip_wait(unsigned long other)
 {
 	unsigned long left;
