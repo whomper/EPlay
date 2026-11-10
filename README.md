@@ -20,7 +20,7 @@ and web radio, in a GEM window. Written in C and DSP56001 assembly.
 - **Mini player:** the bar alone, in a small window.
 - **Falcon, TT and STE:** WAV and AIFF on the TT's and STE's DMA sound too.
 
-![EPlay on a Falcon in 256 colours (Hatari): an album of five tracks in the list, the first playing, its cover, title and artist in the bar with the position, the volume and DSP as the output](docs/player.png)
+![EPlay's Settings on a Falcon in 256 colours (Hatari): its pages Playing, Stations and Files at the left; Playing shows the Output (Auto, FDI, DSP) and ReplayGain (Off, Track, Album, Auto) as buttons](docs/settings.png)
 
 ## Getting started
 
