@@ -51,6 +51,7 @@ typedef struct {
 	int lfo_dirty, dac_dirty;
 	int dac_sent;		/* the DAC's on, as last sent */
 	int dac_wr;		/* written since the tick began */
+	long outg;		/* a channel's gain in the mix (OPN_OUTG: the volume's 0 dB) */
 } OPND;
 
 /* a channel's level in the mix (Q23: the chip's 14 bits through its 9-bit
@@ -82,6 +83,8 @@ enum { OPNC_OP = 2, OPNC_CH = 3, OPNC_KEY = 5, OPNC_LFO = 7, OPNC_DAC = 8, OPNC_
 
 void opnd_init(OPND *d, unsigned long clock, long rate);
 void opnd_write(OPND *d, int port, int reg, int val);
+/* a channel's gain in the mix (the volume): each channel's sent again */
+void opnd_gain(OPND *d, long g);
 /* what changed since, as the DSP's commands, a word at a time to put; the
    marks cleared */
 void opnd_send(OPND *d, void (*put)(void *u, long w), void *u);

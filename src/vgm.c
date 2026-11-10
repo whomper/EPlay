@@ -68,8 +68,6 @@ int vgm_head_of(const unsigned char *b, long n, long size, VGMHEAD *h)
 		h->other = 1;
 	if (h->version >= 0x110 && (field(b, n, data, 0x30) & 0x3fffffffUL))
 		h->other = 1;
-	if (h->ym2612_clock)
-		h->other = 1;
 	for (o = 0x38; o < 0x74 && h->version >= 0x151; o += 4)
 		if (o != 0x3c && (field(b, n, data, o) & 0x3fffffffUL))	/* (0x3c: SegaPCM's interface) */
 			h->other = 1;

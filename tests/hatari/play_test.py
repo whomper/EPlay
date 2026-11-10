@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, firstrun (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -93,6 +93,10 @@ CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 491
 CASES["vgm"] = ("TONE.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
 CASES["vgz"] = ("TONE.VGZ", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
 CASES["vgmsn"] = ("SN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (999, 999), 3)
+# phase 10 (Erez, 10 Nov 2026): the Mega Drive's YM2612 on the DSP at
+# 24,585 Hz, algorithm 7's operator 4 alone, a sine at 999.7 Hz (F-number
+# 1230, block 5, at the NTSC clock)
+CASES["vgmopn"] = ("OPN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 24585, (1000, 1000), 3)
 SQUARE = {"vgm", "vgz", "vgmsn"}
 		# (a square wave: 81 % of its power in the tone)
 # the cases' sounds, where not sine tones
@@ -214,14 +218,28 @@ QUIT_STEPS = ("the sound stopped", "settings saved", "the window closed", "colou
 LEVEL = {}
 
 
-def make_vgm(path, secs, gz, sn=False):
+def opn_cmds():
+    """the YM2612's writes for a sine at 999.7 Hz on channel 1: algorithm
+    7, operators 1-3 silent (TL 127), operator 4 at full level, its attack
+    at once, held"""
+    w = lambda r, v: bytes([0x52, r, v])
+    c = w(0x22, 0) + w(0x27, 0) + w(0x2b, 0) + w(0xb0, 0x07) + w(0xb4, 0xc0)
+    for slot, tl in ((0x00, 127), (0x04, 127), (0x08, 127), (0x0c, 0)):    # (operators 1, 3, 2, 4)
+        c += w(0x30 + slot, 0x01) + w(0x40 + slot, tl) + w(0x50 + slot, 0x1f) + w(0x60 + slot, 0)
+        c += w(0x70 + slot, 0) + w(0x80 + slot, 0x0f)
+    return c + w(0xa4, (5 << 3) | (1230 >> 8)) + w(0xa0, 1230 & 255) + w(0x28, 0xf0)
+
+
+def make_vgm(path, secs, gz, sn=False, opn=False):
     """a VGM (phase 9): channel A of an AY at the Spectrum's 1,773,400 Hz,
     a 1 kHz tone there (period 111: 998.6 Hz; 125 at the Atari's 2 MHz,
     1000 Hz), secs long, then silent; gzipped as a VGZ. sn: the SN76489
     at the Master System's 3,579,545 Hz instead, tone 0 at period 112
     (998.8 Hz), the others silent (on the DSP)"""
     import gzip
-    if sn:
+    if opn:
+        cmds = opn_cmds()
+    elif sn:
         cmds = bytes([0x50, 0xbf, 0x50, 0xdf, 0x50, 0xff, 0x50, 0x80, 0x50, 0x07, 0x50, 0x90])
     else:
         cmds = bytes([0xa0, 7, 0x3e, 0xa0, 0, 111, 0xa0, 1, 0, 0xa0, 8, 15])
@@ -230,14 +248,16 @@ def make_vgm(path, secs, gz, sn=False):
         k = min(left, 44100)
         cmds += bytes([0x61, k & 0xff, k >> 8])
         left -= k
-    cmds += bytes([0x50, 0x9f, 0x66] if sn else [0xa0, 8, 0, 0x66])
+    cmds += bytes([0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn else [0xa0, 8, 0, 0x66])
     head = bytearray(0x80)
     head[0:4] = b"Vgm "
     struct.pack_into("<I", head, 0x04, 0x80 + len(cmds) - 4)
     struct.pack_into("<I", head, 0x08, 0x151)
     struct.pack_into("<I", head, 0x18, secs * 44100)
     struct.pack_into("<I", head, 0x34, 0x80 - 0x34)
-    if sn:
+    if opn:
+        struct.pack_into("<I", head, 0x2c, 7670453)
+    elif sn:
         struct.pack_into("<I", head, 0x0c, 3579545)
     else:
         struct.pack_into("<I", head, 0x74, 1773400)
@@ -249,7 +269,7 @@ def make_vgm(path, secs, gz, sn=False):
 def make_file(hd, case):
     f, fmt, lame, _, _, secs = CASES[case]
     if f.endswith((".VGM", ".VGZ")):
-        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn")
+        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn")
         return f
     src = os.path.join(hd, "..", "src.wav")
     synth = ["synth", str(secs)] + SYNTH.get(case, ["sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else []))

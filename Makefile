@@ -44,7 +44,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn dspopn opnd dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -56,13 +56,14 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
-           common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h
+           common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
+           $(B)/opn_prog.h $(B)/opntab.h
 
 all: binary/eplay.prg binary/eplayst.prg
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
-binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h | binary
+binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opntab.h | binary
 	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/st build/st/eplay.elf
 	python3 common/tools/oddaccess.py build/st/eplay.elf
 	PRGFLAGS=0x10 python3 common/tools/elf2tos.py build/st/eplay.elf $@
@@ -108,6 +109,13 @@ $(B)/mp3tab.h: tools/mkmp3tab.py data/mp3huff.txt data/mp3window.txt | $(B)
 $(B)/sn_prog.h: dsp/sn.a56 common/dsp/mkh.py | $(B)
 	mkdir -p $(B)/sn && cd $(B)/sn && a56 ../../dsp/sn.a56 > sn.lst && ! grep -q 'warning:\|error:' sn.lst && \
 		python3 ../../common/dsp/mkh.py a56.out ../sn_prog.h dsp_sn_prog sn.a56
+$(B)/opn_prog.h: dsp/opn.a56 common/dsp/mkh.py | $(B)
+	mkdir -p $(B)/opn && cd $(B)/opn && a56 ../../dsp/opn.a56 > opn.lst && ! grep -q 'warning:\|error:' opn.lst && \
+		python3 ../../common/dsp/mkh.py a56.out ../opn_prog.h dsp_opn_prog opn.a56
+# (the YM2612's tables: the model's, made on the build machine)
+$(B)/opntab.h: tools/mkopntab.c src/opnfast.c src/opnfast.h src/opnd.h | $(B)
+	cc -O2 -Wall -Wextra -Werror -Isrc -o $(B)/mkopntab tools/mkopntab.c src/opnfast.c -lm
+	$(B)/mkopntab $@
 $(B)/mp3_prog.h: dsp/mp3.a56 $(B)/mp3tab.h common/dsp/mkh.py
 	cd $(B) && a56 ../dsp/mp3.a56 > mp3.lst && ! grep -q 'warning:\|error:' mp3.lst && \
 		python3 ../common/dsp/mkh.py a56.out mp3_prog.h dsp_mp3_prog mp3.a56

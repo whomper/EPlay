@@ -179,6 +179,7 @@ void opnd_init(OPND *d, unsigned long clock, long rate)
 	memset(d, 0, sizeof(*d));
 	d->clock = clock;
 	d->rate = rate;
+	d->outg = OPN_OUTG;
 	rate_tables(d);
 	for (c = 0; c < 6; c++) {
 		d->ch[c].pan = 3;
@@ -192,6 +193,12 @@ void opnd_init(OPND *d, unsigned long clock, long rate)
 		ch_steps(d, c);
 	}
 	d->op_dirty = 0xffffff;
+	d->ch_dirty = 0x3f;
+}
+
+void opnd_gain(OPND *d, long g)
+{
+	d->outg = g;
 	d->ch_dirty = 0x3f;
 }
 
@@ -372,8 +379,8 @@ void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 			put(u, c);
 			put(u, ch->alg);
 			put(u, ch->fb ? 1L << (ch->fb + 14) : 0);
-			put(u, ch->pan & 2 ? OPN_OUTG : 0);
-			put(u, ch->pan & 1 ? OPN_OUTG : 0);
+			put(u, ch->pan & 2 ? d->outg : 0);
+			put(u, ch->pan & 1 ? d->outg : 0);
 			put(u, ch->ams ? 1L << (22 - ams_shift[ch->ams]) : 0);
 			put(u, ch->pms ? (pms_depth[ch->pms] * 8388608L + 250) / 500 : 0);
 		}

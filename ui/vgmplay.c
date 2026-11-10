@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * vgmplay.c - a VGM or VGZ file played on the YM2149 and the DSP's SN76489
- * (vgmplay.h).
+ * vgmplay.c - a VGM or VGZ file played on the YM2149, the DSP's SN76489 or
+ * the DSP's YM2612 (vgmplay.h).
  */
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +12,7 @@
 #include "vgmplay.h"
 #include "ym.h"
 #include "dspsn.h"
+#include "dspopn.h"
 #include "feed.h"
 #include "snd.h"
 #include "elog.h"
@@ -25,7 +26,7 @@ static VGMRUN run;
 static unsigned long acc;
 static volatile int ended;
 static volatile int att_due = -1;	/* the volume's steps for the tick to take (GEM can't reach the chip) */
-static int playing, open_, use_ay, use_sn;
+static int playing, open_, use_ay, use_sn, use_opn;
 
 static void *take(long n)
 {
@@ -63,6 +64,18 @@ static void sn(void *u, int val)
 	dspsn_write(val);
 }
 
+static void opn(void *u, int port, int reg, int val)
+{
+	(void)u;
+	dspopn_write(port, reg, val);
+}
+
+/* (the YM2612's tick: the file a sample at a time, for the DAC's) */
+static int one(void *v)
+{
+	return vgm_run(v, 1);
+}
+
 /* both chips silent (the tick's, at the end) */
 static void hush(void)
 {
@@ -73,6 +86,8 @@ static void hush(void)
 	if (use_sn)
 		for (r = 0; r < 4; r++)
 			dspsn_write(0x9f | r << 5);
+	if (use_opn)
+		dspopn_hush();
 }
 
 /* the tick (an interrupt): the commands of its 44.2 samples */
@@ -90,7 +105,7 @@ static void tick(void)
 	acc += STEP;
 	n = (long)(acc >> 16);
 	acc &= 0xffff;
-	if (!vgm_run(&run, n)) {
+	if (!(use_opn ? dspopn_tick(one, &run, n) : vgm_run(&run, n))) {
 		ended = 1;
 		hush();
 	}
@@ -135,8 +150,23 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	     "from %ld", h.version >> 8, h.version & 0xff, mem_n, h.ay_clock, h.ay_type, h.sn_clock, h.ym2612_clock,
 	     h.other ? ", other chips" : "", h.total, h.loop_samples, h.loop_at);
 	use_ay = h.ay_clock != 0;
-	use_sn = 0;
-	if (h.sn_clock) {
+	use_sn = use_opn = 0;
+	if (h.ym2612_clock) {
+		/* the YM2612 on the DSP (the DSP rule: locked while it plays) */
+		const char *why;
+		if (dspopn_open(h.ym2612_clock, &why))
+			use_opn = 1;
+		else if (!use_ay) {
+			snprintf(err, (size_t)n, "%s is music for the Mega Drive's YM2612:|EPlay %s.", name, why);
+			vp_stop();
+			return 0;
+		} else
+			elog("VGM: its YM2612 left out (%s)", why);
+	}
+	if (h.sn_clock && use_opn)
+		/* (one DSP program at a time: the Mega Drive's PSG not yet) */
+		elog("VGM: its SN76489 left out (the DSP plays the YM2612)");
+	else if (h.sn_clock) {
 		/* the SN76489 on the DSP (locked while it plays: the DSP rule) */
 		const char *why;
 		if (dspsn_open(h.sn_clock, h.sn_fb, h.sn_w, &why))
@@ -148,9 +178,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		} else
 			elog("VGM: its SN76489 left out (%s)", why);
 	}
-	if (!use_ay && !use_sn) {
-		const char *chip = h.ym2612_clock ? "the Mega Drive's YM2612" : "a sound chip";
-		snprintf(err, (size_t)n, "%s is music for %s,|which EPlay doesn't play yet.", name, chip);
+	if (!use_ay && !use_sn && !use_opn) {
+		snprintf(err, (size_t)n, "%s is music for a sound chip|EPlay doesn't play yet.", name);
 		vp_stop();
 		return 0;
 	}
@@ -158,28 +187,38 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	vgm_gd3(mem, mem_n, &h, t->title, t->album, t->artist, TAG_TEXT);
 	len = vgm_length(&h);
 	*len_ms = len / VGM_RATE * 1000 + len % VGM_RATE * 1000 / VGM_RATE;
-	if (use_ay)
+	if (use_opn)
+		chip_name(info, ni, "VGM  YM2612", h.ym2612_clock);
+	else if (use_ay)
 		chip_name(info, ni, h.ay_type >= 0x10 ? "VGM  YM2149" : "VGM  AY-3-8910", h.ay_clock);
 	else
 		chip_name(info, ni, "VGM  SN76489", h.sn_clock);
 	{
 		char dsp[24];
-		long r = use_sn ? dspsn_rate() : 0;
+		long r = use_sn ? dspsn_rate() : use_opn ? dspopn_synth() : 0;
+		int dsp_on = use_sn || use_opn;
 		snprintf(dsp, sizeof(dsp), "DSP  %ld.%ld kHz", r / 1000, r % 1000 / 100);
-		snprintf(out, (size_t)no, "%s%s%s%s", use_ay ? "YM2149" : "", use_ay && use_sn ? " + " : "",
-			 use_sn ? dsp : "", h.other ? " (its part alone)" : "");
+		snprintf(out, (size_t)no, "%s%s%s%s", use_ay ? "YM2149" : "", use_ay && dsp_on ? " + " : "",
+			 dsp_on ? dsp : "",
+			 h.other || (use_opn && h.sn_clock) || (h.ym2612_clock && !use_opn) ? " (its part alone)" : "");
+		if (use_opn)
+			elog("VGM: the YM2612 on the DSP at %ld Hz (the SSI's %ld)", dspopn_synth(), dspopn_rate());
 	}
 	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0, use_sn ? sn : 0, 0);
+	run.opn_fn = use_opn ? opn : 0;
 	acc = 0;
 	ended = 0;
 	att_due = -1;
 	if (ms > 0) {
 		long to = ms / 1000 * VGM_RATE + ms % 1000 * VGM_RATE / 1000;
 		VGM_SN s = run.sn_fn;
+		VGM_OPN o = run.opn_fn;
 		run.ay_fn = 0;		/* (the chips written once it plays: vp_start) */
 		run.sn_fn = 0;
+		run.opn_fn = 0;
 		vgm_seek(&run, to);
 		run.sn_fn = s;
+		run.opn_fn = o;
 	}
 	open_ = 1;
 	return 1;
@@ -222,6 +261,10 @@ void vp_stop(void)
 		dspsn_close();
 		use_sn = 0;
 	}
+	if (use_opn) {
+		dspopn_close();
+		use_opn = 0;
+	}
 	if (mem) {
 		give(mem);
 		mem = 0;
@@ -256,6 +299,9 @@ void vp_volume(int att, int mute)
 			dspsn_volume(0, mute);
 		return;
 	}
-	snd_dac_volume(0, 0);		/* (the SN alone: its amplitudes, the FDI's way too) */
-	dspsn_volume(att, mute);
+	snd_dac_volume(0, 0);		/* (the DSP's chip alone: its own level, the FDI's way too) */
+	if (use_opn)
+		dspopn_volume(att, mute);
+	else
+		dspsn_volume(att, mute);
 }

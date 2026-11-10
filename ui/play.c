@@ -1964,7 +1964,7 @@ const char *play_keep_up(void)
 {
 	static char b[260];
 	if (vgm) {
-		snprintf(b, sizeof(b), "on the YM2149, from the tick");
+		snprintf(b, sizeof(b), "its chips from the tick");
 		return b;
 	}
 	if (dsp) {
@@ -1999,7 +1999,7 @@ int play_step(int ms)
 	if (vgm) {
 		if (vp_ended()) {
 			nf_debug("EPLAY ended: 0 underruns\n");	/* (the rigs) */
-			elog("played to the end: %ld ms on the YM2149", play_ms());
+			elog("played to the end: %ld ms, a VGM (its chips from the tick)", play_ms());
 			play_stop();
 			elog_save();
 			return 1;
