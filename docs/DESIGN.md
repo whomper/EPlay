@@ -1855,15 +1855,24 @@ decoder was made: a model first, then the program held to it bit for bit.
    summed and limited. Against the reference at 24,585 Hz all nine files are within the limits:
    level 0.5 dB, the loudness curve 1.8 dB, timbre 1.3 dB.
 3. **The program (done).** `dsp/opn.a56`. Each sample, each channel's handler (its algorithm's,
-   the silent one's, or the DAC's) runs from internal P; the update every 8 samples (envelopes,
-   gains, the LFO) runs from external P. `tests/dspopn` (in `make dsptest`) plays the nine files
-   through it and the model with the same commands: the same, bit for bit. The worst case (six
-   channels in the heaviest algorithm, feedback 7, tremolo and vibrato on every operator) takes
-   1,125 cycles a sample, 86% of a stock Falcon's DSP at 24,585 Hz (1,301).
-4. **The 68030's side.** `opnd` from the VGM's commands at the tick (its Timer A, as the SN76489),
-   the DAC's samples streamed, the SN76489 of a Mega Drive file mixed in. Then the Hatari rig's
-   case, and the release, with MP3 on the 68060 (below).
-5. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way.
+   the silent one's, or the DAC's) runs from internal P; the update every 16 samples (envelopes,
+   gains, the LFO) runs from external P. `tests/dspopn` (in `make dsptest`) plays the test
+   files through it and the model with the same commands: the same, bit for bit.
+4. **The 68030's side (done).** `src/opnd.c` in integers (EPlay has no floating point); the
+   tables made on the build machine (`tools/mkopntab.c`); `atari/dspopn.c` loads the program
+   and, from the tick, runs the file and sends what changed in a burst (the host's flag 0 up:
+   no sample made between its commands). The DAC's samples (the Mega Drive's drums, written at
+   44.1 kHz) go as DACS, a tick's at a time, into a queue the DSP plays at its rate. At the
+   FDI's 44.1 or 48 kHz the chip is made at half the rate, each sample written twice.
+5. **The Mega Drive's SN76489 (done).** In the same program (one DSP program at a time):
+   sn.a56's arithmetic, its commands from 20 (`src/sncmd.c`, shared with `atari/dspsn.c`),
+   each channel at most 0.1 of full scale, about 8 dB under an FM channel at its loudest (to
+   check on real hardware). The worst case (six channels in the heaviest algorithm, feedback
+   7, tremolo and vibrato on every operator, the SN76489's tones and noise sounding) takes
+   1,133 cycles a sample, 87% of a stock Falcon's DSP at 24,585 Hz (1,301). The Hatari rig's
+   cases vgmopn (a YM2612 sine) and vgmmd (a Mega Drive file's SN76489) pass on ERZ.
+6. **MP3 on the 68060** (below), then the release.
+7. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way.
 
 ## A FireBee edition (Erez, 10 Nov 2026)
 
