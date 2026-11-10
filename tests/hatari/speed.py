@@ -64,6 +64,7 @@ STEP = 5
 # "EPLAY window" line): the places above are its; on another screen (an
 # STE's 640 x 400) they move with the window (Rig.at)
 WORK_FALCON = (85, 131)
+PLACE = "WINDOW=87,89,472,251\r\n"	# (that work area's window: 1.15's first place)
 
 
 class Rig(speed.Rig):
@@ -81,6 +82,15 @@ class Rig(speed.Rig):
 
     def click(self, x, y, button="1"):
         super().click(*self.at(x, y), button)
+
+    def write(self, name, text):
+        """eplay.inf with the window's old first place (1.16 opens a first
+        start at the desk's height: the figures stay comparable from
+        release to release, and the Add files dialog's places, the screen's,
+        stay where the rows are; play_test's firstrun checks the new place)"""
+        if name == "eplay.inf" and "WINDOW=" not in text:
+            text = text + PLACE
+        super().write(name, text)
 
     def still(self, most=30):
         """while it plays the time changes each second: a few seconds are
@@ -185,6 +195,7 @@ def session(work, spec, kind):
         # (an STE: the 68000's edition, make profst, under the same name)
         r.put(os.path.join(TOP, "build", "profst" if r.m.name.startswith("STE") else "prof", "eplay.prg"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
+        r.write("eplay.inf", "")		# (the place: Rig.write; a session's own INF replaces it)
         src = os.path.join(r.work, "src.wav")
         subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(SECS),
                         "sine", "1000", "sine", "1500", "gain", "-6"], check=True)
