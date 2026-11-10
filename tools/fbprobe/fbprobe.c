@@ -7,6 +7,8 @@
  * reads, and writes what it found to FBPROBE.TXT beside itself (and on
  * the screen):
  *	- the cookie jar, every cookie (_MCH, _CPU, _SND, _FPU, _VDO, ...);
+ *	- the memory (Malloc(-1), Mxalloc(-1) for ST RAM and the other) and,
+ *	  with a Falcon's video or after (_VDO), Vsetmode(-1);
  *	- the Falcon's XBIOS sound calls that only report: Locksnd and
  *	  Unlocksnd, Sndstatus(0), Soundcmd(n, -1) for each n (inquire),
  *	  Buffptr; Setbuffer, Devconnect and Buffoper are not called;
@@ -88,6 +90,11 @@ int main(void)
 		id[4] = 0;
 		say("  %s  $%08lX", id, jar[1]);
 	}
+	say("%s", "");
+	say("The memory: Malloc(-1) %ld; Mxalloc(-1, 0) ST RAM %ld; Mxalloc(-1, 1) other RAM %ld",
+	    (long)Malloc(-1L), (long)Mxalloc(-1L, 0), (long)Mxalloc(-1L, 1));
+	if ((get_cookie(0x5F56444FL) >> 16) >= 3)	/* _VDO: a Falcon's video or after */
+		say("Vsetmode(-1) (the video mode)  $%04lX", trap14_ww(88, -1) & 0xffffL);
 	say("%s", "");
 	say("The XBIOS's sound calls (inquiries only):");
 	r = trap14_w(128);	/* Locksnd */
