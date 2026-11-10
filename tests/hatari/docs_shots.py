@@ -141,7 +141,8 @@ def run(work, mini):
         fh.write(make_album(w, hd) + "\r\n")
     with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
         fh.write("VOLUME=12\r\n\r\n" + ("MINI=1\r\n\r\n" if mini else "") +
-                 "GATE=192.168.1.20\r\n\r\nGATEPORT=8580\r\n\r\n")
+                 "GATE=192.168.1.20\r\n\r\nGATEPORT=8580\r\n\r\n" +
+                 "WINDOW=87,89,472,251\r\n\r\n")	# (the pictures' size: a first start takes the desk's height)
     m = machines.Machine(SPEC, hd)
     fifo, shots, log = os.path.join(w, "cmd.fifo"), os.path.join(w, "shots"), os.path.join(w, "hatari.log")
     os.makedirs(shots)

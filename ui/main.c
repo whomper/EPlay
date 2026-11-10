@@ -352,7 +352,12 @@ static void open_window(void)
 	if (at_x >= 0) {
 		x = at_x + w > desk_x + desk_w ? desk_x + desk_w - w : at_x;
 		y = at_y + h > desk_y + desk_h ? desk_y + desk_h - h : at_y;
-	} else if (!bar_mini && settings_window(&sx, &sy, &sw, &sh)) {
+	} else if (!bar_mini && !settings_window(&sx, &sy, &sw, &sh)) {
+		/* the first start (no place kept): the desk's whole height, its
+		   width design D's, centred across (D39, WINDOWS 1.1) */
+		y = desk_y;
+		saved = desk_h != h ? desk_h : 0;
+	} else if (!bar_mini) {
 		/* the place it was left at (WINDOW=: D43), kept on the desk; its
 		   width is the bar's, its height whole rows (sized, below) */
 		if (sh > desk_h)

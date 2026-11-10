@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, firstrun (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
 by default; Falcon (Erez's, with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
@@ -199,6 +199,9 @@ def add_rg(path, case):
 # taken in whole rows
 CASES["place"] = CASES["wav"]
 INFS["place"] = "WINDOW=24,96,480,330\r\n\r\n"
+# the first start (1.16, D39): no place kept, the window at the desk's
+# whole height, centred across (its width design D's)
+CASES["firstrun"] = CASES["wav"]
 
 # the level of the middle (RMS), each case's, for wavvol's against wav's
 LEVEL = {}
@@ -531,6 +534,12 @@ def run(work, case, spec):
             return False, m.describe(), played or "nothing played"
         time.sleep(1.5)
         cmd(fifo, "hatari-shortcut", "screenshot")
+        if case == "firstrun":
+            wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
+            v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]
+            left, right = v[0], 640 - (v[0] + v[2])
+            if not (v[1] < 80 and v[1] + v[3] > 420 and abs(left - right) <= 24):
+                return False, m.describe(), "a first start: the work area at %s (wanted the desk's height, centred)" % wl
         if case == "place":
             wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
             v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]

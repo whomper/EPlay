@@ -454,8 +454,10 @@ def mini_session(r, src):
     r.write("TAIL.TXT", "C:\\MINI.MP3\n")
     r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
     r.results[-1] = ("started in the mini player, playing", "AESSTART", speed.START)
-    r.act("Pause (mini)", speed.KEY, lambda: r.click(*MINI_PLAY))
-    r.act("Play (mini)", speed.KEY, lambda: r.click(*MINI_PLAY))
+    # (MINI_PLAY is the screen's place: Rig.click would move it as if it
+    # were in the full window's work area, and missed: paused 0 times)
+    r.act("Pause (mini)", speed.KEY, lambda: speed.Rig.click(r, *MINI_PLAY))
+    r.act("Play (mini)", speed.KEY, lambda: speed.Rig.click(r, *MINI_PLAY))
     r.act("View > Mini player: the whole window", speed.WINDOW, lambda: r.menu(VIEW[0] - 20, VIEW[1]))
     r.act("View > Mini player: the bar alone", speed.WINDOW, lambda: r.menu(VIEW[0] - 20, VIEW[1]))
     rc = r.report()
