@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -97,7 +97,10 @@ CASES["vgmsn"] = ("SN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100,
 # 24,585 Hz, algorithm 7's operator 4 alone, a sine at 999.7 Hz (F-number
 # 1230, block 5, at the NTSC clock)
 CASES["vgmopn"] = ("OPN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
-SQUARE = {"vgm", "vgz", "vgmsn"}
+# a Mega Drive file whose sound is its SN76489 (period 112: 998.8 Hz), the
+# YM2612 silent: the PSG in opn.a56, not sn.a56
+CASES["vgmmd"] = ("MD.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (999, 999), 3)
+SQUARE = {"vgm", "vgz", "vgmsn", "vgmmd"}
 		# (a square wave: 81 % of its power in the tone)
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
@@ -230,7 +233,7 @@ def opn_cmds():
     return c + w(0xa4, (5 << 3) | (1230 >> 8)) + w(0xa0, 1230 & 255) + w(0x28, 0xf0)
 
 
-def make_vgm(path, secs, gz, sn=False, opn=False):
+def make_vgm(path, secs, gz, sn=False, opn=False, md=False):
     """a VGM (phase 9): channel A of an AY at the Spectrum's 1,773,400 Hz,
     a 1 kHz tone there (period 111: 998.6 Hz; 125 at the Atari's 2 MHz,
     1000 Hz), secs long, then silent; gzipped as a VGZ. sn: the SN76489
@@ -239,7 +242,7 @@ def make_vgm(path, secs, gz, sn=False, opn=False):
     import gzip
     if opn:
         cmds = opn_cmds()
-    elif sn:
+    elif sn or md:
         cmds = bytes([0x50, 0xbf, 0x50, 0xdf, 0x50, 0xff, 0x50, 0x80, 0x50, 0x07, 0x50, 0x90])
     else:
         cmds = bytes([0xa0, 7, 0x3e, 0xa0, 0, 111, 0xa0, 1, 0, 0xa0, 8, 15])
@@ -248,14 +251,19 @@ def make_vgm(path, secs, gz, sn=False, opn=False):
         k = min(left, 44100)
         cmds += bytes([0x61, k & 0xff, k >> 8])
         left -= k
-    cmds += bytes([0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn else [0xa0, 8, 0, 0x66])
+    cmds += bytes([0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn or md else [0xa0, 8, 0, 0x66])
     head = bytearray(0x80)
     head[0:4] = b"Vgm "
     struct.pack_into("<I", head, 0x04, 0x80 + len(cmds) - 4)
     struct.pack_into("<I", head, 0x08, 0x151)
     struct.pack_into("<I", head, 0x18, secs * 44100)
     struct.pack_into("<I", head, 0x34, 0x80 - 0x34)
-    if opn:
+    if md:
+        struct.pack_into("<I", head, 0x2c, 7670453)
+        struct.pack_into("<I", head, 0x0c, 3579545)
+        struct.pack_into("<H", head, 0x28, 0x0009)
+        head[0x2a] = 16
+    elif opn:
         struct.pack_into("<I", head, 0x2c, 7670453)
     elif sn:
         struct.pack_into("<I", head, 0x0c, 3579545)
@@ -269,7 +277,7 @@ def make_vgm(path, secs, gz, sn=False, opn=False):
 def make_file(hd, case):
     f, fmt, lame, _, _, secs = CASES[case]
     if f.endswith((".VGM", ".VGZ")):
-        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn")
+        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn", case == "vgmmd")
         return f
     src = os.path.join(hd, "..", "src.wav")
     synth = ["synth", str(secs)] + SYNTH.get(case, ["sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else []))

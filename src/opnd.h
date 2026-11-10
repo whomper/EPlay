@@ -14,7 +14,7 @@
 #ifndef EPLAY_OPND_H
 #define EPLAY_OPND_H
 
-#define OPN_UPD 8		/* samples between the envelopes' updates */
+#define OPN_UPD 16		/* samples between the envelopes' updates */
 #define OPN_Q 4096L		/* the attenuation's fraction: 1 step (0.094 dB) */
 
 typedef struct {
@@ -76,6 +76,8 @@ typedef struct {
 	OPNC_DRATE the file's DAC samples an output sample: whole, Q23
 	OPNC_DACS n, then n DAC samples (bytes, as written), three a word,
 		the first in its low byte: a tick's, into the DSP's queue
+	OPNC_SN + c, v: the Mega Drive's SN76489, sn.a56's command c (0-11):
+		src/sncmd.c's words with base OPNC_SN
 	OPNC_RUN n (tests), OPNC_PLAY k (1; 2 at the FDI's rates), OPNC_RESET
    (1, 4 and 6 are LOADX, LOADY and LOADP) */
 
@@ -86,7 +88,7 @@ typedef struct {
 #define OPN_Y_SIN 0x2000
 
 enum { OPNC_OP = 2, OPNC_CH = 3, OPNC_KEY = 5, OPNC_LFO = 7, OPNC_DAC = 8, OPNC_RUN = 9, OPNC_PLAY = 10,
-       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACS = 14 };
+       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACS = 14, OPNC_SN = 20 };
 
 void opnd_init(OPND *d, unsigned long clock, long rate);
 void opnd_write(OPND *d, int port, int reg, int val);

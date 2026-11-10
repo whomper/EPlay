@@ -64,6 +64,12 @@ static void sn(void *u, int val)
 	dspsn_write(val);
 }
 
+static void opn_sn(void *u, int val)
+{
+	(void)u;
+	dspopn_sn(val);
+}
+
 static void opn(void *u, int port, int reg, int val)
 {
 	(void)u;
@@ -159,7 +165,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	if (h.ym2612_clock) {
 		/* the YM2612 on the DSP (the DSP rule: locked while it plays) */
 		const char *why;
-		if (dspopn_open(h.ym2612_clock, &why))
+		if (dspopn_open(h.ym2612_clock, h.sn_clock, h.sn_fb, h.sn_w, &why))
 			use_opn = 1;
 		else if (!use_ay) {
 			snprintf(err, (size_t)n, "%s is music for the Mega Drive's YM2612:|EPlay %s.", name, why);
@@ -169,8 +175,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 			elog("VGM: its YM2612 left out (%s)", why);
 	}
 	if (h.sn_clock && use_opn)
-		/* (one DSP program at a time: the Mega Drive's PSG not yet) */
-		elog("VGM: its SN76489 left out (the DSP plays the YM2612)");
+		;			/* (the Mega Drive's SN76489: in opn.a56 with it) */
 	else if (h.sn_clock) {
 		/* the SN76489 on the DSP (locked while it plays: the DSP rule) */
 		const char *why;
@@ -205,11 +210,12 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		snprintf(dsp, sizeof(dsp), "DSP  %ld.%ld kHz", r / 1000, r % 1000 / 100);
 		snprintf(out, (size_t)no, "%s%s%s%s", use_ay ? "YM2149" : "", use_ay && dsp_on ? " + " : "",
 			 dsp_on ? dsp : "",
-			 h.other || (use_opn && h.sn_clock) || (h.ym2612_clock && !use_opn) ? " (its part alone)" : "");
+			 h.other || (h.ym2612_clock && !use_opn) ? " (its part alone)" : "");
 		if (use_opn)
-			elog("VGM: the YM2612 on the DSP at %ld Hz (the SSI's %ld)", dspopn_synth(), dspopn_rate());
+			elog("VGM: the YM2612%s on the DSP at %ld Hz (the SSI's %ld)",
+			     dspopn_psg() ? " and the SN76489" : "", dspopn_synth(), dspopn_rate());
 	}
-	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0, use_sn ? sn : 0, 0);
+	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0, use_sn ? sn : use_opn && dspopn_psg() ? opn_sn : 0, 0);
 	run.opn_fn = use_opn ? opn : 0;
 	acc = 0;
 	ended = 0;

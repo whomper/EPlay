@@ -32,6 +32,9 @@
 ;	   first halfway from the one before (the FDI's 44.1 or 48 kHz: the
 ;	   chip made at half of it)
 ;	13 DACRATE: the file's DAC samples an output sample, whole, Q23
+;	20-31 SN v: the Mega Drive's SN76489, sn.a56's commands 0-11 (+ 20):
+;	   from the first, its three tones and its noise each sample too,
+;	   added to left and right (atari/dspsn.c works them out)
 ;	14 DACS n w...: n DAC samples (the file's, a tick's), three a word,
 ;	   the first in its low byte, into the DAC's queue (1,024), which
 ;	   channel 6 plays at DACRATE while the DAC is on
@@ -54,6 +57,7 @@ BCR	equ	$fffe
 IPR	equ	$ffff
 
 OPN_Q	equ	4096
+OPN_UPD	equ	16		; samples between updates (src/opnd.h's)
 
 ; ---- internal X (short addresses: $00-$3F)
 UPD	equ	$00		; samples to the next update
@@ -80,6 +84,16 @@ DCNT	equ	$35
 DSI	equ	$36
 DSF	equ	$37
 ALGT	equ	$38		; the algorithms' handlers (8)
+SNON	equ	$16		; the SN76489 sounding (a command came); its sample's sum
+SNOUT	equ	$17
+SPH	equ	$70		; the SN76489 (sn.a56's): the phases, tones 0-2 and the noise,
+SINC	equ	$74		; their steps, their amplitudes, the tones' signed levels;
+SAMP	equ	$78		; the noise's register, its taps, its top bit, white or not
+SSG	equ	$7c
+SLFSR	equ	$80
+STAPS	equ	$81
+STOPB	equ	$82
+SNWH	equ	$83
 DTMP	equ	$0e		; (DACS) the samples still coming, the word
 DWORD	equ	$0f
 CHX	equ	$40		; each channel's operators: phase, gain (8 each, to $6F)
@@ -191,7 +205,9 @@ smp1	move	#CHX,r0
 	move	x:<HND+5,r2
 	nop
 	jsr	(r2)
-	move	#VOUT,r0		; the mix
+	jclr	#0,x:<SNON,smix		; the SN76489's, when it sounds
+	jsr	snsamp
+smix	move	#VOUT,r0		; the mix
 	move	#PAN,r5
 	clr	a
 	clr	b	x:(r0)+,x1	y:(r5)+,y1
@@ -206,7 +222,9 @@ smp1	move	#CHX,r0
 	mac	y1,x1,a	y:(r5)+,y1
 	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
 	mac	y1,x1,a	y:(r5)+,y1
-	mac	y1,x1,b
+	mac	y1,x1,b	x:<SNOUT,x1
+	add	x1,a			; (the SN76489's on both)
+	add	x1,b
 	rts
 
 ; a channel's end: its output, the next's feedback
@@ -671,6 +689,9 @@ cmdx	move	#>1,x1
 	move	#>14,x1
 	cmp	x1,a
 	jeq	c_dacs
+	move	#>20,x1
+	cmp	x1,a
+	jge	c_sn
 	jmp	cmd
 
 loadx	jsr	rd
@@ -705,6 +726,8 @@ c_drate	jsr	hc_drate
 	jmp	cmd
 c_dacs	jsr	hc_dacs
 	jmp	cmd
+c_sn	jsr	hc_sn
+	jmp	cmd
 
 ; a command (x0 its number) from play's loop: not a load, not RUN
 hcmd	move	x0,a
@@ -729,6 +752,9 @@ hcmd	move	x0,a
 	move	#>14,x1
 	cmp	x1,a
 	jeq	hc_dacs
+	move	#>20,x1
+	cmp	x1,a
+	jge	hc_sn
 	rts
 
 ; OP i: its block's step, tl, arf, d1, d2, rr, sl, am; the increment of
@@ -914,6 +940,134 @@ hc_dac	jsr	rd
 	move	x0,x:DACV
 	jmp	sethall
 
+; ---- the SN76489 (sn.a56's arithmetic): b its sample, to SNOUT
+snsamp	clr	b
+	move	#SPH,r0
+	move	#SINC,r1
+	move	#SSG,r3
+	do	#3,snt
+	move	x:(r0),a
+	move	x:(r1)+,x0
+	add	x0,a
+	jclr	#23,a1,sq1
+	bclr	#23,a1
+	move	a1,x:(r0)
+	move	x:(r3),a
+	neg	a
+	move	a1,x:(r3)
+	jmp	sq2
+sq1	move	a1,x:(r0)
+sq2	move	(r0)+
+	move	x:(r3)+,x0
+	add	x0,b
+	nop
+snt
+	move	x:(r0),a		; the noise
+	move	x:(r1),x0
+	add	x0,a
+	jclr	#23,a1,sz1
+	bclr	#23,a1
+	move	a1,x:(r0)
+	jsr	snshift
+	jmp	sz2
+sz1	move	a1,x:(r0)
+sz2	move	x:SAMP+3,a
+	move	x:SLFSR,x0
+	jset	#0,x0,sz3
+	neg	a
+sz3	add	a,b
+	move	b,x:<SNOUT
+	rts
+
+; the noise's register shifted: white, the taps' two bits xor; periodic,
+; the bit out; in at the top
+snshift	move	x:SLFSR,a
+	move	a1,y0
+	move	x:SNWH,x0
+	jclr	#0,x0,sper
+	move	x:STAPS,x0
+	and	x0,a
+	tst	a
+	jeq	sfb0
+	cmp	x0,a
+	jeq	sfb0
+	jmp	sfb1
+sper	jclr	#0,y0,sfb0
+sfb1	move	y0,a
+	lsr	a
+	move	x:STOPB,x0
+	or	x0,a
+	jmp	sfbx
+sfb0	move	y0,a
+	lsr	a
+sfbx	move	a1,x:SLFSR
+	rts
+
+; SN c+20 v: sn.a56's command c (its value v)
+hc_sn	move	x0,a
+	move	#>20,x1
+	sub	x1,a
+	move	a1,y1
+	jsr	rd
+	move	x0,x1
+	move	y1,x0
+	bset	#0,x:<SNON
+	move	x0,a
+	move	#>4,y0
+	cmp	y0,a
+	jge	sn4
+	move	#SINC,r0		; 0-3: a step
+	move	x0,n0
+	nop
+	move	x1,x:(r0+n0)
+	rts
+sn4	move	#>8,y0
+	cmp	y0,a
+	jge	sn8
+	move	#>4,y0			; 4-7: an amplitude, the sign kept
+	sub	y0,a
+	move	a1,n0
+	move	a1,n1
+	move	#SAMP,r0
+	move	#SSG,r1
+	nop
+	move	x1,x:(r0+n0)
+	move	x:(r1+n1),a
+	tst	a
+	jlt	snneg
+	move	x1,x:(r1+n1)
+	rts
+snneg	move	x1,a
+	neg	a
+	move	a1,x:(r1+n1)
+	rts
+sn8	jne	sn9
+	move	x1,x:SNWH		; 8: the noise's kind, its register reset
+	move	x:STOPB,x0
+	move	x0,x:SLFSR
+	rts
+sn9	move	#>9,y0
+	cmp	y0,a
+	jne	sn10
+	move	x1,x:STAPS
+	rts
+sn10	move	#>10,y0
+	cmp	y0,a
+	jne	sn11
+	move	x1,x:STOPB
+	rts
+sn11	move	#>11,y0
+	cmp	y0,a
+	jne	snx
+	move	x1,n0			; 11: tone x1 held up
+	move	x1,n1
+	move	#SAMP,r0
+	move	#SSG,r1
+	nop
+	move	x:(r0+n0),a
+	move	a1,x:(r1+n1)
+snx	rts
+
 ; DACRATE: the file's DAC samples an output sample, whole and Q23
 hc_drate jsr	rd
 	move	x0,x:<DSI
@@ -994,7 +1148,7 @@ shx	rts
 ; its step with the vibrato's; each channel live or not (an operator not
 ; off). In the operators' loop: x0 the vibrato, y0 the tremolo, y1 $800,
 ; r5 the gains' table, n3 live, n2 10
-update	move	#>8,a
+update	move	#>OPN_UPD,a
 	move	a,x:<UPD
 	move	x:LFOP,a
 	move	x:LFOS,x1
@@ -1131,7 +1285,7 @@ wr	jclr	#1,x:HSR,wr
 ; ---- RESET: all silent; the sine's 8 copies (from its first, loaded)
 c_reset	clr	a
 	move	#0,r0
-	rep	#$80			; internal X: the state
+	rep	#$84			; internal X: the state
 	move	a,x:(r0)+
 	move	#0,r0
 	rep	#$80			; internal Y: the gains, the steps
@@ -1179,6 +1333,13 @@ rs1
 	rep	#4
 	move	a,x:(r0)+
 rs2
+	move	#>$8000,x1		; the SN76489: 16 bits, the Mega Drive's taps, white
+	move	x1,x:STOPB
+	move	x1,x:SLFSR
+	move	#>9,x1
+	move	x1,x:STAPS
+	move	#>1,x1
+	move	x1,x:SNWH
 	move	#>DQ,x1			; the DAC's queue: empty
 	move	x1,x:<DWP
 	move	x1,x:<DRP

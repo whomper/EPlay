@@ -68,8 +68,7 @@ own pitch.
   output or the FDI, the way an MP3 does (the DSP held only while it plays). A VGZ is unpacked
   first, into memory. A file for the YM2612 (Mega Drive and Genesis music: its six FM channels
   and its drums) plays on the Falcon's DSP at 24.6 kHz, or at half the FDI's rate through the
-  FDI. The Mega Drive's second chip, its SN76489, isn't played with it yet: the bar says "its part
-  alone". While one plays, the keyboard's click and the bell are off. Music for another chip (an
+  FDI, with the Mega Drive's second chip, its SN76489, in the same program. While one plays, the keyboard's click and the bell are off. Music for another chip (an
   arcade board's) says so and isn't played yet.
 
 ## Windows and menus

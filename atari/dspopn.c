@@ -4,12 +4,15 @@
  * dspopn.c - the YM2612 on the Falcon's DSP (dspopn.h). The DSP's words
  * from one place only, the tick, but for the start (before the tick runs).
  * A burst (a tick's changes) goes with the host's flag 0 set, so that the
- * DSP takes its commands one after another, no sample made between.
+ * DSP takes its commands one after another, no sample made between. The
+ * Mega Drive's SN76489 plays in the same program: its writes turned into
+ * sn.a56's commands by src/sncmd.c, numbered from OPNC_SN.
  */
 #include "tos.h"
 #include "snd.h"
 #include "opnd.h"
 #include "dspopn.h"
+#include "sncmd.h"
 #include "opn_prog.h"
 #include "opntab.h"
 
@@ -30,6 +33,10 @@ static const long att_q15[16] = { 32768, 27571, 23198, 19519, 16423, 13818, 1162
 				  8231,  6925,  5827,  4903,  4125,  3471,  2920,  2457 };
 
 static OPND chip;
+static SNCMD psg;		/* the Mega Drive's SN76489, in opn.a56 */
+static unsigned long psg_clock;
+static int psg_fb, psg_w, psg_on;
+static volatile int psg_att = -1, psg_mute;
 static int locked, failed, on, twice;
 static long rate, synth;
 static volatile int gain_due = -1;	/* the volume's gain for the tick to send */
@@ -80,16 +87,27 @@ static long setup(void)
 {
 	opnd_send_drate(&chip, put, 0);
 	opnd_send(&chip, put, 0);
+	if (psg_clock) {
+		/* (its amplitudes halved: 0.1 of full scale a channel, about 8 dB
+		   under an FM channel at its loudest) */
+		sncmd_init(&psg, psg_clock, synth, psg_fb, psg_w, OPNC_SN, 1, put, 0);
+		psg_on = 1;
+	}
 	put(0, OPNC_PLAY);
 	put(0, twice ? 2 : 1);
 	return 0;
 }
 
-int dspopn_open(unsigned long clock, const char **why)
+int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, const char **why)
 {
 	int ext;
 	unsigned long t;
 	failed = 0;
+	psg_on = 0;
+	psg_clock = sn_clock;
+	psg_fb = sn_fb;
+	psg_w = sn_w;
+	psg_att = -1;
 	if (!(get_cookie(0x5F534E44L) & 8)) {	/* _SND bit 3: a DSP */
 		*why = "needs the Falcon's DSP";
 		return 0;
@@ -146,6 +164,17 @@ void dspopn_write(int port, int reg, int val)
 		opnd_write(&chip, port, reg, val);
 }
 
+void dspopn_sn(int b)
+{
+	if (on && psg_on)
+		sncmd_write(&psg, b);
+}
+
+int dspopn_psg(void)
+{
+	return psg_on;
+}
+
 int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long n)
 {
 	int live;
@@ -156,6 +185,12 @@ int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long 
 		gain_due = -1;
 	}
 	HICR |= 8;		/* (HF0: a burst coming) */
+	if (psg_on && psg_att >= 0) {
+		psg.att = psg_att;
+		psg.mute = psg_mute;
+		psg_att = -1;
+		sncmd_reamp(&psg);
+	}
 	live = opnd_tick(&chip, run, at, v, n, put, 0);
 	HICR &= ~8;
 	return live;
@@ -171,12 +206,17 @@ void dspopn_hush(void)
 	opnd_write(&chip, 0, 0x2b, 0);
 	HICR |= 8;
 	opnd_send(&chip, put, 0);
+	if (psg_on)
+		for (c = 0; c < 4; c++)
+			sncmd_write(&psg, 0x9f | c << 5);
 	HICR &= ~8;
 }
 
 void dspopn_volume(int att, int mute)
 {
 	gain_due = mute ? 0 : (int)((long long)OPN_OUTG * att_q15[att & 15] >> 15);
+	psg_mute = mute;
+	psg_att = att & 15;
 }
 
 void dspopn_close(void)
@@ -196,4 +236,5 @@ void dspopn_close(void)
 void dspopn_term(void)
 {
 	on = 0;
+	psg_on = 0;
 }

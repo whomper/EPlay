@@ -11,9 +11,12 @@
 #define EPLAY_DSPOPN_H
 
 /* the DSP locked, reset, loaded and sounding (silent until written): clock
-   the chip's (Hz). 0 with why: no DSP, another program has it, it didn't
-   answer */
-int dspopn_open(unsigned long clock, const char **why);
+   the chip's (Hz); sn_clock the Mega Drive's SN76489's (0: none), sn_fb and
+   sn_w its noise's taps and register's bits (the VGM header's). 0 with
+   why: no DSP, another program has it, it didn't answer */
+int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, const char **why);
+void dspopn_sn(int byte);	/* (the tick's, or before it runs) a byte to the SN76489 */
+int dspopn_psg(void);		/* the SN76489 plays with it */
 void dspopn_write(int port, int reg, int val);	/* (the tick's, or before it runs) a register */
 /* (from the tick: supervisor mode) n of the file's samples run (0 at its
    end; at: its place, for the DAC's samples), then what changed sent; 0

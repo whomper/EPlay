@@ -55,6 +55,9 @@ void opnf_init(OPNF *f)
 			f->ch[c].op[k].mode = M_OFF;
 		}
 	f->upd = 1;
+	f->stopb = f->slfsr = 0x8000;
+	f->staps = 9;
+	f->snwh = 1;
 }
 
 /* ---- the commands */
@@ -64,6 +67,8 @@ static int cmd_len(const OPNF *f)
 	long c = f->cw[0];
 	if (c == OPNC_DACS)
 		return f->cn < 2 ? 2 : 2 + (int)((f->cw[1] + 2) / 3);
+	if (c >= OPNC_SN)
+		return 2;
 	switch (c) {
 	case OPNC_OP:
 		return 10;
@@ -78,10 +83,35 @@ static int cmd_len(const OPNF *f)
 	return 1;
 }
 
+/* sn.a56's command c, value v */
+static void sn_cmd(OPNF *f, int c, long v)
+{
+	f->sn_on = 1;
+	if (c < 4)
+		f->sinc[c] = v;
+	else if (c < 8) {
+		f->samp[c - 4] = v;
+		if (c < 7)
+			f->ssg[c - 4] = S24(f->ssg[c - 4]) < 0 ? W24(-v) : v;
+	} else if (c == 8) {
+		f->snwh = v;
+		f->slfsr = f->stopb;
+	} else if (c == 9)
+		f->staps = v;
+	else if (c == 10)
+		f->stopb = v;
+	else if (c == 11 && v < 3)
+		f->ssg[v] = f->samp[v];
+}
+
 static void cmd(OPNF *f, const long *w)
 {
 	OPNF_CH *ch;
 	OPNF_OP *op;
+	if (w[0] >= OPNC_SN) {
+		sn_cmd(f, (int)(w[0] - OPNC_SN), w[1]);
+		return;
+	}
 	switch (w[0]) {
 	case OPNC_OP:
 		op = &f->ch[w[1] / 4].op[w[1] % 4];
@@ -307,11 +337,49 @@ static long ch_calc(OPNF *f, OPNF_CH *ch)
 	return lim(a);
 }
 
+/* the SN76489's sample (sn.a56's sample, its words as there) */
+static void sn_shift(OPNF *f)
+{
+	long y = f->slfsr, fb;
+	if (f->snwh & 1) {
+		long t = y & f->staps;
+		fb = !(t == 0 || t == f->staps);
+	} else
+		fb = y & 1;
+	f->slfsr = (y >> 1) | (fb ? f->stopb : 0);
+}
+
+static long sn_sample(OPNF *f)
+{
+	long b = 0, a;
+	int t;
+	for (t = 0; t < 3; t++) {
+		a = f->sph[t] + f->sinc[t];
+		if (a & 0x800000L) {
+			a &= 0x7fffff;
+			f->ssg[t] = W24(-S24(f->ssg[t]));
+		}
+		f->sph[t] = W24(a);
+		b += S24(f->ssg[t]);
+	}
+	a = f->sph[3] + f->sinc[3];
+	if (a & 0x800000L) {
+		a &= 0x7fffff;
+		f->sph[3] = W24(a);
+		sn_shift(f);
+	} else
+		f->sph[3] = W24(a);
+	a = S24(f->samp[3]);
+	b += f->slfsr & 1 ? a : -a;
+	return lim((acc_t)b << 24);
+}
+
 void opnf_words(OPNF *f, long *lr, int n)
 {
 	int k, c;
 	for (k = 0; k < n; k++) {
 		acc_t l = 0, r = 0;
+		long sn = 0;
 		if (!--f->upd)
 			update(f);
 		for (c = 0; c < 6; c++) {
@@ -323,9 +391,14 @@ void opnf_words(OPNF *f, long *lr, int n)
 				v = 0;
 			else
 				v = ch_calc(f, ch);
+			if (c == 5 && f->sn_on)
+				sn = sn_sample(f);	/* (made after the channels, before the mix) */
 			l += prod(v, ch->pl);
 			r += prod(v, ch->pr);
 		}
+		/* (added at the accumulators' top word, as opn.a56's add) */
+		l += (acc_t)sn << 24;
+		r += (acc_t)sn << 24;
 		lr[2 * k] = W24(lim(l));
 		lr[2 * k + 1] = W24(lim(r));
 	}

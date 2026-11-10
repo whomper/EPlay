@@ -6,8 +6,9 @@
  * (tests/ym2612/mkvgm.py's) through src/opnd.c, its commands sent to both
  * a tick at a time as the 68030 sends them (opnd_tick), the samples
  * between (RUN) compared word for word. Then the worst case for
- * time: all six channels live, feedback 7, each algorithm; its cycles a
- * sample against a stock Falcon's DSP at 24,585 Hz (32 MHz: 1,301).
+ * time: all six channels live, feedback 7, each algorithm, and the Mega
+ * Drive's SN76489 sounding; its cycles a sample against a stock Falcon's
+ * DSP at 24,585 Hz (32 MHz: 1,301).
  *
  *	sim FILE.VGM...
  */
@@ -18,6 +19,7 @@
 #include "vgm.h"
 #include "opnd.h"
 #include "opnfast.h"
+#include "sncmd.h"
 
 #define RATE 24585L
 
@@ -104,6 +106,14 @@ static long at(void *v)
 	return ((VGMRUN *)v)->at;
 }
 
+static SNCMD psg;
+
+static void sn(void *u, int b)
+{
+	(void)u;
+	sncmd_write(&psg, b);
+}
+
 static void opn(void *u, int port, int reg, int val)
 {
 	(void)u;
@@ -144,6 +154,11 @@ static int play(const char *path)
 	r.opn_fn = opn;
 	opnd_send_drate(&chip, both, NULL);
 	opnd_send(&chip, both, NULL);
+	if (h.sn_clock) {
+		/* the Mega Drive's SN76489 in opn.a56, as atari/dspopn.c sends it */
+		sncmd_init(&psg, h.sn_clock, RATE, h.sn_fb, h.sn_w, OPNC_SN, 1, both, NULL);
+		r.sn_fn = sn;
+	}
 	bad_at = -1;
 	nsamp = 0;
 	run_cycles = 0;
@@ -198,6 +213,14 @@ static int worst(int alg, double *per)
 	nsamp = 0;
 	run_cycles = 0;
 	opnd_send(&chip, both, NULL);
+	/* and the Mega Drive's SN76489: its three tones and its noise, loud */
+	sncmd_init(&psg, 3579545, RATE, 9, 16, OPNC_SN, 1, both, NULL);
+	{
+		static const unsigned char b[] = { 0x8e, 0x0f, 0x90, 0xa5, 0x0c, 0xb0, 0xc3, 0x08, 0xd0, 0xe7, 0xf0 };
+		unsigned i;
+		for (i = 0; i < sizeof(b); i++)
+			sncmd_write(&psg, b[i]);
+	}
 	pend = 2000;
 	flush();
 	*per = (double)run_cycles / nsamp;

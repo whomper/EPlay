@@ -31,9 +31,14 @@ class Vgm:
     def __init__(self):
         self.d = bytearray()
         self.samples = 0
+        self.psg = False
 
     def w(self, port, reg, val):
         self.d += bytes([0x52 + port, reg, val])
+
+    def sn(self, b):
+        self.d += bytes([0x50, b])
+        self.psg = True
 
     def wait(self, n):
         self.samples += n
@@ -52,6 +57,11 @@ class Vgm:
         struct.pack_into("<I", head, 0x18, self.samples)
         struct.pack_into("<I", head, 0x2c, CLOCK)
         struct.pack_into("<I", head, 0x34, 0x100 - 0x34)
+        if self.psg:
+            # the Mega Drive's SN76489: its clock (NTSC), taps $0009, 16 bits
+            struct.pack_into("<I", head, 0x0c, 3579545)
+            struct.pack_into("<H", head, 0x28, 0x0009)
+            head[0x2a] = 16
         with open(path, "wb") as f:
             f.write(bytes(head) + body)
 
@@ -261,10 +271,43 @@ def detune(out):
     v.save(out)
 
 
+def psg(out):
+    """the Mega Drive's two chips: an FM note (algorithm 7, operator 4) and
+    the SN76489 (tone 0 at period 254, 440.4 Hz, its volume stepped down;
+    then the noise, periodic then white, at tone 2's rate): held to the DSP
+    bit for bit (tests/dspopn), not to the reference (it has no SN76489)"""
+    v = Vgm()
+    init(v)
+    chan(v, 0, 7)
+    for o in range(4):
+        op(v, 0, o, tl=0 if o == 3 else 127)
+    freq(v, 0, 1084, 4)
+    key(v, 0, True)
+    for b in (0x9f, 0xbf, 0xdf, 0xff):          # all four silent
+        v.sn(b)
+    v.sn(0x80 | (254 & 15))
+    v.sn(254 >> 4)
+    for vol in (0, 2, 4, 8):
+        v.sn(0x90 | vol)
+        v.wait(RATE // 4)
+    v.sn(0x9f)
+    v.sn(0xc0 | (100 & 15))                     # tone 2's period 100 (silent), the noise at its rate
+    v.sn(100 >> 4)
+    v.sn(0xe3)                                  # periodic
+    v.sn(0xf0)
+    v.wait(RATE // 4)
+    v.sn(0xe7)                                  # white
+    v.wait(RATE // 4)
+    v.sn(0xff)
+    key(v, 0, False)
+    v.wait(RATE // 4)
+    v.save(out)
+
+
 def main():
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    for f in (sine, fm, chain, env, dac, chord, lfo, ch3, detune):
+    for f in (sine, fm, chain, env, dac, chord, lfo, ch3, detune, psg):
         f(os.path.join(out, f.__name__.upper() + ".VGM"))
 
 

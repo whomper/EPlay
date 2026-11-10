@@ -50,6 +50,9 @@ typedef struct {
 	long dq[1024];
 	int dwp, drp, dcnt;
 	long drf, dsi, dsf;
+	/* the Mega Drive's SN76489 (sn.a56's, in opn.a56): on once written */
+	int sn_on;
+	long sph[4], sinc[4], samp[4], ssg[3], slfsr, staps, stopb, snwh;
 	/* the words of a command still coming */
 	long cw[64];
 	int cn;
