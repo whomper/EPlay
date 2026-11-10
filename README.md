@@ -3,7 +3,7 @@
 <img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
 An audio player for the Atari Falcon, TT and STE: MP3 decoded on the Falcon's DSP, WAV and AIFF,
-and web radio, in a GEM window. Written in C and DSP56001 assembly.
+VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembly.
 
 ![EPlay on a Falcon in 256 colours (Hatari): an album of five tracks in the list, the first playing, its cover, title and artist in the bar with the position, the volume and DSP as the output](docs/player.png)
 
@@ -15,6 +15,7 @@ and web radio, in a GEM window. Written in C and DSP56001 assembly.
 - **Steady sound:** fed by an interrupt from memory, so menus, dialogs and other programs don't break it up.
 - **Gapless:** an album encoded with LAME plays from one track into the next with no gap.
 - **ReplayGain:** evens out the loudness of tracks or albums from their tags.
+- **VGM and VGZ game music:** AY and YM2149 files on the Atari's own YM2149 (Falcon, TT, STE); SN76489 files (Master System, Game Gear) on the Falcon's DSP.
 - **Web radio:** Icecast and Shoutcast stations, http or https, with titles and pictures; Find station searches by genre, country and language.
 - **Playlists:** files, folders and `.M3U`; reorder by dragging; Shuffle and Repeat.
 - **Mini player:** the bar alone, in a small window.
