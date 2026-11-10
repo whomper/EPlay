@@ -12,8 +12,9 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, firstrun (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
-by default; Falcon (Erez's, with the DFB1) when named, once a week (the
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, firstrun (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+(machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
+stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
 screenshot while it plays in WORK/MACHINE-CASE/shots.
@@ -735,7 +736,12 @@ def run(work, case, spec):
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-play")
     cases = [a for a in sys.argv[2:] if a in CASES] or [c for c in CASES if c not in NOT_DEFAULT]
-    specs = [a for a in sys.argv[2:] if a not in CASES] or ["Falcon-4"]
+    # (Erez's configuration by default, the hub's 10 Nov 2026: Falcon-4:256
+    # with NVDI; EmuTOS without NVDI where the container has neither, a
+    # stand-in, as describe() says)
+    specs = [a for a in sys.argv[2:] if a not in CASES] or [machines.ERZ_MACHINE]
+    if specs == [machines.ERZ_MACHINE]:
+        os.environ.update(machines.erz_env())
     failed = 0
     for spec in specs:
         for case in cases:

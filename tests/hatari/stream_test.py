@@ -606,7 +606,12 @@ def run(work, case, spec):
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-stream")
     cases = [a for a in sys.argv[2:] if a in CASES] or CASES
-    specs = [a for a in sys.argv[2:] if a not in CASES] or ["Falcon-4"]
+    # (Erez's configuration by default, the hub's 10 Nov 2026: Falcon-4:256
+    # with NVDI; EmuTOS without NVDI where the container has neither, a
+    # stand-in, as describe() says)
+    specs = [a for a in sys.argv[2:] if a not in CASES] or [machines.ERZ_MACHINE]
+    if specs == [machines.ERZ_MACHINE]:
+        os.environ.update(machines.erz_env())
     failed = 0
     for spec in specs:
         for case in cases:
