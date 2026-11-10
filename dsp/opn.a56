@@ -26,8 +26,15 @@
 ;	7 LFO: step, reset
 ;	8 DAC: on, sample
 ;	9 RUN n: n samples, each its left and right word to the host (tests)
-;	10 PLAY: the SSI on, the samples into its ring; the commands still
-;	   taken between samples
+;	10 PLAY k: the SSI on, the samples into its ring; the commands still
+;	   taken between samples, and while the host's flag 0 is set (a
+;	   burst of them coming) no sample made. k 2: each sample twice, the
+;	   first halfway from the one before (the FDI's 44.1 or 48 kHz: the
+;	   chip made at half of it)
+;	13 DACRATE: the file's DAC samples an output sample, whole, Q23
+;	14 DACS n w...: n DAC samples (the file's, a tick's), three a word,
+;	   the first in its low byte, into the DAC's queue (1,024), which
+;	   channel 6 plays at DACRATE while the DAC is on
 ;	12 RESET: all silent, the sine table's 8 copies made (after its LOADY)
 ;
 ; Memory: what runs each sample in internal P; the rest from P:$7000
@@ -66,7 +73,15 @@ CHSP	equ	$0d		; (update) the channel's block
 HND	equ	$10		; each channel's handler (6)
 VOUT	equ	$18		; each channel's output this sample (6)
 FB	equ	$20		; each channel's: feedback factor, operator 1's last two (3 each)
+DWP	equ	$32		; the DAC's queue: where the next goes, the next played,
+DRP	equ	$33		; its fraction, the samples in it, the rate (whole,
+DRF	equ	$34		; Q23)
+DCNT	equ	$35
+DSI	equ	$36
+DSF	equ	$37
 ALGT	equ	$38		; the algorithms' handlers (8)
+DTMP	equ	$0e		; (DACS) the samples still coming, the word
+DWORD	equ	$0f
 CHX	equ	$40		; each channel's operators: phase, gain (8 each, to $6F)
 ; ---- internal Y
 PAN	equ	$00		; each channel's left, right gains (2 each)
@@ -83,6 +98,10 @@ PMWT	equ	$1780
 RING	equ	$1000		; the SSI's ring, 512 words
 LEAD	equ	256		; the words written ahead of the SSI
 STAB	equ	$2000		; the sine, 1,024, its 8 copies (modulo 8,192)
+DQ	equ	$1400		; the DAC's queue, 1,024 (modulo 1,024)
+PLX	equ	$30		; (PLAY) 2: each sample twice; the one before (L, R)
+PREVL	equ	$31
+PREVR	equ	$0c		; (Y)
 
 O_MODE	equ	0
 O_INC	equ	1
@@ -579,8 +598,36 @@ alg7	move	x:(r0),b	y:(r5)+n5,y0	; operator 1: its phase, its step
 ; external P: the commands, the update, the start of a play
 	org	p:$7000
 
-; the DAC's handler (channel 6 while it is on): its sample
-dach	move	x:<DACV,a
+; the DAC's handler (channel 6 while it is on): the queue's next, at
+; DACRATE (the last held while it is empty)
+dach	move	x:<DCNT,a
+	tst	a
+	jle	dhold
+	movec	#1023,m2
+	move	x:<DSI,n2
+	move	x:<DRP,r2
+	nop
+	move	y:(r2)+n2,b		; the sample; on by the whole steps
+	move	b,x:<DACV
+	move	x:<DSF,x1		; the fraction: one more where it carries
+	move	x:<DRF,b
+	add	x1,b	x:<DSI,x1
+	sub	x1,a
+	jclr	#23,b1,dh1
+	bclr	#23,b1
+	move	(r2)+
+	move	#>1,x1
+	sub	x1,a
+dh1	move	b1,x:<DRF
+	move	r2,x:<DRP
+	movec	#$ffff,m2
+	tst	a
+	jge	dh2
+	clr	a			; (played past the end: held at it)
+	move	x:<DWP,x1
+	move	x1,x:<DRP
+dh2	move	a,x:<DCNT
+dhold	move	x:<DACV,a
 	jmp	dacend
 
 ; the SSI's underrun: its status read, then the word
@@ -618,6 +665,12 @@ cmdx	move	#>1,x1
 	move	#>12,x1
 	cmp	x1,a
 	jeq	c_reset
+	move	#>13,x1
+	cmp	x1,a
+	jeq	c_drate
+	move	#>14,x1
+	cmp	x1,a
+	jeq	c_dacs
 	jmp	cmd
 
 loadx	jsr	rd
@@ -648,6 +701,10 @@ c_lfo	jsr	hc_lfo
 	jmp	cmd
 c_dac	jsr	hc_dac
 	jmp	cmd
+c_drate	jsr	hc_drate
+	jmp	cmd
+c_dacs	jsr	hc_dacs
+	jmp	cmd
 
 ; a command (x0 its number) from play's loop: not a load, not RUN
 hcmd	move	x0,a
@@ -666,6 +723,12 @@ hcmd	move	x0,a
 	move	#>8,x1
 	cmp	x1,a
 	jeq	hc_dac
+	move	#>13,x1
+	cmp	x1,a
+	jeq	hc_drate
+	move	#>14,x1
+	cmp	x1,a
+	jeq	hc_dacs
 	rts
 
 ; OP i: its block's step, tl, arf, d1, d2, rr, sl, am; the increment of
@@ -850,6 +913,59 @@ hc_dac	jsr	rd
 	jsr	rd
 	move	x0,x:DACV
 	jmp	sethall
+
+; DACRATE: the file's DAC samples an output sample, whole and Q23
+hc_drate jsr	rd
+	move	x0,x:<DSI
+	jsr	rd
+	move	x0,x:<DSF
+	rts
+
+; DACS n w...: n samples, three a word (the first in the low byte), each
+; (byte - 128) x 2^16 into the queue; none while it holds 1,000
+hc_dacs	jsr	rd
+	move	x0,x:<DTMP
+	movec	#1023,m1
+	move	x:<DWP,r1
+	move	#>$8000,y1		; (x 2^15: the byte x 2^16, the product's low word)
+dsw	move	x:<DTMP,a
+	tst	a
+	jle	dsx
+	jsr	rd
+	move	x0,x:<DWORD
+	do	#3,dsb
+	move	x:<DTMP,a
+	tst	a
+	jle	dsn
+	move	#>1,x1
+	sub	x1,a
+	move	a,x:<DTMP
+	move	x:<DWORD,a
+	move	#>$ff,x1
+	and	x1,a
+	move	a1,a			; (the byte alone: the word's sign gone)
+	move	#>128,x1
+	sub	x1,a
+	move	a1,x1
+	mpy	x1,y1,b
+	move	x:<DCNT,a
+	move	#>1000,x1
+	cmp	x1,a
+	jge	dsfull
+	move	b0,y:(r1)+
+	move	#>1,x1
+	add	x1,a
+	move	a,x:<DCNT
+dsfull	move	x:<DWORD,a
+	rep	#8
+	lsr	a
+	move	a1,x:<DWORD
+dsn	nop
+dsb
+	jmp	dsw
+dsx	move	r1,x:<DWP
+	movec	#$ffff,m1
+	rts
 
 ; each channel's handler: its algorithm's, or the silent one's (none of its
 ; operators live); channel 6's the DAC's while it is on
@@ -1063,6 +1179,9 @@ rs1
 	rep	#4
 	move	a,x:(r0)+
 rs2
+	move	#>DQ,x1			; the DAC's queue: empty
+	move	x1,x:<DWP
+	move	x1,x:<DRP
 	move	#STAB,r0		; the sine's copies
 	move	#STAB+1024,r1
 	do	#7,rs3
@@ -1076,7 +1195,12 @@ rs3
 
 ; ---- PLAY: the SSI on (sn.a56's way), the ring kept LEAD words ahead,
 ; the commands taken between samples
-c_play	movec	#$1fff,m4
+c_play	jsr	rd			; k: 1, or 2 (each sample twice)
+	move	x0,x:<PLX
+	clr	a
+	move	a,x:<PREVL
+	move	a,y:<PREVR
+	movec	#$1fff,m4
 	move	#STAB,r4
 	clr	a
 	move	#RING,r6
@@ -1095,9 +1219,11 @@ pmt	jclr	#6,x:SSISR,pmt
 	movep	#0,x:TX
 pmt2	jclr	#6,x:SSISR,pmt2
 pmr	andi	#$fc,mr			; interrupts on: the left first
-ploop	jclr	#0,x:HSR,pgen
+ploop	jclr	#0,x:HSR,pgen0
 	jsr	rd
 	jsr	hcmd
+	jmp	ploop
+pgen0	jset	#3,x:HSR,ploop		; (HF0: a burst of commands still coming)
 pgen	move	r6,a
 	move	r7,x0
 	sub	x0,a
@@ -1109,6 +1235,25 @@ pgen	move	r6,a
 	cmp	x0,a
 	jge	ploop
 	jsr	sample
+	jclr	#1,x:<PLX,pone
+	move	a,x1			; twice: first halfway from the one before
+	move	x:<PREVL,y1
+	move	x1,x:<PREVL
+	move	a,y0
+	tfr	y1,a
+	add	y0,a
+	asr	a
 	move	a,y:(r6)+
+	move	b,x1
+	move	y:<PREVR,y1
+	move	x1,y:<PREVR
+	move	b,y0
+	tfr	y1,b
+	add	y0,b
+	asr	b
+	move	b,y:(r6)+
+	move	x:<PREVL,a
+	move	y:<PREVR,b
+pone	move	a,y:(r6)+
 	move	b,y:(r6)+
 	jmp	ploop

@@ -5,10 +5,10 @@
  * as opn.c has them (its detune, key codes, envelope increments); the
  * envelope's steps the average of the chip's increments over its envelope
  * clocks in an update (OPN_UPD samples at the output's rate: the chip's
- * rate / 3 clocks a second), the attack's factor their product.
+ * rate / 3 clocks a second), the attack's factor their product. Integers
+ * only: it runs on the 68030 (and EPlay has no floating point).
  */
 #include <string.h>
-#include <math.h>
 #include "opnd.h"
 
 static const unsigned char dt_tab[4][32] = {
@@ -33,58 +33,113 @@ static int eff(int r, int ksr)
 	return v > 63 ? 63 : v;
 }
 
-/* the chip's increments for rate r: their mean an envelope clock, and the
-   attack's factor a clock (the product's root), over its pattern */
-static void rate_avg(int r, double *mean, double *af)
+/* log2(1 - inc / 16), Q24: the attenuation's factor of an increment in
+   the attack (inc 16 and up: at once) */
+static const long log2_att[16] = { 0, -1562117, -3232048, -5025788, -6963174, -9069232, -11376159, -13926348, -16777216, -20009264, -23740390, -28153375, -33554432, -40517606, -50331648, -67108864 };
+
+/* 2^(-i/256), Q23 (an exp2's fraction) */
+static const long exp2_frac[257] = {
+	8388608, 8365926, 8343305, 8320745, 8298246, 8275808, 8253431, 8231114, 8208857, 8186661,
+	8164525, 8142448, 8120432, 8098475, 8076577, 8054738, 8032959, 8011238, 7989576, 7967973,
+	7946428, 7924941, 7903512, 7882142, 7860829, 7839574, 7818376, 7797235, 7776152, 7755126,
+	7734156, 7713244, 7692387, 7671588, 7650844, 7630157, 7609525, 7588949, 7568429, 7547965,
+	7527555, 7507201, 7486902, 7466658, 7446469, 7426334, 7406253, 7386227, 7366255, 7346338,
+	7326473, 7306663, 7286906, 7267203, 7247553, 7227956, 7208412, 7188921, 7169482, 7150096,
+	7130763, 7111482, 7092253, 7073076, 7053950, 7034877, 7015855, 6996885, 6977965, 6959097,
+	6940280, 6921514, 6902799, 6884134, 6865520, 6846956, 6828442, 6809978, 6791564, 6773200,
+	6754886, 6736621, 6718406, 6700240, 6682122, 6664054, 6646035, 6628065, 6610143, 6592269,
+	6574444, 6556667, 6538938, 6521257, 6503624, 6486039, 6468501, 6451011, 6433567, 6416171,
+	6398822, 6381520, 6364265, 6347056, 6329894, 6312779, 6295709, 6278686, 6261709, 6244778,
+	6227892, 6211052, 6194258, 6177509, 6160805, 6144147, 6127533, 6110965, 6094441, 6077962,
+	6061528, 6045138, 6028792, 6012490, 5996233, 5980019, 5963850, 5947724, 5931642, 5915603,
+	5899607, 5883655, 5867746, 5851880, 5836057, 5820276, 5804539, 5788844, 5773191, 5757581,
+	5742012, 5726486, 5711002, 5695560, 5680159, 5664801, 5649483, 5634207, 5618973, 5603779,
+	5588627, 5573516, 5558445, 5543416, 5528427, 5513478, 5498570, 5483702, 5468874, 5454087,
+	5439339, 5424632, 5409964, 5395336, 5380747, 5366198, 5351688, 5337217, 5322786, 5308393,
+	5294039, 5279725, 5265449, 5251211, 5237012, 5222851, 5208729, 5194645, 5180599, 5166591,
+	5152621, 5138688, 5124794, 5110937, 5097117, 5083335, 5069589, 5055882, 5042211, 5028577,
+	5014980, 5001420, 4987896, 4974409, 4960959, 4947544, 4934167, 4920825, 4907519, 4894250,
+	4881016, 4867818, 4854656, 4841529, 4828438, 4815382, 4802361, 4789376, 4776426, 4763511,
+	4750630, 4737785, 4724974, 4712198, 4699457, 4686749, 4674077, 4661438, 4648834, 4636264,
+	4623728, 4611225, 4598757, 4586322, 4573921, 4561553, 4549219, 4536918, 4524651, 4512416,
+	4500215, 4488047, 4475911, 4463809, 4451739, 4439701, 4427697, 4415725, 4403785, 4391877,
+	4380002, 4368158, 4356347, 4344568, 4332820, 4321105, 4309421, 4297768, 4286147, 4274558,
+	4263000, 4251473, 4239977, 4228512, 4217079, 4205676, 4194304
+};
+
+/* 2^x, Q23, for x (Q24) at most 0 */
+static long exp2_q(long long x)
 {
-	int k, period;
-	double sum = 0, lp = 0;
-	if (r < 4) {
-		*mean = 0;
-		*af = 1;
-		return;
-	}
-	if (r >= 60) {
-		*mean = 8;
-		*af = 0;	/* (at once, as good as: the attack's last two rates are) */
-		return;
-	}
-	if (r < 48) {
-		int shift = 11 - (r >> 2);
-		period = 8 << shift;
-		for (k = 0; k < 8; k++) {
-			int inc = eg_lo[r & 3][k];
-			sum += inc;
-			lp += log(1 - inc / 16.0);
+	unsigned long long y = (unsigned long long)-x;
+	long ip = (long)(y >> 24), f = (long)(y & 0xffffff), i = f >> 16, r;
+	long a, b;
+	if (ip >= 24)
+		return 0;
+	a = exp2_frac[i];
+	b = exp2_frac[i + 1];
+	r = a - (long)(((long long)(a - b) * (f & 0xffff)) >> 16);
+	return r >> ip;
+}
+
+/* each rate's increments over the chip's pattern: their mean an update
+   (x OPN_Q) and the attack's factor an update (Q23), for the envelope's
+   clocks an update (the chip's rate / 3 a second, OPN_UPD samples at the
+   output's): integers only (EPlay has no floating point to spare) */
+static void rate_tables(OPND *d)
+{
+	/* the envelope's clocks an update: clock / 144 / 3 / rate x OPN_UPD,
+	   as a fraction egk_n / egk_d */
+	unsigned long long egk_n = (unsigned long long)d->clock * OPN_UPD, egk_d = 432ULL * (unsigned long)d->rate;
+	int r, k;
+	for (r = 0; r < 64; r++) {
+		int period, sum = 0;
+		long long l2 = 0;
+		int at_once = 0;
+		if (r < 4) {
+			d->r_mean[r] = 0;
+			d->r_arf[r] = 8388607L;	/* (no attack: its factor 1) */
+			continue;
 		}
-	} else {
-		period = 8;
-		for (k = 0; k < 8; k++) {
-			int inc = eg_hi[r & 3][k] << ((r >> 2) - 12);
-			sum += inc;
-			lp += inc >= 16 ? -50 : log(1 - inc / 16.0);
+		if (r >= 60) {
+			d->r_mean[r] = (long)((8ULL * egk_n * OPN_Q + egk_d / 2) / egk_d);
+			d->r_arf[r] = 0;	/* (at once, as good as: the attack's last rates are) */
+			continue;
 		}
+		if (r < 48) {
+			period = 8 << (11 - (r >> 2));
+			for (k = 0; k < 8; k++) {
+				int inc = eg_lo[r & 3][k];
+				sum += inc;
+				l2 += log2_att[inc];
+			}
+		} else {
+			period = 8;
+			for (k = 0; k < 8; k++) {
+				int inc = eg_hi[r & 3][k] << ((r >> 2) - 12);
+				sum += inc;
+				if (inc >= 16)
+					at_once = 1;
+				else
+					l2 += log2_att[inc];
+			}
+		}
+		d->r_mean[r] = (long)(((unsigned long long)sum * egk_n * OPN_Q + (unsigned long long)period * egk_d / 2) /
+				      ((unsigned long long)period * egk_d));
+		/* af^egk = 2^(l2 / period x egk) */
+		d->r_arf[r] = at_once ? 0 : exp2_q(l2 * (long long)egk_n / ((long long)period * (long long)egk_d));
+		if (d->r_arf[r] > 8388607L)
+			d->r_arf[r] = 8388607L;
 	}
-	*mean = sum / period;
-	*af = exp(lp / period);
 }
 
 static void op_rates(OPND *d, OPND_OP *op)
 {
-	double mean, af;
-	int r;
-	r = eff(op->ar, op->ksr);
-	rate_avg(r, &mean, &af);
-	op->arf = r >= 62 || af == 0 ? 0 : !r ? 8388607L : (long)(pow(af, d->egk) * 8388608.0);
-	if (op->arf > 8388607L)
-		op->arf = 8388607L;
-	rate_avg(eff(op->d1r, op->ksr), &mean, &af);
-	op->d1 = (long)(mean * d->egk * OPN_Q + 0.5);
-	rate_avg(eff(op->d2r, op->ksr), &mean, &af);
-	op->d2 = (long)(mean * d->egk * OPN_Q + 0.5);
+	int r = eff(op->ar, op->ksr);
+	op->arf = r >= 62 ? 0 : !r ? 8388607L : d->r_arf[r];
+	op->d1 = d->r_mean[eff(op->d1r, op->ksr)];
+	op->d2 = d->r_mean[eff(op->d2r, op->ksr)];
 	r = op->rrr * 4 + 2 + op->ksr;
-	rate_avg(r > 63 ? 63 : r, &mean, &af);
-	op->rr = (long)(mean * d->egk * OPN_Q + 0.5);
+	op->rr = d->r_mean[r > 63 ? 63 : r];
 }
 
 static void ch_steps(OPND *d, int c)
@@ -106,8 +161,10 @@ static void ch_steps(OPND *d, int c)
 		fc &= 0x1ffff;
 		inc = (long)fc * (op->mul ? op->mul * 2 : 1) >> 1;
 		inc &= 0xfffff;
-		/* (the chip's 20 bits a turn, 2^21 here: x 2, at the output's rate) */
-		op->step = (long)(inc * 2.0 * d->ratio + 0.5) & 0xffffff;
+		/* (the chip's 20 bits a turn, 2^21 here: x 2, at the output's rate:
+		   clock / 144 / rate) */
+		op->step = (long)(((unsigned long long)inc * 2 * d->clock + 72ULL * (unsigned long)d->rate) /
+				  (144ULL * (unsigned long)d->rate)) & 0xffffff;
 		if (op->ksr != kc >> (3 - op->ks)) {
 			op->ksr = kc >> (3 - op->ks);
 			op_rates(d, op);
@@ -122,8 +179,7 @@ void opnd_init(OPND *d, unsigned long clock, long rate)
 	memset(d, 0, sizeof(*d));
 	d->clock = clock;
 	d->rate = rate;
-	d->ratio = (double)clock / 144 / rate;
-	d->egk = (double)clock / 144 / 3 / rate * OPN_UPD;
+	rate_tables(d);
 	for (c = 0; c < 6; c++) {
 		d->ch[c].pan = 3;
 		for (i = 0; i < 4; i++) {
@@ -173,7 +229,7 @@ void opnd_write(OPND *d, int port, int reg, int val)
 			break;
 		case 0x2a:
 			d->dac = val;
-			d->dac_dirty = 1;
+			d->dac_wr = 1;
 			break;
 		case 0x2b:
 			d->dac_on = val >> 7;
@@ -263,14 +319,47 @@ static const unsigned char lfo_per[8] = { 108, 77, 71, 67, 62, 44, 8, 5 };
 static const unsigned char ams_shift[4] = { 8, 3, 1, 0 };
 static const unsigned short pms_depth[8] = { 0, 2, 4, 6, 8, 12, 23, 46 };
 
-void opnd_send_dac(OPND *d, void (*put)(void *u, long w), void *u)
+static void send_dac(OPND *d, void (*put)(void *u, long w), void *u)
 {
-	if (d->dac_dirty) {
+	if (d->dac_dirty && d->dac_on != d->dac_sent) {
 		put(u, OPNC_DAC);
 		put(u, d->dac_on);
 		put(u, ((long)(d->dac - 128) << 16) & 0xffffff);
-		d->dac_dirty = 0;
+		d->dac_sent = d->dac_on;
 	}
+	d->dac_dirty = 0;
+}
+
+void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u)
+{
+	/* 44,100 / rate: whole, then the fraction's 23 bits */
+	unsigned long r = (unsigned long)d->rate;
+	put(u, OPNC_DRATE);
+	put(u, (long)(44100UL / r));
+	put(u, (long)((((unsigned long long)(44100UL % r) << 23) + r / 2) / r) & 0x7fffff);
+}
+
+int opnd_tick(OPND *d, int (*step)(void *v), void *v, long n, void (*put)(void *u, long w), void *u)
+{
+	unsigned char b[96];
+	long k, nb = 0;
+	int any = 0, live = 1;
+	d->dac_wr = 0;
+	for (k = 0; k < n && live; k++) {
+		live = step(v);
+		if (d->dac_wr)
+			any = 1;
+		if (nb < (long)sizeof(b))
+			b[nb++] = (unsigned char)d->dac;
+	}
+	opnd_send(d, put, u);
+	if (any && d->dac_on) {
+		put(u, OPNC_DACS);
+		put(u, nb);
+		for (k = 0; k < nb; k += 3)
+			put(u, (long)b[k] | (k + 1 < nb ? (long)b[k + 1] << 8 : 0) | (k + 2 < nb ? (long)b[k + 2] << 16 : 0));
+	}
+	return live;
 }
 
 void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
@@ -286,7 +375,7 @@ void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 			put(u, ch->pan & 2 ? OPN_OUTG : 0);
 			put(u, ch->pan & 1 ? OPN_OUTG : 0);
 			put(u, ch->ams ? 1L << (22 - ams_shift[ch->ams]) : 0);
-			put(u, ch->pms ? (long)(pms_depth[ch->pms] * 8388608.0 / 500 + 0.5) : 0);
+			put(u, ch->pms ? (pms_depth[ch->pms] * 8388608L + 250) / 500 : 0);
 		}
 		for (k = 0; k < 4; k++) {
 			int i = c * 4 + k;
@@ -313,10 +402,13 @@ void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 	}
 	if (d->lfo_dirty) {
 		put(u, OPNC_LFO);
-		put(u, d->lfo_on ? (long)(d->ratio * OPN_UPD / lfo_per[d->lfo_rate] * 131072 + 0.5) : 0);
+		/* (clock / 144 / rate x OPN_UPD / its period, x 2^17) */
+		put(u, d->lfo_on ? (long)(((unsigned long long)d->clock * OPN_UPD * 131072 +
+					   72ULL * (unsigned long)d->rate * lfo_per[d->lfo_rate]) /
+					  (144ULL * (unsigned long)d->rate * lfo_per[d->lfo_rate])) : 0);
 		put(u, !d->lfo_on);
 	}
-	opnd_send_dac(d, put, u);
+	send_dac(d, put, u);
 	d->op_dirty = 0;
 	d->ch_dirty = 0;
 	d->lfo_dirty = 0;

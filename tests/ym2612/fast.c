@@ -3,9 +3,8 @@
 /*
  * fast.c - a VGM's YM2612 as the DSP plays it (src/opnd.c, the 68030's
  * half, and src/opnfast.c, the DSP's arithmetic), at a rate given, to a
- * WAV, the model taking only the DSP's commands (opnd_send's words): the
- * parameters each 1 ms tick (the 68030's Timer A), the DAC's samples as
- * they come (they are streamed).
+ * WAV, the model taking only the DSP's commands, a tick at a time as the
+ * 68030 sends them (opnd_tick: what changed, the tick's DAC samples).
  *
  *	fast FILE.VGM OUT.WAV RATE [seconds]
  */
@@ -23,6 +22,14 @@ static void opn(void *u, int port, int reg, int val)
 {
 	(void)u;
 	opnd_write(&chip, port, reg, val);
+}
+
+#define TICK_HZ (2457600.0 / 16 / 154)
+#define STEP 2897647UL		/* the file's samples a tick, Q16 (vgmplay.c's) */
+
+static int step(void *v)
+{
+	return vgm_run(v, 1);
 }
 
 static void put(void *u, long w)
@@ -47,7 +54,8 @@ int main(int argc, char **argv)
 	FILE *f, *o;
 	unsigned char *b;
 	long n, rate, frames = 0, i;
-	double secs, acc = 0, tick = 0;
+	double secs, tick = 1;
+	unsigned long vacc = 0;
 	VGMHEAD h;
 	VGMRUN r;
 	if (argc < 4) {
@@ -68,6 +76,7 @@ int main(int argc, char **argv)
 	fclose(f);
 	opnd_init(&chip, h.ym2612_clock, rate);
 	opnf_init(&dsp);
+	opnd_send_drate(&chip, put, &dsp);
 	opnd_send(&chip, put, &dsp);
 	vgm_begin(&r, b, n, &h, 0, 0, 0);
 	r.opn_fn = opn;
@@ -83,21 +92,18 @@ int main(int argc, char **argv)
 	fwrite("data\0\0\0\0", 1, 8, o);
 	if (secs <= 0)
 		secs = (double)vgm_length(&h) / VGM_RATE;
+	/* the tick as the 68030's (2,457,600 / 16 / 154 Hz: 44.2 of the file's
+	   samples), its commands before the samples after it */
 	for (i = 0; i < (long)(secs * rate); i++) {
 		short s[2] = { 0, 0 };
-		acc += (double)VGM_RATE / rate;
-		if (acc >= 1) {
-			long k = (long)acc;
-			acc -= k;
-			if (!vgm_run(&r, k))
-				break;
-		}
-		tick += 1000.0 / rate;
+		tick += TICK_HZ / rate;
 		if (tick >= 1) {
 			tick -= 1;
-			opnd_send(&chip, put, &dsp);
-		} else
-			opnd_send_dac(&chip, put, &dsp);
+			vacc += STEP;
+			if (!opnd_tick(&chip, step, &r, (long)(vacc >> 16), put, &dsp))
+				break;
+			vacc &= 0xffff;
+		}
 		opnf_run(&dsp, s, 1);
 		put16(o, (unsigned)s[0]);
 		put16(o, (unsigned)s[1]);

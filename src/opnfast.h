@@ -46,8 +46,12 @@ typedef struct {
 	int upd;		/* samples to the next update */
 	/* the tables the 68030 loads */
 	long sin_tab[1024], gain_tab[OPNF_GAINS], triw[128], pmw[128];
+	/* the DAC's queue (DACS), played at DACRATE */
+	long dq[1024];
+	int dwp, drp, dcnt;
+	long drf, dsi, dsf;
 	/* the words of a command still coming */
-	long cw[12];
+	long cw[64];
 	int cn;
 } OPNF;
 

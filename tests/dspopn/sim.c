@@ -4,8 +4,8 @@
  * sim.c - dsp/opn.a56, the YM2612 on the DSP (phase 10), on Hatari's DSP
  * core, against its model (src/opnfast.c), bit for bit: each test file
  * (tests/ym2612/mkvgm.py's) through src/opnd.c, its commands sent to both
- * (the parameters at each 1 ms tick, the DAC's samples as they come), the
- * samples between (RUN) compared word for word. Then the worst case for
+ * a tick at a time as the 68030 sends them (opnd_tick), the samples
+ * between (RUN) compared word for word. Then the worst case for
  * time: all six channels live, feedback 7, each algorithm; its cycles a
  * sample against a stock Falcon's DSP at 24,585 Hz (32 MHz: 1,301).
  *
@@ -63,6 +63,12 @@ static void flush(void)
 				for (j = 0; j < 4; j++)
 					fprintf(stderr, " %06x", dsp_core.ramext[0x4000 + 0x1600 + 8 * c + j]);
 				fprintf(stderr, " HND %06x\n", dsp_core.ramint[0][0x10 + c]);
+				fprintf(stderr, " DAC: DSP on %x v %06x wp %x rp %x rf %06x cnt %d si %d sf %06x q0 %06x; model on %d v %06lx wp %d rp %d cnt %d si %ld sf %06lx q0 %06lx\n",
+					dsp_core.ramint[0][0x0a], dsp_core.ramint[0][0x0b], dsp_core.ramint[0][0x32],
+					dsp_core.ramint[0][0x33], dsp_core.ramint[0][0x34], dsp_core.ramint[0][0x35],
+					dsp_core.ramint[0][0x36], dsp_core.ramint[0][0x37], dsp_core.ramext[0x1400],
+					model.dac_on, model.dac & 0xffffff, model.dwp, model.drp, model.dcnt, model.dsi, model.dsf,
+					model.dq[0] & 0xffffff);
 			}
 		}
 	}
@@ -85,6 +91,14 @@ static void sample(void)
 		flush();
 }
 
+#define TICK_HZ (2457600.0 / 16 / 154)
+#define STEP 2897647UL
+
+static int vstep(void *v)
+{
+	return vgm_run(v, 1);
+}
+
 static void opn(void *u, int port, int reg, int val)
 {
 	(void)u;
@@ -105,7 +119,8 @@ static int play(const char *path)
 	FILE *f = fopen(path, "rb");
 	unsigned char *b;
 	long n, i, total;
-	double acc = 0, tick = 0;
+	double tick = 1;
+	unsigned long vacc = 0;
 	VGMHEAD h;
 	VGMRUN r;
 	if (!f)
@@ -122,25 +137,21 @@ static int play(const char *path)
 	opnd_init(&chip, h.ym2612_clock, RATE);
 	vgm_begin(&r, b, n, &h, 0, 0, 0);
 	r.opn_fn = opn;
+	opnd_send_drate(&chip, both, NULL);
 	opnd_send(&chip, both, NULL);
 	bad_at = -1;
 	nsamp = 0;
 	run_cycles = 0;
 	total = (long)((double)vgm_length(&h) / VGM_RATE * RATE);
 	for (i = 0; i < total && !dead; i++) {
-		acc += (double)VGM_RATE / RATE;
-		if (acc >= 1) {
-			long k = (long)acc;
-			acc -= k;
-			if (!vgm_run(&r, k))
-				break;
-		}
-		tick += 1000.0 / RATE;
+		tick += TICK_HZ / RATE;
 		if (tick >= 1) {
 			tick -= 1;
-			opnd_send(&chip, both, NULL);
-		} else
-			opnd_send_dac(&chip, both, NULL);
+			vacc += STEP;
+			if (!opnd_tick(&chip, vstep, &r, (long)(vacc >> 16), both, NULL))
+				break;
+			vacc &= 0xffff;
+		}
 		sample();
 	}
 	flush();

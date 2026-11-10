@@ -59,8 +59,11 @@ void opnf_init(OPNF *f)
 
 /* ---- the commands */
 
-static int cmd_len(long c)
+static int cmd_len(const OPNF *f)
 {
+	long c = f->cw[0];
+	if (c == OPNC_DACS)
+		return f->cn < 2 ? 2 : 2 + (int)((f->cw[1] + 2) / 3);
 	switch (c) {
 	case OPNC_OP:
 		return 10;
@@ -69,6 +72,7 @@ static int cmd_len(long c)
 	case OPNC_KEY:
 	case OPNC_LFO:
 	case OPNC_DAC:
+	case OPNC_DRATE:
 		return 3;
 	}
 	return 1;
@@ -123,13 +127,51 @@ static void cmd(OPNF *f, const long *w)
 		f->dac_on = (int)w[1];
 		f->dac = S24(w[2]);
 		break;
+	case OPNC_DRATE:
+		f->dsi = w[1];
+		f->dsf = w[2];
+		break;
+	case OPNC_DACS: {
+		long n = w[1], k;
+		for (k = 0; k < n; k++) {
+			int b = (int)(w[2 + k / 3] >> (8 * (k % 3)) & 255);
+			if (f->dcnt >= 1000)
+				continue;
+			f->dq[f->dwp] = (long)(b - 128) << 16;
+			f->dwp = (f->dwp + 1) & 1023;
+			f->dcnt++;
+		}
+		break;
 	}
+	}
+}
+
+/* channel 6 while the DAC is on: the queue's next at DACRATE, the last
+   held while it is empty */
+static long dac_next(OPNF *f)
+{
+	if (f->dcnt > 0) {
+		long adv = f->dsi;
+		f->dac = f->dq[f->drp];
+		f->drf += f->dsf;
+		if (f->drf & 0x800000L) {
+			f->drf &= 0x7fffff;
+			adv++;
+		}
+		f->drp = (int)((f->drp + adv) & 1023);
+		f->dcnt -= (int)adv;
+		if (f->dcnt < 0) {
+			f->dcnt = 0;
+			f->drp = f->dwp;
+		}
+	}
+	return f->dac;
 }
 
 void opnf_word(OPNF *f, long w)
 {
 	f->cw[f->cn++] = W24(w);
-	if (f->cn >= cmd_len(f->cw[0])) {
+	if (f->cn >= cmd_len(f)) {
 		cmd(f, f->cw);
 		f->cn = 0;
 	}
@@ -276,7 +318,7 @@ void opnf_words(OPNF *f, long *lr, int n)
 			OPNF_CH *ch = &f->ch[c];
 			long v;
 			if (c == 5 && f->dac_on)
-				v = f->dac;
+				v = dac_next(f);
 			else if (!ch->live)
 				v = 0;
 			else
