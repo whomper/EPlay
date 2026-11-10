@@ -1853,3 +1853,10 @@ What EPlay needs beyond common's layer:
   `tools/fbprobe`) asks the machine, for its tester through Erez.
 - **EPlay's own assembly:** `feed.S` (the tick), `hostirq.S` (the DSP's: not built), `term.c`'s
   trap 13, `div64.c`'s 64-bit forms (the C path).
+
+## Next, to propose: a Jellyfin library (Erez, 10 Nov 2026)
+
+After the YM2612 (phase 10's first part), a design for Erez: EPlay browsing and playing a
+Jellyfin server's music (its JSON API on the home network, its tracks sent as MP3 at a rate
+EPlay asks, its cover art resized), with the browser's layout, a Settings page and the steps.
+Design only; nothing before he decides.
