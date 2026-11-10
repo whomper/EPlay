@@ -66,6 +66,20 @@ binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h | binary
 	PRGFLAGS=0x10 python3 common/tools/elf2tos.py build/st/eplay.elf $@
 .PHONY: st
 
+# FBPROBE.PRG, for the FireBee's tester (the hub, 10 Nov 2026): plain
+# 68000 code that only reads (tools/fbprobe), built with the STE's objects
+fbprobe: binary/fbprobe.prg
+binary/fbprobe.prg: FORCE | binary
+	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/st build/st/fbprobe.elf
+	PRGFLAGS=0 python3 common/tools/elf2tos.py build/st/fbprobe.elf $@
+build/st/fbprobe.o: tools/fbprobe/fbprobe.c | $(OBJDIR)
+	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
+build/st/fbpeek.o: tools/fbprobe/peek.S | $(OBJDIR)
+	$(CC) -m68000 -c -o $@ $<
+build/st/fbprobe.elf: build/st/crt0.o build/st/fbprobe.o build/st/fbpeek.o build/st/libc.o build/st/tos.o common/atari/link.ld
+	$(CC) $(LDFLAGS) -o $@ build/st/crt0.o build/st/fbprobe.o build/st/fbpeek.o build/st/libc.o build/st/tos.o -lgcc
+.PHONY: fbprobe
+
 # PRGFLAGS 0x17: fast load, the program and its memory in TT RAM, and
 # under MiNT's memory protection Global: the sound's interrupts (the tick,
 # the host port's) run while other programs' are current, and reach
@@ -241,10 +255,10 @@ binary/eplay.hyp: docs/GUIDE.md common/tools/mkhelp.py VERSION docs/front.json d
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
-DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
+DIST    := binary/eplay.prg binary/eplayst.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
            common/tlsovl/tls.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
-dist: all help
+dist: all fbprobe help
 	rm -rf dist
 	mkdir -p dist/zip/icons
 	cp $(DIST) $(ICONS) dist/
