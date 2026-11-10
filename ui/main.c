@@ -30,6 +30,7 @@
 #include "offdraw.h"
 #include "click.h"
 #include "play.h"
+#include "tooltip.h"
 #include "prefs.h"
 #include "list.h"
 #include "dd.h"
@@ -245,6 +246,40 @@ static void status_again(void)
 	}
 }
 
+/* r less the tip's box where one is up (tooltip.h's tip_area): up to 4
+   pieces into out, their number */
+static int around_tip(const GRECT *r, GRECT out[4])
+{
+	GRECT t;
+	int n = 0;
+	short x2, y2, tx2, ty2;
+	if (!tip_area(&t) || !rc_intersect(r, &t)) {
+		out[0] = *r;
+		return 1;
+	}
+	x2 = r->x + r->w;
+	y2 = r->y + r->h;
+	tx2 = t.x + t.w;
+	ty2 = t.y + t.h;
+	if (t.y > r->y) {			/* above it */
+		out[n].x = r->x, out[n].y = r->y, out[n].w = r->w, out[n].h = t.y - r->y;
+		n++;
+	}
+	if (ty2 < y2) {				/* below it */
+		out[n].x = r->x, out[n].y = ty2, out[n].w = r->w, out[n].h = y2 - ty2;
+		n++;
+	}
+	if (t.x > r->x) {			/* beside it, left */
+		out[n].x = r->x, out[n].y = t.y, out[n].w = t.x - r->x, out[n].h = t.h;
+		n++;
+	}
+	if (tx2 < x2) {				/* and right */
+		out[n].x = tx2, out[n].y = t.y, out[n].w = x2 - tx2, out[n].h = t.h;
+		n++;
+	}
+	return n;
+}
+
 /* the window's parts again (bar.h's BP_...), through the AES's
    rectangles, within area (0: the parts' own). A small part (the times,
    each second; Play/Pause) is drawn off the screen and shown in one step
@@ -275,11 +310,17 @@ static void redraw(GRECT *area, int parts)
 	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w && r.h) {
 		if (rc_intersect(area, &r)) {
-			if (small && off_begin(vdi_h, r.x, r.y, r.w, r.h)) {
-				bar_draw(&r, parts);
-				off_end();
-			} else
-				bar_draw(&r, parts);
+			/* (a tip up: what it covers left out, D18's tip_area; the
+			   clock and the position bar draw by themselves each second) */
+			GRECT piece[4];
+			int k, n = around_tip(&r, piece);
+			for (k = 0; k < n; k++) {
+				if (small && off_begin(vdi_h, piece[k].x, piece[k].y, piece[k].w, piece[k].h)) {
+					bar_draw(&piece[k], parts);
+					off_end();
+				} else
+					bar_draw(&piece[k], parts);
+			}
 		}
 		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
 	}
@@ -2027,6 +2068,48 @@ static void crash_quit(const char *what)
 
 /* one turn of the event loop: an event, or none within the timer (none at
    all inside the album art's decode: nested), and the music fed */
+/* the bar's tips (D18, the guidelines' 3.4): what a control does and its
+   key, where the pointer rests on it in EPlay's window on top */
+static short tip_x = -1, tip_y = -1;
+
+static int bar_tip(short x, short y, char *out, int size)
+{
+	const char *t;
+	short top, k;
+	if (wind_find(x, y) != wh)
+		return 0;
+	wind_get(0, WF_TOP, &top, &k, &k, &k);
+	if (top != wh)
+		return 0;
+	switch (bar_hit(x, y)) {
+	case BH_PREV:
+		t = "Previous file (Shift+Left)";
+		break;
+	case BH_PLAY:
+		t = play_state() == PS_PLAYING ? "Pause (Space)" : "Play (Space)";
+		break;
+	case BH_NEXT:
+		t = "Next file (Shift+Right)";
+		break;
+	case BH_SHUFFLE:
+		t = "Shuffle";
+		break;
+	case BH_REPEAT:
+		t = "Repeat";
+		break;
+	case BH_POS:
+		t = "Position: click or drag (Left and Right: 10 s)";
+		break;
+	case BH_VOL:
+		t = "Volume: click or drag (+ and -)";
+		break;
+	default:
+		return 0;
+	}
+	snprintf(out, (size_t)size, "%s", t);
+	return 1;
+}
+
 static void turn(int nested)
 {
 	int piece = 0;
@@ -2040,10 +2123,18 @@ static void turn(int nested)
 	dlg_idle = playing ? feed_only : 0;
 	/* (either button: 0x101, 3, 0 as popup.c asks; the right one opens a
 	   row's menu) */
-	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER, 0x101, 3, 0,
+	/* (MU_M1: the pointer left its place, for the tips: D18) */
+	evnt_set_m1(1, tip_x, tip_y, 1, 1);
+	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER | MU_M1, 0x101, 3, 0,
 			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || shown_due ? 0 :
-			    list_unread ? 20 : play_wait_ms(), msg, &ev);
+			    tip_wait(list_unread ? 20 : (unsigned long)play_wait_ms()), msg, &ev);
 	turn_t0 = tos_ms();
+	if (which & MU_M1) {
+		tip_x = ev.mx;
+		tip_y = ev.my;
+	}
+	if (!nested)
+		tip_tick(which, iconified || wh <= 0 ? -1 : tip_x, tip_y, bar_tip);
 	if (which & (MU_KEYBD | MU_BUTTON))
 		input_ms = turn_t0;	/* (a picture's time from the input: the rigs') */
 	if (pending_play[0] && !nested && !art_needs_dsp()) {
@@ -2187,6 +2278,7 @@ int app_main(void)
 	wind_get(0, WF_WORKXYWH, &desk_x, &desk_y, &desk_w, &desk_h);
 	crash_install(app_dir(), "EPlay", app_version);
 	term_install();			/* (the sound's interrupts taken away however EPlay ends) */
+	tip_init(0);			/* (the AES redraws what a tip covered) */
 	pf_idle = busy_idle;		/* (Esc or Undo while a station connects: busy.h) */
 	sart_init(fetch_message);
 	crash_cleanup = crash_quit;

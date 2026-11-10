@@ -70,6 +70,8 @@ it plays: **FDI**, **DSP** or **DMA**.
   beside it go to the previous and next file.
 - **The position bar:** click or drag on it to go to that place in the file.
 - **The volume** at the right: click or drag on it, or press + and -.
+- **Tips:** rest the pointer on a control for a moment and a tip says what it does and its key
+  (through BubbleGEM where it runs).
 - **The info line** under the window's title says what EPlay is doing: "Playing", "Paused", the
   output's rate, or why a file can't play.
 
