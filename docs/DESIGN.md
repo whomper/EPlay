@@ -1820,3 +1820,17 @@ register and a ring of 256 words ahead of the SSI (96 words' lead), polling the 
 samples; volume changes go through the tick, the host port's only writer. `tests/dspsn` runs it
 on Hatari's DSP core (999 Hz for 998.8, the level, the noise, silence). play_test's `vgm`, `vgz`
 (Falcon-4, TT, STE: 1002 Hz for 1000, 3.04 s) and `vgmsn` (Falcon-4: 998 Hz, 3.00 s).
+
+**Step 3, the YM2612 measured (10 Nov 2026).** `tests/dspfm` (a measurement, not a player): a
+YM2612-like sample (24 operators in algorithm 0's chain, each its phase, its sine at phase plus the
+modulation, its envelope a step, its level) takes 1,248 cycles on Hatari's DSP core written
+plainly, 52 an operator: with a tenth kept for the SSI and the host port, about 23,000 samples a
+second on a stock Falcon's DSP (the chip's own rate 53,267). Parallel moves might halve it; the
+chip's whole work (feedback, detune, key scaling, the LFO, the envelope's states, the DAC channel
+of its drums) adds to it. So: 24,585 Hz likely, 32,780 Hz perhaps, 49,170 Hz no.
+
+**For discussion with Erez (10 Nov 2026: "let's go back to this soon").** Which chips next, by how
+much of the VGM archive they open: the YM2612 (the Mega Drive, the largest share, at a lower rate:
+above), the YM2151 (arcade, X68000: heavier still), the OPN family (PC-88/98), OPL2/OPL3 (DOS:
+likely feasible), the NES and the Game Boy (cheap, as the SN76489 was). Nothing starts before he
+chooses.
