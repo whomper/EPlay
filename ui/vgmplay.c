@@ -117,7 +117,13 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	f.fh = fh;
 	mem = vgm_load(rd, &f, size, &mem_n, take, give, &why);
 	if (!mem) {
-		snprintf(err, (size_t)n, "%s %s.", name, why);
+		elog("VGM: %s %s (%ld bytes, %ld unpacked; the largest free block %ld)", name, why, size, vgm_need,
+		     (long)Mxalloc(-1L, 3));
+		if (vgm_need > 0 && strstr(why, "memory"))
+			snprintf(err, (size_t)n, "%s needs %ld KB of memory|to play, which isn't free.", name,
+				 (vgm_need + 1023) / 1024);
+		else
+			snprintf(err, (size_t)n, "%s %s.", name, why);
 		return 0;
 	}
 	if (!vgm_head(mem, mem_n, &h)) {

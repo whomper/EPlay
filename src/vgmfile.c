@@ -67,16 +67,20 @@ static long gz_head(TAG_READ rd, void *u, long size)
 	return at < size ? at : 0;
 }
 
+long vgm_need;
+
 unsigned char *vgm_load(TAG_READ rd, void *u, long size, long *n, void *(*alloc)(long), void (*release)(void *),
 			const char **why)
 {
 	unsigned char head[4], *b;
 	long len;
 	*n = 0;
+	vgm_need = 0;
 	*why = "isn't a VGM file";
 	if (size < 4 || rd(u, 0, head, 4) != 4)
 		return 0;
 	if (vgm_magic(head, 4) == 1) {
+		vgm_need = size;
 		if (size > VGM_MAX) {
 			*why = "is too big to play";
 			return 0;
@@ -105,6 +109,7 @@ unsigned char *vgm_load(TAG_READ rd, void *u, long size, long *n, void *(*alloc)
 		}
 		len = (long)((unsigned long)t[0] | (unsigned long)t[1] << 8 | (unsigned long)t[2] << 16 |
 			     (unsigned long)t[3] << 24);	/* (ISIZE: its size unpacked) */
+		vgm_need = len;
 		if (len < 64 || len > VGM_MAX) {
 			*why = len > VGM_MAX ? "is too big to play" : "is damaged";
 			return 0;
