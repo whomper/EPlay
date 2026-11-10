@@ -21,7 +21,7 @@ after another, and the music goes on while you work in other dialogs and menus.
 - **This guide:** copy `eplay.hyp` and `eplay.ref` into `C:\GUIDES\`, or beside `eplay.prg`.
   **Help** in EPlay opens it in EHypView or ST-Guide.
 - **Play something:** start EPlay and choose **File > Open...** (^O), or drop MP3, WAV or AIFF
-  files, a folder or an `.M3U` playlist on EPlay's window or on `eplay.prg`. What you give goes
+  (or VGM and VGZ) files, a folder or an `.M3U` playlist on EPlay's window or on `eplay.prg`. What you give goes
   into the list, and the first file plays.
 
 **Needs:** a Falcon030 with TOS 4.0x or EmuTOS, or a TT, and a screen 640 pixels wide or more.
@@ -59,6 +59,15 @@ own pitch.
   nearest rate the Falcon has, unless an FDI gives its rate.
 - **Shares the DSP.** EPlay holds the DSP only while it plays through it, and gives it back on
   Pause and Stop: see [Settings](#settings).
+- **VGM and VGZ.** Game music recorded as the sound chip's own writes: a file for the AY-3-8910
+  or YM2149 (Atari ST, Amstrad CPC, MSX, ZX Spectrum music) plays on the Atari's own YM2149, the
+  real chip, on the Falcon, the TT and the STE; a chip at another clock (the Spectrum's 1.77 MHz)
+  is put at its pitch. The list shows the track, the game and the composer from its GD3 tag. A
+  file with a loop plays it once more, its last 4 seconds fading out. A file for the SN76489
+  (Master System, Game Gear, BBC Micro music) plays on the Falcon's DSP, through the Falcon's
+  output or the FDI, the way an MP3 does (the DSP held only while it plays). A VGZ is unpacked
+  first, into memory. While one plays, the keyboard's click and the bell are off. Music for another
+  chip (the Mega Drive's FM, an arcade board's) says so and isn't played yet.
 
 ## Windows and menus
 

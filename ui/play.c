@@ -44,6 +44,9 @@
 #include "plat.h"
 #include "conn.h"
 #include "busy.h"
+#include "vgm.h"
+#include "vgmfile.h"
+#include "vgmplay.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -58,6 +61,7 @@ const char *play_via = "";
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
+static int vgm;			/* a VGM or VGZ plays on the YM2149 (phase 9: vgmplay.c) */
 /* a WAV or AIFF the DSP resamples (XSTREAM: Erez, 4 Nov 2026, the right
    pitch at any rate): the ring at the DSP's rate, through the matrix to
    its receive, a frame with a sample where the step has one (pcm_spread).
@@ -121,6 +125,10 @@ static void apply_volume(void)
 	int a = VOL_MAX - vol;		/* 0..15 steps down, while vol is 1 or more */
 	int sub, subn, digital = !(snd_dma8 && !snd_dma8_interp);	/* (not the STE's 68000) */
 	long g, gn;
+	if (vgm) {
+		vp_volume(a, !vol);	/* (vgmplay.c: the chips' ways) */
+		return;
+	}
 	if ((s_ext || (snd_dma8 && snd_dma8_interp)) && play_is_open()) {
 		snd_dac_volume(0, 0);
 		gain_at(a - rg_now, &g, &sub);
@@ -1089,6 +1097,22 @@ int play_open(const char *path, char *err, int n)
 	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
 		elog("tags: \"%s\", \"%s\", \"%s\"; album art %ld bytes%s", play_tags.title, play_tags.artist,
 		     play_tags.album, play_tags.pic_end - play_tags.pic_at, play_tags.pic_unsync ? " (unsynchronised)" : "");
+	if (!net && vgm_magic(fbuf, fend)) {
+		/* a VGM or VGZ (phase 9): read whole, played by the tick on
+		   the YM2149 */
+		if (!vp_open(fh, file_size, seek_ms, &play_tags, play_info, sizeof(play_info), play_out,
+			     sizeof(play_out), &len_ms, err, n, play_name)) {
+			close_file();
+			return 0;
+		}
+		vgm = 1;
+		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
+		rate = VGM_RATE;
+		play_hz = 0;
+		play_kbps = 0;
+		elog("VGM: %s; %s; %ld ms%s", play_info, play_out, len_ms, base_ms ? " (from a place in it)" : "");
+		return 1;
+	}
 	if (!net && pcm_probe(fbuf, fend, &fmt, &why)) {
 		kind = fmt.kind;
 		rate = fmt.rate;
@@ -1692,6 +1716,12 @@ int play_paused(void)
 
 void play_start(void)
 {
+	if (vgm && state != PS_PLAYING) {
+		state = PS_PLAYING;
+		vp_start();
+		apply_volume();
+		return;
+	}
 	if ((fh >= 0 || net) && state != PS_PLAYING) {
 		state = PS_PLAYING;
 		if (dsp) {
@@ -1711,6 +1741,10 @@ static unsigned long give_at;
 void play_stop(void)
 {
 	paused = 0;
+	if (vgm) {
+		vp_stop();		/* (silent: the chip as the machine had it) */
+		vgm = 0;
+	}
 	feed_off();			/* first: the tick and the DSP's interrupt no longer run */
 	hostirq_off();
 	if (hirq_spur)
@@ -1825,6 +1859,8 @@ long play_ms(void)
 	long f;
 	if (paused)
 		return pause_ms;
+	if (vgm)
+		return vp_ms();
 	if (dsp) {			/* (the file's samples: at its rate, resampled or not) */
 		long fr, late, wmin, wavg;
 		if (!s_started)
@@ -1927,6 +1963,10 @@ void play_log_stop(void)
 const char *play_keep_up(void)
 {
 	static char b[260];
+	if (vgm) {
+		snprintf(b, sizeof(b), "on the YM2149, from the tick");
+		return b;
+	}
 	if (dsp) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
@@ -1956,6 +1996,21 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
+	if (vgm) {
+		if (vp_ended()) {
+			nf_debug("EPLAY ended: 0 underruns\n");	/* (the rigs) */
+			elog("played to the end: %ld ms on the YM2149", play_ms());
+			play_stop();
+			elog_save();
+			return 1;
+		}
+		sec = play_ms() / 1000;
+		if (sec != last_sec) {
+			last_sec = sec;
+			return 1;
+		}
+		return 0;
+	}
 	if (dsp && !loading && !s_started && !t_failed) {
 		if (xs)
 			s_spf = 576;	/* (the DSP's packets, for play_ms) */
@@ -2096,7 +2151,7 @@ int play_wait_ms(void)
 	long ahead;
 	if (state != PS_PLAYING)
 		return 500;
-	if (src_done)
+	if (src_done || vgm)
 		return 100;
 	ahead = q_w - q_r;		/* seconds of music, near enough */
 	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;

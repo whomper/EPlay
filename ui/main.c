@@ -729,7 +729,7 @@ static int audio_name(const char *n)
 		e[i] = (char)(d[i + 1] | 0x20);
 	e[i] = 0;
 	return !strcmp(e, "mp3") || !strcmp(e, "wav") || !strcmp(e, "aif") || !strcmp(e, "aiff") ||
-	       !strcmp(e, "aifc");
+	       !strcmp(e, "aifc") || !strcmp(e, "vgm") || !strcmp(e, "vgz");
 }
 
 static void feed_only(void);
@@ -978,8 +978,8 @@ static void feed_only(void)
 
 /* File > Open... (^O): common's file dialog with EPlay's types (Add
    files: Erez, 4 Nov 2026) */
-static const DL_TYPE add_types[] = { { "Music files", "MP3 WAV AIF AIFF AIFC M3U" }, { "MP3", "MP3" },
-				     { "WAV", "WAV" }, { "AIFF", "AIF AIFF AIFC" }, { "Playlists", "M3U" },
+static const DL_TYPE add_types[] = { { "Music files", "MP3 WAV AIF AIFF AIFC VGM VGZ M3U" }, { "MP3", "MP3" },
+				     { "WAV", "WAV" }, { "AIFF", "AIF AIFF AIFC" }, { "VGM", "VGM VGZ" }, { "Playlists", "M3U" },
 				     { "All files", "" } };
 static const FP_SPEC add_spec = { "Add files", "Add", "No folder added from yet", "EPLAY", add_types,
 				  (int)(sizeof(add_types) / sizeof(add_types[0])) };

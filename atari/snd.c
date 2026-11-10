@@ -1073,6 +1073,7 @@ static int open_to(long rate, int ext, int feed)
 #define RTATTEN 1
 #define ADDERIN 4
 static short adder_found = -1;
+int snd_adder_adc;		/* 1 while a VGM plays on the YM2149 (ym.c): the ADC added too */
 
 void snd_dac_volume(int att, int mute)
 {
@@ -1096,7 +1097,7 @@ void snd_dac_volume(int att, int mute)
 	}
 	Soundcmd(LTATTEN, (att & 15) << 4);
 	Soundcmd(RTATTEN, (att & 15) << 4);
-	Soundcmd(ADDERIN, mute ? 0 : adder_found);
+	Soundcmd(ADDERIN, mute ? 0 : adder_found | snd_adder_adc);
 }
 
 void snd_close(void)

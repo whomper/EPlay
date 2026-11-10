@@ -10,6 +10,7 @@
 #include "list.h"
 #include "tags.h"
 #include "probe.h"
+#include "vgmfile.h"
 
 ORDER list_order;		/* which plays next: kept in step with the list here */
 
@@ -323,6 +324,17 @@ static long rd(void *u, long at, unsigned char *buf, long k)
 	return Fread((short)fh_, k, buf);
 }
 
+static void *vtake(long n)
+{
+	void *p = (void *)Mxalloc(n, 3);
+	return (long)p > 0 ? p : 0;
+}
+
+static void vgive(void *p)
+{
+	Mfree(p);
+}
+
 int list_step(int *row)
 {
 	static unsigned char buf[PROBE_BUF];
@@ -344,6 +356,24 @@ int list_step(int *row)
 		return 1;
 	}
 	size = Fseek(0, (short)fh_, 2);
+	{
+		/* a VGM or VGZ (phase 9): its GD3 tag and its length */
+		unsigned char m[4];
+		if (rd(0, 0, m, 4) == 4 && vgm_magic(m, 4)) {
+			e->len_ms = vgm_probe(rd, 0, size, &t, vtake, vgive);
+			t.title[39] = t.artist[39] = t.album[39] = 0;
+			e->title = keep(t.title);
+			e->artist = keep(t.artist);
+			e->album = keep(t.album);
+			if (e->len_ms < 0) {
+				e->bad = 1;
+				e->len_ms = 0;
+			}
+			Fclose((short)fh_);
+			fh_ = -1;
+			return 1;
+		}
+	}
 	tags_read(&t, rd, 0, size);
 	/* (the list's columns are 20, 11 and 12 characters: 39 bytes kept at most) */
 	t.title[39] = t.artist[39] = t.album[39] = 0;

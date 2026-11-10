@@ -18,6 +18,7 @@ void snd_exit(void);
 /* the sound system (Locksnd) while EPlay plays: 1, or 0 when another
    program has it; snd_give puts the matrix back and lets it go */
 int snd_take(void);
+extern int snd_adder_adc;	/* the ADC (the PSG) added to the Falcon's output: a VGM plays (ym.c) */
 void snd_term(void);	/* (supervisor mode: term.c) */
 void snd_give(void);
 

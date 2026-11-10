@@ -1802,3 +1802,21 @@ is one gzipped (common's `inflate.c`). What the chip is decides the way, as prop
    DSP's whole time; the rate it reaches is reported, and Erez decides.
 
 OPL, YM2151 and the arcade chips are not part of it.
+
+**Steps 1 and 2 done (9 Nov 2026).** `src/vgm.c` reads the file (header, GD3, the commands; the
+loop once more and a 4 s fade; a seek runs the commands silently and writes every register as it
+is there), `src/vgmfile.c` reads it whole or unpacks a VGZ (gzip's header passed over, then
+`inflate.c`); host tests in `tests/vgm` (a file made there, its writes at their samples, the AY's
+periods turned from 1.7734 MHz to 2 MHz, the loop, the fade, a seek; every length cut and 20,000
+random changes under AddressSanitizer; the VGZ by gzip). The tick (`feed.h`, 997 Hz) runs 44.2 of
+the file's samples a tick (`ui/vgmplay.c`). The AY's writes go to the YM2149 (`atari/ym.c`):
+register 7's port bits kept, 14 and 15 never written, each write with the interrupts off; the key
+click and the bell off while it plays; on the Falcon the PSG through the codec (ADC input to the
+PSG, added to the DAC: `snd_adder_adc` keeps it there when the volume changes). The TT has no
+mixer after its YM2149: its volume takes the chip's own volumes, 3 dB a step. The SN76489's go to
+`dsp/sn.a56` (`atari/dspsn.c`): a program of the bootstrap's 512 words; the 68030 turns each
+write into a tone's step (Q23 of a sample) and amplitude, the DSP keeps the phases, the noise's
+register and a ring of 256 words ahead of the SSI (96 words' lead), polling the host port between
+samples; volume changes go through the tick, the host port's only writer. `tests/dspsn` runs it
+on Hatari's DSP core (999 Hz for 998.8, the level, the noise, silence). play_test's `vgm`, `vgz`
+(Falcon-4, TT, STE: 1002 Hz for 1000, 3.04 s) and `vgmsn` (Falcon-4: 998 Hz, 3.00 s).

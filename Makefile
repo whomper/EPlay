@@ -42,7 +42,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 stsearch finddlg dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -54,7 +54,7 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
-           common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h
+           common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h
 
 all: binary/eplay.prg binary/eplayst.prg
 
@@ -89,6 +89,9 @@ $(OBJDIR)/eplay.elf: $(OBJS) $(OBJDIR)/version.o common/atari/link.ld
 # the tables and the DSP program (as C arrays), made here, never committed
 $(B)/mp3tab.h: tools/mkmp3tab.py data/mp3huff.txt data/mp3window.txt | $(B)
 	python3 tools/mkmp3tab.py data $@
+$(B)/sn_prog.h: dsp/sn.a56 common/dsp/mkh.py | $(B)
+	mkdir -p $(B)/sn && cd $(B)/sn && a56 ../../dsp/sn.a56 > sn.lst && ! grep -q 'warning:\|error:' sn.lst && \
+		python3 ../../common/dsp/mkh.py a56.out ../sn_prog.h dsp_sn_prog sn.a56
 $(B)/mp3_prog.h: dsp/mp3.a56 $(B)/mp3tab.h common/dsp/mkh.py
 	cd $(B) && a56 ../dsp/mp3.a56 > mp3.lst && ! grep -q 'warning:\|error:' mp3.lst && \
 		python3 ../common/dsp/mkh.py a56.out mp3_prog.h dsp_mp3_prog mp3.a56
@@ -180,6 +183,11 @@ $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 $(B)/test_stsearch: tests/stsearch/test_stsearch.c src/stsearch.c src/stsearch.h common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/stsearch/test_stsearch.c \
 		src/stsearch.c common/src/charset.c common/src/bidi.c
+$(B)/test_vgm: tests/vgm/test_vgm.c src/vgm.c src/vgm.h src/vgmfile.c src/vgmfile.h src/tags.c src/rgain.c \
+		common/src/charset.c common/src/bidi.c common/src/inflate.c common/src/util.c
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/vgm/test_vgm.c \
+		src/vgm.c src/vgmfile.c src/tags.c src/rgain.c common/src/charset.c common/src/bidi.c \
+		common/src/inflate.c common/src/util.c
 $(B)/test_stream: tests/stream/test_stream.c src/stream.c src/stream.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/stream/test_stream.c src/stream.c
 # the stream parser's fuzz target (the guidelines, 7.1): make fuzz runs
@@ -193,8 +201,9 @@ fuzz: tests/fuzz/fuzz_stream.c src/stream.c src/stream.h | $(B)
 	mkdir -p $(B)/fuzzcorpus
 	./$(B)/fuzz_stream -max_total_time=$(FUZZ_S) -artifact_prefix=tests/fuzz/found/ $(B)/fuzzcorpus tests/fuzz/seeds
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/fuzz_replay
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay
 	./$(B)/test_inf
+	mkdir -p $(B)/vgmfiles && ./$(B)/test_vgm $(B)/vgmfiles
 	./$(B)/test_stream
 	./$(B)/test_stsearch
 	./$(B)/fuzz_replay tests/fuzz/seeds/* tests/fuzz/found/*
@@ -214,6 +223,7 @@ clean:
 	rm -rf $(B) binary dist
 dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspmp3
+	$(MAKE) -C tests/dspsn
 
 # eplay.hyp from docs/GUIDE.md with the family's front page (docs/front.json,
 # common/tools/helpfront.py), and eplay.ref, its pages' names for ST-Guide's

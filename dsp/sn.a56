@@ -1,0 +1,242 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; sn.a56 - the SN76489 (Master System, Game Gear, BBC Micro) for a VGM
+; file on the Falcon's DSP (phase 9, Erez, 9 Nov 2026). Small enough for
+; the bootstrap's 512 words: loaded and started by it.
+;
+; The 68030 does the chip's arithmetic (atari/dspsn.c): for each of the
+; three tones and the noise a step, by which a phase of 23 bits goes on
+; each output sample (2^23: a toggle of the tone, a shift of the noise's
+; register), and each one's amplitude (its volume, 2 dB a step). Here,
+; for each sample at the SSI's rate (the Falcon's clock or the FDI's):
+; each tone's phase on, its sign turned over where it wrapped; the noise's
+; shift register shifted where its phase wrapped (white: the two taps'
+; bits, xor; periodic: the bit out), its bit 0 the noise's sign; the sum
+; into a ring of 256 words (Y:0), left and right the same, which the SSI's
+; transmit interrupt plays a word a time slot. The host port is polled
+; between samples: a command is two words, its number and its value:
+;
+;	0-3	the step of tone 0, 1, 2, the noise
+;	4-7	the amplitude of tone 0, 1, 2, the noise (0: silent)
+;	8	the noise white (1) or periodic (0); its register reset
+;	9	the taps (two bits: $0009 the Master System's, $0003 the TI's)
+;	10	the register's top bit, where the feedback goes in ($8000: 16 bits)
+;	11	tone n held up (its step 0: a constant level, for the samples
+;		games play through its volume)
+
+PBC	equ	$ffe0
+PCC	equ	$ffe1
+HCR	equ	$ffe8
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+CRA	equ	$ffec
+CRB	equ	$ffed
+SSISR	equ	$ffee
+TX	equ	$ffef
+BCR	equ	$fffe
+IPR	equ	$ffff
+
+; X: the state
+PH	equ	$00		; the phases: tones 0-2, the noise
+INC	equ	$04		; their steps
+AMP	equ	$08		; their amplitudes
+SG	equ	$0c		; the tones' signed levels (+AMP or -AMP)
+LFSR	equ	$10		; the noise's register
+TAPS	equ	$11
+TOPB	equ	$12
+NWHITE	equ	$13
+JUNK	equ	$14
+
+RING	equ	$0000		; Y: the SSI's ring, 256 words
+LEAD	equ	96		; the words written ahead of the SSI
+
+	org	p:$0
+	jmp	start
+
+; the SSI's transmit, a fast interrupt: the ring to the matrix
+	org	p:$10
+	movep	y:(r7)+,x:TX
+	nop
+	org	p:$12			; with an underrun: the status read, then the word
+	jsr	tue
+
+	org	p:$40
+start	movep	#1,x:PBC		; port B is the host port
+	movep	#0,x:BCR		; no wait states
+	ori	#3,mr			; no interrupts
+	clr	a
+	move	#PH,r0
+	movec	#$ffff,m0
+	rep	#$15
+	move	a,x:(r0)+
+	move	#>$8000,x0
+	move	x0,x:TOPB
+	move	x0,x:LFSR
+	move	#>$9,x0
+	move	x0,x:TAPS
+	move	#>1,x0
+	move	x0,x:NWHITE
+	move	#RING,r6
+	movec	#255,m6
+	rep	#256
+	move	a,y:(r6)+
+	move	#RING,r7
+	movec	#255,m7
+	movec	#$ffff,m1
+	movec	#$ffff,m3
+	movec	#$ffff,m4
+	movec	#$ffff,m5
+	movep	#$1f8,x:PCC		; port C: the SSI
+	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
+	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
+	movep	#$3000,x:IPR		; the SSI at level 2, the host's off
+	movep	#0,x:TX		; in step with the frame (mp3.a56's way): a word
+smt	jclr	#6,x:SSISR,smt		; written goes out in the next slot; while slot
+	jclr	#2,x:SSISR,smr		; 0 (TFS) goes, a silent right, so that the
+	movep	#0,x:TX			; ring's left comes next
+smt2	jclr	#6,x:SSISR,smt2
+smr	andi	#$fc,mr			; interrupts on: the left first
+
+; the loop: a command when one is there, else a sample while the ring
+; has room
+loop	jclr	#0,x:HSR,gen
+	jsr	hostcmd
+gen	move	r6,a
+	move	r7,x0
+	sub	x0,a
+	move	#>$ff,x1
+	and	x1,a			; (a1 alone: the sign's extension a2 dropped next)
+	move	a1,y1
+	move	y1,a
+	move	#>LEAD,x0
+	cmp	x0,a
+	jge	loop
+	jsr	sample
+	jmp	loop
+
+; ---- a sample: b the sum, into the ring twice (left, right)
+sample	clr	b
+	move	#PH,r0
+	move	#INC,r1
+	move	#SG,r3
+	do	#3,stn
+	move	x:(r0),a
+	move	x:(r1)+,x0
+	add	x0,a
+	jclr	#23,a1,st1
+	bclr	#23,a1
+	move	a1,x:(r0)
+	move	x:(r3),a
+	neg	a
+	move	a1,x:(r3)
+	jmp	st2
+st1	move	a1,x:(r0)
+st2	move	(r0)+
+	move	x:(r3)+,x0
+	add	x0,b
+stn
+	move	x:(r0),a		; the noise
+	move	x:(r1),x0
+	add	x0,a
+	jclr	#23,a1,sn1
+	bclr	#23,a1
+	move	a1,x:(r0)
+	jsr	shift
+	jmp	sn2
+sn1	move	a1,x:(r0)
+sn2	move	x:AMP+3,a
+	jset	#0,x:LFSR,sn3
+	neg	a
+sn3	add	a,b
+	move	b,y:(r6)+
+	move	b,y:(r6)+
+	rts
+
+; the noise's register shifted: white, the taps' two bits xor; periodic,
+; the bit out; in at the top
+shift	move	x:LFSR,a
+	move	a1,y0
+	jclr	#0,x:NWHITE,per
+	move	x:TAPS,x0
+	and	x0,a
+	tst	a
+	jeq	fb0
+	cmp	x0,a
+	jeq	fb0
+	jmp	fb1
+per	jclr	#0,y0,fb0
+fb1	move	y0,a
+	lsr	a
+	move	x:TOPB,x0
+	or	x0,a
+	jmp	fbx
+fb0	move	y0,a
+	lsr	a
+fbx	move	a1,x:LFSR
+	rts
+
+; ---- a command: its number in x0, its value in x1
+hostcmd	movep	x:HRX,x0
+hw1	jclr	#0,x:HSR,hw1
+	movep	x:HRX,x1
+	move	x0,a
+	move	#>4,y0
+	cmp	y0,a
+	jge	hc4
+	move	#INC,r4			; 0-3: a step
+	move	x0,n4
+	nop
+	move	x1,x:(r4+n4)
+	rts
+hc4	move	#>8,y0
+	cmp	y0,a
+	jge	hc8
+	move	#>4,y0			; 4-7: an amplitude, the sign kept
+	sub	y0,a
+	move	a1,n4
+	move	a1,n5
+	move	#AMP,r4
+	move	#SG,r5
+	nop
+	move	x1,x:(r4+n4)
+	move	x:(r5+n5),a
+	tst	a
+	jlt	hcneg
+	move	x1,x:(r5+n5)
+	rts
+hcneg	move	x1,a
+	neg	a
+	move	a1,x:(r5+n5)
+	rts
+hc8	jne	hc9
+	move	x1,x:NWHITE		; 8: the noise's kind, its register reset
+	move	x:TOPB,x0
+	move	x0,x:LFSR
+	rts
+hc9	move	#>9,y0
+	cmp	y0,a
+	jne	hc10
+	move	x1,x:TAPS
+	rts
+hc10	move	#>10,y0
+	cmp	y0,a
+	jne	hc11
+	move	x1,x:TOPB
+	rts
+hc11	move	#>11,y0
+	cmp	y0,a
+	jne	hcx
+	move	x1,n4			; 11: tone x1 held up
+	move	x1,n5
+	move	#AMP,r4
+	move	#SG,r5
+	nop
+	move	x:(r4+n4),a
+	move	a1,x:(r5+n5)
+hcx	rts
+
+; the SSI's underrun: its status read, then the word
+tue	movep	x:SSISR,x:JUNK
+	movep	y:(r7)+,x:TX
+	rti

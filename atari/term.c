@@ -10,6 +10,7 @@
 #include "hostirq.h"
 #include "snd.h"
 #include "term.h"
+#include "ym.h"
 
 long term_old;
 void term_vec(void);
@@ -18,6 +19,7 @@ void term_c(void);
 void term_c(void)
 {
 	feed_term();
+	ym_term();		/* (a VGM: the chip silent, the click and bell back) */
 	hostirq_term();
 	snd_term();
 }

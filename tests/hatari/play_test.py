@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn (and many, manym3u, manytree); all but the many ones by default. The machines: Falcon-4 (a stock Falcon)
 by default; Falcon (Erez's, with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
 WORK/MACHINE-CASE/rec.wav (what the Falcon played) and a
@@ -87,7 +87,13 @@ CASES = {
 # 4 Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
 # queue's lead (3 s) never runs out
 CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 14)
-SQUARE = set()
+# phase 9 (Erez, 9 Nov 2026): a VGM and a VGZ on the YM2149, a 1 kHz square
+# wave (the chip's), its file's AY at 1.7734 MHz turned to the Atari's 2 MHz
+CASES["vgm"] = ("TONE.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
+CASES["vgz"] = ("TONE.VGZ", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
+CASES["vgmsn"] = ("SN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (999, 999), 3)
+SQUARE = {"vgm", "vgz", "vgmsn"}
+		# (a square wave: 81 % of its power in the tone)
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
 # three files given at the start (as the desktop gives files dropped on the
@@ -198,8 +204,43 @@ INFS["place"] = "WINDOW=24,96,480,330\r\n\r\n"
 LEVEL = {}
 
 
+def make_vgm(path, secs, gz, sn=False):
+    """a VGM (phase 9): channel A of an AY at the Spectrum's 1,773,400 Hz,
+    a 1 kHz tone there (period 111: 998.6 Hz; 125 at the Atari's 2 MHz,
+    1000 Hz), secs long, then silent; gzipped as a VGZ. sn: the SN76489
+    at the Master System's 3,579,545 Hz instead, tone 0 at period 112
+    (998.8 Hz), the others silent (on the DSP)"""
+    import gzip
+    if sn:
+        cmds = bytes([0x50, 0xbf, 0x50, 0xdf, 0x50, 0xff, 0x50, 0x80, 0x50, 0x07, 0x50, 0x90])
+    else:
+        cmds = bytes([0xa0, 7, 0x3e, 0xa0, 0, 111, 0xa0, 1, 0, 0xa0, 8, 15])
+    left = secs * 44100
+    while left > 0:
+        k = min(left, 44100)
+        cmds += bytes([0x61, k & 0xff, k >> 8])
+        left -= k
+    cmds += bytes([0x50, 0x9f, 0x66] if sn else [0xa0, 8, 0, 0x66])
+    head = bytearray(0x80)
+    head[0:4] = b"Vgm "
+    struct.pack_into("<I", head, 0x04, 0x80 + len(cmds) - 4)
+    struct.pack_into("<I", head, 0x08, 0x151)
+    struct.pack_into("<I", head, 0x18, secs * 44100)
+    struct.pack_into("<I", head, 0x34, 0x80 - 0x34)
+    if sn:
+        struct.pack_into("<I", head, 0x0c, 3579545)
+    else:
+        struct.pack_into("<I", head, 0x74, 1773400)
+    data = bytes(head) + cmds
+    with open(path, "wb") as fh:
+        fh.write(gzip.compress(data, mtime=0) if gz else data)
+
+
 def make_file(hd, case):
     f, fmt, lame, _, _, secs = CASES[case]
+    if f.endswith((".VGM", ".VGZ")):
+        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn")
+        return f
     src = os.path.join(hd, "..", "src.wav")
     synth = ["synth", str(secs)] + SYNTH.get(case, ["sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else []))
     out = os.path.join(hd, f)
@@ -259,7 +300,7 @@ def tone(x, rate):
     return best, 2 * bp / n / total
 
 
-RESAMPLED = {"wav22", "aiff44", "settings"}       # (and every MP3)
+RESAMPLED = {"wav22", "aiff44", "settings", "vgmsn"}       # (and every MP3; the SN76489 the DSP's)
 # wav's level when its own run recorded nothing (excused: Hatari's DMA on
 # a silent track) or didn't run: the tone's own, sox's sine at -6 dB
 # (0.501 of full scale, its RMS that over the square root of 2). Hatari
