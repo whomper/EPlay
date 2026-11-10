@@ -2062,6 +2062,15 @@ static void redraw_under(const short *m)
 	redraw(&r, BP_ALL);
 }
 
+/* one step of quitting in EPLAY.LOG, on the disk at once: if the machine
+   bombs after the window has gone (the hub, 10 Nov 2026: EFTP's and
+   EMail's quit bombs), the last line says where */
+static void quit_step(const char *what)
+{
+	elog("quit: %s", what);
+	elog_save();
+}
+
 /* a crash: the sound stopped and the matrix put back before EPlay goes */
 static void crash_quit(const char *what)
 {
@@ -2395,20 +2404,30 @@ int app_main(void)
 
 	play_log_stop();
 	play_stop();
+	snd_exit();
+	quit_step("the sound stopped, the DSP and the matrix given back");
 	remember_place();
 	settings_flush();		/* (the volume, if it changed) */
-	snd_exit();
-	elog("quit");
-	elog_save();
-	menu_bar(mb.tree, 0);
-	bar_colours_back();
+	quit_step("settings saved");
 	if (wh > 0) {
 		av_window(wh, 0);
 		wind_close(wh);
 		wind_delete(wh);
 	}
+	quit_step("the window closed");
+	menu_bar(mb.tree, 0);
+	bar_colours_back();
 	av_exit();
 	v_clsvwk(vdi_h);
+	quit_step("colours, menu bar and VDI given back");
+	crash_remove();
+	{
+		const char *o = crash_over();
+		char t[220];
+		snprintf(t, sizeof(t), "crash catcher off%s%s", *o ? "; hooked over it: " : "", o);
+		quit_step(t);
+	}
 	appl_exit();
+	quit_step("out of the AES");
 	return 0;
 }

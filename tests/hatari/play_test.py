@@ -203,6 +203,12 @@ INFS["place"] = "WINDOW=24,96,480,330\r\n\r\n"
 # the first start (1.16, D39): no place kept, the window at the desk's
 # whole height, centred across (its width design D's)
 CASES["firstrun"] = CASES["wav"]
+# a quit while it plays (^Q): each step of the way out in EPLAY.LOG, the
+# crash catcher off (the hub, 10 Nov 2026: EFTP's and EMail's quit bombs,
+# the catcher hooked over), no CRASH.LOG
+CASES["quit"] = CASES["wav"]
+QUIT_STEPS = ("the sound stopped", "settings saved", "the window closed", "colours, menu bar and VDI given back",
+              "crash catcher off", "out of the AES")
 
 # the level of the middle (RMS), each case's, for wavvol's against wav's
 LEVEL = {}
@@ -541,6 +547,22 @@ def run(work, case, spec):
             left, right = v[0], 640 - (v[0] + v[2])
             if not (v[1] < 80 and v[1] + v[3] > 420 and abs(left - right) <= 24):
                 return False, m.describe(), "a first start: the work area at %s (wanted the desk's height, centred)" % wl
+        if case == "quit":
+            cmd(fifo, "hatari-event", "keydown", "0x1d")
+            cmd(fifo, "hatari-event", "keypress", "0x10")
+            cmd(fifo, "hatari-event", "keyup", "0x1d")
+            out = wait_line(log, lambda l: l.startswith("LOG quit: out of the AES"), 20)
+            time.sleep(1)
+            steps = [l.strip()[len("LOG quit: "):] for l in open(log, errors="replace") if l.startswith("LOG quit: ")]
+            missing = [q for q in QUIT_STEPS if not any(x.startswith(q) for x in steps)]
+            crashed = machines.ci_path(hd, "CRASH.LOG")
+            # (the catcher left in a chain it couldn't walk: the vector
+            # leads into EPlay's memory once it has gone)
+            stuck = any("not taken off" in x for x in steps)
+            if not out or missing or stuck or os.path.exists(crashed):
+                return False, m.describe(), "quit: %s%s" % ("; ".join(steps) or "no quit lines",
+                                                            ", CRASH.LOG written" if os.path.exists(crashed) else "")
+            return True, m.describe(), "quit: " + "; ".join(steps)
         if case == "place":
             wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
             v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]

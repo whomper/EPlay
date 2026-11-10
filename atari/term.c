@@ -3,7 +3,17 @@
 /*
  * term.c - the terminate vector (term.h). Its handler runs in supervisor
  * mode with no XBIOS: the vectors and the MFP as they were, the DMA's play
- * off, the matrix as EPlay found it; then the vector it took over.
+ * off, the matrix as EPlay found it; itself off the vector; then the one
+ * it took over.
+ *
+ * Its entry has an XBRA header ('XBRA', 'EPLY', the one before it), as the
+ * guidelines want, and it takes itself off as EPlay ends: from the vector
+ * when it is on top, else out of the XBRA chain of what hooked it after.
+ * Without that, etv_term led into EPlay's freed memory once it had quit on
+ * plain TOS (MiNT keeps the vector per process), and the next program to
+ * end bombed; and the crash catcher, under it, couldn't take itself out
+ * either (the hub, 10 Nov 2026: EFTP's and EMail's quit bombs; EPlay's
+ * quit case found "etv_term: hooked over, not taken off").
  */
 #include "tos.h"
 #include "feed.h"
@@ -12,12 +22,39 @@
 #include "term.h"
 #include "ym.h"
 
-long term_old;
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
+
+extern long term_old;		/* (below: the XBRA header's "before") */
 void term_vec(void);
 void term_c(void);
 
+#define XBRA 0x58425241L
+#define ETV_TERM ((volatile long *)0x408L)
+
+/* term_vec off etv_term: from the vector, or out of the XBRA chain over it */
+static void term_unhook(void)
+{
+	long a = *ETV_TERM;
+	int n;
+	if (a == (long)term_vec) {
+		*ETV_TERM = term_old;
+		return;
+	}
+	for (n = 0; n < 16 && a && !(a & 1); n++) {
+		long *p = (long *)a;
+		if (p[-3] != XBRA)
+			return;		/* (hooked over without XBRA: nothing to walk) */
+		if (p[-1] == (long)term_vec) {
+			p[-1] = term_old;
+			return;
+		}
+		a = p[-1];
+	}
+}
+
 void term_c(void)
 {
+	term_unhook();
 	feed_term();
 	ym_term();		/* (a VGM: the chip silent, the click and bell back) */
 	hostirq_term();
@@ -26,6 +63,11 @@ void term_c(void)
 
 __asm__(
 	"	.text\n"
+	"	.even\n"
+	"	.long	0x58425241, 0x45504C59\n"	/* 'XBRA', 'EPLY' */
+	"	.globl	term_old\n"
+	"term_old:\n"
+	"	.long	0\n"
 	"	.globl	term_vec\n"
 	"term_vec:\n"
 	"	movem.l	%d0-%d2/%a0-%a2,-(%sp)\n"
