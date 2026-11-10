@@ -205,10 +205,66 @@ def chord(out):
     v.save(out)
 
 
+def lfo(out):
+    """the LFO at rate 6 (fast): vibrato (PMS 7) and tremolo (AMS 3, on op 4)"""
+    v = Vgm()
+    init(v)
+    v.w(0, 0x22, 0x08 | 6)
+    chan(v, 0, 7, pan=0xc0 | 3 << 4 | 7)
+    for o in range(3):
+        op(v, 0, o, tl=127)
+    op(v, 0, 3, tl=0, am_d1r=0x80)
+    freq(v, 0, 1084, 4)
+    key(v, 0, True)
+    v.wait(RATE)
+    key(v, 0, False)
+    v.wait(RATE // 2)
+    v.save(out)
+
+
+def ch3(out):
+    """channel 3's special mode: operators 1-3 each their own pitch
+    (algorithm 7: all four heard), operator 4 the channel's"""
+    v = Vgm()
+    init(v)
+    v.w(0, 0x27, 0x40)
+    chan(v, 2, 7)
+    for o in range(4):
+        op(v, 2, o, tl=8)
+    # $AD/$A9 operator 1, $AE/$AA 2, $AC/$A8 3; $A6/$A2 operator 4
+    for hi, lo, fnum, block in ((0xad, 0xa9, 1084, 3), (0xae, 0xaa, 1366, 3), (0xac, 0xa8, 1625, 3)):
+        v.w(0, hi, block << 3 | fnum >> 8)
+        v.w(0, lo, fnum & 255)
+    freq(v, 2, 1084, 4)
+    key(v, 2, True)
+    v.wait(RATE)
+    key(v, 2, False)
+    v.wait(RATE // 2)
+    v.save(out)
+
+
+def detune(out):
+    """a high note (block 6) with detune +3 and -3 on two carriers and key
+    scale 3, a fast decay: the detune table and the key's scale"""
+    v = Vgm()
+    init(v)
+    chan(v, 0, 7)
+    op(v, 0, 0, tl=127)
+    op(v, 0, 1, tl=127)
+    op(v, 0, 2, dt_mul=0x31, tl=6, ks_ar=0xdf, am_d1r=12, sl_rr=0x2f)
+    op(v, 0, 3, dt_mul=0x71, tl=6, ks_ar=0xdf, am_d1r=12, sl_rr=0x2f)
+    freq(v, 0, 1084, 6)
+    key(v, 0, True)
+    v.wait(RATE)
+    key(v, 0, False)
+    v.wait(RATE // 2)
+    v.save(out)
+
+
 def main():
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    for f in (sine, fm, chain, env, dac, chord):
+    for f in (sine, fm, chain, env, dac, chord, lfo, ch3, detune):
         f(os.path.join(out, f.__name__.upper() + ".VGM"))
 
 

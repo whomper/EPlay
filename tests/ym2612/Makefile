@@ -9,7 +9,7 @@ N := $(B)/Nuked-OPN2
 
 # the model (src/opn.c) against the reference, at the chip's rate and the Falcon's
 run: $(B)/ref $(B)/model $(B)/files/.made
-	for f in SINE FM CHAIN ENV DAC CHORD; do ./$(B)/ref $(B)/files/$$f.VGM $(B)/files/$$f.ref.wav && \
+	for f in SINE FM CHAIN ENV DAC CHORD LFO CH3 DETUNE; do ./$(B)/ref $(B)/files/$$f.VGM $(B)/files/$$f.ref.wav && \
 		./$(B)/model $(B)/files/$$f.VGM $(B)/files/$$f.m53.wav 53267 && \
 		./$(B)/model $(B)/files/$$f.VGM $(B)/files/$$f.m24.wav 24585 || exit 1; done
 	python3 compare.py $(B)/files 53267

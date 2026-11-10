@@ -53,7 +53,7 @@ def main():
     d = sys.argv[1]
     rate = sys.argv[2] if len(sys.argv) > 2 else "53267"
     bad = 0
-    for name in ("SINE", "FM", "CHAIN", "ENV", "DAC", "CHORD"):
+    for name in ("SINE", "FM", "CHAIN", "ENV", "DAC", "CHORD", "LFO", "CH3", "DETUNE"):
         rr, ref = load("%s/%s.ref.wav" % (d, name))
         mr, mod = load("%s/%s.m%s.wav" % (d, name, rate[:2]))
         a, b = int(0.25 * rr), int(0.75 * rr)
@@ -85,7 +85,15 @@ def main():
         td = max(abs((h_ref[i] - h_ref[0]) - (h_mod[i] - h_mod[0])) for i in sel) if sel else 0
         lr_ref = db(np.sqrt((ref[a:b, 0] ** 2).mean())) - db(np.sqrt((ref[a:b, 1] ** 2).mean()))
         lr_mod = db(np.sqrt((mod[am:bm, 0] ** 2).mean())) - db(np.sqrt((mod[am:bm, 1] ** 2).mean()))
-        ok = (abs(f_ref - f_mod) < LIMITS["pitch"] and abs(lv_ref - lv_mod) < LIMITS["level"] and
+        pitch_ok = abs(f_ref - f_mod) < LIMITS["pitch"]
+        if not pitch_ok:
+            # (several notes as loud: the model's loudest may be another of
+            # them; then the reference's must be within 1 dB of it there)
+            sp = np.abs(np.fft.rfft(s_mod * np.hanning(len(s_mod))))
+            hz = np.fft.rfftfreq(len(s_mod), 1 / mr)
+            at = sp[(hz > f_ref - 3) & (hz < f_ref + 3)].max()
+            pitch_ok = db(sp.max()) - db(at) < 1.0
+        ok = (pitch_ok and abs(lv_ref - lv_mod) < LIMITS["level"] and
               cd < LIMITS["curve"] and td < LIMITS["timbre"] and abs(lr_ref - lr_mod) < 1)
         bad += not ok
         print("%s %-5s pitch %.1f/%.1f Hz, level %+.1f dB, curve %.1f dB, timbre %.1f dB, L-R %+.1f/%+.1f" %
