@@ -1890,6 +1890,27 @@ What EPlay needs beyond common's layer:
   sound calls over it (a ring to feed, its rates), an MFP Timer A, or a PSG at $FF8800 decides a
   small port or a new audio driver (and a software AY for VGM). `FBPROBE.PRG` (1.16,
   `tools/fbprobe`) asks the machine, for its tester through Erez.
+- **What the probe found (FBPROBE 1, the tester's FireBee, 10 Nov 2026):**
+  - FireTOS says `_CPU` 60, `_FPU` 0, `_MCH` and `_VDO` a Falcon's ($00030000), and gives `_CF_`
+    ($01032400): `_CF_` is the only sign of a ColdFire. Every check by `_CPU` must test `_CF_`
+    first; above all the 68060 MP3 overlays, which would otherwise take a FireBee for an
+    LC060 and load `MP3INT.OVL`'s 68060 code. (`div64_cpu60`'s C path is right for both.)
+  - `_SND` $27: the PSG, 8-bit DMA, the codec and the extended sound XBIOS (bit 5), no DSP
+    (bit 3), no matrix (bit 4); a `GSXB` cookie (0). The DMA sound's registers read $FF00, the
+    matrix's and the codec's $FFFF, the DSP's port a bus error: no Falcon sound hardware at its
+    addresses. So EPlay 1.18 takes a FireBee for an STE (bit 1 without bit 4) and plays
+    silently into registers that aren't there.
+  - The XBIOS sound calls answer: `Locksnd` 1, `Sndstatus` 0, the attenuations 32 and gains
+    240, `Buffptr` 0; `Soundcmd(4, -1)` 439 is no ADDERIN a Falcon gives. The sound is the
+    XBIOS's (GSXB's over the AC'97), not the registers': the edition feeds a ring through
+    `Setbuffer`, `Buffoper` and `Buffptr`, a small port of `snd.c`'s Falcon path, if
+    `Buffoper`'s loop and `Buffptr` move as a Falcon's do (unknown: the probe only asked).
+  - The MFP answers (Timer A stopped, $00), so the tick can stay on Timer A. $FF8800 reads $00
+    with no bus error; whether a YM2149 is behind it is unknown, so VGM's AY is taken as absent
+    (a software AY) until a probe plays one.
+  - Next, when the FireBee's turn comes: FBPROBE 2, which plays (a second of tone through
+    `Setbuffer`/`Buffoper` at each `Devconnect` rate, `Buffptr` timed against the 200 Hz clock,
+    and a PSG tone), for the tester to listen to and send back.
 - **EPlay's own assembly:** `feed.S` (the tick), `hostirq.S` (the DSP's: not built), `term.c`'s
   trap 13, `div64.c`'s 64-bit forms (the C path).
 
