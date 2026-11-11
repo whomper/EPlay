@@ -310,7 +310,9 @@ int find_dialog(char *url, int un, char *name, int nn, void (*add)(const char *u
 	for (;;) {
 		int dbl;
 		r = dlg_do(tree, field, o_close);
-		dbl = r >= 0 && (r & 0x8000);
+		/* (the double-click bit makes the short negative: dlg_do gives
+		   no other negative) */
+		dbl = (r & 0x8000) != 0;
 		r &= 0x7fff;
 		if (r == o_close || r < 0)
 			break;
@@ -345,9 +347,13 @@ int find_dialog(char *url, int un, char *name, int nn, void (*add)(const char *u
 			if (r == o_rows[i])
 				break;
 		if (i < ROWS) {
-			/* only the old and new chosen rows: a whole redraw here hides a
-			   quick double click's release (common/ui/dialog.h, DLG_CLICK) */
+			/* the press's release waited for before any drawing, then only
+			   the old and new chosen rows: else the next dlg_do takes a
+			   quick double click's second press for the first one's
+			   release (common/ui/dialog.h, dlg_touch_up) */
 			int old = sel - top;
+			if (!dbl)
+				dlg_touch_up();
 			sel = top + i;
 			rows_text();
 			if (old >= 0 && old < ROWS && old != i)
