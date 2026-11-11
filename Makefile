@@ -53,6 +53,7 @@ CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg net_tos sting tls_ovl
 CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip settings dlgbuild tooltip
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
+	   $(OBJDIR)/inflate_fast_s.o \
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
@@ -152,6 +153,12 @@ $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
+# common's inflate_piece with its hot loop in 68000 assembly (a VGZ:
+# inflate_read unpacked 200 KB/s on a 32 MHz Falcon, Erez's 33 MB VGZ took
+# two minutes)
+$(OBJDIR)/inflate_fast_s.o: common/atari/inflate_fast.S | $(OBJDIR)
+	$(CC) -m$(CPU) -c -o $@ $<
+$(OBJDIR)/inflate.o: CFLAGS += -DINFLATE_ASM
 $(OBJDIR)/sting_s.o: common/atari/sting.S | $(OBJDIR)
 	$(CC) -m$(CPU) -c -o $@ $<
 

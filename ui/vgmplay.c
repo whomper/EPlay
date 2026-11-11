@@ -185,6 +185,17 @@ static void tick(void)
 	}
 }
 
+/* where the music plays, for the bar's badge: the DSP's sound on the FDI's
+   clock or the Falcon's ("" for the YM2149 alone: the chip itself) */
+const char *vp_via(void)
+{
+	if (use_opn)
+		return dspopn_ext() ? "FDI" : "DSP";
+	if (use_sn)
+		return dspsn_ext() ? "FDI" : "DSP";
+	return "";
+}
+
 int vp_on(void)
 {
 	return open_;
@@ -195,8 +206,40 @@ static void chip_name(char *s, int n, const char *what, unsigned long clock)
 	snprintf(s, (size_t)n, "%s  %lu.%02lu MHz", what, clock / 1000000UL, clock % 1000000UL / 10000UL);
 }
 
+/* a big VGZ played as it unpacks: its unpacking (vgmfile.c's), on a handle
+   of its own (play.c's closes at Pause); the bytes there so far */
+static VGMLOAD *ld;
+static FH ld_f = { -1 };
+static long avail;
+#define VGM_STREAM (256L * 1024)	/* a VGZ (packed) past this: played as it unpacks */
+#define VGM_FIRST (256L * 1024)		/* unpacked before it plays */
+
+static void ld_end(void)
+{
+	vgm_load_close(ld);
+	ld = 0;
+	if (ld_f.fh >= 0)
+		Fclose((short)ld_f.fh);
+	ld_f.fh = -1;
+}
+
+/* (a seek past what is there: further now, 256 KB at a time) */
+static long ld_more(void *mu)
+{
+	(void)mu;
+	if (!ld)
+		return 0;
+	avail = vgm_load_more(ld, 256L * 1024);
+	if (vgm_load_state(ld)) {
+		int st = vgm_load_state(ld);
+		ld_end();
+		return st > 0 ? 0 : -1;
+	}
+	return avail;
+}
+
 int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, int no, long *len_ms, char *err,
-	    int n, const char *name)
+	    int n, const char *name, const char *path)
 {
 	FH f;
 	const char *why;
@@ -219,7 +262,33 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		} else {
 			vp_forget();
 			memset(snap_ok, 0, sizeof(snap_ok));
-			mem = vgm_load(rd, &f, size, &mem_n, take, give, &why);
+			if (size > VGM_STREAM && vgm_magic(head, got) == 2 && path) {
+				/* a big VGZ: its first part unpacked, it plays, the
+				   rest as it plays (vp_step); a 33 MB one took two
+				   minutes before it played (Erez, 11 Nov 2026) */
+				why = "can't be read";
+				ld_f.fh = (int)Fopen(path, 0);
+				ld = ld_f.fh >= 0 ? vgm_load_open(rd, &ld_f, size, &mem, &mem_n, take, give, &why) : 0;
+				if (!ld) {
+					if (ld_f.fh >= 0)
+						Fclose((short)ld_f.fh);
+					ld_f.fh = -1;
+					mem = 0;
+				} else {
+					avail = vgm_load_more(ld, VGM_FIRST);
+					if (vgm_load_state(ld) < 0) {
+						give(mem);
+						mem = 0;
+						why = "is damaged";
+						ld_end();
+					} else if (vgm_load_state(ld) > 0)
+						ld_end();
+					else
+						elog("VGM: %ld KB unpacked of %ld; it plays, the rest as it plays", avail / 1024,
+						     mem_n / 1024);
+				}
+			} else
+				mem = vgm_load(rd, &f, size, &mem_n, take, give, &why);
 			if (mem) {
 				kept_size = size;
 				snprintf(kept_name, sizeof(kept_name), "%s", name);
@@ -282,7 +351,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		return 0;
 	}
 	tags_clear(t);
-	vgm_gd3(mem, mem_n, &h, t->title, t->album, t->artist, TAG_TEXT);
+	if (!ld)		/* (at its end: once it has unpacked, vp_tags) */
+		vgm_gd3(mem, mem_n, &h, t->title, t->album, t->artist, TAG_TEXT);
 	len = vgm_length(&h);
 	if (!snap)
 		snap = take((long)NSNAP * (long)sizeof(VGMRUN));
@@ -310,6 +380,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	}
 	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0, use_sn ? sn : use_opn && dspopn_psg() ? opn_sn : 0, 0);
 	run.opn_fn = use_opn ? opn : 0;
+	run.avail = ld ? avail : 0;	/* (still unpacking: so far; a seek unpacks further) */
+	run.more = ld ? ld_more : 0;
 	acc = 0;
 	ended = 0;
 	att_due = -1;
@@ -370,6 +442,9 @@ void vp_stop(void)
 {
 	if (playing) {
 		feed_off();
+		if (ld || run.waits)
+			elog("VGM: %ld KB unpacked of %ld so far; the music waited for it %ld times", ld ? avail / 1024 :
+			     mem_n / 1024, mem_n / 1024, run.waits);
 		elog("VGM: the tick %ld times, %ld of them left out (the one before still ran), %ld of those not made up "
 		     "(the music slowed); %ld past its period (%ld us); %ld us on average, the longest %ld us",
 		     feed_ticks, feed_missed, t_lost, t_over, period_us, t_n ? t_all / t_n : 0, t_max);
@@ -397,9 +472,46 @@ void vp_stop(void)
 
 void vp_forget(void)
 {
+	ld_end();
 	give(kept);
 	kept = 0;
 	memset(snap_ok, 0, sizeof(snap_ok));
+}
+
+int vp_step(int ms)
+{
+	unsigned long t0;
+	if (!ld)
+		return 0;
+	/* (close to where it plays: a turn's longest a job's, 45 ms) */
+	if (avail - run.pos < 256L * 1024 && ms < 45)
+		ms = 45;
+	t0 = tos_ms();
+	do
+		avail = vgm_load_more(ld, 8192);
+	while (!vgm_load_state(ld) && (long)(tos_ms() - t0) < ms);
+	if (vgm_load_state(ld)) {
+		int st = vgm_load_state(ld);
+		ld_end();
+		run.avail = 0;
+		run.more = 0;
+		elog("VGM: unpacked%s (%ld KB)", st > 0 ? "" : ", damaged at its end", avail / 1024);
+		return st > 0 ? 2 : 3;
+	}
+	run.avail = avail;
+	return 1;
+}
+
+int vp_tags(TAGS *t)
+{
+	const unsigned char *b = mem ? mem : kept;
+	long n = mem ? mem_n : kept_n;
+	VGMHEAD h;
+	if (!b || ld || !vgm_head(b, n, &h))
+		return 0;
+	tags_clear(t);
+	vgm_gd3(b, n, &h, t->title, t->album, t->artist, TAG_TEXT);
+	return 1;
 }
 
 int vp_probe(const char *name, long size, const unsigned char *head, TAGS *t, long *ms)
@@ -407,7 +519,7 @@ int vp_probe(const char *name, long size, const unsigned char *head, TAGS *t, lo
 	const unsigned char *b = mem ? mem : kept;
 	long n = mem ? mem_n : kept_n, len;
 	VGMHEAD h;
-	if (!b || size != kept_size || strcmp(name, kept_name) || memcmp(head, kept_head, sizeof(kept_head)) ||
+	if (!b || ld || size != kept_size || strcmp(name, kept_name) || memcmp(head, kept_head, sizeof(kept_head)) ||
 	    !vgm_head(b, n, &h))
 		return 0;
 	tags_clear(t);

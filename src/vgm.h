@@ -106,6 +106,15 @@ typedef struct {
 	VGM_SN sn_fn;
 	VGM_OPN opn_fn;		/* (set after vgm_begin; 0: the YM2612 passed over) */
 	VGMDAC *dac;		/* (set after vgm_begin, with opn_fn: the 0x8n samples into it; 0: through opn_fn) */
+	/* a file still unpacking (a big VGZ played as it unpacks): the bytes
+	   there so far (0: all), more() for a seek to unpack further (the
+	   bytes there then, 0 all, -1 damaged); starved: the run waited at
+	   avail (vgm_run then holds, the music not ended) */
+	long avail;
+	long (*more)(void *mu);
+	void *mu;
+	int starved;
+	long waits;		/* (the runs that waited for it: the log's) */
 	unsigned char opn[2][256];	/* the YM2612's registers as written (for a seek) */
 	unsigned char opn_key[8];	/* each channel's key on/off byte ($28's), as written */
 	long pcm_at, pcm_len;	/* the data block of the YM2612's samples (type 0): in b, its bytes */

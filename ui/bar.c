@@ -176,6 +176,10 @@ void bar_area(int parts, GRECT *r)
 		*r = w_list;
 	else if (parts == BP_ART)
 		*r = w_art;
+	else if (parts == BP_TITLE) {
+		*r = w_txt;
+		r->h = 2 * ch + 2;
+	}
 	else if (parts == BP_LEFT) {
 		*r = w_bar;
 		r->w = w_ctl.x - w_bar.x;
@@ -476,21 +480,99 @@ static void draw_art(void)
 	mask_draw(&k_spot, cx - 2, cy - 2, p_bar);
 }
 
-static void draw_text(void)
+/* ---- the title's and the artist's scroll (Erez, 11 Nov 2026: "if the
+   text is cut on the right side, it should nicely scroll left to right and
+   vice versa"): a line wider than its place moves a character every
+   SCR_STEP ms, and waits SCR_HOLD at each end. A character at a time
+   keeps the text on its cells (text_plain's fast way: one line drawn, the
+   stock machines' speed rule) */
+#define SCR_STEP 250
+#define SCR_HOLD 2000
+static char scr_txt[2][128];
+static short scr_len[2], scr_off[2], scr_cols;
+static signed char scr_dir[2];
+static unsigned long scr_due[2];
+
+static void bar_lines(const char **title, const char **artist)
 {
-	char t[24];
-	const char *title = play_tags.title[0] ? play_tags.title : play_name[0] ? play_name : "No file";
-	const char *artist = play_tags.artist[0] ? play_tags.artist : play_name[0] ? "" : "File > Open... (^O)";
+	*title = play_tags.title[0] ? play_tags.title : play_name[0] ? play_name : "No file";
+	*artist = play_tags.artist[0] ? play_tags.artist : play_name[0] ? "" : "File > Open... (^O)";
 	if (play_is_net() && play_name[0]) {
 		/* a station (Erez, 8 Nov 2026): the song now on top, the
 		   station's name under it (the station's alone until its first) */
 		const char *song = play_net_title();
-		title = song[0] ? song : play_name;
-		artist = song[0] ? play_name : "";
+		*title = song[0] ? song : play_name;
+		*artist = song[0] ? play_name : "";
 	}
+}
+
+/* line k's text now: from its start again when it changed */
+static const char *scr_line(int k, const char *s, short cols)
+{
+	if (strncmp(s, scr_txt[k], sizeof(scr_txt[k]) - 1) || cols != scr_cols) {
+		snprintf(scr_txt[k], sizeof(scr_txt[k]), "%s", s);
+		scr_len[k] = (short)strlen(scr_txt[k]);
+		scr_off[k] = 0;
+		scr_dir[k] = 1;
+		scr_due[k] = tos_ms() + SCR_HOLD;
+	}
+	return scr_len[k] > cols ? scr_txt[k] + scr_off[k] : s;
+}
+
+int bar_scroll_step(void)
+{
+	unsigned long now = tos_ms();
+	int k, moved = 0;
+	for (k = 0; k < 2; k++) {
+		short over = scr_len[k] - scr_cols;
+		if (over <= 0 || !scr_cols || (long)(now - scr_due[k]) < 0)
+			continue;
+		scr_off[k] += scr_dir[k];
+		if (scr_off[k] >= over || scr_off[k] <= 0) {
+			scr_off[k] = scr_off[k] >= over ? over : 0;
+			scr_dir[k] = (signed char)-scr_dir[k];
+			scr_due[k] = now + SCR_HOLD;
+		} else
+			scr_due[k] = now + SCR_STEP;
+		moved = 1;
+	}
+	return moved;
+}
+
+long bar_scroll_wait(void)
+{
+	unsigned long now = tos_ms();
+	long w = -1;
+	int k;
+	for (k = 0; k < 2; k++)
+		if (scr_cols && scr_len[k] > scr_cols) {
+			long d = (long)(scr_due[k] - now);
+			if (d < 0)
+				d = 0;
+			if (w < 0 || d < w)
+				w = d;
+		}
+	return w;
+}
+
+/* the title and the artist (a scroll's step draws these alone) */
+static void draw_lines(void)
+{
+	const char *title, *artist;
 	short x = w_txt.x, cols = (short)(w_txt.w / cw);
+	bar_lines(&title, &artist);
+	title = scr_line(0, title, cols);
+	artist = scr_line(1, artist, cols);
+	scr_cols = cols;
 	text(x, w_txt.y, title, cols, p_txt);
 	text(x, w_txt.y + ch + 2, artist, cols, p_dim);
+}
+
+static void draw_text(void)
+{
+	char t[24];
+	short x = w_txt.x;
+	draw_lines();
 	if (play_name[0]) {
 		short y = w_txt.y + 2 * ch + 6;
 		if (play_kbps > 0) {
@@ -768,6 +850,10 @@ void bar_draw(const GRECT *clip, int parts)
 		draw_art();
 	if (parts == BP_VOL)
 		draw_vol();
+	if (parts == BP_TITLE) {
+		box(w_txt.x, w_txt.y, w_txt.w, 2 * ch + 2, p_bar, 0);
+		draw_lines();
+	}
 	if (parts == BP_LEFT) {			/* (another file: a piece a turn) */
 		box(w_bar.x, w_bar.y, w_ctl.x - w_bar.x, w_bar.h - 1, p_bar, 0);
 		draw_art();

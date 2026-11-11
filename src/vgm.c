@@ -273,10 +273,14 @@ static int commands(VGMRUN *r)
 {
 	const unsigned char *b = r->b;
 	while (r->wait <= 0) {
-		long p = r->pos;
+		long p = r->pos, lim = r->avail ? r->avail : r->n;
 		int k;
 		unsigned c;
-		if (p >= r->n) {
+		if (p >= lim) {
+			if (lim < r->n) {
+				r->starved = 1;	/* (not unpacked yet: it waits) */
+				return 0;
+			}
 			r->done = 1;
 			return 0;
 		}
@@ -312,6 +316,10 @@ static int commands(VGMRUN *r)
 			return 0;
 		}
 		k = cmd_len(b, r->n, p);
+		if (k && p + k > lim && lim < r->n) {
+			r->starved = 1;
+			return 0;
+		}
 		if (!k || p + k > r->n) {
 			r->done = 1;
 			return 0;
@@ -373,7 +381,7 @@ static void drums(VGMRUN *r, long lim)
 {
 	const unsigned char *b = r->b, *pcm = b + r->pcm_at;
 	VGMDAC *q = r->dac;
-	long p = r->pos, n = r->n, at = r->at, wait = 0;
+	long p = r->pos, n = r->avail ? r->avail : r->n, at = r->at, wait = 0;
 	long pp = r->pcm_pos, plen = r->pcm_len, base = q ? q->base : 0;
 	int v = -1;
 	while (p < n) {
@@ -406,6 +414,55 @@ static void drums(VGMRUN *r, long lim)
 		r->opn[0][0x2a] = (unsigned char)v;
 }
 
+/* (a seek's) the commands a seek meets most, inline with no call each: the
+   YM2149's writes and the waits (a 13-minute YM2149 file is millions of
+   them: a seek into it took minutes, Erez, 11 Nov 2026), the YM2612's and
+   SN76489's writes as their registers; until another command, to, or the
+   bytes there so far. With no chip to write (a seek) */
+static void seek_run(VGMRUN *r, long to)
+{
+	const unsigned char *b = r->b;
+	long p = r->pos, n = r->avail ? r->avail : r->n, at = r->at, wait = 0;
+	while (p + 3 <= n) {
+		unsigned c = b[p];
+		if (c == 0xa0) {
+			int reg = b[p + 1];
+			if (!(reg & 0x80) && (reg & 0x0f) <= 13)
+				r->ay[reg & 0x0f] = b[p + 2];
+			p += 3;
+			continue;
+		}
+		if ((c & 0xf0) == 0x70)
+			wait = (c & 15) + 1, p++;
+		else if (c == 0x61)
+			wait = (long)b[p + 1] | (long)b[p + 2] << 8, p += 3;
+		else if (c == 0x62)
+			wait = 735, p++;
+		else if (c == 0x63)
+			wait = 882, p++;
+		else if (c == 0x52 || c == 0x53) {
+			opn_write(r, c & 1, b[p + 1], b[p + 2]);
+			p += 3;
+			continue;
+		} else if (c == 0x50) {
+			sn_shadow(r, b[p + 1]);
+			p += 2;
+			continue;
+		} else
+			break;
+		if (wait >= to - at) {
+			wait -= to - at;
+			at = to;
+			break;
+		}
+		at += wait;
+		wait = 0;
+	}
+	r->pos = p;
+	r->at = at;
+	r->wait = wait;
+}
+
 int vgm_run(VGMRUN *r, long samples)
 {
 	if (r->done)
@@ -419,8 +476,14 @@ int vgm_run(VGMRUN *r, long samples)
 			if (samples <= 0)
 				break;
 		}
-		if (!commands(r))
+		if (!commands(r)) {
+			if (r->starved) {	/* (it holds until there is more) */
+				r->starved = 0;
+				r->waits++;
+				return 1;
+			}
 			return 0;
+		}
 		step = r->wait < samples ? r->wait : samples;
 		r->wait -= step;
 		r->at += step;
@@ -446,7 +509,8 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 	VGM_OPN opn = r->opn_fn;
 	VGMHEAD h = r->h;
 	int att = r->att;
-	void *u = r->u;
+	void *u = r->u, *mu = r->mu;
+	long avail = r->avail, (*more)(void *) = r->more;
 	if (from && from->at <= to) {
 		*r = *from;	/* (a place it was at: the file from there) */
 		r->ay_fn = 0;
@@ -457,6 +521,9 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 	} else
 		vgm_begin(r, r->b, r->n, &h, 0, 0, u);
 	r->att = att;
+	r->avail = avail;
+	r->more = more;
+	r->mu = mu;
 	r->ay_fn = 0;
 	r->sn_fn = 0;
 	while (r->at < to && !r->done) {
@@ -468,9 +535,23 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 			drums(r, to);
 			if (r->at >= to)
 				break;
+			if (r->wait <= 0 && !r->ay_fn && !r->sn_fn) {
+				seek_run(r, to);
+				if (r->at >= to)
+					break;
+			}
 		}
-		if (!commands(r))
+		if (!commands(r)) {
+			if (r->starved && r->more) {
+				/* (still unpacking: further, then on) */
+				r->starved = 0;
+				r->avail = r->more(r->mu);
+				if (r->avail >= 0)
+					continue;
+				r->avail = 0;
+			}
 			break;
+		}
 		step = r->wait < to - r->at ? r->wait : to - r->at;
 		r->wait -= step;
 		r->at += step;

@@ -25,6 +25,7 @@ enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_POS, BH_VOL
 #define BP_NAV   64		/* Previous and Next (and Play/Pause between them) */
 #define BP_LEFT  128		/* the album art, the title, the artist, the labels */
 #define BP_RIGHT 256		/* the output, the speaker and the volume */
+#define BP_TITLE 512		/* the title and the artist alone (a step of their scroll) */
 #define BP_ALL   0xff
 
 void bar_colours(void);		/* the pens, from the screen (at the start) */
@@ -35,6 +36,11 @@ void bar_layout(const GRECT *work);
 /* the parts' area (to draw again just those) */
 void bar_area(int parts, GRECT *r);
 /* the parts that meet clip */
+/* the title's and artist's scroll when they are wider than their place
+   (Erez, 11 Nov 2026): a step when its time has come (1: BP_TITLE again);
+   the ms to the next (-1: none scrolls) */
+int bar_scroll_step(void);
+long bar_scroll_wait(void);
 void bar_draw(const GRECT *clip, int parts);
 int bar_hit(short x, short y);	/* BH_... */
 short bar_art_side(void);

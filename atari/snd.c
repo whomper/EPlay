@@ -550,8 +550,17 @@ static int open_to(long rate, int ext, int feed);
 static long measure(short pre)
 {
 	ext_pre = pre;
-	if (!open_to(44100, 1, 2))	/* (one track, as 0.17 measured) */
+	/* the codec's output silent while the DMA runs on the external clock:
+	   EPlay's first start was heard as a burst of digital noise (Erez,
+	   11 Nov 2026). The adder off, both channels at their lowest; put_regs
+	   puts $FF8938 and $FF893A back as they were found */
+	Soundcmd(4, 0);			/* (ADDERIN: nothing to the DAC) */
+	Soundcmd(0, 0xf0);		/* (LTATTEN, RTATTEN: 22.5 dB down) */
+	Soundcmd(1, 0xf0);
+	if (!open_to(44100, 1, 2)) {	/* (one track, as 0.17 measured) */
+		Supexec(put_regs);
 		return 0;
+	}
 	ring_n = 16384;
 	memset(ring, 0, (size_t)ring_n * 2 * FW);
 	x_setbuffer(0, ring, ring + snd_fw * ring_n);

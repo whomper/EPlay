@@ -18,6 +18,7 @@ void dspsn_write(int byte);	/* (from the tick: supervisor mode) a byte to the ch
 void dspsn_volume(int att, int mute);	/* att steps of 1.5 dB down (0 to 15): sent by dspsn_poll */
 void dspsn_poll(void);		/* (from the tick) a volume asked for, sent */
 void dspsn_close(void);		/* silent, off the matrix, the DSP unlocked */
+int dspsn_ext(void);		/* 1: on the external clock (the FDI) */
 long dspsn_rate(void);		/* the SSI's rate it plays at */
 void dspsn_term(void);		/* (supervisor: term.c) */
 

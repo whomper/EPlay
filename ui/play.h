@@ -29,6 +29,8 @@ void play_stop(void);		/* and the file closed, the DSP given back */
    into the queue; the sound itself is fed by the tick): 1 when something
    shown changed (the time, the state) */
 int play_step(int ms);
+extern int play_tags_late;	/* the file's tags came late (a big VGZ's): its row again */
+const char *play_path(void);	/* the file playing (its path) */
 int play_wait_ms(void);		/* the GEM loop's timer until the next step */
 int play_state(void);
 int play_is_open(void);

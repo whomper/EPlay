@@ -1923,6 +1923,24 @@ stock Falcon with the file:
   Pause, a seek) and for the list's tags. Stock Falcon (speed rig, `vgm`): a seek 14,250 to 270
   ms, Play after Pause 5,290 to 295 ms, the start's stretch 6,365 to 2,350 ms (the VGZ unpacked in
   one turn: left to do). The tick some 1,100 us of its 2 ms.
+- **1.23 (Erez, 11 Nov 2026: a noise as EPlay opened, no badge for a YM2612 file, a 7 MB VGZ
+  slow to open and opened twice, a seek into a 13-minute file that seemed to freeze; and the
+  title's scroll).**
+  - The noise: the external clock's measure at the start ran the DMA's sound on it with the
+    codec's output on; the adder and the attenuation now silence it for the measure (`put_regs`
+    puts them back).
+  - The badge: `vp_via()`, the DSP's output on the FDI's clock or the Falcon's.
+  - A VGZ unpacks through common's `inflate_piece` with its 68000 loop (`inflate_fast.S`,
+    `INFLATE_ASM`), its file read 64 KB at a time: twice as fast. One past 256 KB (packed) plays
+    as it unpacks: its first 256 KB, then the rest in the turns (`vp_step`, 10 ms a turn, 45 ms
+    when it is close to where it plays), the run waiting where it isn't there yet
+    (`VGMRUN.avail`, `starved`) and a seek unpacking further as it goes (`more`). The list reads
+    only such a file's header (its length); its GD3, at the end, once it has unpacked (the row
+    read again). Hatari's 32 MHz Falcon, a 10.5 MB test file: 53 s before it played, now 0.7 s.
+  - A seek runs the YM2149's, the YM2612's and the SN76489's writes and the waits inline
+    (`seek_run`): every place checked the same as before.
+  - The title and the artist scroll a character every 250 ms when wider than their place, 2 s at
+    each end (`bar_scroll_step`, `BP_TITLE`: the two lines alone).
 - **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
   the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST

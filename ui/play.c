@@ -58,6 +58,7 @@ int play_nosig;
 TAGS play_tags;
 long play_kbps, play_hz;
 const char *play_via = "";
+int play_tags_late;		/* a VGZ's GD3 come once it unpacked as it played */
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
@@ -226,6 +227,11 @@ static unsigned char fr[2048];	/* the tick's: a frame, whole */
 static long last_sec = -1;
 static long data_left;		/* bytes still to read into the queue */
 static char cur_path[256];	/* the file open (play_seek opens it again) */
+
+const char *play_path(void)
+{
+	return cur_path;
+}
 /* Quality, by itself (Erez, 4 Nov 2026: no longer a setting): an MP3 on
    the DSP and the Falcon's clock plays at High (49,170 Hz); one the DSP
    falls behind with (granules late) goes on at Normal (32,780 Hz, up to
@@ -1103,11 +1109,12 @@ int play_open(const char *path, char *err, int n)
 		/* a VGM or VGZ (phase 9): read whole, played by the tick on
 		   the YM2149 */
 		if (!vp_open(fh, file_size, seek_ms, &play_tags, play_info, sizeof(play_info), play_out,
-			     sizeof(play_out), &len_ms, err, n, play_name)) {
+			     sizeof(play_out), &len_ms, err, n, play_name, path)) {
 			close_file();
 			return 0;
 		}
 		vgm = 1;
+		play_via = vp_via();	/* (the bar's badge: Erez, 11 Nov 2026, saw none) */
 		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
 		rate = VGM_RATE;
 		play_hz = 0;
@@ -1999,6 +2006,14 @@ int play_step(int ms)
 	if (state != PS_PLAYING)
 		return 0;
 	if (vgm) {
+		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once
+		   it is all there */
+		int st = vp_step(ms > 20 ? ms : 10);	/* (a turn's 10 ms at least: some 30 KB on a 32 MHz Falcon) */
+		if (st == 2) {
+			vp_tags(&play_tags);
+			play_tags_late = 1;	/* (main.c: the list's row again) */
+			return 1;
+		}
 		if (vp_ended()) {
 			nf_debug("EPLAY ended: 0 underruns\n");	/* (the rigs) */
 			elog("played to the end: %ld ms, a VGM (its chips from the tick)", play_ms());

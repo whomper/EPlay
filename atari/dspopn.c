@@ -39,7 +39,7 @@ static SNCMD psg;		/* the Mega Drive's SN76489, in opn.a56 */
 static unsigned long psg_clock;
 static int psg_fb, psg_w, psg_on;
 static volatile int psg_att = -1, psg_mute;
-static int locked, failed, on, twice;
+static int locked, failed, on, twice, ext_on;
 static long rate, synth;
 static volatile int gain_due = -1;	/* the volume's gain for the tick to send */
 static void put(void *u, long w);
@@ -181,6 +181,7 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 	gain_due = -1;
 	/* on the matrix first: its clock starts the SSI, which PLAY waits for */
 	snd_dsp_out(rate, ext);
+	ext_on = ext;
 	on = 1;
 	Supexec(setup);
 	if (failed) {
@@ -189,6 +190,11 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 		return 0;
 	}
 	return 1;
+}
+
+int dspopn_ext(void)
+{
+	return ext_on;
 }
 
 long dspopn_rate(void)

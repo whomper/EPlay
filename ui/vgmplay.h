@@ -16,8 +16,13 @@
    tags, the bar's info ("VGM  YM2149  1.77 MHz") and output ("YM2149"),
    its length. 0 with err set (a chip EPlay doesn't play yet, no memory,
    damaged); the file isn't closed here */
+/* path: the file again, for a big VGZ's unpacking as it plays (0: not) */
 int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, int no, long *len_ms, char *err,
-	    int n, const char *name);
+	    int n, const char *name, const char *path);
+/* a big VGZ's unpacking as it plays, for up to ms: 0 none going, 1 going,
+   2 done now (vp_tags: its GD3), 3 damaged */
+int vp_step(int ms);
+int vp_tags(TAGS *t);		/* its GD3 once unpacked: 1 */
 void vp_start(void);		/* the tick on, the chip sounding */
 void vp_stop(void);		/* silent, the tick off; the file's memory kept for its next open */
 void vp_forget(void);
@@ -30,6 +35,7 @@ int vp_ended(void);		/* 1 once it played to its end (its fade too) */
    Falcon's codec and the STE's LMC1992 take it as for any file (play.c);
    the TT's YM2149 alone (no mixer of its own): its volumes 3 dB a step */
 void vp_volume(int att, int mute);
+const char *vp_via(void);	/* the badge: "FDI", "DSP" or "" */
 int vp_on(void);		/* a VGM is open */
 
 #endif

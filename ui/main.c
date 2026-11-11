@@ -284,6 +284,13 @@ static int around_tip(const GRECT *r, GRECT out[4])
    rectangles, within area (0: the parts' own). A small part (the times,
    each second; Play/Pause) is drawn off the screen and shown in one step
    (common's offdraw, where it can be: no flicker), else on it */
+/* the event's wait, no later than the title's next scroll step */
+static unsigned long scroll_wait(unsigned long ms)
+{
+	long w = bar_scroll_wait();
+	return w >= 0 && (unsigned long)w < ms ? (unsigned long)w : ms;
+}
+
 static void redraw(GRECT *area, int parts)
 {
 	GRECT r, a;
@@ -1721,7 +1728,19 @@ static void step(int playing)
 		if (chain_row >= 0 && (e = list_at(chain_row)) != 0 && !play_chain(e->path))
 			elog("gapless: the next file opens at this one's end");
 	}
+	if (bar_scroll_step())
+		redraw(0, BP_TITLE);	/* (a step of the title's scroll: its two lines) */
 	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
+		if (play_tags_late) {
+			/* (a big VGZ's GD3, at its end: its row read again, now from
+			   memory) */
+			int i = list_find(play_path());
+			play_tags_late = 0;
+			if (i >= 0) {
+				list_at(i)->read = 0;
+				list_unread = 1;
+			}
+		}
 		if (play_note_new) {
 			/* (Normal by itself: the rate on the bar and the info
 			   line) */
@@ -2141,7 +2160,7 @@ static void turn(int nested)
 	evnt_set_m1(1, tip_x, tip_y, 1, 1);
 	which = evnt_multi_(MU_MESAG | MU_KEYBD | MU_BUTTON | MU_TIMER | MU_M1, 0x101, 3, 0,
 			    nested || art_pending() || seek_to >= 0 || pending_play[0] || next_due || open_due || shown_due ? 0 :
-			    tip_wait(list_unread ? 20 : (unsigned long)play_wait_ms()), msg, &ev);
+			    tip_wait(list_unread ? 20 : scroll_wait((unsigned long)play_wait_ms())), msg, &ev);
 	turn_t0 = tos_ms();
 	if (which & MU_M1) {
 		tip_x = ev.mx;

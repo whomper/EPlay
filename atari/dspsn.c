@@ -25,7 +25,7 @@
 #define Ongibit(b) trap14_ww(30, (b))
 #define Offgibit(b) trap14_ww(29, (b))
 
-static int locked, failed, on;
+static int locked, failed, on, ext_on;
 static long rate;
 static SNCMD sn;
 static volatile int att, mute, amp_due;
@@ -99,6 +99,7 @@ int dspsn_open(unsigned long clock, int fb, int width, const char **why)
 	   for before it reads the host port */
 	rate = snd_rate_dsp(44100, &ext);
 	snd_dsp_out(rate, ext);
+	ext_on = ext;
 	on = 1;
 	s_clock = clock;
 	s_fb = fb;
@@ -110,6 +111,11 @@ int dspsn_open(unsigned long clock, int fb, int width, const char **why)
 		return 0;
 	}
 	return 1;
+}
+
+int dspsn_ext(void)
+{
+	return ext_on;
 }
 
 long dspsn_rate(void)

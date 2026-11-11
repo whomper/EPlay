@@ -29,6 +29,7 @@ int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long 
 void dspopn_volume(int att, int mute);	/* att steps of 1.5 dB down (0 to 15): sent by the tick */
 void dspopn_hush(void);		/* (the tick's) every key off */
 void dspopn_close(void);	/* silent, off the matrix, the DSP unlocked */
+int dspopn_ext(void);		/* 1: on the external clock (the FDI) */
 long dspopn_rate(void);		/* the SSI's rate */
 long dspopn_synth(void);	/* the rate the chip is made at (half the SSI's at the FDI's) */
 void dspopn_term(void);		/* (supervisor: term.c) */

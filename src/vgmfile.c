@@ -21,12 +21,34 @@ typedef struct {
 	TAG_READ rd;
 	void *u;
 	long at, end;
+	unsigned char *big;	/* (the file read in big pieces: SRCBIG at a time) */
+	long bp, bn;
 } SRC;
+
+#define SRCBIG 65536L
 
 static int get(void *v, unsigned char *buf, long n)
 {
 	SRC *s = v;
 	long r;
+	if (s->big) {
+		if (s->bp >= s->bn) {
+			long k = s->end - s->at < SRCBIG ? s->end - s->at : SRCBIG;
+			if (k <= 0)
+				return 0;
+			r = s->rd(s->u, s->at, s->big, k);
+			if (r <= 0)
+				return 0;
+			s->at += r;
+			s->bp = 0;
+			s->bn = r;
+		}
+		if (n > s->bn - s->bp)
+			n = s->bn - s->bp;
+		memcpy(buf, s->big + s->bp, (size_t)n);
+		s->bp += n;
+		return (int)n;
+	}
 	if (s->at >= s->end)
 		return 0;
 	if (n > s->end - s->at)
@@ -69,6 +91,108 @@ static long gz_head(TAG_READ rd, void *u, long size)
 
 long vgm_need;
 
+/* a VGZ the list unpacks whole for its GD3 up to this (packed) size; past it
+   only its header */
+#define VGM_PROBE_WHOLE (256L * 1024)
+
+/* a VGZ unpacked a piece at a time (vgm_load_open) */
+struct vgm_load {
+	SRC s;
+	INFLATE *z;
+	unsigned char *b;
+	long len, got;
+	int state;		/* 0 going, 1 done, -1 damaged */
+	void (*release)(void *);
+};
+
+VGMLOAD *vgm_load_open(TAG_READ rd, void *u, long size, unsigned char **buf, long *len, void *(*alloc)(long),
+		       void (*release)(void *), const char **why)
+{
+	unsigned char t[4];
+	long at = gz_head(rd, u, size), n;
+	VGMLOAD *l;
+	*buf = 0;
+	*len = 0;
+	vgm_need = 0;
+	if (!at || size < at + 8 || rd(u, size - 4, t, 4) != 4) {
+		*why = "is damaged";
+		return 0;
+	}
+	n = (long)((unsigned long)t[0] | (unsigned long)t[1] << 8 | (unsigned long)t[2] << 16 |
+		   (unsigned long)t[3] << 24);	/* (ISIZE: its size unpacked) */
+	vgm_need = n;
+	if (n < 64 || n > VGM_MAX) {
+		*why = n > VGM_MAX ? "is too big to play" : "is damaged";
+		return 0;
+	}
+	l = alloc((long)sizeof(VGMLOAD));
+	if (!l) {
+		*why = "can't be played: there isn't the memory";
+		return 0;
+	}
+	memset(l, 0, sizeof(VGMLOAD));
+	l->release = release;
+	l->len = n;
+	l->b = alloc(n);
+	l->s.rd = rd;
+	l->s.u = u;
+	l->s.at = at;
+	l->s.end = size - 8;
+	l->s.big = alloc(SRCBIG);	/* (the disk read in 64 KB pieces, not 4 KB) */
+	/* inflate_piece: its hot loop in 68000 assembly where the program has
+	   it (a VGZ unpacked at some 200 KB/s through inflate_read on a 32 MHz
+	   Falcon: Erez's 33 MB one took two minutes) */
+	l->z = l->b ? inflate_open_piece(get, &l->s) : 0;
+	if (!l->z) {
+		if (l->b)
+			release(l->b);
+		vgm_load_close(l);
+		*why = "can't be played: there isn't the memory";
+		return 0;
+	}
+	*buf = l->b;
+	*len = n;
+	return l;
+}
+
+long vgm_load_more(VGMLOAD *l, long max)
+{
+	long end = l->got + max;
+	if (end > l->len)
+		end = l->len;
+	while (!l->state && l->got < end) {
+		const unsigned char *p;
+		long r = inflate_piece(l->z, &p, end - l->got < 8192 ? end - l->got : 8192, 0);
+		if (r <= 0) {
+			l->state = -1;
+			break;
+		}
+		if (r > l->len - l->got)
+			r = l->len - l->got;
+		memcpy(l->b + l->got, p, (size_t)r);
+		l->got += r;
+	}
+	if (!l->state && l->got >= l->len)
+		l->state = vgm_magic(l->b, l->len) == 1 ? 1 : -1;
+	return l->got;
+}
+
+int vgm_load_state(const VGMLOAD *l)
+{
+	return l->state;
+}
+
+void vgm_load_close(VGMLOAD *l)
+{
+	if (!l)
+		return;
+	if (l->z)
+		inflate_close(l->z);
+	if (l->s.big)
+		l->release(l->s.big);
+	l->release(l);
+}
+
 unsigned char *vgm_load(TAG_READ rd, void *u, long size, long *n, void *(*alloc)(long), void (*release)(void *),
 			const char **why)
 {
@@ -99,40 +223,15 @@ unsigned char *vgm_load(TAG_READ rd, void *u, long size, long *n, void *(*alloc)
 		return b;
 	}
 	if (vgm_magic(head, 4) == 2) {
-		unsigned char t[4];
-		long at = gz_head(rd, u, size), got = 0, r;
-		SRC s;
-		INFLATE *z;
-		if (!at || size < at + 8 || rd(u, size - 4, t, 4) != 4) {
-			*why = "is damaged";
+		VGMLOAD *l = vgm_load_open(rd, u, size, &b, &len, alloc, release, why);
+		long got;
+		int st;
+		if (!l)
 			return 0;
-		}
-		len = (long)((unsigned long)t[0] | (unsigned long)t[1] << 8 | (unsigned long)t[2] << 16 |
-			     (unsigned long)t[3] << 24);	/* (ISIZE: its size unpacked) */
-		vgm_need = len;
-		if (len < 64 || len > VGM_MAX) {
-			*why = len > VGM_MAX ? "is too big to play" : "is damaged";
-			return 0;
-		}
-		b = alloc(len);
-		if (!b) {
-			*why = "can't be played: there isn't the memory";
-			return 0;
-		}
-		s.rd = rd;
-		s.u = u;
-		s.at = at;
-		s.end = size - 8;
-		z = inflate_open(get, &s);
-		if (!z) {
-			release(b);
-			*why = "can't be played: there isn't the memory";
-			return 0;
-		}
-		while (got < len && (r = inflate_read(z, b + got, len - got)) > 0)
-			got += r;
-		inflate_close(z);
-		if (got != len || vgm_magic(b, len) != 1) {
+		got = vgm_load_more(l, len);
+		st = vgm_load_state(l);
+		vgm_load_close(l);
+		if (st != 1) {
 			release(b);
 			*why = got != len ? "is damaged" : "isn't a VGM file";
 			return 0;
@@ -168,6 +267,32 @@ long vgm_probe(TAG_READ rd, void *u, long size, TAGS *t, void *(*alloc)(long), v
 				vgm_gd3(g, glen + 4, &g2, t->title, t->album, t->artist, TAG_TEXT);
 			}
 		}
+	} else if (size > VGM_PROBE_WHOLE) {
+		/* a big VGZ: its header alone unpacked, for its length; its GD3
+		   (at its end) once it is played (vgmplay.c: the list asks it
+		   then). The whole unpacked took Erez's 33 MB one two minutes as it
+		   was added to the list, and again as it played */
+		unsigned char t[4];
+		long at = gz_head(rd, u, size), r, isz;
+		SRC s;
+		INFLATE *z;
+		if (!at || size < at + 8 || rd(u, size - 4, t, 4) != 4)
+			return -1;
+		isz = (long)((unsigned long)t[0] | (unsigned long)t[1] << 8 | (unsigned long)t[2] << 16 |
+			     (unsigned long)t[3] << 24);
+		memset(&s, 0, sizeof(s));
+		s.rd = rd;
+		s.u = u;
+		s.at = at;
+		s.end = size - 8;
+		z = inflate_open(get, &s);
+		if (!z)
+			return 0;
+		r = inflate_read(z, head, (long)sizeof(head));
+		inflate_close(z);
+		if (r < 0x40 || !vgm_head_of(head, r, isz, &h))
+			return -1;
+		len = vgm_length(&h);
 	} else {
 		const char *why;
 		unsigned char *b = vgm_load(rd, u, size, &n, alloc, release, &why);

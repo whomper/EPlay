@@ -587,7 +587,11 @@ def run(work, case, spec):
                 return False, m.describe(), "a first start: the work area at %s (wanted the desk's height, centred)" % wl
         if case == "vgmreal":
             secs = float(os.environ.get("EPLAY_RIG_SECS", "20"))
-            time.sleep(secs)
+            for _ in range(int(os.environ.get("EPLAY_RIG_SHOTS", "0"))):   # (the title's scroll, a shot a second)
+                cmd(fifo, "hatari-shortcut", "screenshot")
+                time.sleep(1)
+                secs -= 1
+            time.sleep(max(secs, 0))
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x10")
             cmd(fifo, "hatari-event", "keyup", "0x1d")
