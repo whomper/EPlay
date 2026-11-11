@@ -49,9 +49,9 @@ jobs:
           echo "TAG=$TAG" >> "$GITHUB_ENV"
       - name: Tools
         run: |
-          # On 11 Nov 2026 the runners reached no Ubuntu mirror over plain http (20 s a file, then
-          # nothing): fetch over https
-          printf "https://mirrors.edge.kernel.org/ubuntu\nhttps://archive.ubuntu.com/ubuntu\n" | sudo tee /etc/apt/apt-mirrors.txt
+          # On 11 Nov 2026 the runners could not reach azure.archive.ubuntu.com or
+          # archive.ubuntu.com (20 s a file, then nothing): kernel.org's mirror, over https
+          echo https://mirrors.edge.kernel.org/ubuntu | sudo tee /etc/apt/apt-mirrors.txt
           sudo apt-get -o Acquire::Retries=3 update
           sudo apt-get -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu a56 sox lame zip autoconf automake libtool gettext autopoint pkg-config
       - name: hcp, for the help file
