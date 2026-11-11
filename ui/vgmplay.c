@@ -77,6 +77,9 @@ static void opn(void *u, int port, int reg, int val)
 }
 
 /* (the YM2612's tick: the file run, its place for the DAC's samples) */
+static long t_all, t_max, t_n, t_over;	/* the tick's times (us): the whole, its longest; past 1 ms */
+static long t_lost;		/* ticks not made up (no time left) */
+
 static int runn(void *v, long n)
 {
 	return vgm_run(v, n);
@@ -102,23 +105,55 @@ static void hush(void)
 }
 
 /* the tick (an interrupt): the commands of its 44.2 samples */
+static long seen;		/* feed_ticks when the tick last ran */
+
 static void tick(void)
 {
-	long n;
+	long n, due, k;
 	if (ended)
 		return;
+	feed_t0();
 	if (att_due >= 0) {
 		vgm_set_att(&run, att_due);
 		att_due = -1;
 	}
 	if (use_sn)
 		dspsn_poll();
-	acc += STEP;
-	n = (long)(acc >> 16);
-	acc &= 0xffff;
-	if (!(use_opn ? dspopn_tick(runn, at, &run, n) : vgm_run(&run, n))) {
-		ended = 1;
-		hush();
+	/* the ticks since the last one ran, this one too: a tick held up (TOS's
+	   own level-6 handlers break into it, up to 60 ms) left out the ones
+	   that came meanwhile, and their samples are made up here, a tick's at
+	   a time, eight at most, and only while this one has taken less than
+	   600 us: where the 68030 itself is short of time, the music slows
+	   rather than GEM stopping (EPlay 1.18 lost them all: Mega Drive drums
+	   at 40 % of their speed, Erez, 11 Nov 2026) */
+	due = feed_ticks - seen;
+	seen += due;
+	if (due > 8) {
+		t_lost += due - 8;
+		due = 8;
+	}
+	for (k = 0; k < due; k++) {
+		if (k && feed_us() >= 600) {
+			t_lost += due - k;
+			break;
+		}
+		acc += STEP;
+		n = (long)(acc >> 16);
+		acc &= 0xffff;
+		if (!(use_opn ? dspopn_tick(runn, at, &run, n) : vgm_run(&run, n))) {
+			ended = 1;
+			hush();
+			break;
+		}
+	}
+	{
+		long t = feed_us();
+		t_all += t;
+		t_n++;
+		if (t > t_max)
+			t_max = t;
+		if (t >= 1000)
+			t_over++;
 	}
 }
 
@@ -231,6 +266,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		run.sn_fn = s;
 		run.opn_fn = o;
 	}
+	run.dac = use_opn ? dspopn_dac() : 0;	/* (the drums' samples straight to the tick's DAC) */
 	open_ = 1;
 	return 1;
 }
@@ -257,6 +293,8 @@ void vp_start(void)
 			att_due = run.att;
 	}
 	playing = 1;
+	t_all = t_max = t_n = t_over = t_lost = 0;
+	seen = 0;		/* (feed_on counts from 0) */
 	feed_on(tick, 1000);
 }
 
@@ -264,6 +302,9 @@ void vp_stop(void)
 {
 	if (playing) {
 		feed_off();
+		elog("VGM: the tick %ld times, %ld of them left out (the one before still ran), %ld of those not made up "
+		     "(the music slowed); %ld past its 1 ms; %ld us on average, the longest %ld us",
+		     feed_ticks, feed_missed, t_lost, t_over, t_n ? t_all / t_n : 0, t_max);
 		if (use_ay)
 			ym_end();
 		playing = 0;

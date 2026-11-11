@@ -1874,6 +1874,34 @@ decoder was made: a model first, then the program held to it bit for bit.
 6. **MP3 on the 68060** (below), then the release.
 7. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way.
 
+### The 68030's tick with drums (1.19, 1.20: Erez's Falcon, 11 Nov 2026)
+
+EPlay 1.18 played "Spinning Machine" (Streets of Rage 3, its drums 44 DAC samples a millisecond)
+at 40 % of its speed on Erez's Falcon, crackling, and crashed. What was found, on Hatari's
+stock Falcon with the file:
+
+- **The crash (1.19):** the tick ran on the stack the interrupt came in on, the AES's in a
+  `wind_get`, and the YM2612's took some 700 bytes: it overran it. `feed.S` now switches to a
+  4 KB stack of its own.
+- **The speed (1.20):** at level 5 TOS's own level-6 handlers break into the tick, for up to
+  60 ms, and the ticks that came meanwhile were lost (two of three). The tick now makes them up
+  (`vgmplay.c`), a tick's samples at a time, eight at most, and only while it has taken under
+  600 us, so that a 68030 short of time slows the music rather than stopping GEM. Level 6 for
+  the tick was tried: the music kept time, but the keyboard's and mouse's bytes were lost on a
+  stock Falcon.
+- **Cheaper:** the drums' commands run in `vgm_run` in registers into the tick's DAC buffer
+  (`VGMDAC`) with no call; the DAC's resampling one 16-bit multiply a sample, its words sent in
+  one loop (`putn`); `opnd_send` passes over a tick with nothing changed; HF0 goes up at the
+  tick's first word, not before the file's run. The words sent are the same, bit for bit (the
+  whole file's).
+- **What is left:** on a stock Falcon (16 MHz, code in ST RAM) this file's tick is still some
+  1,070 us a millisecond: the music slows to two thirds and GEM's longest stretch is some 10 s
+  (the speed rig's `vgm` kind, a file given in `EPLAY_SPEED_VGM`). Erez's 50 MHz DFB1 with TT
+  RAM has three to four times the room. Drum-heavy Mega Drive music on a stock Falcon needs
+  another design: Erez's decision (to put to him).
+- `EPLAY.LOG` gives each play's tick: how many came, were left out, not made up, past 1 ms,
+  its mean and longest time.
+
 ## A FireBee edition (Erez, 10 Nov 2026)
 
 Erez asked for one, "just like the EWeb plan". The hub's order (AERA-Atari's standards/PARKED.md):

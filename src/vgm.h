@@ -56,6 +56,20 @@ typedef void (*VGM_SN)(void *u, int val);
    port 0 is its DAC's sample (the drums), from the file's data block */
 typedef void (*VGM_OPN)(void *u, int port, int reg, int val);
 
+/* the YM2612's DAC over a tick (opnd_tick's): its byte at each of the
+   tick's samples so far. A run given one (VGMRUN's dac) puts the data
+   block's samples (0x8n) straight into it, with no call: Mega Drive drums
+   are some 44 a tick, and their calls cost a stock Falcon the tick's whole
+   millisecond (EPlay 1.18 played them at 40 % of their speed) */
+#define VGMDAC_MAX 96
+typedef struct {
+	unsigned char buf[VGMDAC_MAX];
+	int fill;		/* the bytes so far */
+	long base;		/* the file's sample at buf[0] */
+	int val;		/* the DAC's byte now */
+	int wr;			/* written since the tick began */
+} VGMDAC;
+
 typedef struct {
 	const unsigned char *b;
 	long n, pos;
@@ -73,6 +87,7 @@ typedef struct {
 	VGM_AY ay_fn;
 	VGM_SN sn_fn;
 	VGM_OPN opn_fn;		/* (set after vgm_begin; 0: the YM2612 passed over) */
+	VGMDAC *dac;		/* (set after vgm_begin, with opn_fn: the 0x8n samples into it; 0: through opn_fn) */
 	unsigned char opn[2][256];	/* the YM2612's registers as written (for a seek) */
 	unsigned char opn_key[8];	/* each channel's key on/off byte ($28's), as written */
 	long pcm_at, pcm_len;	/* the data block of the YM2612's samples (type 0): in b, its bytes */

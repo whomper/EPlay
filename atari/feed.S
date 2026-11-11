@@ -12,6 +12,10 @@
 | deep in a call with little room left, and the YM2612's tick takes some
 | 700 bytes (EPlay 1.18 overran the AES's in a wind_get: Erez, 11 Nov 2026).
 | One stack does, as a tick never runs inside another.
+| The ticks that come while one runs are counted (feed_ticks, feed_missed):
+| TOS's own level-6 handlers break into a tick for up to 60 ms, and the
+| next one makes up what they left out (vgmplay.c). Level 6 for the tick
+| instead lost the keyboard's and the mouse's bytes on a stock Falcon.
 
 FEED_STACK = 4096		| the tick's, and an interrupt or two above it
 
@@ -19,8 +23,9 @@ FEED_STACK = 4096		| the tick's, and an interrupt or two above it
 	.globl	feed_vec
 feed_vec:
 	bclr	#5,0xfffffa0f.w		| ISRA: Timer A no longer in service
+	addq.l	#1,feed_ticks
 	tst.b	feed_busy
-	bne.s	1f
+	bne.s	2f
 	st	feed_busy
 	movem.l	%d0-%d2/%a0-%a2,-(%sp)
 	movea.l	%sp,%a1
@@ -32,12 +37,16 @@ feed_vec:
 	movea.l	(%sp),%sp
 	movem.l	(%sp)+,%d0-%d2/%a0-%a2
 	sf	feed_busy
-1:	rte
+	rte
+2:	addq.l	#1,feed_missed		| (left out: the one before still ran)
+	rte
 
 	.bss
-	.globl	feed_busy, feed_fn
+	.globl	feed_busy, feed_fn, feed_ticks, feed_missed
 	.even
 feed_fn:	.skip	4
+feed_ticks:	.skip	4
+feed_missed:	.skip	4
 feed_busy:	.skip	2
 	.even
 feed_stack:	.skip	FEED_STACK

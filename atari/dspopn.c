@@ -42,12 +42,39 @@ static volatile int psg_att = -1, psg_mute;
 static int locked, failed, on, twice;
 static long rate, synth;
 static volatile int gain_due = -1;	/* the volume's gain for the tick to send */
+static void put(void *u, long w);
+static int burst;		/* HF0 up: the tick's words coming */
+
+/* the DAC's words: one wait on the host port's flag a word, in a loop */
+static void putn(void *u, const long *w, int n)
+{
+	int k;
+	if (failed)
+		return;
+	if (!burst) {
+		HICR |= 8;	/* (HF0: a burst coming) */
+		burst = 1;
+	}
+	for (k = 0; k < n; k++) {
+		if (!(HISR & 2)) {
+			put(u, w[k]);	/* (the wait with its limit) */
+			if (failed)
+				return;
+			continue;
+		}
+		HTX32 = (unsigned long)w[k] & 0xffffff;
+	}
+}
 
 static void put(void *u, long w)
 {
 	(void)u;
 	if (failed)
 		return;
+	if (!burst) {
+		HICR |= 8;	/* (HF0: a burst coming) */
+		burst = 1;
+	}
 	if (!(HISR & 2)) {
 		unsigned long t0 = HZ200;
 		while (!(HISR & 2))
@@ -137,6 +164,7 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 	twice = rate > 30000;
 	synth = twice ? rate / 2 : rate;
 	opnd_init(&chip, clock ? clock : 7670453UL, synth);
+	chip.putn = putn;
 	gain_due = -1;
 	/* on the matrix first: its clock starts the SSI, which PLAY waits for */
 	snd_dsp_out(rate, ext);
@@ -158,6 +186,11 @@ long dspopn_rate(void)
 long dspopn_synth(void)
 {
 	return synth;
+}
+
+VGMDAC *dspopn_dac(void)
+{
+	return on ? &chip.dq : 0;
 }
 
 void dspopn_write(int port, int reg, int val)
@@ -186,7 +219,9 @@ int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long 
 		opnd_gain(&chip, gain_due);
 		gain_due = -1;
 	}
-	HICR |= 8;		/* (HF0: a burst coming) */
+	/* HF0 goes up at the tick's first word (put), not before the file's
+	   run: the DSP makes no sample while it is up, and the run is the
+	   68030's longest part (EPlay 1.18: the ring dry on Erez's Falcon) */
 	if (psg_on && psg_att >= 0) {
 		psg.att = psg_att;
 		psg.mute = psg_mute;
@@ -195,6 +230,7 @@ int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long 
 	}
 	live = opnd_tick(&chip, run, at, v, n, put, 0);
 	HICR &= ~8;
+	burst = 0;
 	return live;
 }
 
@@ -206,12 +242,12 @@ void dspopn_hush(void)
 	for (c = 0; c < 6; c++)
 		opnd_write(&chip, 0, 0x28, (c >= 3 ? 4 : 0) | c % 3);
 	opnd_write(&chip, 0, 0x2b, 0);
-	HICR |= 8;
 	opnd_send(&chip, put, 0);
 	if (psg_on)
 		for (c = 0; c < 4; c++)
 			sncmd_write(&psg, 0x9f | c << 5);
 	HICR &= ~8;
+	burst = 0;
 }
 
 void dspopn_volume(int att, int mute)

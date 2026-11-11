@@ -230,22 +230,24 @@ void opnd_write(OPND *d, int port, int reg, int val)
 			for (i = 0; i < 4; i++) {
 				int on = (val >> (4 + i)) & 1;
 				op = &d->ch[c].op[i];
-				if (on != op->key)
+				if (on != op->key) {
 					d->key_event[c * 4 + i] = on ? OPND_KEYON : OPND_KEYOFF;
+					d->key_dirty |= 1UL << (c * 4 + i);
+				}
 				op->key = on;
 			}
 			break;
 		case 0x2a:
 			if (d->at_fn) {
 				/* (the samples of the tick before this one: the byte before) */
-				long k = d->at_fn(d->at_v) - d->base;
-				if (k > (long)sizeof(d->dbuf))
-					k = (long)sizeof(d->dbuf);
-				while (d->dfill < k)
-					d->dbuf[d->dfill++] = (unsigned char)d->dac;
+				long k = d->at_fn(d->at_v) - d->dq.base;
+				if (k > VGMDAC_MAX)
+					k = VGMDAC_MAX;
+				while (d->dq.fill < k)
+					d->dq.buf[d->dq.fill++] = (unsigned char)d->dq.val;
 			}
-			d->dac = val;
-			d->dac_wr = 1;
+			d->dq.val = val;
+			d->dq.wr = 1;
 			break;
 		case 0x2b:
 			d->dac_on = val >> 7;
@@ -340,7 +342,7 @@ static void send_dac(OPND *d, void (*put)(void *u, long w), void *u)
 	if (d->dac_dirty && d->dac_on != d->dac_sent) {
 		put(u, OPNC_DAC);
 		put(u, d->dac_on);
-		put(u, ((long)(d->dac - 128) << 16) & 0xffffff);
+		put(u, ((long)(d->dq.val - 128) << 16) & 0xffffff);
 		d->dac_sent = d->dac_on;
 	}
 	d->dac_dirty = 0;
@@ -358,37 +360,45 @@ void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u)
 int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v, long n,
 	      void (*put)(void *u, long w), void *u)
 {
-	long k, nb = n < (long)sizeof(d->dbuf) ? n : (long)sizeof(d->dbuf);
+	long k, nb = n < VGMDAC_MAX ? n : VGMDAC_MAX;
 	int live;
-	d->dac_wr = 0;
-	d->dfill = 0;
-	d->base = at(v);
+	d->dq.wr = 0;
+	d->dq.fill = 0;
+	d->dq.base = at(v);
 	d->at_fn = at;
 	d->at_v = v;
 	live = run(v, n);
 	d->at_fn = 0;
-	while (d->dfill < nb)
-		d->dbuf[d->dfill++] = (unsigned char)d->dac;
+	while (d->dq.fill < nb)
+		d->dq.buf[d->dq.fill++] = (unsigned char)d->dq.val;
 	opnd_send(d, put, u);
 	/* the DAC at the output's rate: each output sample's place in the
-	   tick's (dpos, Q16), between its two bytes (linear) */
+	   tick's (dpos, Q16), between its two bytes (linear). Their number
+	   first (a division), so that a tick with no DAC only steps on */
 	{
-		long out[64];
-		int no = 0;
-		while (d->dpos < (nb << 16)) {
-			long i = d->dpos >> 16, f = (d->dpos >> 8) & 255;
-			int b0 = d->dbuf[i], b1 = i + 1 < nb ? d->dbuf[i + 1] : b0;
-			if (no < 64)
-				out[no++] = ((long)((b0 - 128) * (256 - f) + (b1 - 128) * f) << 8) & 0xffffff;
-			d->dpos += d->dstep;
+		long lim = nb << 16, cnt = 0, pos = d->dpos;
+		if (pos < lim)
+			cnt = (lim - pos + d->dstep - 1) / d->dstep;
+		if (d->dq.wr && d->dac_on && cnt) {
+			long out[66];
+			int no = cnt < 64 ? (int)cnt : 64;
+			out[0] = OPNC_DACS;
+			out[1] = no;
+			for (k = 0; k < no; k++) {
+				int i = (int)(pos >> 16);
+				short f = (short)((pos >> 8) & 255);
+				short b0 = d->dq.buf[i], b1 = i + 1 < nb ? d->dq.buf[i + 1] : b0;
+				/* (b0 (256 - f) + b1 f, less 128 x 256: one 16-bit multiply) */
+				out[2 + k] = ((((long)b0 - 128) << 8) + (long)(short)(b1 - b0) * f) << 8 & 0xffffff;
+				pos += d->dstep;
+			}
+			if (d->putn)
+				d->putn(u, out, no + 2);
+			else
+				for (k = 0; k < no + 2; k++)
+					put(u, out[k]);
 		}
-		d->dpos -= nb << 16;
-		if (d->dac_wr && d->dac_on && no) {
-			put(u, OPNC_DACS);
-			put(u, no);
-			for (k = 0; k < no; k++)
-				put(u, out[k]);
-		}
+		d->dpos += cnt * d->dstep - lim;
 	}
 	return live;
 }
@@ -396,8 +406,15 @@ int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v
 void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 {
 	int c, k;
+	unsigned long ops = d->op_dirty | d->key_dirty;
+	/* (most ticks change nothing but the DAC: the stock Falcon's 68030
+	   passes over the 30 channels' and operators' tests) */
+	if (!ops && !d->ch_dirty && !d->lfo_dirty && !d->dac_dirty)
+		return;
 	for (c = 0; c < 6; c++) {
 		OPND_CH *ch = &d->ch[c];
+		if (!((ops >> (c * 4)) & 15) && !(d->ch_dirty & (1u << c)))
+			continue;
 		if (d->ch_dirty & (1u << c)) {
 			put(u, OPNC_CH);
 			put(u, c);
@@ -441,6 +458,7 @@ void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 	}
 	send_dac(d, put, u);
 	d->op_dirty = 0;
+	d->key_dirty = 0;
 	d->ch_dirty = 0;
 	d->lfo_dirty = 0;
 }

@@ -100,6 +100,11 @@ CASES["vgmopn"] = ("OPN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 4410
 # a Mega Drive file whose sound is its SN76489 (period 112: 998.8 Hz), the
 # YM2612 silent: the PSG in opn.a56, not sn.a56
 CASES["vgmmd"] = ("MD.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (999, 999), 3)
+# a real file, never in the repo (a game's music: EPLAY_RIG_VGM names it, a
+# VGM or VGZ kept outside), played for EPLAY_RIG_SECS (20) and quit: does
+# its place keep up with the clock, and the DSP's ring (EPlay 1.18 on Erez's
+# Falcon: 6.4 s of music in 15, the ring dry)
+CASES["vgmreal"] = ("REAL.VGZ", None, None, 0, (0, 0), 0)
 SQUARE = {"vgm", "vgz", "vgmsn", "vgmmd"}
 		# (a square wave: 81 % of its power in the tone)
 # the cases' sounds, where not sine tones
@@ -126,7 +131,7 @@ CASES["many"] = ("A.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (
 # at a time; ten folders of 100) and a tree of 1,000 (the same ten folders, given whole)
 CASES["manym3u"] = CASES["many"]
 CASES["manytree"] = CASES["many"]
-NOT_DEFAULT = {"many", "manym3u", "manytree", "miniwav"}
+NOT_DEFAULT = {"many", "manym3u", "manytree", "miniwav", "vgmreal"}
 # phase 4 (Erez, 4 Nov 2026), each a second's files from A.WAV: (the files
 # made, relative to C:\ and lame's arguments or None; what EPlay is given;
 # the files played, in turn; whether it ends then). A playlist with a file
@@ -276,6 +281,9 @@ def make_vgm(path, secs, gz, sn=False, opn=False, md=False):
 
 def make_file(hd, case):
     f, fmt, lame, _, _, secs = CASES[case]
+    if case == "vgmreal":
+        shutil.copy(os.environ["EPLAY_RIG_VGM"], os.path.join(hd, f))
+        return f
     if f.endswith((".VGM", ".VGZ")):
         make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn", case == "vgmmd")
         return f
@@ -553,6 +561,8 @@ def run(work, case, spec):
     fifo, shots = os.path.join(w, "cmd.fifo"), os.path.join(w, "shots")
     os.makedirs(shots)
     log = os.path.join(w, "hatari.log")
+    if os.environ.get("EPLAY_RIG_PARSE"):      # (debugger commands at the start: a profile)
+        args = args + ["--parse", os.environ["EPLAY_RIG_PARSE"]]
     args = ["hatari"] + args + ["--sound", str(REC_RATE), "--fast-boot", "yes", "--natfeats", "yes",
                                 "--cmd-fifo", fifo, "--screenshot-dir", shots, "--log-level", "warn",
                                 "--statusbar", "no", "--auto", "C:\\LAUNCH.PRG"]
@@ -575,6 +585,16 @@ def run(work, case, spec):
             left, right = v[0], 640 - (v[0] + v[2])
             if not (v[1] < 80 and v[1] + v[3] > 420 and abs(left - right) <= 24):
                 return False, m.describe(), "a first start: the work area at %s (wanted the desk's height, centred)" % wl
+        if case == "vgmreal":
+            secs = float(os.environ.get("EPLAY_RIG_SECS", "20"))
+            time.sleep(secs)
+            cmd(fifo, "hatari-event", "keydown", "0x1d")
+            cmd(fifo, "hatari-event", "keypress", "0x10")
+            cmd(fifo, "hatari-event", "keyup", "0x1d")
+            wait_line(log, lambda l: l.startswith("LOG quit: out of the AES"), 30)
+            got = [l.strip()[4:] for l in open(log, errors="replace")
+                   if l.startswith("LOG ") and ("stopped at" in l or "least lead" in l or "VGM" in l)]
+            return True, m.describe(), "after %.0f s of the host's clock: %s" % (secs, " | ".join(got))
         if case == "quit":
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x10")

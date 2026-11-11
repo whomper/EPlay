@@ -281,6 +281,33 @@ static int commands(VGMRUN *r)
 			return 0;
 		}
 		c = b[p];
+		/* (first the commands a Mega Drive's drums are made of, some 44 a
+		   tick: the DAC's next sample and its wait, then a short wait) */
+		if ((c & 0xf0) == 0x80) {
+			r->pos = p + 1;
+			if (r->pcm_pos >= 0 && r->pcm_pos < r->pcm_len) {
+				int v = b[r->pcm_at + r->pcm_pos++];
+				VGMDAC *q = r->dac;
+				if (q) {
+					long e = r->at - q->base;
+					if (e > VGMDAC_MAX)
+						e = VGMDAC_MAX;
+					while (q->fill < e)
+						q->buf[q->fill++] = (unsigned char)q->val;
+					q->val = v;
+					q->wr = 1;
+					r->opn[0][0x2a] = (unsigned char)v;
+				} else
+					opn_write(r, 0, 0x2a, v);
+			}
+			r->wait += c & 15;
+			continue;
+		}
+		if ((c & 0xf0) == 0x70) {
+			r->pos = p + 1;
+			r->wait += (c & 15) + 1;
+			continue;
+		}
 		if (c == 0x66) {	/* the end: the loop once more, else done */
 			if (r->h.loop_at && !r->looped) {
 				r->looped = 1;
@@ -320,14 +347,6 @@ static int commands(VGMRUN *r)
 			r->wait += 735;
 		else if (c == 0x63)
 			r->wait += 882;
-		else if (c >= 0x70 && c <= 0x7f)
-			r->wait += (c & 15) + 1;
-		else if (c >= 0x80 && c <= 0x8f) {
-			/* the DAC: the data block's next sample, then the wait */
-			if (r->pcm_pos >= 0 && r->pcm_pos < r->pcm_len)
-				opn_write(r, 0, 0x2a, b[r->pcm_at + r->pcm_pos++]);
-			r->wait += c & 15;
-		}
 	}
 	return 1;
 }
@@ -357,6 +376,55 @@ int vgm_run(VGMRUN *r, long samples)
 		return 0;
 	while (samples > 0) {
 		long step;
+		if (r->dac && r->wait <= 0 && (r->end <= 0 || r->at + samples < r->end)) {
+			/* the drums' commands (the DAC's next sample and its wait;
+			   a short wait) run here with no call, in registers: a stock
+			   Falcon's 68030 has some 44 of them a tick */
+			const unsigned char *b = r->b, *pcm = b + r->pcm_at;
+			VGMDAC *q = r->dac;
+			long p = r->pos, n = r->n, at = r->at, wait = 0, lim = at + samples;
+			long pp = r->pcm_pos, plen = r->pcm_len, base = q->base;
+			int fill = q->fill, val = q->val, wrote = 0;
+			while (p < n) {
+				unsigned c = b[p];
+				if ((c & 0xf0) == 0x80) {
+					if (pp >= 0 && pp < plen) {
+						long e = at - base;
+						if (e > VGMDAC_MAX)
+							e = VGMDAC_MAX;
+						while (fill < e)
+							q->buf[fill++] = (unsigned char)val;
+						val = pcm[pp++];
+						wrote = 1;
+					}
+					wait = c & 15;
+				} else if ((c & 0xf0) == 0x70)
+					wait = (c & 15) + 1;
+				else
+					break;
+				p++;
+				if (wait >= lim - at) {
+					wait -= lim - at;
+					at = lim;
+					break;
+				}
+				at += wait;
+				wait = 0;
+			}
+			r->pos = p;
+			r->at = at;
+			r->wait = wait;
+			r->pcm_pos = pp;
+			q->fill = fill;
+			q->val = val;
+			if (wrote) {
+				q->wr = 1;
+				r->opn[0][0x2a] = (unsigned char)val;
+			}
+			samples = lim - at;
+			if (samples <= 0)
+				break;
+		}
 		if (!commands(r))
 			return 0;
 		step = r->wait < samples ? r->wait : samples;

@@ -220,6 +220,12 @@ def session(work, spec, kind):
             return add_session(r, src)
         elif kind == "mini":
             return mini_session(r, src)
+        elif kind == "vgm":
+            # a Mega Drive file (the YM2612 on the DSP, its drums from the
+            # 68030's tick): EPLAY_SPEED_VGM names one kept outside the repo
+            # (a game's music is never committed)
+            name, what = "REAL.VGZ", "a Mega Drive VGM (YM2612)"
+            shutil.copy(os.environ["EPLAY_SPEED_VGM"], os.path.join(r.hd, name))
         else:
             name, what = "LONG.WAV", "a WAV (CD quality)"
             subprocess.run(["sox", src, os.path.join(r.hd, name)], check=True)
@@ -291,7 +297,9 @@ def session(work, spec, kind):
             rc = 1
         went = [l for l in r.console().split("\n") if l.startswith("EPLAY went to ")]
         ms = int(went[-1].split()[3]) if went else -1
-        if abs(ms - SECS * 500) > SECS * 50:
+        if kind == "vgm":
+            print("ok    the position bar's middle went to %d ms (a VGM's own length)" % ms)
+        elif abs(ms - SECS * 500) > SECS * 50:
             print("FAIL  the position bar's middle went to %d ms, not about %d" % (ms, SECS * 500))
             rc = 1
         else:
@@ -486,7 +494,7 @@ def mini_session(r, src):
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
-    kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini", "add"]
+    kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini", "add"]	# (and vgm, asked for)
     return max(session(work, spec, k) for k in kinds)
 
 

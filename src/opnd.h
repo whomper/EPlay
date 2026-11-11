@@ -14,6 +14,8 @@
 #ifndef EPLAY_OPND_H
 #define EPLAY_OPND_H
 
+#include "vgm.h"
+
 #define OPN_UPD 32		/* samples between the envelopes' updates */
 #define OPN_Q 4096L		/* the attenuation's fraction: 1 step (0.094 dB) */
 
@@ -40,7 +42,7 @@ enum { OPND_KEYON = 1, OPND_KEYOFF = 2 };
 typedef struct {
 	OPND_CH ch[6];
 	unsigned char latch[2], latch3;
-	int ch3_mode, dac_on, dac, lfo_on, lfo_rate;
+	int ch3_mode, dac_on, lfo_on, lfo_rate;
 	long rate;
 	unsigned long clock;
 	long r_mean[64], r_arf[64];	/* each rate's increment an update (x OPN_Q), attack factor (Q23) */
@@ -48,18 +50,19 @@ typedef struct {
 	unsigned long op_dirty;
 	unsigned ch_dirty;
 	unsigned char key_event[24];	/* OPND_KEYON / OPND_KEYOFF since */
+	unsigned long key_dirty;	/* (the operators with one: 24 bits) */
 	int lfo_dirty, dac_dirty;
 	int dac_sent;		/* the DAC's on, as last sent */
-	int dac_wr;		/* written since the tick began */
 	long outg;		/* a channel's gain in the mix (OPN_OUTG: the volume's 0 dB) */
-	/* (opnd_tick's) the file's place now, the tick's first, the DAC's
-	   byte at each of its samples so far */
+	/* (opnd_tick's) the file's place now; the DAC over the tick (its
+	   byte now: dq.val) */
 	long (*at_fn)(void *v);
 	void *at_v;
-	long base;
-	unsigned char dbuf[96];
-	int dfill;
-	long dpos, dstep;	/* the DAC's next output sample in the tick's (Q16), the file's a sample */
+	VGMDAC dq;
+	long dpos, dstep;
+	/* (where set) words sent together, for the DAC's: the host port's
+	   flag waited on in a loop, not a call each */
+	void (*putn)(void *u, const long *w, int n);	/* the DAC's next output sample in the tick's (Q16), the file's a sample */
 } OPND;
 
 /* a channel's level in the mix (Q23: the chip's 14 bits through its 9-bit

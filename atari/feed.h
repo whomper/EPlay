@@ -14,7 +14,14 @@
    tick costs the stock Falcon's 68030 tens of microseconds, so the
    slower where it is enough */
 void feed_on(void (*tick)(void), int hz);
+
 void feed_off(void);			/* given back as they were */
 void feed_term(void);			/* (the same, from supervisor mode: term.c) */
+/* since feed_on: the ticks that came, and those left out because the one
+   before still ran (the tick too slow for its rate) */
+extern volatile long feed_ticks, feed_missed;
+/* (in the tick) its start marked; the microseconds since */
+void feed_t0(void);
+long feed_us(void);
 
 #endif

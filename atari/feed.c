@@ -72,6 +72,25 @@ static long give_back(void)
 	return 0;
 }
 
+/* the time since feed_t0 (in the tick), from Timer A's count down and the
+   ticks that came meanwhile (each left out: feed_missed), in microseconds */
+static unsigned char t0;
+static long m0;
+
+void feed_t0(void)
+{
+	t0 = TADR;
+	m0 = feed_missed;
+}
+
+long feed_us(void)
+{
+	unsigned char t = TADR;
+	/* (at level 6 the next tick waits, pending, instead of being left out) */
+	long n = (feed_missed - m0 + ((IPRA & TA_BIT) != 0)) * dr + t0 - t;
+	return n * (cr == 3 ? 625 : 2500) / 96;	/* (16 or 64 of 2,457,600 Hz) */
+}
+
 /* the tick taken away from supervisor mode (term.c: EPlay ending however
    it ends, killed too) */
 void feed_term(void)
@@ -91,6 +110,7 @@ void feed_on(void (*tick)(void), int hz)
 	dr = hz > 250 && hz <= 500 ? 77 : 154;
 	feed_fn = tick;
 	feed_busy = 0;
+	feed_ticks = feed_missed = 0;
 	Supexec(take);
 	on = 1;
 }
@@ -101,4 +121,5 @@ void feed_off(void)
 		Supexec(give_back);
 		on = 0;
 	}
+
 }
