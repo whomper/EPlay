@@ -1941,6 +1941,15 @@ stock Falcon with the file:
     (`seek_run`): every place checked the same as before.
   - The title and the artist scroll a character every 250 ms when wider than their place, 2 s at
     each end (`bar_scroll_step`, `BP_TITLE`: the two lines alone).
+- **1.24 (Erez, 11 Nov 2026, with 1.22: a YM2612 file played nothing, then "can't play: the DSP
+  didn't answer", then played; once it stopped while playing).** `dspopn.c`'s `put` raised HF0
+  at a burst's first word, and the bootstrap's 512 words went through `put` from 1.19: the
+  56001's boot ROM ends the load when the host sets HF0, so the DSP ran a part of `opn.a56`
+  (the log's "stopped taking the 68030's words after 154" was within the 512), or met a missing
+  part later. Hatari stops its bootstrap on HF0 too, but its reset keeps the DSP's program
+  memory, which hid it. The bootstrap now goes with HF0 down; `dspopn_close` puts HF0 down for
+  the next program's bootstrap. Also: Find station's double click (its own test of
+  `dlg_do`'s 0x8000 on a `short` threw every double away).
 - **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
   the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST

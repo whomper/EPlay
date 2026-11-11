@@ -111,6 +111,15 @@ static void load(int cmd, unsigned addr, const unsigned long *w, long n)
 static long boot(void)
 {
 	int i;
+	/* HF0 down through the load: the 56001's boot ROM ends the 512 words
+	   early when the host sets HF0, and runs what it has. put raised it at
+	   the first word (a burst's mark), so on a real DSP the load stopped
+	   at a word that depended on timing: the DSP stuck at once ("stopped
+	   taking the 68030's words after 154"), or a part of the program
+	   missing, met later while playing (Erez's Falcon, 1.19-1.23; Hatari's
+	   boot loads all 512 whatever HF0 is) */
+	HICR &= ~8;
+	burst = 1;		/* (so put doesn't raise it) */
 	for (i = 0; i < 512; i++)
 		put(0, (long)dsp_opn_prog[i]);
 	/* its outer part, its tables, then all silent (RESET: the sine's
@@ -121,6 +130,7 @@ static long boot(void)
 	load(1, OPN_X_PMW, opn_pmw, 128);
 	load(4, OPN_Y_SIN, opn_sin, 1024);
 	put(0, OPNC_RESET);
+	burst = 0;
 	return 0;
 }
 
@@ -292,6 +302,13 @@ static long status(void)
 	return 0;
 }
 
+static long hf0_down(void)
+{
+	HICR &= ~8;
+	burst = 0;
+	return 0;
+}
+
 void dspopn_close(void)
 {
 	if (on && !failed) {
@@ -309,8 +326,10 @@ void dspopn_close(void)
 		     last_w[0], last_w[1], last_w[2], last_w[3], last_w[4], last_w[5], last_w[6], last_w[7]);
 	}
 	if (on) {
-		/* (HF0 is down: the tick puts it back after each burst, and it is
-		   off by now; the host port isn't reachable here, in user mode) */
+		/* HF0 down (supervisor mode: the host port): left up by a stop in
+		   a burst or a DSP that stopped, the next program's bootstrap (an
+		   MP3's, the SN76489's, this one's) would end early */
+		Supexec(hf0_down);
 		snd_dsp_off();
 		on = 0;
 	}
