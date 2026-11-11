@@ -414,6 +414,60 @@ static void drums(VGMRUN *r, long lim)
 		r->opn[0][0x2a] = (unsigned char)v;
 }
 
+/* the YM2149's writes and the waits, inline with no call to commands()
+   each, until another command or lim: a file of sampled sound on the
+   YM2149 is 20,000 writes a second and more (Erez, 11 Nov 2026: a 17 MB
+   one, the tick 72 % of a 32 MHz Falcon's 68030). A volume register goes
+   straight to the chip's function unless a fade or the attenuation is on;
+   every other register through ay_write */
+static void ay_burst(VGMRUN *r, long lim)
+{
+	const unsigned char *b = r->b;
+	long p = r->pos, n = r->avail ? r->avail : r->n, at = r->at, wait = 0;
+	VGM_AY fn = r->ay_fn;
+	void *u = r->u;
+	int plain = r->fade >= 16 && !r->att;
+	while (p < n) {
+		unsigned c = b[p];
+		if (c == 0xa0) {
+			unsigned reg;
+			if (p + 3 > n)
+				break;
+			reg = b[p + 1];
+			if (!(reg & 0x80)) {
+				reg &= 0x0f;
+				if (plain && reg >= 8 && reg <= 10) {
+					r->ay[reg] = b[p + 2];
+					fn(u, (int)reg, b[p + 2]);
+				} else
+					ay_write(r, (int)reg, b[p + 2]);
+			}
+			p += 3;
+			continue;
+		}
+		if ((c & 0xf0) == 0x70)
+			wait = (c & 15) + 1, p++;
+		else if (c == 0x61 && p + 3 <= n)
+			wait = (long)b[p + 1] | (long)b[p + 2] << 8, p += 3;
+		else if (c == 0x62)
+			wait = 735, p++;
+		else if (c == 0x63)
+			wait = 882, p++;
+		else
+			break;
+		if (wait >= lim - at) {
+			wait -= lim - at;
+			at = lim;
+			break;
+		}
+		at += wait;
+		wait = 0;
+	}
+	r->pos = p;
+	r->at = at;
+	r->wait = wait;
+}
+
 /* (a seek's) the commands a seek meets most, inline with no call each: the
    YM2149's writes and the waits (a 13-minute YM2149 file is millions of
    them: a seek into it took minutes, Erez, 11 Nov 2026), the YM2612's and
@@ -472,6 +526,13 @@ int vgm_run(VGMRUN *r, long samples)
 		if (r->dac && r->wait <= 0 && (r->end <= 0 || r->at + samples < r->end)) {
 			long lim = r->at + samples;
 			drums(r, lim);
+			samples = lim - r->at;
+			if (samples <= 0)
+				break;
+		}
+		if (!r->dac && r->ay_fn && r->wait <= 0 && (r->end <= 0 || r->at + samples < r->end)) {
+			long lim = r->at + samples;
+			ay_burst(r, lim);
 			samples = lim - r->at;
 			if (samples <= 0)
 				break;

@@ -2036,5 +2036,15 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
   cookie, as `div64_cpu60`). Never on a 68030 or slower (Erez, 3 Nov 2026). Measured first on
   Hatari's 68060; the Raven's DSP56303 is not the 56001 (another host port and sound wiring), so
   it is not used.
+- **Measured (11 Nov 2026, `tests/hatari/mp3cpu.py`):** the C model of the DSP's decoder, built
+  for the 68060, takes 15 times real time on Hatari's 68060 at 32 MHz (a 128 kbit/s 44.1 kHz
+  stereo file; its 68030 at 32 MHz: 50 times). Scaled by the clock, a real 68060 at 66 MHz
+  would still need some 7 times real time, at 100 MHz 5 (Hatari's 68060 isn't cycle-exact: a
+  guide). The model works in the DSP's 56-bit accumulators, 64-bit products the 68060 makes
+  from 16-bit pieces (it has no 64-bit `mulu.l`: libgcc's own stops it, exception 61). So the
+  overlays can't be the model: `MP3FPU.OVL` a decoder in the FPU's floating point (as minimp3's
+  float path), `MP3INT.OVL` one in 32-bit fixed point (products of 16 by 16 bits, or 32-bit
+  `muls.l` kept to 32), each held to minimp3 by the existing tests' limits rather than to the
+  DSP bit for bit; then measured again before anything else is built.
 - **With the FireBee's release:** the same decoder in the ColdFire edition, its synthesis filter
   and IMDCT on the EMAC later.
