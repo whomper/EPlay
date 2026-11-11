@@ -49,7 +49,7 @@ typedef struct {
 	/* the DAC's queue (DACS), played at DACRATE */
 	long dq[1024];
 	int dwp, drp, dcnt;
-	long drf, dsi, dsf;
+	long drf, dsi, dsf, dword;	/* (DACE) the place's step and the place (Q16), the byte now */
 	/* the Mega Drive's SN76489 (sn.a56's, in opn.a56): on once written */
 	int sn_on;
 	long sph[4], sinc[4], samp[4], ssg[3], slfsr, staps, stopb, snwh;

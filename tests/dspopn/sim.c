@@ -179,6 +179,8 @@ static int play(const char *path)
 	opnd_init(&chip, h.ym2612_clock, RATE);
 	vgm_begin(&r, b, n, &h, 0, 0, 0);
 	r.opn_fn = opn;
+	if (!getenv("OPNNODAC"))
+		r.dac = &chip.dq;	/* (the drums as the player runs them: vgm_run's) */
 	opnd_send_drate(&chip, both, NULL);
 	opnd_send(&chip, both, NULL);
 	if (h.sn_clock) {

@@ -289,13 +289,7 @@ static int commands(VGMRUN *r)
 				int v = b[r->pcm_at + r->pcm_pos++];
 				VGMDAC *q = r->dac;
 				if (q) {
-					long e = r->at - q->base;
-					if (e > VGMDAC_MAX)
-						e = VGMDAC_MAX;
-					while (q->fill < e)
-						q->buf[q->fill++] = (unsigned char)q->val;
-					q->val = v;
-					q->wr = 1;
+					vgmdac_put(q, r->at - q->base, v);
 					r->opn[0][0x2a] = (unsigned char)v;
 				} else
 					opn_write(r, 0, 0x2a, v);
@@ -384,17 +378,12 @@ int vgm_run(VGMRUN *r, long samples)
 			VGMDAC *q = r->dac;
 			long p = r->pos, n = r->n, at = r->at, wait = 0, lim = at + samples;
 			long pp = r->pcm_pos, plen = r->pcm_len, base = q->base;
-			int fill = q->fill, val = q->val, wrote = 0;
+			int wrote = 0;
 			while (p < n) {
 				unsigned c = b[p];
 				if ((c & 0xf0) == 0x80) {
 					if (pp >= 0 && pp < plen) {
-						long e = at - base;
-						if (e > VGMDAC_MAX)
-							e = VGMDAC_MAX;
-						while (fill < e)
-							q->buf[fill++] = (unsigned char)val;
-						val = pcm[pp++];
+						vgmdac_put(q, at - base, pcm[pp++]);
 						wrote = 1;
 					}
 					wait = c & 15;
@@ -415,12 +404,8 @@ int vgm_run(VGMRUN *r, long samples)
 			r->at = at;
 			r->wait = wait;
 			r->pcm_pos = pp;
-			q->fill = fill;
-			q->val = val;
-			if (wrote) {
-				q->wr = 1;
-				r->opn[0][0x2a] = (unsigned char)val;
-			}
+			if (wrote)
+				r->opn[0][0x2a] = (unsigned char)q->val;
 			samples = lim - at;
 			if (samples <= 0)
 				break;

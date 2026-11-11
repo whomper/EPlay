@@ -17,8 +17,14 @@
 #include "snd.h"
 #include "elog.h"
 
-/* the file's samples a tick, Q16: 44,100 / (2,457,600 / 16 / 154) */
+/* the file's samples a tick, Q16: 44,100 / (2,457,600 / 16 / 154); the
+   YM2612's tick 500 times a second, 44,100 / (2,457,600 / 64 / 77): its
+   fixed part halved on a stock Falcon's 68030, whose cache doesn't hold
+   it (the DSP's ring holds 31 ms) */
 #define STEP 2897647UL
+#define STEP500 5795328UL
+static unsigned long step;
+static long period_us;		/* the tick's period */
 
 static unsigned char *mem;
 static long mem_n;
@@ -123,7 +129,7 @@ static void tick(void)
 	   own level-6 handlers break into it, up to 60 ms) left out the ones
 	   that came meanwhile, and their samples are made up here, a tick's at
 	   a time, eight at most, and only while this one has taken less than
-	   600 us: where the 68030 itself is short of time, the music slows
+	   60 % of its period: where the 68030 itself is short of time, the music slows
 	   rather than GEM stopping (EPlay 1.18 lost them all: Mega Drive drums
 	   at 40 % of their speed, Erez, 11 Nov 2026) */
 	due = feed_ticks - seen;
@@ -133,11 +139,11 @@ static void tick(void)
 		due = 8;
 	}
 	for (k = 0; k < due; k++) {
-		if (k && feed_us() >= 600) {
+		if (k && feed_us() >= period_us * 6 / 10) {
 			t_lost += due - k;
 			break;
 		}
-		acc += STEP;
+		acc += step;
 		n = (long)(acc >> 16);
 		acc &= 0xffff;
 		if (!(use_opn ? dspopn_tick(runn, at, &run, n) : vgm_run(&run, n))) {
@@ -152,7 +158,7 @@ static void tick(void)
 		t_n++;
 		if (t > t_max)
 			t_max = t;
-		if (t >= 1000)
+		if (t >= period_us)
 			t_over++;
 	}
 }
@@ -295,7 +301,9 @@ void vp_start(void)
 	playing = 1;
 	t_all = t_max = t_n = t_over = t_lost = 0;
 	seen = 0;		/* (feed_on counts from 0) */
-	feed_on(tick, 1000);
+	step = use_opn ? STEP500 : STEP;
+	period_us = use_opn ? 2005 : 1003;
+	feed_on(tick, use_opn ? 500 : 1000);
 }
 
 void vp_stop(void)
@@ -303,8 +311,8 @@ void vp_stop(void)
 	if (playing) {
 		feed_off();
 		elog("VGM: the tick %ld times, %ld of them left out (the one before still ran), %ld of those not made up "
-		     "(the music slowed); %ld past its 1 ms; %ld us on average, the longest %ld us",
-		     feed_ticks, feed_missed, t_lost, t_over, t_n ? t_all / t_n : 0, t_max);
+		     "(the music slowed); %ld past its period (%ld us); %ld us on average, the longest %ld us",
+		     feed_ticks, feed_missed, t_lost, t_over, period_us, t_n ? t_all / t_n : 0, t_max);
 		if (use_ay)
 			ym_end();
 		playing = 0;

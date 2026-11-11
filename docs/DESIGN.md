@@ -1899,8 +1899,21 @@ stock Falcon with the file:
   (the speed rig's `vgm` kind, a file given in `EPLAY_SPEED_VGM`). Erez's 50 MHz DFB1 with TT
   RAM has three to four times the room. Drum-heavy Mega Drive music on a stock Falcon needs
   another design: Erez's decision (to put to him).
-- `EPLAY.LOG` gives each play's tick: how many came, were left out, not made up, past 1 ms,
-  its mean and longest time.
+- `EPLAY.LOG` gives each play's tick: how many came, were left out, not made up, past its
+  period, its mean and longest time.
+- **The drums on the DSP (1.21; Erez, 11 Nov 2026: "Move the drums to the DSP").** The 68030
+  sends the tick's DAC writes as events, each its place in the tick and its byte (`OPNC_DACE`,
+  some 9 a millisecond in "Spinning Machine"); `opn.a56` reads them into a table, counts the
+  tick's output samples (a 24-step division) and makes each from the last byte at or before its
+  place (the chip's DAC holds its byte: no longer linear between them), in a hardware loop. The
+  68030 no longer fills a byte per file sample nor resamples. The DSP's busiest 31 ms in the
+  file: 1,083 cycles a sample (1.20: 1,058), its mean 880 (856): some 90 % of a real DSP at
+  the peak. The operators' steps in 32-bit multiplies (`stepk`, Q16; within 1e-5 of the
+  64-bit form). The YM2612's tick 500 times a second, its fixed part halved.
+- **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
+  the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
+  kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST
+  RAM through a 256-byte cache.
 
 ## A FireBee edition (Erez, 10 Nov 2026)
 

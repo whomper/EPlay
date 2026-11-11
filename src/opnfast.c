@@ -65,8 +65,8 @@ void opnf_init(OPNF *f)
 static int cmd_len(const OPNF *f)
 {
 	long c = f->cw[0];
-	if (c == OPNC_DACS)
-		return f->cn < 2 ? 2 : 2 + (int)f->cw[1];
+	if (c == OPNC_DACE)
+		return f->cn < 3 ? 3 : 3 + (int)f->cw[2];
 	if (c >= OPNC_SN)
 		return 2;
 	switch (c) {
@@ -156,19 +156,36 @@ static void cmd(OPNF *f, const long *w)
 	case OPNC_DAC:
 		f->dac_on = (int)w[1];
 		f->dac = S24(w[2]);
+		f->dword = f->dac;
 		break;
 	case OPNC_DRATE:
 		f->dsi = w[1];
 		f->dsf = w[2];
 		break;
-	case OPNC_DACS: {
-		long n = w[1], k;
-		if (n <= 0)
-			break;
-		for (k = 0; k < n; k++) {
-			f->dq[f->dwp] = S24(w[2 + k]);
+	case OPNC_DACE: {
+		/* opn.a56's hc_dacs: each output sample's place in the tick
+		   takes the last event's byte at or before it */
+		long lim = w[1], ne = w[2], k = 0, n = 0, epos, ev = 0;
+		long pos = f->dsf;
+#define NEXT()	do { if (k < ne) { long e_ = w[3 + k++]; epos = e_ & 0xff0000; \
+			ev = S24((e_ << 8) & 0xff0000); } else epos = 0x7fffff; } while (0)
+		NEXT();
+		while (pos < lim) {
+			while (pos >= epos) {
+				f->dword = ev;
+				NEXT();
+			}
+			f->dq[f->dwp] = f->dword;
 			f->dwp = (f->dwp + 1) & 1023;
+			n++;
+			pos += f->dsi;
 		}
+		while (epos != 0x7fffff) {
+			f->dword = ev;
+			NEXT();
+		}
+#undef NEXT
+		f->dsf = pos - lim;
 		f->dcnt += (int)n;
 		if (f->dcnt > 1000) {
 			/* (too many: the oldest dropped) */

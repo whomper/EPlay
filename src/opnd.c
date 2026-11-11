@@ -162,9 +162,13 @@ static void ch_steps(OPND *d, int c)
 		inc = (long)fc * (op->mul ? op->mul * 2 : 1) >> 1;
 		inc &= 0xfffff;
 		/* (the chip's 20 bits a turn, 2^21 here: x 2, at the output's rate:
-		   clock / 144 / rate) */
-		op->step = (long)(((unsigned long long)inc * 2 * d->clock + 72ULL * (unsigned long)d->rate) /
-				  (144ULL * (unsigned long)d->rate)) & 0xffffff;
+		   clock / 144 / rate, as stepk (Q16): two 32-bit multiplies, its
+		   10-bit halves, not a 64-bit divide for each operator) */
+		{
+			unsigned long t = (unsigned long)(inc >> 10) * d->stepk;
+			op->step = (long)((t >> 6) + ((((t & 63) << 10) + (unsigned long)(inc & 1023) * d->stepk +
+						     32768) >> 16)) & 0xffffff;
+		}
 		if (op->ksr != kc >> (3 - op->ks)) {
 			op->ksr = kc >> (3 - op->ks);
 			op_rates(d, op);
@@ -182,6 +186,7 @@ void opnd_init(OPND *d, unsigned long clock, long rate)
 	d->outg = OPN_OUTG;
 	rate_tables(d);
 	d->dstep = (long)((44100ULL << 16) / (unsigned long)rate);
+	d->stepk = (unsigned long)(((2ULL * clock << 16) + 72ULL * (unsigned long)rate) / (144ULL * (unsigned long)rate));
 	for (c = 0; c < 6; c++) {
 		d->ch[c].pan = 3;
 		for (i = 0; i < 4; i++) {
@@ -238,16 +243,10 @@ void opnd_write(OPND *d, int port, int reg, int val)
 			}
 			break;
 		case 0x2a:
-			if (d->at_fn) {
-				/* (the samples of the tick before this one: the byte before) */
-				long k = d->at_fn(d->at_v) - d->dq.base;
-				if (k > VGMDAC_MAX)
-					k = VGMDAC_MAX;
-				while (d->dq.fill < k)
-					d->dq.buf[d->dq.fill++] = (unsigned char)d->dq.val;
-			}
-			d->dq.val = val;
-			d->dq.wr = 1;
+			if (d->at_fn)
+				vgmdac_put(&d->dq, d->at_fn(d->at_v) - d->dq.base, val);
+			else
+				d->dq.val = val;
 			break;
 		case 0x2b:
 			d->dac_on = val >> 7;
@@ -350,55 +349,37 @@ static void send_dac(OPND *d, void (*put)(void *u, long w), void *u)
 
 void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u)
 {
-	/* 44,100 / rate: whole, then the fraction's 23 bits */
-	unsigned long r = (unsigned long)d->rate;
+	/* 44,100 / rate (Q16), the place 0 */
 	put(u, OPNC_DRATE);
-	put(u, (long)(44100UL / r));
-	put(u, (long)((((unsigned long long)(44100UL % r) << 23) + r / 2) / r) & 0x7fffff);
+	put(u, d->dstep);
+	put(u, 0);
 }
 
 int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v, long n,
 	      void (*put)(void *u, long w), void *u)
 {
-	long k, nb = n < VGMDAC_MAX ? n : VGMDAC_MAX;
-	int live;
-	d->dq.wr = 0;
-	d->dq.fill = 0;
+	long nb = n < VGMDAC_MAX ? n : VGMDAC_MAX;
+	int live, k;
+	d->dq.ne = 0;
 	d->dq.base = at(v);
 	d->at_fn = at;
 	d->at_v = v;
 	live = run(v, n);
 	d->at_fn = 0;
-	while (d->dq.fill < nb)
-		d->dq.buf[d->dq.fill++] = (unsigned char)d->dq.val;
 	opnd_send(d, put, u);
-	/* the DAC at the output's rate: each output sample's place in the
-	   tick's (dpos, Q16), between its two bytes (linear). Their number
-	   first (a division), so that a tick with no DAC only steps on */
-	{
-		long lim = nb << 16, cnt = 0, pos = d->dpos;
-		if (pos < lim)
-			cnt = (lim - pos + d->dstep - 1) / d->dstep;
-		if (d->dq.wr && d->dac_on && cnt) {
-			long out[66];
-			int no = cnt < 64 ? (int)cnt : 64;
-			out[0] = OPNC_DACS;
-			out[1] = no;
-			for (k = 0; k < no; k++) {
-				int i = (int)(pos >> 16);
-				short f = (short)((pos >> 8) & 255);
-				short b0 = d->dq.buf[i], b1 = i + 1 < nb ? d->dq.buf[i + 1] : b0;
-				/* (b0 (256 - f) + b1 f, less 128 x 256: one 16-bit multiply) */
-				out[2 + k] = ((((long)b0 - 128) << 8) + (long)(short)(b1 - b0) * f) << 8 & 0xffffff;
-				pos += d->dstep;
-			}
-			if (d->putn)
-				d->putn(u, out, no + 2);
-			else
-				for (k = 0; k < no + 2; k++)
-					put(u, out[k]);
-		}
-		d->dpos += cnt * d->dstep - lim;
+	/* the DAC's writes (the drums): the DSP makes the samples from them */
+	if (d->dq.ne && d->dac_on) {
+		long out[3 + VGMDAC_MAX];
+		out[0] = OPNC_DACE;
+		out[1] = nb << 16;
+		out[2] = d->dq.ne;
+		for (k = 0; k < d->dq.ne; k++)
+			out[3 + k] = d->dq.ev[k];
+		if (d->putn)
+			d->putn(u, out, 3 + d->dq.ne);
+		else
+			for (k = 0; k < 3 + d->dq.ne; k++)
+				put(u, out[k]);
 	}
 	return live;
 }

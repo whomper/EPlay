@@ -56,19 +56,32 @@ typedef void (*VGM_SN)(void *u, int val);
    port 0 is its DAC's sample (the drums), from the file's data block */
 typedef void (*VGM_OPN)(void *u, int port, int reg, int val);
 
-/* the YM2612's DAC over a tick (opnd_tick's): its byte at each of the
-   tick's samples so far. A run given one (VGMRUN's dac) puts the data
-   block's samples (0x8n) straight into it, with no call: Mega Drive drums
-   are some 44 a tick, and their calls cost a stock Falcon the tick's whole
-   millisecond (EPlay 1.18 played them at 40 % of their speed) */
+/* the YM2612's DAC over a tick (opnd_tick's): its writes, each its place
+   in the tick << 16 | the byte with its top bit turned << 8 (opn.a56's
+   form), for the DSP to make the samples from (OPNC_DACE). A run given one (VGMRUN's dac) puts the data block's samples
+   (0x8n) straight into it, with no call: Mega Drive drums are thousands a
+   second, and the 68030 making their samples itself cost a stock Falcon
+   more than its time (EPlay 1.18 to 1.20) */
 #define VGMDAC_MAX 96
 typedef struct {
-	unsigned char buf[VGMDAC_MAX];
-	int fill;		/* the bytes so far */
-	long base;		/* the file's sample at buf[0] */
+	unsigned long ev[VGMDAC_MAX];
+	int ne;			/* the writes so far */
+	long base;		/* the file's sample at the tick's first */
 	int val;		/* the DAC's byte now */
-	int wr;			/* written since the tick began */
 } VGMDAC;
+
+/* a write at the tick's place e (a full tick's last place taking the last) */
+static inline void vgmdac_put(VGMDAC *q, long e, int v)
+{
+	if (e > VGMDAC_MAX - 1)
+		e = VGMDAC_MAX - 1;
+	unsigned long w = (unsigned long)e << 16 | (unsigned long)(v ^ 0x80) << 8;
+	if (q->ne < VGMDAC_MAX)
+		q->ev[q->ne++] = w;
+	else
+		q->ev[VGMDAC_MAX - 1] = w;
+	q->val = v;
+}
 
 typedef struct {
 	const unsigned char *b;

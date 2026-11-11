@@ -59,7 +59,8 @@ typedef struct {
 	long (*at_fn)(void *v);
 	void *at_v;
 	VGMDAC dq;
-	long dpos, dstep;
+	long dstep;		/* the file's samples an output sample (Q16): DRATE's */
+	unsigned long stepk;	/* 2 x clock / 144 / rate (Q16): the operators' steps' factor */
 	/* (where set) words sent together, for the DAC's: the host port's
 	   flag waited on in a loop, not a call each */
 	void (*putn)(void *u, const long *w, int n);	/* the DAC's next output sample in the tick's (Q16), the file's a sample */
@@ -77,10 +78,11 @@ typedef struct {
 	OPNC_KEY operator i, OPND_KEYON or OPND_KEYOFF
 	OPNC_LFO its step an update (2^24: 128 steps), its phase reset (1)
 	OPNC_DAC on (1), its sample (Q23): sent as it turns on or off
-	OPNC_DRATE the file's DAC samples an output sample: whole, Q23
-	OPNC_DACS n, then n DAC samples at the output's rate (Q23: the
-		file's bytes, linear between them), a tick's, into the DSP's
-		queue, one played each sample
+	OPNC_DRATE the file's samples an output sample (Q16), the place (0)
+	OPNC_DACE nb, ne, then ne events: the tick's DAC (the drums), nb the
+		file's samples in it (<< 16), each event its place (0-95) << 16 | the
+		byte written there, its top bit turned, << 8; the DSP makes the samples at the output's
+		rate (each the last byte at or before its place) into its queue
 	OPNC_SN + c, v: the Mega Drive's SN76489, sn.a56's command c (0-11):
 		src/sncmd.c's words with base OPNC_SN
 	OPNC_STATUS: one word back, the ring's least lead since PLAY (words)
@@ -94,7 +96,7 @@ typedef struct {
 #define OPN_Y_SIN 0x2000
 
 enum { OPNC_OP = 2, OPNC_CH = 3, OPNC_KEY = 5, OPNC_LFO = 7, OPNC_DAC = 8, OPNC_RUN = 9, OPNC_PLAY = 10,
-       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACS = 14, OPNC_STATUS = 15, OPNC_SN = 20 };
+       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACE = 14, OPNC_STATUS = 15, OPNC_SN = 20 };
 
 void opnd_init(OPND *d, unsigned long clock, long rate);
 void opnd_write(OPND *d, int port, int reg, int val);
