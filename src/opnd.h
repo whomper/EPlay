@@ -48,6 +48,7 @@ typedef struct {
 	long r_mean[64], r_arf[64];	/* each rate's increment an update (x OPN_Q), attack factor (Q23) */
 	/* what changed since the last opnd_send: an operator's (24 bits), a channel's (6) */
 	unsigned long op_dirty;
+	unsigned long step_dirty;	/* (the operators whose step alone changed: STEP) */
 	unsigned ch_dirty;
 	unsigned char key_event[24];	/* OPND_KEYON / OPND_KEYOFF since */
 	unsigned long key_dirty;	/* (the operators with one: 24 bits) */
@@ -75,6 +76,8 @@ typedef struct {
 	OPNC_CH	channel c: algorithm, feedback's factor (2^(FB + 14), 0),
 		left's and right's gains, tremolo's factor (2^(22 - shift)),
 		vibrato's depth (Q23 of 500)
+	OPNC_STEP operator i, its step alone (a frequency written, its rates
+		the same)
 	OPNC_KEY operator i, OPND_KEYON or OPND_KEYOFF
 	OPNC_LFO its step an update (2^24: 128 steps), its phase reset (1)
 	OPNC_DAC on (1), its sample (Q23): sent as it turns on or off
@@ -96,7 +99,7 @@ typedef struct {
 #define OPN_Y_SIN 0x2000
 
 enum { OPNC_OP = 2, OPNC_CH = 3, OPNC_KEY = 5, OPNC_LFO = 7, OPNC_DAC = 8, OPNC_RUN = 9, OPNC_PLAY = 10,
-       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACE = 14, OPNC_STATUS = 15, OPNC_SN = 20 };
+       OPNC_RESET = 12, OPNC_DRATE = 13, OPNC_DACE = 14, OPNC_STATUS = 15, OPNC_STEP = 16, OPNC_SN = 20 };
 
 void opnd_init(OPND *d, unsigned long clock, long rate);
 void opnd_write(OPND *d, int port, int reg, int val);

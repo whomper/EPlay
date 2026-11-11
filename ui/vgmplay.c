@@ -50,6 +50,20 @@ typedef struct {
 	int fh;
 } FH;
 
+/* the run as it was at places in the file, a copy each snap_every samples
+   (the tick's), for a seek or Play after Pause to start from: running the
+   file from its start to there took a stock Falcon seconds of GEM's time */
+#define NSNAP 64
+static VGMRUN *snap;
+static unsigned char snap_ok[NSNAP];
+static long snap_every;
+
+/* the last file unpacked, kept after it stops (vp_open, vp_forget) */
+static void *kept;
+static long kept_n, kept_size = -1;
+static char kept_name[64];
+static unsigned char kept_head[64];
+
 static long rd(void *u, long at, unsigned char *buf, long n)
 {
 	FH *f = u;
@@ -152,6 +166,14 @@ static void tick(void)
 			break;
 		}
 	}
+	if (snap && !ended) {
+		/* (a copy of the run, the first in each part of the file) */
+		long s = run.at / snap_every;
+		if (s < NSNAP && !snap_ok[s]) {
+			snap[s] = run;
+			snap_ok[s] = 1;
+		}
+	}
 	{
 		long t = feed_us();
 		t_all += t;
@@ -182,7 +204,32 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	long len;
 	vp_stop();
 	f.fh = fh;
-	mem = vgm_load(rd, &f, size, &mem_n, take, give, &why);
+	/* the file unpacked before, kept, when it is the same (Play after
+	   Pause, a seek: a stock Falcon's 68030 takes seconds to unpack a VGZ
+	   again) */
+	{
+		unsigned char head[sizeof(kept_head)];
+		long got = rd(&f, 0, head, (long)sizeof(head));
+		if (kept && size == kept_size && got == (long)sizeof(head) && !strcmp(name, kept_name) &&
+		    !memcmp(head, kept_head, sizeof(head))) {
+			mem = kept;
+			mem_n = kept_n;
+			kept = 0;
+			elog("VGM: unpacked as before (kept)");
+		} else {
+			vp_forget();
+			memset(snap_ok, 0, sizeof(snap_ok));
+			mem = vgm_load(rd, &f, size, &mem_n, take, give, &why);
+			if (mem) {
+				kept_size = size;
+				snprintf(kept_name, sizeof(kept_name), "%s", name);
+				if (got == (long)sizeof(head))
+					memcpy(kept_head, head, sizeof(head));
+				else
+					kept_size = -1;
+			}
+		}
+	}
 	if (!mem) {
 		elog("VGM: %s %s (%ld bytes, %ld unpacked; the largest free block %ld)", name, why, size, vgm_need,
 		     (long)Mxalloc(-1L, 3));
@@ -237,6 +284,11 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	tags_clear(t);
 	vgm_gd3(mem, mem_n, &h, t->title, t->album, t->artist, TAG_TEXT);
 	len = vgm_length(&h);
+	if (!snap)
+		snap = take((long)NSNAP * (long)sizeof(VGMRUN));
+	snap_every = len / NSNAP + 1;
+	if (snap_every < 2 * VGM_RATE)
+		snap_every = 2 * VGM_RATE;
 	*len_ms = len / VGM_RATE * 1000 + len % VGM_RATE * 1000 / VGM_RATE;
 	if (use_opn)
 		chip_name(info, ni, "VGM  YM2612", h.ym2612_clock);
@@ -268,7 +320,15 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		run.ay_fn = 0;		/* (the chips written once it plays: vp_start) */
 		run.sn_fn = 0;
 		run.opn_fn = 0;
-		vgm_seek(&run, to);
+		{
+			/* (from the last copy at or before the place) */
+			long k = snap && snap_every ? to / snap_every : -1;
+			if (k >= NSNAP)
+				k = NSNAP - 1;
+			while (k >= 0 && (!snap_ok[k] || snap[k].at > to))
+				k--;
+			vgm_seek_from(&run, k >= 0 ? &snap[k] : 0, to);
+		}
 		run.sn_fn = s;
 		run.opn_fn = o;
 	}
@@ -326,10 +386,35 @@ void vp_stop(void)
 		use_opn = 0;
 	}
 	if (mem) {
-		give(mem);
+		/* (kept for the same file's next open: vp_forget gives it back) */
+		give(kept);
+		kept = mem;
+		kept_n = mem_n;
 		mem = 0;
 	}
 	open_ = 0;
+}
+
+void vp_forget(void)
+{
+	give(kept);
+	kept = 0;
+	memset(snap_ok, 0, sizeof(snap_ok));
+}
+
+int vp_probe(const char *name, long size, const unsigned char *head, TAGS *t, long *ms)
+{
+	const unsigned char *b = mem ? mem : kept;
+	long n = mem ? mem_n : kept_n, len;
+	VGMHEAD h;
+	if (!b || size != kept_size || strcmp(name, kept_name) || memcmp(head, kept_head, sizeof(kept_head)) ||
+	    !vgm_head(b, n, &h))
+		return 0;
+	tags_clear(t);
+	vgm_gd3(b, n, &h, t->title, t->album, t->artist, TAG_TEXT);
+	len = vgm_length(&h);
+	*ms = len / VGM_RATE * 1000 + len % VGM_RATE * 1000 / VGM_RATE;
+	return 1;
 }
 
 long vp_ms(void)

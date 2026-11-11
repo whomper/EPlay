@@ -78,6 +78,7 @@ static int cmd_len(const OPNF *f)
 	case OPNC_LFO:
 	case OPNC_DAC:
 	case OPNC_DRATE:
+	case OPNC_STEP:
 		return 3;
 	}
 	return 1;
@@ -123,6 +124,9 @@ static void cmd(OPNF *f, const long *w)
 		op->rr = w[7];
 		op->sl = w[8];
 		op->am = (int)w[9];
+		break;
+	case OPNC_STEP:
+		f->ch[w[1] / 4].op[w[1] % 4].step = w[2];
 		break;
 	case OPNC_CH:
 		ch = &f->ch[w[1]];

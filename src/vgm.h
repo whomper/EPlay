@@ -73,9 +73,14 @@ typedef struct {
 /* a write at the tick's place e (a full tick's last place taking the last) */
 static inline void vgmdac_put(VGMDAC *q, long e, int v)
 {
+	unsigned long w;
+	/* (a byte already held left out: the DSP holds it; half of a Mega
+	   Drive's drums' writes) */
+	if (v == q->val)
+		return;
 	if (e > VGMDAC_MAX - 1)
 		e = VGMDAC_MAX - 1;
-	unsigned long w = (unsigned long)e << 16 | (unsigned long)(v ^ 0x80) << 8;
+	w = (unsigned long)e << 16 | (unsigned long)(v ^ 0x80) << 8;
 	if (q->ne < VGMDAC_MAX)
 		q->ev[q->ne++] = w;
 	else
@@ -116,6 +121,8 @@ int vgm_run(VGMRUN *r, long samples);
    then every AY register written as it is there, and the SN76489's
    registers as bytes that set them */
 void vgm_seek(VGMRUN *r, long to);
+/* the same from a copy of the run made at a place before (0: the start) */
+void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to);
 /* the AY's volumes att steps down (the TT's volume: its YM2149 has no
    mixer after it), written at once */
 void vgm_set_att(VGMRUN *r, int att);

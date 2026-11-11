@@ -364,6 +364,48 @@ static void fade_to(VGMRUN *r)
 			r->ay_fn(r->u, reg, faded(r, r->ay[reg]));
 }
 
+/* the drums' commands (the DAC's next sample and its wait; a short wait)
+   from where the file is, until another command or the sample lim, with
+   no call, in registers: a stock Falcon's 68030 has thousands a second.
+   Each write into the tick's DAC (r->dac), or with none (a seek) only
+   kept as the register's */
+static void drums(VGMRUN *r, long lim)
+{
+	const unsigned char *b = r->b, *pcm = b + r->pcm_at;
+	VGMDAC *q = r->dac;
+	long p = r->pos, n = r->n, at = r->at, wait = 0;
+	long pp = r->pcm_pos, plen = r->pcm_len, base = q ? q->base : 0;
+	int v = -1;
+	while (p < n) {
+		unsigned c = b[p];
+		if ((c & 0xf0) == 0x80) {
+			if (pp >= 0 && pp < plen) {
+				v = pcm[pp++];
+				if (q)
+					vgmdac_put(q, at - base, v);
+			}
+			wait = c & 15;
+		} else if ((c & 0xf0) == 0x70)
+			wait = (c & 15) + 1;
+		else
+			break;
+		p++;
+		if (wait >= lim - at) {
+			wait -= lim - at;
+			at = lim;
+			break;
+		}
+		at += wait;
+		wait = 0;
+	}
+	r->pos = p;
+	r->at = at;
+	r->wait = wait;
+	r->pcm_pos = pp;
+	if (v >= 0)
+		r->opn[0][0x2a] = (unsigned char)v;
+}
+
 int vgm_run(VGMRUN *r, long samples)
 {
 	if (r->done)
@@ -371,42 +413,9 @@ int vgm_run(VGMRUN *r, long samples)
 	while (samples > 0) {
 		long step;
 		if (r->dac && r->wait <= 0 && (r->end <= 0 || r->at + samples < r->end)) {
-			/* the drums' commands (the DAC's next sample and its wait;
-			   a short wait) run here with no call, in registers: a stock
-			   Falcon's 68030 has some 44 of them a tick */
-			const unsigned char *b = r->b, *pcm = b + r->pcm_at;
-			VGMDAC *q = r->dac;
-			long p = r->pos, n = r->n, at = r->at, wait = 0, lim = at + samples;
-			long pp = r->pcm_pos, plen = r->pcm_len, base = q->base;
-			int wrote = 0;
-			while (p < n) {
-				unsigned c = b[p];
-				if ((c & 0xf0) == 0x80) {
-					if (pp >= 0 && pp < plen) {
-						vgmdac_put(q, at - base, pcm[pp++]);
-						wrote = 1;
-					}
-					wait = c & 15;
-				} else if ((c & 0xf0) == 0x70)
-					wait = (c & 15) + 1;
-				else
-					break;
-				p++;
-				if (wait >= lim - at) {
-					wait -= lim - at;
-					at = lim;
-					break;
-				}
-				at += wait;
-				wait = 0;
-			}
-			r->pos = p;
-			r->at = at;
-			r->wait = wait;
-			r->pcm_pos = pp;
-			if (wrote)
-				r->opn[0][0x2a] = (unsigned char)q->val;
-			samples = lim - at;
+			long lim = r->at + samples;
+			drums(r, lim);
+			samples = lim - r->at;
 			if (samples <= 0)
 				break;
 		}
@@ -427,17 +436,39 @@ int vgm_run(VGMRUN *r, long samples)
 
 void vgm_seek(VGMRUN *r, long to)
 {
+	vgm_seek_from(r, 0, to);
+}
+
+void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
+{
 	VGM_AY ay = r->ay_fn;
 	VGM_SN sn = r->sn_fn;
 	VGM_OPN opn = r->opn_fn;
 	VGMHEAD h = r->h;
 	int att = r->att;
-	vgm_begin(r, r->b, r->n, &h, 0, 0, r->u);
+	void *u = r->u;
+	if (from && from->at <= to) {
+		*r = *from;	/* (a place it was at: the file from there) */
+		r->ay_fn = 0;
+		r->sn_fn = 0;
+		r->opn_fn = 0;
+		r->dac = 0;
+		r->u = u;
+	} else
+		vgm_begin(r, r->b, r->n, &h, 0, 0, u);
 	r->att = att;
 	r->ay_fn = 0;
 	r->sn_fn = 0;
 	while (r->at < to && !r->done) {
 		long step;
+		/* (the drums run through without a call each: a minute of Mega
+		   Drive music is some 400,000 of them; with no YM2612 to write,
+		   their bytes only kept) */
+		if (r->wait <= 0 && !r->opn_fn) {
+			drums(r, to);
+			if (r->at >= to)
+				break;
+		}
 		if (!commands(r))
 			break;
 		step = r->wait < to - r->at ? r->wait : to - r->at;

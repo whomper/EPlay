@@ -1910,6 +1910,19 @@ stock Falcon with the file:
   file: 1,083 cycles a sample (1.20: 1,058), its mean 880 (856): some 90 % of a real DSP at
   the peak. The operators' steps in 32-bit multiplies (`stepk`, Q16; within 1e-5 of the
   64-bit form). The YM2612's tick 500 times a second, its fixed part halved.
+- **1.22 (Erez's 1.21 log, 11 Nov 2026; "Make the file reading faster for stock Falcons").**
+  Three of his plays had a tick of 1,001 ms: the 68030's second-long wait for the DSP to take a
+  word, after which nothing more is sent. Not seen on Hatari; the likeliest cause, DACE's drum
+  loop jumping out of a hardware DO loop and back to its last instruction, is gone (a compare
+  loop, as 1.20's). `EPLAY.LOG` now says when the DSP stops taking words, with the last burst's
+  first words. The 68030's words a 2 ms tick in "Spinning Machine": 46 to 22 (`OPNC_STEP`, an
+  operator's step alone, where a frequency write sent all four operators' 10 words; drum writes of
+  the byte already held left out, half of them; a tick's words sent together). The file's reading:
+  a seek runs the drums without a call each and starts from a copy of the run the tick keeps every
+  few seconds of the file (64, some 45 KB); the unpacked file is kept for its next open (Play after
+  Pause, a seek) and for the list's tags. Stock Falcon (speed rig, `vgm`): a seek 14,250 to 270
+  ms, Play after Pause 5,290 to 295 ms, the start's stretch 6,365 to 2,350 ms (the VGZ unpacked in
+  one turn: left to do). The tick some 1,100 us of its 2 ms.
 - **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
   the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST

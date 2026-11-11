@@ -11,6 +11,7 @@
 #include "tags.h"
 #include "probe.h"
 #include "vgmfile.h"
+#include "vgmplay.h"
 
 ORDER list_order;		/* which plays next: kept in step with the list here */
 
@@ -358,9 +359,14 @@ int list_step(int *row)
 	size = Fseek(0, (short)fh_, 2);
 	{
 		/* a VGM or VGZ (phase 9): its GD3 tag and its length */
-		unsigned char m[4];
+		unsigned char m[64];
 		if (rd(0, 0, m, 4) == 4 && vgm_magic(m, 4)) {
-			e->len_ms = vgm_probe(rd, 0, size, &t, vtake, vgive);
+			/* (the one playing, unpacked already: not unpacked again, which
+			   took a stock Falcon seconds of GEM's time as it began) */
+			const char *base = strrchr(e->path, '\\');
+			base = base ? base + 1 : e->path;
+			if (!(rd(0, 0, m, 64) == 64 && vp_probe(base, size, m, &t, &e->len_ms)))
+				e->len_ms = vgm_probe(rd, 0, size, &t, vtake, vgive);
 			t.title[39] = t.artist[39] = t.album[39] = 0;
 			e->title = keep(t.title);
 			e->artist = keep(t.artist);

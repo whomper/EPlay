@@ -43,7 +43,11 @@ static int locked, failed, on, twice;
 static long rate, synth;
 static volatile int gain_due = -1;	/* the volume's gain for the tick to send */
 static void put(void *u, long w);
-static int burst;		/* HF0 up: the tick's words coming */
+static int burst;
+/* the last words sent (for the log, should the DSP stop taking them) */
+static long last_w[8];
+static unsigned long sent, f_sent;
+static int f_hisr;		/* HF0 up: the tick's words coming */
 
 /* the DAC's words: one wait on the host port's flag a word, in a loop */
 static void putn(void *u, const long *w, int n)
@@ -51,18 +55,23 @@ static void putn(void *u, const long *w, int n)
 	int k;
 	if (failed)
 		return;
+	/* (the burst's first words, for the log should the DSP stop: a word
+	   each costs a stock Falcon too much) */
+	for (k = 0; k < 8; k++)
+		last_w[k] = k < n ? w[k] : -1;
 	if (!burst) {
 		HICR |= 8;	/* (HF0: a burst coming) */
 		burst = 1;
 	}
 	for (k = 0; k < n; k++) {
 		if (!(HISR & 2)) {
-			put(u, w[k]);	/* (the wait with its limit) */
+			put(u, w[k]);	/* (the wait with its limit; counted there) */
 			if (failed)
 				return;
 			continue;
 		}
 		HTX32 = (unsigned long)w[k] & 0xffffff;
+		sent++;
 	}
 }
 
@@ -80,10 +89,13 @@ static void put(void *u, long w)
 		while (!(HISR & 2))
 			if (HZ200 - t0 > 200) {
 				failed = 1;
+				f_sent = sent;
+				f_hisr = HISR;
 				return;
 			}
 	}
 	HTX32 = (unsigned long)w & 0xffffff;
+	sent++;
 }
 
 static void load(int cmd, unsigned addr, const unsigned long *w, long n)
@@ -132,6 +144,7 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 	int ext;
 	unsigned long t;
 	failed = 0;
+	sent = 0;
 	psg_on = 0;
 	psg_clock = sn_clock;
 	psg_fb = sn_fb;
@@ -282,6 +295,12 @@ void dspopn_close(void)
 			     least * 500 / (rate ? rate : 24585), least < 64 ? ": it fell behind" : "");
 		else
 			elog("VGM: the DSP didn't say how it kept up");
+	}
+	if (on && failed) {
+		/* the DSP stopped taking words: the last burst's first ones */
+		elog("VGM: the DSP stopped taking the 68030's words after %lu; HISR $%02X; the last burst began "
+		     "%lX %lX %lX %lX %lX %lX %lX %lX", f_sent, f_hisr,
+		     last_w[0], last_w[1], last_w[2], last_w[3], last_w[4], last_w[5], last_w[6], last_w[7]);
 	}
 	if (on) {
 		/* (HF0 is down: the tick puts it back after each burst, and it is

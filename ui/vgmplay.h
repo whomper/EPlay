@@ -19,7 +19,11 @@
 int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, int no, long *len_ms, char *err,
 	    int n, const char *name);
 void vp_start(void);		/* the tick on, the chip sounding */
-void vp_stop(void);		/* silent, the tick off, the memory given back */
+void vp_stop(void);		/* silent, the tick off; the file's memory kept for its next open */
+void vp_forget(void);
+/* the file's tags and length (ms) from it unpacked, when it is the one open
+   or kept (name, size, its first 64 bytes): 1; else 0, to be read */
+int vp_probe(const char *name, long size, const unsigned char *head, TAGS *t, long *ms);		/* that memory given back (another kind of file opened) */
 long vp_ms(void);		/* where it is */
 int vp_ended(void);		/* 1 once it played to its end (its fade too) */
 /* the volume: att steps of 1.5 dB down (0 to 15), mute: silent. The

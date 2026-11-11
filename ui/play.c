@@ -1097,6 +1097,8 @@ int play_open(const char *path, char *err, int n)
 	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
 		elog("tags: \"%s\", \"%s\", \"%s\"; album art %ld bytes%s", play_tags.title, play_tags.artist,
 		     play_tags.album, play_tags.pic_end - play_tags.pic_at, play_tags.pic_unsync ? " (unsynchronised)" : "");
+	if (net || !vgm_magic(fbuf, fend))
+		vp_forget();	/* (a VGM's unpacked file, kept for its next open, given back) */
 	if (!net && vgm_magic(fbuf, fend)) {
 		/* a VGM or VGZ (phase 9): read whole, played by the tick on
 		   the YM2149 */

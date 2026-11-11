@@ -32,6 +32,8 @@
 ;	   first halfway from the one before (the FDI's 44.1 or 48 kHz: the
 ;	   chip made at half of it)
 ;	13 DACRATE: the file's samples an output sample (Q16), the place (0)
+;	16 STEP i s: operator i's step alone (its frequency written, its rates as
+;	   they were)
 ;	15 STATUS: one word back, the ring's least lead since it first filled (words,
 ;	   2,048 at most; near 0: the DSP fell behind)
 ;	20-31 SN v: the Mega Drive's SN76489, sn.a56's commands 0-11 (+ 20):
@@ -684,6 +686,9 @@ cmdx	move	#>1,x1
 	move	#>14,x1
 	cmp	x1,a
 	jeq	c_dacs
+	move	#>16,x1
+	cmp	x1,a
+	jeq	c_step
 	move	#>20,x1
 	cmp	x1,a
 	jge	c_sn
@@ -721,6 +726,8 @@ c_drate	jsr	hc_drate
 	jmp	cmd
 c_dacs	jsr	hc_dacs
 	jmp	cmd
+c_step	jsr	hc_step
+	jmp	cmd
 c_sn	jsr	hc_sn
 	jmp	cmd
 
@@ -747,6 +754,9 @@ hcmd	move	x0,a
 	move	#>14,x1
 	cmp	x1,a
 	jeq	hc_dacs
+	move	#>16,x1
+	cmp	x1,a
+	jeq	hc_step
 	move	#>15,x1
 	cmp	x1,a
 	jeq	hc_stat
@@ -759,6 +769,13 @@ hcmd	move	x0,a
 hc_stat	move	x:<MINLD,x1
 hcs1	jclr	#1,x:HSR,hcs1
 	movep	x1,x:HTX
+	rts
+
+; STEP i s: operator i's step alone (a frequency written: its rates the same)
+hc_step	jsr	opblk
+	move	#O_STEP,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
 	rts
 
 ; OP i: its block's step, tl, arf, d1, d2, rr, sl, am; the increment of
@@ -1113,31 +1130,23 @@ dev
 	move	#EVY,r4
 	movec	#1023,m1
 	move	x:<DWP,r1
-	; the tick's output samples: (end - place + step - 1) / step
-	move	x:<DRF,a
 	move	x:<DSF,b
-	sub	b,a	x:<DSI,x0
-	jle	dnone
-	add	x0,a	#>1,y1
-	sub	y1,a
-	move	a1,y1
-	clr	a
-	move	y1,a0
-	asl	a			; (div's fractions: the dividend x 2)
-	andi	#$fe,ccr
-	rep	#24
-	div	x0,a
-	move	a0,x1
-	move	x:<DSF,b
+	move	x:<DRF,x1
 	move	x:<DSI,y0
 	move	x:<DWORD,a
 	move	x:(r3)+,x0	y:(r4)+,y1
-	; each output sample (b its place, y0 the step): the events at or
-	; before it (x0 the next's place, y1 its byte), then a the byte
-	do	x1,dlend
-	cmp	x0,b
-	jge	dtake
+	; each output sample (b its place, x1 the tick's end, y0 the step):
+	; the events at or before it (x0 the next's place, y1 its byte), then
+	; a the byte. (No DO loop: a jump out of one and back to its last
+	; instruction is what the real DSP may not take)
+dl	cmp	x1,b
+	jge	dlend
+dw	cmp	x0,b
+	jlt	dput
+	tfr	y1,a	x:(r3)+,x0	y:(r4)+,y1
+	jmp	dw
 dput	add	y0,b	a,y:(r1)+
+	jmp	dl
 dlend	move	b1,x:<DSF		; (events left: the last one's byte)
 	move	#>$7fffff,b
 	cmp	x0,b
@@ -1176,16 +1185,6 @@ dfin0	move	x:<DSF,b
 	move	b1,x:<DRP
 dsc	move	a,x:<DCNT
 dsx	rts
-; (DACE, in its loop) the events at or before the place: the last one's byte
-dtake	tfr	y1,a	x:(r3)+,x0	y:(r4)+,y1
-	cmp	x0,b
-	jge	dtake
-	jmp	dput
-dnone	move	x:<DWORD,a		; (no output sample in the tick)
-	move	x:<DSF,b
-	move	x:(r3)+,x0	y:(r4)+,y1
-	jmp	dlend
-
 ; each channel's handler: its algorithm's, or the silent one's (none of its
 ; operators live); channel 6's the DAC's while it is on
 sethall	move	#CHS+C_HND,r5

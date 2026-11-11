@@ -172,8 +172,9 @@ static void ch_steps(OPND *d, int c)
 		if (op->ksr != kc >> (3 - op->ks)) {
 			op->ksr = kc >> (3 - op->ks);
 			op_rates(d, op);
-		}
-		d->op_dirty |= 1UL << (c * 4 + i);
+			d->op_dirty |= 1UL << (c * 4 + i);
+		} else
+			d->step_dirty |= 1UL << (c * 4 + i);	/* (its step alone: STEP's 3 words, not OP's 10) */
 	}
 }
 
@@ -336,17 +337,6 @@ static const unsigned char lfo_per[8] = { 108, 77, 71, 67, 62, 44, 8, 5 };
 static const unsigned char ams_shift[4] = { 8, 3, 1, 0 };
 static const unsigned short pms_depth[8] = { 0, 2, 4, 6, 8, 12, 23, 46 };
 
-static void send_dac(OPND *d, void (*put)(void *u, long w), void *u)
-{
-	if (d->dac_dirty && d->dac_on != d->dac_sent) {
-		put(u, OPNC_DAC);
-		put(u, d->dac_on);
-		put(u, ((long)(d->dq.val - 128) << 16) & 0xffffff);
-		d->dac_sent = d->dac_on;
-	}
-	d->dac_dirty = 0;
-}
-
 void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u)
 {
 	/* 44,100 / rate (Q16), the place 0 */
@@ -384,62 +374,84 @@ int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v
 	return live;
 }
 
+/* (opnd_send's words, sent together: put each, or putn the lot) */
+static long ob[400];
+static int on_;
+#define EMIT(w)	(ob[on_++] = (w))
+
 void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 {
 	int c, k;
-	unsigned long ops = d->op_dirty | d->key_dirty;
+	unsigned long ops = d->op_dirty | d->key_dirty | d->step_dirty;
 	/* (most ticks change nothing but the DAC: the stock Falcon's 68030
 	   passes over the 30 channels' and operators' tests) */
 	if (!ops && !d->ch_dirty && !d->lfo_dirty && !d->dac_dirty)
 		return;
+	on_ = 0;
 	for (c = 0; c < 6; c++) {
 		OPND_CH *ch = &d->ch[c];
 		if (!((ops >> (c * 4)) & 15) && !(d->ch_dirty & (1u << c)))
 			continue;
 		if (d->ch_dirty & (1u << c)) {
-			put(u, OPNC_CH);
-			put(u, c);
-			put(u, ch->alg);
-			put(u, ch->fb ? 1L << (ch->fb + 14) : 0);
-			put(u, ch->pan & 2 ? d->outg : 0);
-			put(u, ch->pan & 1 ? d->outg : 0);
-			put(u, ch->ams ? 1L << (22 - ams_shift[ch->ams]) : 0);
-			put(u, ch->pms ? (pms_depth[ch->pms] * 8388608L + 250) / 500 : 0);
+			EMIT(OPNC_CH);
+			EMIT(c);
+			EMIT(ch->alg);
+			EMIT(ch->fb ? 1L << (ch->fb + 14) : 0);
+			EMIT(ch->pan & 2 ? d->outg : 0);
+			EMIT(ch->pan & 1 ? d->outg : 0);
+			EMIT(ch->ams ? 1L << (22 - ams_shift[ch->ams]) : 0);
+			EMIT(ch->pms ? (pms_depth[ch->pms] * 8388608L + 250) / 500 : 0);
 		}
 		for (k = 0; k < 4; k++) {
 			int i = c * 4 + k;
 			const OPND_OP *op = &ch->op[k];
 			if (d->op_dirty & (1UL << i)) {
-				put(u, OPNC_OP);
-				put(u, i);
-				put(u, op->step);
-				put(u, op->tl);
-				put(u, op->arf);
-				put(u, op->d1);
-				put(u, op->d2);
-				put(u, op->rr);
-				put(u, op->sl);
-				put(u, op->am);
+				EMIT(OPNC_OP);
+				EMIT(i);
+				EMIT(op->step);
+				EMIT(op->tl);
+				EMIT(op->arf);
+				EMIT(op->d1);
+				EMIT(op->d2);
+				EMIT(op->rr);
+				EMIT(op->sl);
+				EMIT(op->am);
+			} else if (d->step_dirty & (1UL << i)) {
+				EMIT(OPNC_STEP);
+				EMIT(i);
+				EMIT(op->step);
 			}
 			if (d->key_event[i]) {
-				put(u, OPNC_KEY);
-				put(u, i);
-				put(u, d->key_event[i]);
+				EMIT(OPNC_KEY);
+				EMIT(i);
+				EMIT(d->key_event[i]);
 				d->key_event[i] = 0;
 			}
 		}
 	}
 	if (d->lfo_dirty) {
-		put(u, OPNC_LFO);
+		EMIT(OPNC_LFO);
 		/* (clock / 144 / rate x OPN_UPD / its period, x 2^17) */
-		put(u, d->lfo_on ? (long)(((unsigned long long)d->clock * OPN_UPD * 131072 +
-					   72ULL * (unsigned long)d->rate * lfo_per[d->lfo_rate]) /
-					  (144ULL * (unsigned long)d->rate * lfo_per[d->lfo_rate])) : 0);
-		put(u, !d->lfo_on);
+		EMIT(d->lfo_on ? (long)(((unsigned long long)d->clock * OPN_UPD * 131072 +
+					 72ULL * (unsigned long)d->rate * lfo_per[d->lfo_rate]) /
+					(144ULL * (unsigned long)d->rate * lfo_per[d->lfo_rate])) : 0);
+		EMIT(!d->lfo_on);
 	}
-	send_dac(d, put, u);
+	if (d->dac_dirty && d->dac_on != d->dac_sent) {
+		EMIT(OPNC_DAC);
+		EMIT(d->dac_on);
+		EMIT(((long)(d->dq.val - 128) << 16) & 0xffffff);
+		d->dac_sent = d->dac_on;
+	}
+	d->dac_dirty = 0;
 	d->op_dirty = 0;
+	d->step_dirty = 0;
 	d->key_dirty = 0;
 	d->ch_dirty = 0;
 	d->lfo_dirty = 0;
+	if (d->putn)
+		d->putn(u, ob, on_);
+	else
+		for (k = 0; k < on_; k++)
+			put(u, ob[k]);
 }
