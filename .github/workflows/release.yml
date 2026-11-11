@@ -49,8 +49,10 @@ jobs:
           echo "TAG=$TAG" >> "$GITHUB_ENV"
       - name: Tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu a56 sox lame zip autoconf automake libtool gettext autopoint pkg-config
+          # Azure's Ubuntu mirror can hang for 20 s a package (11 Nov 2026): use Ubuntu's own
+          echo http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::http::Timeout=30 -o Acquire::Retries=3 install -y gcc-m68k-linux-gnu a56 sox lame zip autoconf automake libtool gettext autopoint pkg-config
       - name: hcp, for the help file
         run: common/tools/build-hcp.sh "$RUNNER_TEMP/hcp"
       - name: Test
