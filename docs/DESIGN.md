@@ -2003,6 +2003,20 @@ Jellyfin server's music (its JSON API on the home network, its tracks sent as MP
 EPlay asks, its cover art resized), with the browser's layout, a Settings page and the steps.
 Design only; nothing before he decides.
 
+A tester's notes (Erez relayed them, 11 Nov 2026), for the design:
+
+- **A track** comes whole with `GET /Audio/<item id>/stream?static=true` (the file as it is, no
+  transcode) on the server's port (8096 by default, plain http on the home network), with the
+  header `Authorization: MediaBrowser Token="<token>"`.
+- **The token:** a server API key (Dashboard → API Keys) works for a quick test but can do
+  anything; the player should use a dedicated Jellyfin user's access token, that user's access
+  limited to the music library. The iPhone clients find the server (it advertises itself), ask
+  for the user name and password, and keep the token the server gives back.
+- **What the clients show:** Artists, then Albums, with the cover art; inside an album its
+  tracks; playlists too, and single songs.
+- EPlay keeps a token in EPLAY.INF only as a secret is kept there (never in a log or a test
+  run's files kept).
+
 ## MP3 on the CPU (Erez, 10 Nov 2026)
 
 A user's note (Erez relayed it): 68060 machines (the Raven clone, others) and the FireBee decode MP3

@@ -15,6 +15,8 @@ LDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.
 B       := build
 
 all: $(B)/LAUNCH.PRG $(B)/PCMTEST.PRG
+.PHONY: mp3cpu
+mp3cpu: $(B)/MP3CPU.PRG
 $(B)/%.PRG: $(B)/%.elf ../../common/tools/elf2tos.py
 	python3 ../../common/tools/elf2tos.py $< $@
 $(B)/LAUNCH.elf: $(B)/crt0.o $(B)/launch.o $(B)/gem.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
@@ -31,6 +33,20 @@ $(B)/pcmtest_c.o: pcmtest_c.c ../../src/pcm.c ../../src/pcm.h | $(B)
 	$(CC) $(P030) -c -o $@ $<
 $(B)/pcm.o: ../../src/pcm.c ../../src/pcm.h | $(B)
 	$(CC) $(P030) -c -o $@ $<
+# MP3CPU.PRG (mp3cpu.c): the C model of the DSP's MP3 decoder timed on the
+# CPU it is built for, the 68060 (python3 mp3cpu.py WORK FILE.MP3)
+P060    := -m68060 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+           -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -Wall \
+           -nostdinc -isystem $(GCCINC) -I$(A)/include -I$(A) -I../../src/mp3 -I../../build
+$(B)/MP3CPU.elf: $(B)/crt0.o $(B)/mp3cpu.o $(B)/mul060.o $(B)/mp3frame.o $(B)/mp3dsp.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
+	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+$(B)/mp3cpu.o: mp3cpu.c | $(B)
+	$(CC) $(P060) -c -o $@ $<
+$(B)/mp3frame.o: ../../src/mp3/mp3frame.c | $(B)
+	$(CC) $(P060) -c -o $@ $<
+$(B)/mp3dsp.o: ../../src/mp3/mp3dsp.c ../../build/mp3tab.h | $(B)
+	$(CC) $(P060) -c -o $@ $<
 $(B)/%.o: %.c | $(B)
 	$(CC) $(CFLAGS) -c -o $@ $<
 $(B)/%.o: $(A)/%.c | $(B)
@@ -44,3 +60,5 @@ $(B):
 clean:
 	rm -rf $(B)
 .PHONY: all clean
+$(B)/mul060.o: mul060.c | $(B)
+	$(CC) $(P060) -c -o $@ $<
