@@ -345,8 +345,14 @@ int find_dialog(char *url, int un, char *name, int nn, void (*add)(const char *u
 			if (r == o_rows[i])
 				break;
 		if (i < ROWS) {
+			/* only the old and new chosen rows: a whole redraw here hides a
+			   quick double click's release (common/ui/dialog.h, DLG_CLICK) */
+			int old = sel - top;
 			sel = top + i;
-			rows_draw();
+			rows_text();
+			if (old >= 0 && old < ROWS && old != i)
+				dlg_draw(tree, o_rows[old]);
+			dlg_draw(tree, o_rows[i]);
 			if (!dbl)
 				continue;
 			r = o_play;	/* (a double click plays it) */

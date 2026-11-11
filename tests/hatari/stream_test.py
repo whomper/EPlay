@@ -487,9 +487,18 @@ def run(work, case, spec):
             time.sleep(2)
             cmd(fifo, "hatari-shortcut", "screenshot")
             px, py = [int(v) for v in os.environ.get("FIND_PLAY", "512,408").split(",")]
+            if os.environ.get("FIND_DBL"):
+                # (FIND_DBL=70: a double click, 70 ms apart, on the first station plays it, the
+                # hub's check of 11 Nov 2026: 70 ms between the clicks)
+                px, py = [int(v) for v in os.environ.get("FIND_ROW", "200,225").split(",")]
             xdo("mousemove", "--window", win[0], str(px), str(py))
             time.sleep(0.5)
-            xdo("click", "1")
+            if os.environ.get("FIND_DBL"):
+                xdo("click", "--repeat", "2", "--delay", os.environ["FIND_DBL"], "1")
+                time.sleep(3)
+                cmd(fifo, "hatari-shortcut", "screenshot")
+            else:
+                xdo("click", "1")
         if case in ("url", "urledit"):
             def xdo(*a):
                 return subprocess.run(["xdotool", *a], env=env, capture_output=True, text=True).stdout
