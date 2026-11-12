@@ -2065,6 +2065,13 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
   float path), `MP3INT.OVL` one in 32-bit fixed point (products of 16 by 16 bits, or 32-bit
   `muls.l` kept to 32), each held to minimp3 by the existing tests' limits rather than to the
   DSP bit for bit; then measured again before anything else is built.
+- **minimp3 on the 68060's FPU (12 Nov 2026, `MP3MINI.PRG`):** minimp3 (CC0, the tests'
+  reference) built for the 68060 takes 103 % of Hatari's 68060 at 32 MHz on the same file:
+  some 52 % of a 66 MHz 68060, 34 % at 100 MHz. So `MP3FPU.OVL` is minimp3 as it is, with
+  EPlay's frame parser around it (gapless, ReplayGain, the resampler to the DMA's rates on the
+  CPU). `MP3INT.OVL` (the 68LC060 and 68EC060, no FPU) needs a fixed-point decoder, and the
+  68060 has no 32 x 32 → 64 multiply either: its third-party choice (licence first) is still
+  open.
 - **VGM on the 68060 too (Erez, 12 Nov 2026: "make sure to have the VGM player also supported in
   68060").** Two cases:
   - **A 68060 Falcon (a CT60's), the DSP there:** as now: the YM2149 on the chip, the SN76489
