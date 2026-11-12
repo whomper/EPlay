@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include "gemui.h"
 #include "aboutbox.h"
+#include "aboutpen.h"
 #include "alert.h"
 #include "dialog.h"
 #include "crash.h"
@@ -313,31 +314,70 @@ static void icon_pens(const unsigned char *px, const unsigned char *map, const s
 		      short x, short y, short sx, short sy)
 {
 	unsigned char slot[256];
-	short pen_of[64], n = 0, r, c, k, yy, i, wpl = 2 * sx, words = wpl * ICON_H * sy;
+	short pen_of[64], n = 0, r, c, i, wpl = 2 * sx, words = wpl * ICON_H * sy;
 	short w = ICON_W * sx, h = ICON_H * sy, pxy[8], colors[2];
-	unsigned short *masks;
+	short c0[64], c1[64], r0[64], r1[64];		/* each pen's box in the icon's pixels */
+	unsigned short *masks, *mbase[64], *mrow[64];
 	MFDB src, dst;
+	/* the pens the icon has, and each one's box: one pass over the pixels (no division or
+	   multiply in it: on a stock Falcon 1,000 pixels of either took 20 ms, the box's opening 150) */
+	if (sx < 1 || sx > 2 || sy < 1 || sy > 2)
+		return;
 	memset(slot, 0xff, sizeof(slot));
-	for (i = 0; i < ICON_W * ICON_H; i++)
-		if (px[i] && slot[px[i]] == 0xff && n < 64) {
-			slot[px[i]] = (unsigned char)n;
-			pen_of[n++] = px[i];
+	for (r = 0; r < ICON_H; r++) {
+		const unsigned char *pr = px + r * ICON_W;
+		for (c = 0; c < ICON_W; c++) {
+			unsigned char s = pr[c];
+			short sl;
+			if (!s)
+				continue;
+			sl = slot[s];
+			if (sl == 0xff) {
+				if (n >= 64)
+					continue;
+				slot[s] = (unsigned char)n;
+				pen_of[n] = s;
+				c0[n] = c1[n] = c;
+				r0[n] = r1[n] = r;
+				n++;
+				continue;
+			}
+			if (c < c0[sl])
+				c0[sl] = c;
+			if (c > c1[sl])
+				c1[sl] = c;
+			r1[sl] = r;
 		}
+	}
 	if (!n || !(masks = calloc((size_t)n * words, 2)))
 		return;
-	for (r = 0; r < ICON_H; r++)
-		for (c = 0; c < ICON_W; c++) {
-			unsigned char s = px[r * ICON_W + c];
-			unsigned short *m;
-			if (!s || slot[s] == 0xff)
-				continue;
-			m = masks + slot[s] * words;
-			for (k = 0; k < sx; k++) {
-				short bx = c * sx + k;
-				for (yy = 0; yy < sy; yy++)
-					m[(r * sy + yy) * wpl + (bx >> 4)] |= 0x8000 >> (bx & 15);
+	for (i = 0; i < n; i++)
+		mbase[i] = masks + (long)i * words;
+	{
+		/* a pixel is sx bits in one word, shifted by its place, in each of the sy rows it makes
+		   (sx and sy are 1 or 2: the About box's 2 x 1 or 2 x 2, the iconified window's 1 x 1) */
+		unsigned short unit = (unsigned short)(0xFFFFu << (16 - sx));
+		short lg = sx == 1 ? 0 : 1;
+		for (r = 0; r < ICON_H; r++) {
+			const unsigned char *pr = px + r * ICON_W;
+			short ro = (short)(r * sy * wpl);
+			for (i = 0; i < n; i++)
+				mrow[i] = mbase[i] + ro;
+			for (c = 0; c < ICON_W; c++) {
+				unsigned char s = pr[c];
+				unsigned short *m, bits;
+				short sl, bx;
+				if (!s || (sl = slot[s]) == 0xff)
+					continue;
+				bx = (short)(c << lg);
+				bits = (unsigned short)(unit >> (bx & 15));
+				m = mrow[sl] + (bx >> 4);
+				*m |= bits;
+				if (sy > 1)
+					m[wpl] |= bits;
 			}
 		}
+	}
 	memset(&src, 0, sizeof(src));
 	memset(&dst, 0, sizeof(dst));
 	src.fd_addr = st_ram((long)words * 2);
@@ -345,16 +385,18 @@ static void icon_pens(const unsigned char *px, const unsigned char *map, const s
 	src.fd_h = h;
 	src.fd_wdwidth = wpl;
 	src.fd_nplanes = 1;
-	pxy[0] = 0;
-	pxy[1] = 0;
-	pxy[2] = w - 1;
-	pxy[3] = h - 1;
-	pxy[4] = x;
-	pxy[5] = y;
-	pxy[6] = x + w - 1;
-	pxy[7] = y + h - 1;
 	for (i = 0; src.fd_addr && i < n; i++) {
-		memcpy(src.fd_addr, masks + i * words, (size_t)words * 2);
+		/* only the part of the icon this pen is in: a blit is as long as
+		   its area (NVDI took a stock Falcon some 5 ms a pen over the whole icon) */
+		pxy[0] = c0[i] * sx;
+		pxy[1] = r0[i] * sy;
+		pxy[2] = (c1[i] + 1) * sx - 1;
+		pxy[3] = (r1[i] + 1) * sy - 1;
+		pxy[4] = x + pxy[0];
+		pxy[5] = y + pxy[1];
+		pxy[6] = x + pxy[2];
+		pxy[7] = y + pxy[3];
+		memcpy(src.fd_addr, mbase[i], (size_t)words * 2);
 		colors[0] = map ? map[pen_of[i]] : pens ? pens[pen_of[i]] : pen_of[i];
 		colors[1] = 0;
 		vrt_cpyfm(vdi_h, 2, pxy, &src, &dst, colors);	/* transparent */
@@ -385,30 +427,43 @@ static void icon256_draw(const unsigned char *px, const unsigned char *map, shor
    palette is TOS's, else the nearest (an app's theme may have taken pens
    16 and up: EMail's). Nothing is lent, so nothing else on the screen
    changes colour while the box is open. */
+/* A few of the icon's pens changed (an app's theme.c takes pens 16 to 21):
+   each takes the nearest of the 16 system pens and the icon's own pens that
+   kept their colour (16 + about 20 vq_color calls). When many changed
+   (NVDI's palette) the whole palette is asked once (the guidelines' Speed,
+   not 256 times a colour). */
+#define FEW 8
+
 static void icon256_pens(const short (*rgb)[4], unsigned char *map)
 {
-	short i, p, have[3], (*pal)[3] = 0;
-	for (i = 0; rgb[i][0]; i++) {
-		long best = -1;
+	short i, n, nmiss = 0, have[32][3], cpen[48], cc[48][3], nc = 0;
+	short (*pal)[3] = 0;
+	char ok[32];
+	for (n = 0; n < 32 && rgb[n][0]; n++) {
+		vq_color(vdi_h, rgb[n][0], have[n]);
+		ok[n] = abs(have[n][0] - rgb[n][1]) + abs(have[n][1] - rgb[n][2]) + abs(have[n][2] - rgb[n][3]) <= 24;
+		nmiss += !ok[n];
+		if (ok[n] && nc < 32) {
+			cpen[nc] = rgb[n][0];
+			cc[nc][0] = have[n][0], cc[nc][1] = have[n][1], cc[nc][2] = have[n][2];
+			nc++;
+		}
+	}
+	if (nmiss && nmiss <= FEW) {
+		for (i = 0; i < 16; i++) {
+			cpen[nc] = i;
+			vq_color(vdi_h, i, cc[nc++]);
+		}
+	} else if (nmiss && (pal = malloc(256 * sizeof(*pal))) != 0)
+		for (i = 0; i < 256; i++)
+			vq_color(vdi_h, i, pal[i]);
+	for (i = 0; i < n; i++) {
 		short pen = rgb[i][0];
-		vq_color(vdi_h, pen, have);
-		if (abs(have[0] - rgb[i][1]) + abs(have[1] - rgb[i][2]) + abs(have[2] - rgb[i][3]) > 24) {
-			/* the palette asked once, not 256 times a colour (the
-			   guidelines' Speed) */
-			if (!pal && (pal = malloc(256 * sizeof(*pal))) != 0)
-				for (p = 0; p < 256; p++)
-					vq_color(vdi_h, p, pal[p]);
-			for (p = 0; pal && p < 256; p++) {
-				long d;
-				short *h = pal[p];
-				d = (long)(h[0] - rgb[i][1]) * (h[0] - rgb[i][1]) +
-				    (long)(h[1] - rgb[i][2]) * (h[1] - rgb[i][2]) +
-				    (long)(h[2] - rgb[i][3]) * (h[2] - rgb[i][3]);
-				if (best < 0 || d < best) {
-					best = d;
-					pen = p;
-				}
-			}
+		if (!ok[i]) {
+			if (pal)
+				pen = about_nearest_pen((const short (*)[3])pal, 0, 256, &rgb[i][1]);
+			else if (nc)
+				pen = about_nearest_pen((const short (*)[3])cc, cpen, nc, &rgb[i][1]);
 		}
 		map[rgb[i][0]] = (unsigned char)pen;
 	}
