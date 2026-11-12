@@ -2087,5 +2087,15 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
     68060 first, as the MP3 decoder was; the YM2612's model (`opnfast.c`) also keeps the DSP's
     48-bit products (`long long`), so it may need a 68060 form of its own as the MP3 decoder
     does (24-bit words, products of 16 by 16 bits).
+- **Where the sound goes (Erez, 12 Nov 2026): the XBIOS sound path when there is no Atari DMA
+  sound; a 68060 isn't taken to mean XBIOS.** The output is chosen by what the machine has,
+  not by its CPU: the Falcon's, TT's or STE's DMA sound wherever its registers answer (a CT60
+  Falcon, a Falcon whose DSP is taken); else the XBIOS sound calls (`Locksnd`, `Setbuffer`,
+  `Buffoper`, `Buffptr`: GSXB on a Milan, FireTOS on the FireBee), checked to answer; else no
+  sound, said. The decoder is chosen apart from it: the Falcon's DSP where it is there and
+  free; else on a 68060 with its FPU `MP3FPU.OVL` (minimp3), decoded to PCM and played as a WAV
+  is (the ring, the CPU's resampler to the output's rates). The FireBee's `_SND` claims the
+  8-bit DMA (bit 1) that isn't there (FBPROBE 1), so the DMA's registers are probed, not taken
+  from `_SND` alone.
 - **With the FireBee's release:** the same decoder in the ColdFire edition, its synthesis filter
   and IMDCT on the EMAC later.
