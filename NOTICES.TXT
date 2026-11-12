@@ -6,9 +6,10 @@ EPlay includes or uses, under their own licences (compatible with the GPL):
   mpegaudiodsp_data.c, GNU LGPL 2.1 or later), extracted by tools/mkhuff.py
   and tools/mkwin.py.
 
-- tests/mp3/third_party/minimp3.h: minimp3 by Lion (lieff), CC0 1.0
-  (tests/mp3/third_party/LICENSE.minimp3). The tests' reference decoder
-  only: it is not part of EPLAY.PRG.
+- third_party/minimp3/minimp3.h: minimp3 by Lion (lieff), CC0 1.0
+  (third_party/minimp3/LICENSE). The tests' reference decoder, and the
+  MP3 decoder of MP3FPU.OVL (a 68060 with its FPU and no Falcon DSP),
+  unchanged; it is not part of EPLAY.PRG.
 
 - common/third_party/tjpgd: TJpgDec R0.03, the Tiny JPEG Decompressor,
   Copyright (C) 2021, ChaN, all right reserved (elm-chan.org/fsw/tjpgd/),

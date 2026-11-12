@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * mp3mini.c - MP3MINI.PRG: minimp3 (CC0, tests/mp3/third_party) built for
+ * mp3mini.c - MP3MINI.PRG: minimp3 (CC0, third_party/minimp3) built for
  * the 68060 and its FPU, timed as mp3cpu.c times EPlay's DSP model: C:\TEST.MP3
  * decoded, the result to the console. A measurement for MP3FPU.OVL
  * (DESIGN.md, "MP3 on the CPU"), not a test.

@@ -60,7 +60,7 @@ HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
            $(B)/opn_prog.h $(B)/opntab.h
 
-all: binary/eplay.prg binary/eplayst.prg
+all: binary/eplay.prg binary/eplayst.prg binary/mp3fpu.ovl
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
@@ -182,7 +182,7 @@ build/prof/eplay.prg: build/prof/eplay.elf common/tools/elf2tos.py
 	PRGFLAGS=0x17 python3 common/tools/elf2tos.py $< $@
 
 HOSTCC  := cc
-HCFLAGS := -O2 -Wall -Wextra -DDSP_COUNT_LIMIT -I$(B) -Isrc/mp3 -Itests/mp3
+HCFLAGS := -O2 -Wall -Wextra -DDSP_COUNT_LIMIT -I$(B) -Isrc/mp3 -Itests/mp3 -Ithird_party/minimp3
 MP3SRC  := src/mp3/mp3frame.c src/mp3/mp3dsp.c
 MP3HDRS := $(wildcard src/mp3/*.h) $(B)/mp3tab.h
 
@@ -270,11 +270,29 @@ binary/eplay.hyp: docs/GUIDE.md common/tools/mkhelp.py VERSION docs/front.json d
 	$(HCP) -q -o $@ $(B)/help/EPLAY.STG >/dev/null
 	test -s binary/eplay.ref
 
+# MP3FPU.OVL (mp3ovl/, src/mp3ovl.h): minimp3 for a 68060 with its FPU, the
+# MP3 decoder where there is no Falcon DSP free (DESIGN.md, MP3 on the CPU),
+# loaded by EPlay only then; 68060 code, linked at 0 like TLS.OVL
+OVLCF   := -m68060 -O2 -ffast-math -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+           -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -Wall -nostdinc \
+           -isystem $(GCCINC) -Icommon/atari/include -Isrc -Ithird_party/minimp3 -DMP3OVL_VERSION=\"$(VERSION_STR)\"
+binary/mp3fpu.ovl: $(B)/mp3ovl/mp3fpu.elf common/tools/elf2tos.py | binary
+	python3 common/tools/elf2tos.py $< $@
+$(B)/mp3ovl/mp3fpu.elf: $(B)/mp3ovl/head.o $(B)/mp3ovl/stack.o mp3ovl/ovl.ld
+	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,mp3ovl/ovl.ld -Wl,--build-id=none \
+	    -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $(B)/mp3ovl/head.o $(B)/mp3ovl/stack.o -lgcc
+$(B)/mp3ovl/head.o: mp3ovl/head.c src/mp3ovl.h third_party/minimp3/minimp3.h VERSION
+	@mkdir -p $(dir $@)
+	$(CC) $(OVLCF) -c -o $@ $<
+$(B)/mp3ovl/stack.o: mp3ovl/stack.S
+	@mkdir -p $(dir $@)
+	$(CC) -m68060 -c -o $@ $<
+
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
 DIST    := binary/eplay.prg binary/eplayst.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl
+           common/tlsovl/tls.ovl binary/mp3fpu.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
 	rm -rf dist

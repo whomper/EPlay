@@ -3,7 +3,7 @@
 /*
  * test_mp3.c - the model of the DSP's MP3 decode (src/mp3/mp3dsp.c), fed
  * by the 68030's packets (src/mp3/mp3frame.c), against minimp3 (CC0,
- * third_party/) as the reference, frame by frame, with ISO/IEC 11172-4's
+ * third_party/minimp3/) as the reference, frame by frame, with ISO/IEC 11172-4's
  * limits for a decoder of full accuracy: the difference's RMS under
  * 2^-15 / sqrt(12) of full scale, and no sample more than 2^-14 off.
  * Then the same through the resampler (mp3rs, to the Falcon's clock
@@ -18,7 +18,7 @@
 #include <math.h>
 #define MINIMP3_IMPLEMENTATION
 #define MINIMP3_FLOAT_OUTPUT
-#include "third_party/minimp3.h"
+#include "minimp3.h"
 #include "mp3frame.h"
 #include "mp3dsp.h"
 #include "mp3tab.h"
