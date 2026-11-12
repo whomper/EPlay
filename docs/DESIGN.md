@@ -1950,6 +1950,16 @@ stock Falcon with the file:
   memory, which hid it. The bootstrap now goes with HF0 down; `dspopn_close` puts HF0 down for
   the next program's bootstrap. Also: Find station's double click (its own test of
   `dlg_do`'s 0x8000 on a `short` threw every double away).
+- **1.25 (Erez, 11 Nov 2026: a 17 MB VGZ for the YM2149, sampled sound at 22,500 register
+  writes a second, played badly).** `ay_burst()` runs the YM2149's writes and the waits inline
+  in the tick, as `drums()` does: on Hatari's 32 MHz Falcon the tick 724 → 252 µs of its
+  1,000, none left out, the unpacking keeping ahead. Each write still goes at its tick, not at
+  its own moment (within 1 ms): exact timing for sampled sound is Erez's choice (a second timer
+  for such files, or the YM2149 imitated on the DSP). **Accepted figures (Erez, 12 Nov 2026,
+  through the hub):** on Falcon-4, the speed rig's vgm kind with a 20 s cut of that file,
+  "Position bar: let go" 120 → 400 ms, the ticks left out 57 % → 53 %: the stock Falcon can't
+  keep up with such a file either way; no fix asked. The ST's row stays open until speed.py's
+  vgm kind starts EPlay on ST:mono.
 - **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
   the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST
