@@ -80,10 +80,15 @@ static long run(int alg)
 	return (long)(tos_ms() - t0);
 }
 
+extern int div64_cpu60;		/* atari/div64.c */
+
 int main(void)
 {
 	char line[160];
-	long a0 = run(0), a7 = run(7);
+	long a0, a7;
+	div64_cpu60 = 1;		/* (as EPlay sets it on a 68060, from _CPU) */
+	a0 = run(0);
+	a7 = run(7);
 	snprintf(line, sizeof(line), "OPNCPU the YM2612's model, a second at %ld Hz, the worst case: algorithm 0 %ld ms, "
 		 "algorithm 7 %ld ms\n", RATE, a0, a7);
 	nf_debug(line);
