@@ -2086,7 +2086,13 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
     DMA sound's ring, with the YM2149 on the chip where there is one. Measured on Hatari's
     68060 first, as the MP3 decoder was; the YM2612's model (`opnfast.c`) also keeps the DSP's
     48-bit products (`long long`), so it may need a 68060 form of its own as the MP3 decoder
-    does (24-bit words, products of 16 by 16 bits).
+    does (24-bit words, products of 16 by 16 bits). **Measured (12 Nov 2026, `OPNCPU.PRG`):**
+    dspopn's worst case (six channels, every operator on, feedback 7, the LFO, the SN76489)
+    takes 9.9 s for a second at 24,585 Hz on Hatari's 68060 at 32 MHz: some 4.8 times real time
+    at 66 MHz, 3.2 at 100. So the 68060's YM2612 is a version of its own in 32-bit arithmetic,
+    and the VGM played ahead into the queue (as MP3 on the CPU is), not commands to the DSP
+    from the tick. Its machines (no Falcon DSP) have no Atari DMA sound either, so it comes
+    with the XBIOS output, after FBPROBE 2's answer.
 - **Where the sound goes (Erez, 12 Nov 2026): the XBIOS sound path when there is no Atari DMA
   sound; a 68060 isn't taken to mean XBIOS.** The output is chosen by what the machine has,
   not by its CPU: the Falcon's, TT's or STE's DMA sound wherever its registers answer (a CT60
