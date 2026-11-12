@@ -3,7 +3,8 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 # Nuked-OPL3 (LGPL-2.1+, Nuke.YKT), a cycle-exact YMF262 that runs OPL2 files
 # as an OPL2 does: the reference EPlay's OPL2 is tested against, as
-# Nuked-OPN2 is for its YM2612: fetched here for the host tests, never
+# Nuked-OPN2 is for its YM2612 (Erez allowed it, 12 Nov 2026: tests only):
+# fetched here for the host tests, never
 # committed nor built into EPlay
 set -e
 cd "$(dirname "$0")"
