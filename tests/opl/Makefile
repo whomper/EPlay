@@ -1,18 +1,30 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-# phase 10 step 7: the YM3812's (OPL2's) test files (mkvgm.py) and the
+# phase 10 step 7: the YM3812's (OPL2's) test files (mkvgm.py), the
 # reference's WAVs (ref.c over Nuked-OPL3, fetched by fetch-ref.sh: never
-# committed); EPlay's model against them follows
+# committed), the DSP's arithmetic's (fast.c over src/opld.c and
+# src/oplfast.c) at the chip's rate and the Falcon's, and the two compared
+# (compare.py)
+TOP := ../..
 B := build
 N := $(B)/Nuked-OPL3
 FILES := SINE FM ENV WAVE LFO RHYTHM CHORD KEYS
+CF := -O2 -Wall -Wextra -Wno-unused-parameter -Werror -I$(TOP)/src
 
-run: $(B)/ref $(B)/files/.made
-	for f in $(FILES); do ./$(B)/ref $(B)/files/$$f.VGM $(B)/files/$$f.ref.wav || exit 1; done
+run: $(B)/ref $(B)/fast $(B)/files/.made
+	for f in $(FILES); do ./$(B)/ref $(B)/files/$$f.VGM $(B)/files/$$f.ref.wav && \
+		./$(B)/fast $(B)/files/$$f.VGM $(B)/files/$$f.f49.wav 49716 && \
+		./$(B)/fast $(B)/files/$$f.VGM $(B)/files/$$f.f24.wav 24585 || exit 1; done
+	python3 compare.py $(B)/files 49716
+	python3 compare.py $(B)/files 24585
 $(N)/opl3.c:
 	sh fetch-ref.sh
 $(B)/ref: ref.c $(N)/opl3.c
 	cc -O2 -w -I$(N) -o $@ ref.c $(N)/opl3.c
+$(B)/fast: fast.c $(TOP)/src/opld.c $(TOP)/src/opld.h $(TOP)/src/oplfast.c $(TOP)/src/oplfast.h \
+		$(TOP)/src/egmath.c $(TOP)/src/egmath.h
+	@mkdir -p $(B)
+	cc $(CF) -o $@ fast.c $(TOP)/src/opld.c $(TOP)/src/oplfast.c $(TOP)/src/egmath.c -lm
 $(B)/files/.made: mkvgm.py
 	python3 mkvgm.py $(B)/files && touch $@
 clean:

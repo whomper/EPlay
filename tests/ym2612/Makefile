@@ -20,9 +20,9 @@ $(B)/model: model.c $(TOP)/src/opn.c $(TOP)/src/opn.h $(TOP)/src/vgm.c $(TOP)/sr
 	cc -O2 -Wall -Wextra -Wno-unused-parameter -Werror -I$(TOP)/src -I$(TOP)/common/src -o $@ model.c \
 		$(TOP)/src/opn.c $(TOP)/src/vgm.c $(TOP)/common/src/charset.c $(TOP)/common/src/bidi.c -lm
 # the DSP's arithmetic (src/opnd.c, src/opnfast.c), at the Falcon's rate
-$(B)/fast: fast.c $(TOP)/src/opnd.c $(TOP)/src/opnd.h $(TOP)/src/opnfast.c $(TOP)/src/opnfast.h $(TOP)/src/vgm.c $(TOP)/src/vgm.h
+$(B)/fast: fast.c $(TOP)/src/opnd.c $(TOP)/src/egmath.c $(TOP)/src/opnd.h $(TOP)/src/opnfast.c $(TOP)/src/opnfast.h $(TOP)/src/vgm.c $(TOP)/src/vgm.h
 	cc -O2 -Wall -Wextra -Wno-unused-parameter -Werror -I$(TOP)/src -I$(TOP)/common/src -o $@ fast.c \
-		$(TOP)/src/opnd.c $(TOP)/src/opnfast.c $(TOP)/src/vgm.c $(TOP)/common/src/charset.c $(TOP)/common/src/bidi.c -lm
+		$(TOP)/src/opnd.c $(TOP)/src/egmath.c $(TOP)/src/opnfast.c $(TOP)/src/vgm.c $(TOP)/common/src/charset.c $(TOP)/common/src/bidi.c -lm
 $(N)/ym3438.c:
 	sh fetch-ref.sh
 $(B)/ref: ref.c $(TOP)/src/vgm.c $(TOP)/src/vgm.h $(N)/ym3438.c
