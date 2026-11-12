@@ -15,6 +15,7 @@ enum { OUT_AUTO, OUT_FDI, OUT_DSP };
    and goes to Normal by itself where the DSP falls behind: play.c. An
    INF's QUALITY= is read no more). The granules late at High that make
    it Normal: 3, or QLATE= (the play rig's, 0: at once; never written) */
+int settings_mp3cpu(void);	/* MP3CPU=1: the rigs' */
 int settings_qlate(void);
 
 void settings_load(void);	/* EPLAY.INF, at the start */

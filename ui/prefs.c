@@ -32,6 +32,7 @@ static char add_dir[FP_PATH], recent[FP_RECENT][FP_PATH];	/* the Add files dialo
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
+static int mp3cpu;			/* MP3CPU=: the rigs' (read, never written). 1: on a 68060 with its FPU, MP3 on the CPU (MP3FPU.OVL) though the DSP is there: Hatari's DSP can't be taken away under EmuTOS */
 static int qlate = 1;			/* QLATE=: the rigs' (read, never written). 1: Normal at the first granule late past the start (3 let a heavy file crackle six times first: Erez, 5 Nov 2026) */
 static int shuffle, shuffle_saved, repeat, repeat_saved;	/* the Play menu's, saved at the end */
 static const char *const rnames[3] = { "OFF", "ALL", "ONE" };
@@ -128,6 +129,8 @@ void settings_load(void)
 	}
 	if (inf_get(inf, inf_n, "QLATE", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		qlate = atoi(v);
+	if (inf_get(inf, inf_n, "MP3CPU", v, sizeof(v)))
+		mp3cpu = v[0] == '1';
 	if (inf_get(inf, inf_n, "SHUFFLE", v, sizeof(v)))
 		shuffle = shuffle_saved = v[0] == '1';
 	if (inf_get(inf, inf_n, "REPEAT", v, sizeof(v)))
@@ -154,6 +157,11 @@ void settings_load(void)
 			if (!strcmp(v, rg_names[i]))
 				rgain = i;
 	}
+}
+
+int settings_mp3cpu(void)
+{
+	return mp3cpu;
 }
 
 int settings_qlate(void)

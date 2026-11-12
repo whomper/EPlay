@@ -33,6 +33,7 @@
 #include "snd.h"
 #include "feed.h"
 #include "dspmp3.h"
+#include "cmp3.h"
 #include "hostirq.h"
 #include "../src/pcm.h"
 #include "mp3frame.h"
@@ -63,6 +64,17 @@ int play_tags_late;		/* a VGZ's GD3 come once it unpacked as it played */
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
 static int vgm;			/* a VGM or VGZ plays on the YM2149 (phase 9: vgmplay.c) */
+/* an MP3 decoded on the CPU (MP3FPU.OVL, cmp3.c: a 68060 with no Falcon DSP
+   free), played as a WAV is: its frames decoded into the queue by fill,
+   resampled there to the output's rate (16-bit big-endian stereo) */
+static int cmp;
+#define CMP_IN 16384
+static unsigned char cmp_in[CMP_IN];
+static long cmp_at, cmp_n;		/* the file's bytes waiting in cmp_in */
+static short cmp_pcm[1152 * 2];
+static long cmp_rin;			/* the file's rate */
+static unsigned long cmp_step, cmp_pos;	/* Q16: input samples an output sample */
+static short cmp_prev[2];
 /* a WAV or AIFF the DSP resamples (XSTREAM: Erez, 4 Nov 2026, the right
    pitch at any rate): the ring at the DSP's rate, through the matrix to
    its receive, a frame with a sample where the step has one (pcm_spread).
@@ -977,10 +989,97 @@ static long q_lead_ms(void)
    size, so that a turn stays near its 50 ms (Erez, 4 Nov 2026, a stock
    Falcon: the turns' 20 ms often spent before the reading, which then
    came at 246 KB/s, the music 295: the queue ran dry in 4 s) */
+/* (cmp) ns samples a channel from cmp_pcm (ch channels) into the queue at
+   the output's rate, linearly between the file's samples, as 16-bit
+   big-endian stereo: the queue's room was checked */
+static void cmp_put(int ns, int ch)
+{
+	long at = q_woff, put = 0;
+	int i;
+	for (i = 0; i < ns; i++) {
+		short l = cmp_pcm[i * ch], r = ch == 2 ? cmp_pcm[i * ch + 1] : l;
+		while (cmp_pos < 65536UL) {
+			long f = (long)(cmp_pos >> 1);	/* (Q15: the product stays in 32 bits) */
+			short *o = (short *)(q + at);
+			o[0] = (short)(cmp_prev[0] + (((long)(l - cmp_prev[0]) * f) >> 15));
+			o[1] = (short)(cmp_prev[1] + (((long)(r - cmp_prev[1]) * f) >> 15));
+			at += 4;
+			if (at >= q_size)
+				at = 0;
+			put += 4;
+			cmp_pos += cmp_step;
+		}
+		cmp_pos -= 65536UL;
+		cmp_prev[0] = l;
+		cmp_prev[1] = r;
+	}
+	q_woff = at;
+	q_w += put;			/* (last: the tick sees the samples there) */
+}
+
+/* (cmp) the queue filled for ms by decoding the file's frames on the CPU */
+static void fill_cmp(unsigned long t0, int ms, int low)
+{
+	int must = low;
+	while (!src_done && (must || ms_now() - t0 < (unsigned long)ms)) {
+		/* a frame's room: 1,152 samples, at most 49,170 / 22,050 times as
+		   many resampled up, 4 bytes each */
+		long room = q_size - (q_w - q_r);
+		int ns;
+		MP3OVL_INFO fi;
+		if (room < 1152L * 9 / 4 * 4 + 64)
+			break;
+		must = 0;
+		if (cmp_n < CMP_IN / 2 && data_left > 0) {
+			long want = CMP_IN - cmp_at - cmp_n, r;
+			if (cmp_at > 0) {
+				memmove(cmp_in, cmp_in + cmp_at, (size_t)cmp_n);
+				cmp_at = 0;
+				want = CMP_IN - cmp_n;
+			}
+			if (want > data_left)
+				want = data_left;
+			{
+				unsigned long a = ms_now();
+				r = Fread(fh, want, cmp_in + cmp_n);
+				rd_ms += (long)(ms_now() - a);
+			}
+			if (r > 0) {
+				cmp_n += r;
+				data_left -= r;
+				rd_bytes += r;
+			} else
+				data_left = 0;
+		}
+		if (cmp_n < 4) {
+			src_done = 1;
+			break;
+		}
+		ns = cmp3_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi);
+		if (fi.frame_bytes <= 0) {
+			/* no frame in what is here: more of the file, or the end */
+			if (data_left > 0 && cmp_n < CMP_IN / 2)
+				continue;
+			src_done = 1;
+			break;
+		}
+		if (fi.frame_bytes > cmp_n)
+			fi.frame_bytes = (int)cmp_n;
+		cmp_at += fi.frame_bytes;
+		cmp_n -= fi.frame_bytes;
+		if (ns > 0)
+			cmp_put(ns, fi.channels == 2 ? 2 : 1);
+	}
+}
+
 static void fill(unsigned long t0, int ms, int low)
 {
 	long piece = low ? PIECE / 2 : PIECE;
 	int must = low;
+	if (cmp) {
+		fill_cmp(t0, ms, low);
+		return;
+	}
 	while (!src_done && (must || ms_now() - t0 < (unsigned long)ms)) {
 		long free = q_size - (q_w - q_r), at = q_woff, n = q_size - at, r;
 		if (n > free)
@@ -1098,6 +1197,7 @@ int play_open(const char *path, char *err, int n)
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
 	}
 	dsp = xs = 0;
+	cmp = 0;
 	pcm_got = 0;
 	elog("open %s (%ld bytes)", path, file_size);
 	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
@@ -1263,12 +1363,43 @@ int play_open(const char *path, char *err, int n)
 			net_pend_n = fend - at;
 		} else
 			Fseek(at, fh, 0);	/* the frames read from here into the queue */
-		if (!take_queue(1)) {
-			snprintf(err, n, "There isn't the memory to play.");
-			close_file();
-			return 0;
-		}
-		switch (dspmp3_open()) {
+		{
+			/* the DSP where it is there and free; else, on a 68060 with
+			   its FPU, MP3FPU.OVL on the CPU (Erez, 12 Nov 2026) */
+			int dr = settings_mp3cpu() && cmp3_can() ? DSPMP3_BUSY : dspmp3_open();
+			if (dr != DSPMP3_OK && (dr == DSPMP3_NONE || dr == DSPMP3_BUSY) && !net && cmp3_can()) {
+				if (!cmp3_load(err, n)) {
+					close_file();
+					return 0;
+				}
+				cmp = 1;
+				dsp = 0;
+				elog("MP3 on the CPU (%s): the DSP %s", cmp3_what(), dr == DSPMP3_BUSY ? "in use" : "not there");
+			}
+			if (!take_queue(cmp ? 4 : 1)) {
+				snprintf(err, n, "There isn't the memory to play.");
+				if (dr == DSPMP3_OK)
+					dspmp3_close();
+				close_file();
+				return 0;
+			}
+			if (cmp) {
+				/* from here a WAV of 16-bit big-endian stereo, its rate
+				   the output's once chosen (fill_cmp resamples to it) */
+				memset(&fmt, 0, sizeof(fmt));
+				fmt.kind = kind = PCM_WAV;
+				fmt.bits = 16;
+				fmt.channels = 2;
+				fmt.bytes = 4;
+				fmt.big = 1;
+				fmt.rate = rate;
+				cmp_rin = rate;
+				cmp_at = cmp_n = 0;
+				cmp_pos = 65536UL;
+				cmp_prev[0] = cmp_prev[1] = 0;
+				cmp3_reset();
+			}
+			if (!cmp) switch (dr) {
 		case DSPMP3_OK:
 			break;
 		case DSPMP3_BUSY:
@@ -1283,6 +1414,7 @@ int play_open(const char *path, char *err, int n)
 			snprintf(err, n, "The DSP didn't answer.");
 			close_file();
 			return 0;
+		}
 		}
 		mp3_reset(&parse);
 		if (net) {
@@ -1368,6 +1500,14 @@ int play_open(const char *path, char *err, int n)
 			if (snd_fdi_note[0])
 				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 		}
+		if (cmp) {
+			/* (an MP3 on the CPU: fill_cmp resamples to the output's
+			   rate, so the queue plays at it as it is) */
+			cmp_step = ((unsigned long)cmp_rin << 16) / (unsigned long)out_rate;
+			rate = fmt.rate = out_rate;
+			if (cmp_rin != out_rate)
+				elog("%ld Hz to the DMA's %ld Hz by the CPU, as it decodes", cmp_rin, out_rate);
+		}
 		snd_in_rate = rate;	/* (the 8-bit DMA resamples from it) */
 		raw8 = snd_dma8 && !snd_dma8_interp;
 		if (snd_dma8) {
@@ -1426,6 +1566,10 @@ int play_open(const char *path, char *err, int n)
 		} else
 			snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr,
 				 fr);
+	} else if (cmp && cmp_rin != out_rate) {	/* (an MP3 on the CPU, resampled as it decodes) */
+		char fr[16];
+		khz(fr, sizeof(fr), cmp_rin);
+		snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr, fr);
 	} else if (ext)
 		snprintf(play_out, sizeof(play_out), "External clock  %s", kr);
 	else if (out_rate == rate)
@@ -1466,7 +1610,7 @@ int play_open(const char *path, char *err, int n)
 int play_wants_next(void)
 {
 	if (chain_asked || !src_done || net || paused || state != PS_PLAYING || chain_q >= 0 || t_end ||
-	    (dsp && xs))
+	    (dsp && xs) || cmp)	/* (an MP3 on the CPU: decoded sound in the queue, not the file's bytes) */
 		return 0;
 	if (q_w - q_r < 32768L)
 		return 0;		/* (too near the end to begin anything) */

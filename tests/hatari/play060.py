@@ -22,10 +22,18 @@ machines.MACHINES["Falcon-060"] = (
      "--ttram", "64", "--addr24", "off", "--dsp", "emu", "--monitor", "vga"],
     ["256", "16", "65536"], "no-tos-for-a-68060.img")
 
+# the same with no DSP (a Falcon whose DSP another program holds, or a 68060
+# machine without one, with the DMA's sound): MP3 by MP3FPU.OVL on the CPU
+machines.MACHINES["Falcon-060nodsp"] = (
+    machines.MACHINES["Falcon-060"][0].replace("the DSP", "no DSP"),
+    [a if a != "emu" else "none" for a in machines.MACHINES["Falcon-060"][1]],
+    machines.MACHINES["Falcon-060"][2], machines.MACHINES["Falcon-060"][3])
+
 import play_test  # noqa: E402
 
 if __name__ == "__main__":
     work = sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-060"
-    sys.argv = [sys.argv[0], work] + (sys.argv[2:] or ["vgm", "vgz", "vgmsn", "vgmopn", "vgmmd"]) + \
-        ["Falcon-060:256"]
+    # (PLAY060_MACHINE=Falcon-060nodsp: MP3 on the CPU)
+    spec = os.environ.get("PLAY060_MACHINE", "Falcon-060") + ":256"
+    sys.argv = [sys.argv[0], work] + (sys.argv[2:] or ["vgm", "vgz", "vgmsn", "vgmopn", "vgmmd"]) + [spec]
     play_test.main()

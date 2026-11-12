@@ -479,6 +479,9 @@ def run(work, case, spec):
     # (an STE runs the 68000 edition under its own name, as it is shipped)
     prg = "eplayst.prg" if spec.startswith("STE") else "eplay.prg"
     shutil.copy(os.path.join(TOP, "binary", prg), os.path.join(hd, prg))
+    # (MP3FPU.OVL beside it, as a release has it: a 68060 with no DSP decodes MP3 with it)
+    if os.path.exists(os.path.join(TOP, "binary", "mp3fpu.ovl")):
+        shutil.copy(os.path.join(TOP, "binary", "mp3fpu.ovl"), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     f = make_file(hd, case)
     tail = "C:\\%s" % f
@@ -553,6 +556,10 @@ def run(work, case, spec):
     if case in INFS:
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
             fh.write(INFS[case])
+    if os.environ.get("EPLAY_RIG_INF"):
+        # (lines added to eplay.inf: play060.py's MP3CPU=1)
+        with open(os.path.join(hd, "eplay.inf"), "a", newline="") as fh:
+            fh.write(os.environ["EPLAY_RIG_INF"].replace(";", "\r\n") + "\r\n")
     m = machines.Machine(spec, hd)
     args = m.args()
     rec = os.path.join(w, "rec.wav")
