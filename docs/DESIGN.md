@@ -1876,6 +1876,28 @@ decoder was made: a model first, then the program held to it bit for bit.
    2026):** step 7 now, on the Falcon's DSP; the YM2612 and SN76489 on a 68060 with no DSP (6c)
    later, with the XBIOS output and the FireBee edition, once FBPROBE 2's answer is in.
 
+### Step 7: OPL2 (the YM3812), then OPL3 (the YMF262), on the DSP (12 Nov 2026)
+
+The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for bit.
+
+1. **Test files and the reference.** `tests/opl/mkvgm.py` writes VGMs for the YM3812 (command
+   0x5A; the header's clock at 0x50): a sine, FM, the envelopes, the four waveforms, tremolo and
+   vibrato, the rhythm mode, a chord of nine channels. The reference is Nuked-OPL3 (LGPL-2.1+,
+   Nuke.YKT; the OPL3 runs OPL2 files as an OPL2 does), fetched for the host tests by
+   `fetch-ref.sh` as Nuked-OPN2 is: never committed or shipped.
+2. **The DSP's arithmetic** (`src/oplfast.c`, with the 68030's half `src/opld.c`): nine
+   channels of two operators, a sine of 1,024 times a gain of 2^(-A/64), the four waveforms,
+   the envelope's rates, key scaling, feedback, tremolo and vibrato, the rhythm mode's five
+   instruments (the noise from its LFSR); held to the reference: pitch exact, level within
+   0.5 dB.
+3. **The program** (`dsp/opl.a56`) held to it bit for bit on Hatari's DSP core
+   (`tests/dspopl`), and its worst case's cycles a sample against the Falcon's 1,301 at 24,585 Hz.
+4. **The 68030's side:** `src/vgm.c` reads the YM3812 (and the YMF262's two ports, 0x5E/0x5F,
+   for OPL3), `atari/dspopl.c` loads the program and sends the changes from the tick, as
+   `dspopn.c` does; the bar's badge and the info line as the YM2612's.
+5. **OPL3** after OPL2's release: 18 channels, four-operator pairs, stereo; measured first
+   (36 operators against the YM2612's 24: 24,585 Hz may not hold).
+
 ### The 68030's tick with drums (1.19, 1.20: Erez's Falcon, 11 Nov 2026)
 
 EPlay 1.18 played "Spinning Machine" (Streets of Rage 3, its drums 44 DAC samples a millisecond)
