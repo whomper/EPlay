@@ -1955,10 +1955,17 @@ stock Falcon with the file:
   in the tick, as `drums()` does: on Hatari's 32 MHz Falcon the tick 724 → 252 µs of its
   1,000, none left out, the unpacking keeping ahead. Each write still goes at its tick, not at
   its own moment (within 1 ms): exact timing for sampled sound is Erez's choice (a second timer
-  for such files, or the YM2149 imitated on the DSP). **Figures: pending.** The ones first given (Falcon-4, "Position bar: let go" 120 → 400 ms)
-  ran a stale `make prof` build on both sides, so they measured nothing; they are being
-  taken again from fresh `make prof`/`profst` builds on Falcon-4:16 and STE:mono (the 68000's
-  row: the plain ST is left out, no DMA sound).
+  for such files, or the YM2149 imitated on the DSP). **Accepted figures (Erez, 12 Nov 2026, "Ok", through the hub).** The speed rig's vgm
+  kind with a 20 s cut (1.5 MB) of that file, fresh `make prof`/`profst` builds each side
+  (before 13fb729, after fd9de69); neither machine keeps up with such a file in either, every
+  row over its time. The rows that grew: Falcon-4:16 started 2575 → 2705, Pause let go 135 →
+  155, Play let go 210 → 275, playing 210 → 280, the position bar pressed 170 → 240 and let go
+  285 → 530, playing from there 60 → 180, the volume let go 55 → 75; STE:mono (EPLAYST, the
+  68000's row: the plain ST is left out) started 8160 → 9395, playing from there 2675 → 9380,
+  the volume pressed < 20 → 1415. The rest fell (Falcon-4: About 550 → 275, Settings 545 →
+  340; STE: most rows 1.5 to 3 times). Why: before, most ticks were left out and not made up
+  (the music slowed, so did less); the cheaper tick plays more of the music, and GEM gets less
+  of the 68000 or 68030. No further work on those rows.
 - **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
   the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST
