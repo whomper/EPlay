@@ -67,8 +67,11 @@ $(B)/mul060.o: mul060.c | $(B)
 .PHONY: mp3mini
 mp3mini: $(B)/MP3MINI.PRG
 P060F   := $(subst -I../../build,-I../mp3/third_party,$(P060)) -ffast-math
-$(B)/MP3MINI.elf: $(B)/crt0.o $(B)/mp3mini.o $(B)/mul060.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
+$(B)/MP3MINI.elf: $(B)/crt0_64k.o $(B)/mp3mini.o $(B)/mul060.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
 	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
 	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
 $(B)/mp3mini.o: mp3mini.c ../mp3/third_party/minimp3.h | $(B)
 	$(CC) $(P060F) -c -o $@ $<
+# (minimp3 keeps some 16 KB of scratch on the stack: crt0's 4 KB overran)
+$(B)/crt0_64k.o: $(A)/crt0.S | $(B)
+	$(CC) -m68000 -DSTACK_SIZE=65536 -c -o $@ $<
