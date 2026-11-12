@@ -1872,7 +1872,9 @@ decoder was made: a model first, then the program held to it bit for bit.
    1,133 cycles a sample, 87% of a stock Falcon's DSP at 24,585 Hz (1,301). The Hatari rig's
    cases vgmopn (a YM2612 sine) and vgmmd (a Mega Drive file's SN76489) pass on ERZ.
 6. **MP3 on the 68060** (below), then the release.
-7. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way.
+7. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way. **Order (Erez, 12 Nov
+   2026):** step 7 now, on the Falcon's DSP; the YM2612 and SN76489 on a 68060 with no DSP (6c)
+   later, with the XBIOS output and the FireBee edition, once FBPROBE 2's answer is in.
 
 ### The 68030's tick with drums (1.19, 1.20: Erez's Falcon, 11 Nov 2026)
 
