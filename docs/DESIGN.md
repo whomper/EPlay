@@ -1954,8 +1954,11 @@ stock Falcon with the file:
   writes a second, played badly).** `ay_burst()` runs the YM2149's writes and the waits inline
   in the tick, as `drums()` does: on Hatari's 32 MHz Falcon the tick 724 → 252 µs of its
   1,000, none left out, the unpacking keeping ahead. Each write still goes at its tick, not at
-  its own moment (within 1 ms): exact timing for sampled sound is Erez's choice (a second timer
-  for such files, or the YM2149 imitated on the DSP). **Accepted figures (Erez, 12 Nov 2026, "Ok", through the hub).** The speed rig's vgm
+  its own moment (within 1 ms). **Decided (Erez, 12 Nov 2026): B, a second, faster timer,
+  only for the files that need it and not on slow machines.** A file whose YM2149 writes come
+  closer than 1 ms apart (sampled sound) has them played each at its own moment by a second MFP
+  timer, from a queue the 1 ms tick fills; other files stay on the tick as now. The ST edition
+  (`EPLAYST.PRG`, the 68000 at 8 MHz) keeps the tick alone (A). After phase 10's step 7. **Accepted figures (Erez, 12 Nov 2026, "Ok", through the hub).** The speed rig's vgm
   kind with a 20 s cut (1.5 MB) of that file, fresh `make prof`/`profst` builds each side
   (before 13fb729, after fd9de69); neither machine keeps up with such a file in either, every
   row over its time. The rows that grew: Falcon-4:16 started 2575 → 2705, Pause let go 135 →
