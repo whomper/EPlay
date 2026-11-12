@@ -75,3 +75,20 @@ $(B)/mp3mini.o: mp3mini.c ../../third_party/minimp3/minimp3.h | $(B)
 # (minimp3 keeps some 16 KB of scratch on the stack: crt0's 4 KB overran)
 $(B)/crt0_64k.o: $(A)/crt0.S | $(B)
 	$(CC) -m68000 -DSTACK_SIZE=65536 -c -o $@ $<
+# OPNCPU.PRG (opncpu.c): the YM2612's C model built for the 68060, timed
+# (python3 mp3cpu.py WORK ANY.MP3 6 OPNCPU.PRG)
+.PHONY: opncpu
+opncpu: $(B)/OPNCPU.PRG
+P060O   := $(P060) -Iinc060 -I../../src -I../../common/src
+$(B)/OPNCPU.elf: $(B)/crt0_64k.o $(B)/opncpu.o $(B)/opnfast60.o $(B)/opnd60.o $(B)/sncmd60.o $(B)/mul060.o \
+		$(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
+	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+$(B)/opncpu.o: opncpu.c ../../build/opntab.h | $(B)
+	$(CC) $(P060O) -c -o $@ $<
+$(B)/opnfast60.o: ../../src/opnfast.c | $(B)
+	$(CC) $(P060O) -c -o $@ $<
+$(B)/opnd60.o: ../../src/opnd.c | $(B)
+	$(CC) $(P060O) -c -o $@ $<
+$(B)/sncmd60.o: ../../src/sncmd.c | $(B)
+	$(CC) $(P060O) -c -o $@ $<
