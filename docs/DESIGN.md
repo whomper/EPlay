@@ -1955,11 +1955,10 @@ stock Falcon with the file:
   in the tick, as `drums()` does: on Hatari's 32 MHz Falcon the tick 724 → 252 µs of its
   1,000, none left out, the unpacking keeping ahead. Each write still goes at its tick, not at
   its own moment (within 1 ms): exact timing for sampled sound is Erez's choice (a second timer
-  for such files, or the YM2149 imitated on the DSP). **Accepted figures (Erez, 12 Nov 2026,
-  through the hub):** on Falcon-4, the speed rig's vgm kind with a 20 s cut of that file,
-  "Position bar: let go" 120 → 400 ms, the ticks left out 57 % → 53 %: the stock Falcon can't
-  keep up with such a file either way; no fix asked. The ST's row stays open until speed.py's
-  vgm kind starts EPlay on ST:mono.
+  for such files, or the YM2149 imitated on the DSP). **Figures: pending.** The ones first given (Falcon-4, "Position bar: let go" 120 → 400 ms)
+  ran a stale `make prof` build on both sides, so they measured nothing; they are being
+  taken again from fresh `make prof`/`profst` builds on Falcon-4:16 and STE:mono (the 68000's
+  row: the plain ST is left out, no DMA sound).
 - **Stock Falcon, 1.21:** the file at some 90 % of its speed (1.20: 67 %), the tick 65 % of
   the 68030; GEM's longest stretches while it plays are still seconds (the speed rig's `vgm`
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST
