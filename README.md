@@ -20,6 +20,8 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
 - **Playlists:** files, folders and `.M3U`; reorder by dragging; Shuffle and Repeat.
 - **Mini player:** the bar alone, in a small window.
 - **Falcon, TT and STE:** WAV and AIFF on the TT's and STE's DMA sound too.
+- **68060:** a Falcon with a 68060 plays as any Falcon; where its DSP isn't free, the 68060 and its
+  FPU decode MP3 themselves (`mp3fpu.ovl`; so far tested in Hatari, not yet on a real CT60).
 
 ![EPlay's Settings on a Falcon in 256 colours (Hatari): its pages Playing, Stations and Files at the left; Playing shows the Output (Auto, FDI, DSP) and ReplayGain (Off, Track, Album, Auto) as buttons](docs/settings.png)
 
@@ -33,13 +35,16 @@ Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** a
 | `eplayst.prg` | the program for an STE |
 | `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it |
 | `tls.ovl`, `cacert.pem` | secure (https) stations: keep them beside the program |
+| `mp3fpu.ovl` | MP3 decoded by a 68060 with its FPU where there is no DSP free: keep it beside the program |
+| `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` (a FireBee edition is in development) |
 
 Start `eplay.prg`, or drop music files, a folder or a playlist on it. **File > Open...** adds more,
 **File > Open URL...** plays a station, **Help > Keys...** lists the keys. The guide
 ([docs/GUIDE.md](docs/GUIDE.md)) has the rest.
 
-**Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP), a TT, or an STE or Mega STE
-with `eplayst.prg` (WAV and AIFF); a screen 640 pixels wide. Web radio needs a network card and
+**Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP, or a 68060 with its FPU), a TT,
+or an STE or Mega STE with `eplayst.prg` (WAV and AIFF); a screen 640 pixels wide. The original ST
+has no DMA sound and isn't supported. Web radio needs a network card and
 STinG or MiNTnet.
 
 ## AERA-Gateway
@@ -59,13 +64,15 @@ More in [docs/DEVELOPING.md](docs/DEVELOPING.md).
 
 ## Source
 
-`src/` the formats and the decoder's C model, `dsp/` the MP3 decoder for the DSP56001, `atari/` the
-sound hardware, `ui/` GEM, `radio/` the Gateway's radio service, `common/` the AERA library. The
+`src/` the formats and the decoder's C model, `dsp/` the MP3 decoder and the chips' programs for the
+DSP56001, `atari/` the sound hardware, `ui/` GEM, `mp3ovl/` the 68060's MP3 overlay (minimp3, in
+`third_party/`), `radio/` the Gateway's radio service, `common/` the AERA library. The
 full list is in [docs/DEVELOPING.md](docs/DEVELOPING.md).
 
 ## Tests
 
-`make test` and `make dsptest`, with the Hatari rigs in `tests/hatari/`: see [docs/DEVELOPING.md](docs/DEVELOPING.md).
+`make test` and `make dsptest`, with the Hatari rigs in `tests/hatari/` (`play060.py` runs them on a
+Falcon with a 68060): see [docs/DEVELOPING.md](docs/DEVELOPING.md).
 
 ## Licence
 
