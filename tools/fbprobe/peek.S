@@ -34,8 +34,23 @@ fail:	movea.l	saved_sp,%sp		| (the exception's frame dropped, whatever its forma
 	clr.w	fb_ok
 	bra.s	back
 
+| FBPROBE 2: fb_tick, an MFP Timer A handler (Xbtimer's) that counts in
+| fb_ticks and clears Timer A's in-service bit (ISRA bit 5); fb_hz200 reads
+| the 200 Hz clock ($4BA) in supervisor mode (Supexec's) into fb_val
+	.globl	fb_tick, fb_hz200
+fb_tick:
+	addq.l	#1,fb_ticks
+	bclr	#5,0xfffffa0f.w
+	rte
+fb_hz200:
+	move.l	0x4ba.w,fb_val
+	moveq	#0,%d0
+	rts
+
 	.bss
 	.even
+	.globl	fb_ticks
+fb_ticks:	.skip	4
 	.globl	fb_addr, fb_size, fb_ok, fb_val
 fb_addr:	.skip	4
 fb_val:		.skip	4
