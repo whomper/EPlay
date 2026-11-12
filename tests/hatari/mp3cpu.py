@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""mp3cpu.py WORK FILE.MP3 [CPULEVEL]: MP3CPU.PRG (make mp3cpu) on Hatari's
+"""mp3cpu.py WORK FILE.MP3 [CPULEVEL [PRG]]: MP3CPU.PRG (make mp3cpu) on Hatari's
 Falcon with a 68060 (CPULEVEL 6, or 3 for a 68030 to compare) at 32 MHz,
 under EmuTOS (TOS 4.04 knows no 68060), no DSP: the C model of EPlay's
 DSP decoder timed on the CPU. A measurement (DESIGN.md, "MP3 on the CPU"):
@@ -23,11 +23,12 @@ def main():
     work = os.path.abspath(sys.argv[1])
     mp3 = sys.argv[2]
     level = sys.argv[3] if len(sys.argv) > 3 else "6"
-    w = os.path.join(work, "mp3cpu-%s" % level)
+    prg = sys.argv[4] if len(sys.argv) > 4 else "MP3CPU.PRG"	# (or MP3MINI.PRG: minimp3's)
+    w = os.path.join(work, "%s-%s" % (prg.split(".")[0].lower(), level))
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(HERE, "build", "MP3CPU.PRG"), hd)
+    shutil.copy(os.path.join(HERE, "build", prg), os.path.join(hd, "MP3CPU.PRG"))
     shutil.copy(mp3, os.path.join(hd, "TEST.MP3"))
     log = os.path.join(w, "hatari.log")
     args = ["hatari", "--tos", machines.emutos(), "--machine", "falcon", "--cpulevel", level,

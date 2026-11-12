@@ -62,3 +62,13 @@ clean:
 .PHONY: all clean
 $(B)/mul060.o: mul060.c | $(B)
 	$(CC) $(P060) -c -o $@ $<
+# MP3MINI.PRG (mp3mini.c): minimp3 built for the 68060's FPU, timed the same
+# way (python3 mp3cpu.py WORK FILE.MP3 6 MP3MINI.PRG)
+.PHONY: mp3mini
+mp3mini: $(B)/MP3MINI.PRG
+P060F   := $(subst -I../../build,-I../mp3/third_party,$(P060)) -ffast-math
+$(B)/MP3MINI.elf: $(B)/crt0.o $(B)/mp3mini.o $(B)/mul060.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
+	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+$(B)/mp3mini.o: mp3mini.c ../mp3/third_party/minimp3.h | $(B)
+	$(CC) $(P060F) -c -o $@ $<
