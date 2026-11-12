@@ -495,6 +495,12 @@ def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
     kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini", "add"]	# (and vgm, asked for)
+    if spec.split(":")[0] in ("ST", "ST-1"):
+        # (EPlay leaves out the plain ST: no DMA sound, DESIGN.md; it says so
+        # and stops. Its 8 MHz 68000 is the STE's edition's: STE:mono. A
+        # Falcon's eplay.prg on an ST's 68000 never started: 11 Nov 2026)
+        print("speed: EPlay leaves out the plain ST (no DMA sound): its 68000 at 8 MHz is STE:mono's")
+        return 1
     return max(session(work, spec, k) for k in kinds)
 
 
