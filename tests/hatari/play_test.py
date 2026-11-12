@@ -372,7 +372,9 @@ def analyse(rec, case):
     rms = [math.sqrt(sum(v * v for v in left[i:i + blk]) / blk) for i in range(0, len(left) - blk, blk)]
     loud = [i for i, r in enumerate(rms) if r > 1000]
     if not loud:
-        if hatari_keeps_parity() and not CASES[case][2] and case not in RESAMPLED:
+        # (MP3CPU=1, play060.py's: an MP3 decoded on the CPU goes through the DMA too)
+        cpu_mp3 = "MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "")
+        if hatari_keeps_parity() and (cpu_mp3 or (not CASES[case][2] and case not in RESAMPLED)):
             # the sound DMA plays four tracks, the music in the first
             # (Erez's Analog 8: channels 3 to 8 silent). Hatari 2.4 keeps
             # the DMA's word count from its last stop (EPlay's clock
