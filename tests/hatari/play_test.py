@@ -558,6 +558,9 @@ def run(work, case, spec):
     if case in INFS:
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
             fh.write(INFS[case])
+    if os.environ.get("EPLAY_RIG_INF_FILE"):
+        # (inf_test.py's: this file as eplay.inf, its date kept)
+        shutil.copy2(os.environ["EPLAY_RIG_INF_FILE"], os.path.join(hd, "eplay.inf"))
     if os.environ.get("EPLAY_RIG_INF"):
         # (lines added to eplay.inf: play060.py's MP3CPU=1)
         with open(os.path.join(hd, "eplay.inf"), "a", newline="") as fh:

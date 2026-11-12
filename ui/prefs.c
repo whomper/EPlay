@@ -292,6 +292,10 @@ static void save_in(void)
 		if (a != inf3)
 			memcpy(inf3, a, (size_t)n);
 	}
+	/* (guidelines 6.1, Erez 12 Nov 2026: the INF written only when it
+	   changes: the same text as read or last written, no file touched) */
+	if (n == inf_n && !memcmp(inf, inf3, (size_t)n))
+		return;
 	inf_path(path, sizeof(path), "eplay.inf");
 	inf_path(tmp, sizeof(tmp), "eplay.in$");
 	h = Fcreate(tmp, 0);
