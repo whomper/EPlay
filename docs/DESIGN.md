@@ -2062,5 +2062,20 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
   float path), `MP3INT.OVL` one in 32-bit fixed point (products of 16 by 16 bits, or 32-bit
   `muls.l` kept to 32), each held to minimp3 by the existing tests' limits rather than to the
   DSP bit for bit; then measured again before anything else is built.
+- **VGM on the 68060 too (Erez, 12 Nov 2026: "make sure to have the VGM player also supported in
+  68060").** Two cases:
+  - **A 68060 Falcon (a CT60's), the DSP there:** as now: the YM2149 on the chip, the SN76489
+    and the YM2612 on the DSP. `tests/hatari/play060.py` runs play_test's cases on Hatari's
+    Falcon at CPU level 6 (EmuTOS: TOS 4.04 knows no 68060; the machine added at run time,
+    "Falcon-060", until common's machines.py has one): vgm, vgz, vgmsn, vgmopn and vgmmd pass
+    (12 Nov 2026). EPlay has no 64-bit `mulu.l`/`divu.l` of its own; the 8-bit DMA's `movep.w`
+    (`snd_put8_raw`, the TT's and STE's path) would go through the 68060's software package,
+    and a 68060 Falcon doesn't take that path.
+  - **A 68060 without a Falcon DSP:** the SN76489 and the YM2612 made on the CPU, from the C
+    models the DSP programs are held to (`src/sncmd.c`'s arithmetic, `src/opnfast.c`), into the
+    DMA sound's ring, with the YM2149 on the chip where there is one. Measured on Hatari's
+    68060 first, as the MP3 decoder was; the YM2612's model (`opnfast.c`) also keeps the DSP's
+    48-bit products (`long long`), so it may need a 68060 form of its own as the MP3 decoder
+    does (24-bit words, products of 16 by 16 bits).
 - **With the FireBee's release:** the same decoder in the ColdFire edition, its synthesis filter
   and IMDCT on the EMAC later.
