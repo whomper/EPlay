@@ -62,7 +62,7 @@ const char *play_via = "";
 int play_tags_late;		/* a VGZ's GD3 come once it unpacked as it played */
 
 static int state = PS_IDLE, kind, fh = -1, eof;
-static int dsp;			/* the DSP plays it: an MP3, or WAV and AIFF resampled */
+static int dsp;			/* the DSP decodes it: an MP3 */
 static int vgm;			/* a VGM or VGZ plays on the YM2149 (phase 9: vgmplay.c) */
 /* an MP3 decoded on the CPU (MP3FPU.OVL, cmp3.c: a 68060 with no Falcon DSP
    free), played as a WAV is: its frames decoded into the queue by fill,
@@ -1663,6 +1663,19 @@ int play_chain(const char *path)
 	int nx_has_lt = 0;
 	if (h2 < 0)
 		return 0;
+	{
+		/* (its first bytes: a WAV or AIFF after an MP3, or the other way,
+		   turned down at once, not its tags read and 8 KB searched for an
+		   MP3 frame: the speed rig's drag, a row moved, 85 to 170 ms in
+		   that turn on a stock Falcon) */
+		unsigned char hd[4];
+		int pcm2 = Fread((short)h2, 4, hd) == 4 && (!memcmp(hd, "RIFF", 4) || !memcmp(hd, "FORM", 4));
+		if (pcm2 != !(dsp || cmp)) {
+			Fclose((short)h2);
+			elog("gapless: %s is not this file's kind: it opens at this one's end", base_name(path));
+			return 0;
+		}
+	}
 	size = Fseek(0, (short)h2, 2);
 	memset(&nx, 0, sizeof(nx));
 	nx_delay = nx_pad = -1;
