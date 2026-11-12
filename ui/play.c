@@ -75,6 +75,21 @@ static short cmp_pcm[1152 * 2];
 static long cmp_rin;			/* the file's rate */
 static unsigned long cmp_step, cmp_pos;	/* Q16: input samples an output sample */
 static short cmp_prev[2];
+/* LAME's delay and padding (its tag), the decoder's 529 samples with it:
+   the samples left out at the start, and how many there are to play (-1:
+   not known: a file with no tag, or played from a place in it) */
+static long cmp_skip, cmp_keep;
+static long open_fs;			/* the file's samples by its Xing frame (0: none) */
+static void cmp_trim(int has_lt, const MP3LAME *lt, long fs, int from_start)
+{
+	cmp_skip = 0;
+	cmp_keep = -1;
+	if (has_lt && from_start) {
+		cmp_skip = lt->delay + 529;
+		if (fs > 0)
+			cmp_keep = fs - lt->delay - lt->padding;
+	}
+}
 /* a WAV or AIFF the DSP resamples (XSTREAM: Erez, 4 Nov 2026, the right
    pitch at any rate): the ring at the DSP's rate, through the matrix to
    its receive, a frame with a sample where the step has one (pcm_spread).
@@ -992,11 +1007,11 @@ static long q_lead_ms(void)
 /* (cmp) ns samples a channel from cmp_pcm (ch channels) into the queue at
    the output's rate, linearly between the file's samples, as 16-bit
    big-endian stereo: the queue's room was checked */
-static void cmp_put(int ns, int ch)
+static void cmp_put(int from, int ns, int ch)
 {
 	long at = q_woff, put = 0;
 	int i;
-	for (i = 0; i < ns; i++) {
+	for (i = from; i < from + ns; i++) {
 		short l = cmp_pcm[i * ch], r = ch == 2 ? cmp_pcm[i * ch + 1] : l;
 		while (cmp_pos < 65536UL) {
 			long f = (long)(cmp_pos >> 1);	/* (Q15: the product stays in 32 bits) */
@@ -1067,8 +1082,21 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 			fi.frame_bytes = (int)cmp_n;
 		cmp_at += fi.frame_bytes;
 		cmp_n -= fi.frame_bytes;
-		if (ns > 0)
-			cmp_put(ns, fi.channels == 2 ? 2 : 1);
+		if (ns > 0) {
+			/* the delay left out, then no more than there is to play */
+			int from = 0;
+			if (cmp_skip > 0) {
+				from = cmp_skip < ns ? (int)cmp_skip : ns;
+				cmp_skip -= from;
+			}
+			ns -= from;
+			if (cmp_keep >= 0 && ns > cmp_keep)
+				ns = (int)cmp_keep;
+			if (cmp_keep >= 0)
+				cmp_keep -= ns;
+			if (ns > 0)
+				cmp_put(from, ns, fi.channels == 2 ? 2 : 1);
+		}
 	}
 }
 
@@ -1276,9 +1304,11 @@ int play_open(const char *path, char *err, int n)
 			int vbr;
 			long nf = !net && first_at + h.length <= fend ? mp3_info_frames(fbuf + first_at, &h, &vbr) : 0;
 			long bytes = file_size - at;
+			open_fs = 0;
 			if (nf > 0) {
 				long fs = nf * h.samples;
 				MP3LAME lt;
+				open_fs = fs;
 				open_has_lt = mp3_info_lame(fbuf + first_at, &h, &lt);
 				cur_pad = open_has_lt ? lt.padding : -1;
 				open_lt = lt;
@@ -1398,6 +1428,7 @@ int play_open(const char *path, char *err, int n)
 				cmp_pos = 65536UL;
 				cmp_prev[0] = cmp_prev[1] = 0;
 				cmp3_reset();
+				cmp_trim(open_has_lt, &open_lt, open_fs, base_ms == 0);
 			}
 			if (!cmp) switch (dr) {
 		case DSPMP3_OK:
@@ -1610,7 +1641,7 @@ int play_open(const char *path, char *err, int n)
 int play_wants_next(void)
 {
 	if (chain_asked || !src_done || net || paused || state != PS_PLAYING || chain_q >= 0 || t_end ||
-	    (dsp && xs) || cmp)	/* (an MP3 on the CPU: decoded sound in the queue, not the file's bytes) */
+	    (dsp && xs))
 		return 0;
 	if (q_w - q_r < 32768L)
 		return 0;		/* (too near the end to begin anything) */
@@ -1648,24 +1679,35 @@ int play_chain(const char *path)
 		refill_cap = 8192;	/* (a header, the Xing frame, a frame or two: the
 					   speed rig's Return held 345 ms with 32 KB here) */
 		refill();
-		if (dsp) {
+		if (dsp || cmp) {
 			MP3HDR h;
 			int vbr = 0;
 			long nf;
 			at = find_mp3(&h);
-			if (at < 0 || h.rate != rate) {
+			if (at < 0 || h.rate != (cmp ? cmp_rin : rate)) {
 				fh = was;
 				fpos = wpos;
 				fend = wend;
 				eof = weof;
 				Fclose((short)h2);
 				refill_cap = 32768;
-				elog("gapless: %s is no MP3 at %ld Hz: it opens at this one's end", base_name(path), rate);
+				elog("gapless: %s is no MP3 at %ld Hz: it opens at this one's end", base_name(path),
+				     cmp ? cmp_rin : rate);
 				return 0;
 			}
 			nf = first_at + h.length <= fend ? mp3_info_frames(fbuf + first_at, &h, &vbr) : 0;
 			nx.xing_at = at;
 			left = size - at;
+			if (cmp) {
+				/* (an MP3 on the CPU: this one decoded to its end, the
+				   decoder begun afresh for the next, its own delay and
+				   padding left out) */
+				MP3LAME lt0;
+				int has = nf > 0 && mp3_info_lame(fbuf + first_at, &h, &lt0);
+				cmp3_reset();
+				cmp_at = cmp_n = 0;
+				cmp_trim(has, &lt0, nf > 0 ? nf * h.samples : 0, 1);
+			}
 			if (nf > 0) {
 				long fs = nf * h.samples;
 				MP3LAME lt;
