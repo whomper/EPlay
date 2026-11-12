@@ -78,6 +78,12 @@ typedef struct {
 	OPLC_STATUS: one word back, the ring's least lead since PLAY (words)
 	OPLC_RUN n (tests), OPLC_PLAY k, OPLC_RESET
    (1, 4 and 6 are LOADX, LOADY and LOADP) */
+/* where the 68030 loads the DSP's tables (oplfast.c's: LOADX, LOADY) */
+#define OPL_X_GAIN 0x0400
+#define OPL_X_AM 0x1000
+#define OPL_X_PMW 0x1200
+#define OPL_Y_WAVE 0x2000
+
 enum { OPLC_OP = 2, OPLC_CH = 3, OPLC_KEY = 5, OPLC_LFO = 7, OPLC_RHY = 8, OPLC_RUN = 9, OPLC_PLAY = 10,
        OPLC_RESET = 12, OPLC_STATUS = 15, OPLC_STEP = 16 };
 

@@ -1898,6 +1898,36 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
 5. **OPL3** after OPL2's release: 18 channels, four-operator pairs, stereo; measured first
    (36 operators against the YM2612's 24: 24,585 Hz may not hold).
 
+**Done (OPL2, 12 Nov 2026):**
+
+- **The model** (`src/opld.c`, `src/oplfast.c`) written from the chip's documented behaviour, its
+  timings measured against Nuked-OPL3 as a black box (`tests/opl/compare.py`): the envelope
+  clocked each of the chip's samples (clock / 72), a rate R's pattern stepped each 2^(12 - R) of
+  them up to R 12, then each one at twice and four times the increments, R 15's decay 4 and its
+  attack at once; the attack's step the attenuation's eighth, its rounding taken as the
+  attenuation plus 4.5 steps times the factor; the key scaling's rate offset the key code (a
+  quarter of it without KSR), its level 6 dB an octave at most from a table of 16 by the
+  F-number's top bits (halved and quartered); SL 15 as 31; the drums' phases (the hi-hat, the
+  snare, the cymbal) from the hi-hat's phase bits 2, 3, 7 and 8, the cymbal's 3 and 5, and a
+  23-bit noise, as the die shows (the cymbal at the index $80 or $280: 3 dB under a full
+  square); the drums twice as loud as a channel. The eight test files within the limits at
+  49,716 and 24,585 Hz: pitch exact, level within 0.4 dB, the loudness curve within 0.6 dB,
+  the timbre within 2.8 dB.
+- **The program** (`dsp/opl.a56`) bit for bit with the model on all eight files and the worst
+  cases. Each operator: its waveform's table by a base in Y (four of 1,024), the index masked
+  ($3FF) rather than the YM2612's eight copies. The worst case, the rhythm mode with six
+  channels in FM at feedback 7, every operator loud with tremolo and vibrato: 1,106 cycles a
+  sample, 85 % of a stock Falcon's DSP at 24,585 Hz (nine channels in FM: 929).
+- **The player:** `src/vgm.c` reads 0x5A and the clock at 0x50 (a seek writes the registers
+  again, the keys and the drums last); `atari/dspopl.c` as `dspopn.c` (the tick 500 times a
+  second); the info line "VGM YM3812", the badge DSP or FDI. A file with a YM3812 and a YM2612
+  plays the YM2612 (one DSP program at a time); one with a YM3812 and an SN76489 the YM3812,
+  the SN76489 left out ("its part alone"). The play rig's `vgmopl` (a 1 kHz sine) passes on
+  Falcon-4 with TOS 4.04 and NVDI and on the 68060 machine; the rhythm test file plays with the
+  DSP's ring full throughout (its least lead 1,531 words of 1,536), the tick 197 us of its 2 ms.
+- **Its level is the reference's:** one channel at full level is -18 dB of full scale, as a
+  real OPL2 is against its DAC's range; music with several channels is louder.
+
 ### The 68030's tick with drums (1.19, 1.20: Erez's Falcon, 11 Nov 2026)
 
 EPlay 1.18 played "Spinning Machine" (Streets of Rage 3, its drums 44 DAC samples a millisecond)

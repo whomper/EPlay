@@ -55,6 +55,7 @@ int vgm_head_of(const unsigned char *b, long n, long size, VGMHEAD *h)
 	if (h->version >= 0x110)
 		h->ym2612_clock = field(b, n, data, 0x2c) & 0x3fffffffUL;
 	if (h->version >= 0x151) {
+		h->ym3812_clock = field(b, n, data, 0x50) & 0x3fffffffUL;
 		h->ay_clock = field(b, n, data, 0x74) & 0x3fffffffUL;
 		if (h->ay_clock && 0x79 < data && 0x79 < n) {
 			h->ay_type = b[0x78];
@@ -69,7 +70,7 @@ int vgm_head_of(const unsigned char *b, long n, long size, VGMHEAD *h)
 	if (h->version >= 0x110 && (field(b, n, data, 0x30) & 0x3fffffffUL))
 		h->other = 1;
 	for (o = 0x38; o < 0x74 && h->version >= 0x151; o += 4)
-		if (o != 0x3c && (field(b, n, data, o) & 0x3fffffffUL))	/* (0x3c: SegaPCM's interface) */
+		if (o != 0x3c && o != 0x50 && (field(b, n, data, o) & 0x3fffffffUL))	/* (0x3c: SegaPCM's interface) */
 			h->other = 1;
 	for (o = 0x80; o < 0xe0 && h->version >= 0x161; o += 4)
 		if (field(b, n, data, o) & 0x3fffffffUL)
@@ -268,6 +269,14 @@ static void opn_write(VGMRUN *r, int port, int reg, int val)
 		r->opn_fn(r->u, port, reg, val);
 }
 
+/* a YM3812 register: kept (a seek writes them again), and passed on */
+static void opl_write(VGMRUN *r, int reg, int val)
+{
+	r->opl[reg & 0xff] = (unsigned char)val;
+	if (r->opl_fn)
+		r->opl_fn(r->u, 0, reg, val);
+}
+
 /* the commands until one waits; 0 at the end */
 static int commands(VGMRUN *r)
 {
@@ -334,6 +343,8 @@ static int commands(VGMRUN *r)
 				r->sn_fn(r->u, b[p + 1]);
 		} else if (c == 0x52 || c == 0x53) {
 			opn_write(r, c & 1, b[p + 1], b[p + 2]);
+		} else if (c == 0x5a) {
+			opl_write(r, b[p + 1], b[p + 2]);
 		} else if (c == 0x67 && k >= 7) {
 			/* a data block: the YM2612's samples (type 0), the first kept */
 			if (b[p + 2] == 0 && !r->pcm_len) {
@@ -498,6 +509,10 @@ static void seek_run(VGMRUN *r, long to)
 			opn_write(r, c & 1, b[p + 1], b[p + 2]);
 			p += 3;
 			continue;
+		} else if (c == 0x5a) {
+			opl_write(r, b[p + 1], b[p + 2]);
+			p += 3;
+			continue;
 		} else if (c == 0x50) {
 			sn_shadow(r, b[p + 1]);
 			p += 2;
@@ -568,6 +583,7 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 	VGM_AY ay = r->ay_fn;
 	VGM_SN sn = r->sn_fn;
 	VGM_OPN opn = r->opn_fn;
+	VGM_OPL opl = r->opl_fn;
 	VGMHEAD h = r->h;
 	int att = r->att;
 	void *u = r->u, *mu = r->mu;
@@ -577,6 +593,7 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 		r->ay_fn = 0;
 		r->sn_fn = 0;
 		r->opn_fn = 0;
+		r->opl_fn = 0;
 		r->dac = 0;
 		r->u = u;
 	} else
@@ -620,6 +637,7 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 	r->ay_fn = ay;
 	r->sn_fn = sn;
 	r->opn_fn = opn;
+	r->opl_fn = opl;
 	fade_to(r);
 	vgm_resend(r);
 }
@@ -663,6 +681,25 @@ void vgm_resend(VGMRUN *r)
 		for (ch = 0; ch < 8; ch++)
 			if (ch != 3 && ch != 7)
 				r->opn_fn(r->u, 0, 0x28, r->opn_key[ch] ? r->opn_key[ch] : ch);
+	}
+	if (r->opl_fn && r->h.ym3812_clock) {
+		/* the YM3812: its modes, the operators' registers, the channels'
+		   (the keys last: $B0-$B8, then $BD's drums) */
+		static const unsigned char first[3] = { 0x01, 0x08, 0xbd };
+		int reg, k;
+		for (k = 0; k < 3; k++)
+			r->opl_fn(r->u, 0, first[k], first[k] == 0xbd ? r->opl[0xbd] & 0xe0 : r->opl[first[k]]);
+		for (reg = 0x20; reg < 0xa0; reg++)
+			r->opl_fn(r->u, 0, reg, r->opl[reg]);
+		for (reg = 0xe0; reg < 0xf6; reg++)
+			r->opl_fn(r->u, 0, reg, r->opl[reg]);
+		for (reg = 0xa0; reg < 0xa9; reg++)
+			r->opl_fn(r->u, 0, reg, r->opl[reg]);
+		for (reg = 0xc0; reg < 0xc9; reg++)
+			r->opl_fn(r->u, 0, reg, r->opl[reg]);
+		for (reg = 0xb0; reg < 0xb9; reg++)
+			r->opl_fn(r->u, 0, reg, r->opl[reg]);
+		r->opl_fn(r->u, 0, 0xbd, r->opl[0xbd]);
 	}
 	if (r->sn_fn && r->h.sn_clock) {
 		int ch;

@@ -1,0 +1,1070 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; opl.a56 - the YM3812 (OPL2) for a VGM file on the Falcon's DSP (phase 10,
+; step 7), at the Falcon's 24,585 Hz: src/oplfast.c's arithmetic, word for
+; word (tests/dspopl holds it to it, bit for bit). The 68030 does the chip's
+; registers (src/opld.c) and sends what changed, as the commands below.
+;
+; Each sample: the rhythm mode's noise on; each channel's handler (X:HND,
+; set at each update: FM's, both out's, the bass drum's, the drums', or the
+; silent one's when both operators are); an operator its phase (2^21 a turn)
+; on by its step, its modulation added (the modulator's output as it is),
+; the index the phase's bits 20-11 (mpy by $1000, and $3FF), its waveform's
+; table (its base in Y, by the operator) times its gain; the channel the sum
+; / 8 (the rhythm mode's / 4), limited; the nine mixed by their left and
+; right gains. Each OPL_UPD (32) samples, the update: the tremolo and the
+; vibrato, each operator's envelope (its mode a handler's address), its gain
+; from the table, its step with the vibrato's.
+;
+; The host's words, a command's number then its words:
+;	1 LOADX ADDR N w..., 4 LOADY ADDR N w..., 6 LOADP ADDR N w...
+;	2 OP i: step tl arf d1 d2 rr sl am vib ws	(src/opld.h's OPLC_*)
+;	3 CH c: cnt kf left right dw
+;	5 KEY i: 1 on, 2 off
+;	7 LFO: the tremolo's step, the vibrato's, the tremolo deep (1)
+;	8 RHY: the rhythm mode on (1), the noise's steps a sample
+;	9 RUN n: n samples, each its left and right word to the host (tests)
+;	10 PLAY k: the SSI on, the samples into its ring; the commands still
+;	   taken between samples, and while the host's flag 0 is set (a
+;	   burst of them coming) no sample made. k 2: each sample twice, the
+;	   first halfway from the one before (the FDI's 44.1 or 48 kHz)
+;	16 STEP i s: operator i's step alone
+;	15 STATUS: one word back, the ring's least lead since it first filled
+;	12 RESET: all silent
+;
+; Memory: what runs each sample in internal P; the rest from P:$7000
+; (X:$3000), loaded with LOADP.
+
+PBC	equ	$ffe0
+PCC	equ	$ffe1
+HCR	equ	$ffe8
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+HTX	equ	$ffeb
+CRA	equ	$ffec
+CRB	equ	$ffed
+SSISR	equ	$ffee
+TX	equ	$ffef
+BCR	equ	$fffe
+IPR	equ	$ffff
+
+OPL_UPD	equ	32		; samples between updates (src/opld.h's)
+ATTMAX	equ	$3fe000		; 511 envelope steps of 8,192: off
+AKOFF	equ	$9000		; (the attack's 4.5 steps: oplfast.c's OPLF_AK)
+
+; ---- internal X (short addresses: $00-$3F)
+UPD	equ	$00		; samples to the next update
+MASK	equ	$01		; $3FF: the index's
+AK	equ	$02		; AKOFF
+ATTM	equ	$03		; ATTMAX
+AMTV	equ	$04		; (update) the tremolo now
+PMWV	equ	$07		; (update) the vibrato's pattern now
+AMP	equ	$08		; the tremolo's phase (2^24 its period), its step
+AMS	equ	$09
+PMP	equ	$0a		; the vibrato's
+PMS	equ	$0b
+JUNK	equ	$0c
+CHSP	equ	$0d		; (update) the channel's block
+AMD	equ	$0e		; the tremolo's table (AMT, or AMT+256 deep)
+RHY	equ	$0f		; the rhythm mode
+HND	equ	$10		; each channel's handler (9)
+NOISE	equ	$19		; the noise's register (23 bits), its steps a sample
+NSTEPS	equ	$1a
+HI	equ	$1b		; (drums) the hi-hat's index; a temporary
+T1	equ	$1c
+MINLD	equ	$1e		; (PLAY) the ring's least lead since it first filled: STATUS's
+PFULL	equ	$1f		; (PLAY) the ring has filled to LEAD once
+VOUT	equ	$20		; each channel's output this sample (9)
+PLX	equ	$2a		; (PLAY) 2: each sample twice; the one before (L, R)
+PREVL	equ	$2b
+GH	equ	$2c		; (drums) the hi-hat's gain, the snare's, the cymbal's;
+GS	equ	$2d		; the hi-hat's waveform, the snare's
+GC	equ	$2e
+WH	equ	$2f
+WS	equ	$30
+CHX	equ	$50		; each operator's phase, gain (2 each, 18: to $73)
+FB	equ	$80		; each channel's feedback's factor, its modulator's last two (3 each)
+; ---- internal Y
+PAN	equ	$00		; each channel's left, right gains (2 each)
+PREVR	equ	$12
+CHY	equ	$50		; each operator's step with the vibrato's, its waveform's base
+; ---- external X
+GAIN	equ	$0400		; 2^(-A/64), 2,048
+OPS	equ	$0c00		; each operator's (16 each): its mode (its handler), the
+				; mode's increment (its attack's factor in the attack),
+				; sl, att, tl, am, vib, step, arf, d1, d2, rr
+CHS	equ	$0e00		; each channel's (8 each): live, cnt, dw
+AMT	equ	$1000		; the tremolo, half steps: 256 shallow, 256 deep (modulo 256)
+PMWT	equ	$1200		; the vibrato's pattern, 8 (modulo 8)
+; ---- external Y
+RING	equ	$1800		; the SSI's ring, 2,048 words (modulo 2,048)
+LEAD	equ	1536		; the words written ahead of the SSI
+WAVE	equ	$2000		; the four waveforms, 1,024 each
+
+O_MODE	equ	0
+O_INC	equ	1
+O_SL	equ	2
+O_ATT	equ	3
+O_TL	equ	4
+O_AM	equ	5
+O_VIB	equ	6
+O_STEP	equ	7
+O_ARF	equ	8
+O_D1	equ	9
+O_D2	equ	10
+O_RR	equ	11
+C_LIVE	equ	0
+C_CNT	equ	1
+C_DW	equ	2
+
+	org	p:$0
+	jmp	start
+
+; the SSI's transmit, a fast interrupt: the ring to the matrix
+	org	p:$10
+	movep	y:(r7)+,x:TX
+	nop
+	org	p:$12			; with an underrun: the status read, then the word
+	jsr	tue
+
+	org	p:$14
+start	movep	#1,x:PBC		; port B is the host port
+	movep	#0,x:BCR		; no wait states
+	ori	#3,mr			; no interrupts
+	movec	#$ffff,m0
+	jmp	cmd
+
+; a host word into x0
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+
+; ---- the commands: LOADP here, the rest in the external part
+cmd	jsr	rd
+	move	x0,a
+	move	#>6,x1
+	cmp	x1,a
+	jne	cmdx
+	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lp
+	jsr	rd
+	movem	x0,p:(r0)+
+lp
+	jmp	cmd
+
+; ---- a sample: A the left, B the right (limited when stored)
+sample	move	x:<UPD,a
+	move	#>1,x1
+	sub	x1,a
+	move	a,x:<UPD
+	jne	smp1
+	jsr	update
+smp1	jclr	#0,x:<RHY,smp2		; the rhythm mode's noise
+	jsr	noise
+smp2	move	#CHX,r0
+	move	#CHY,r5
+	move	#FB,r1
+	move	#VOUT,r3
+	move	#>$1000,x0
+	move	#4,n0
+	move	#3,n1
+	move	#4,n5
+	move	x:<HND+0,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+1,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+2,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+3,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+4,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+5,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+6,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+7,r2
+	nop
+	jsr	(r2)
+	move	x:<HND+8,r2
+	nop
+	jsr	(r2)
+	move	#VOUT,r0		; the mix
+	move	#PAN,r5
+	clr	a
+	clr	b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b	x:(r0)+,x1	y:(r5)+,y1
+	mac	y1,x1,a	y:(r5)+,y1
+	mac	y1,x1,b
+	rts
+
+; a silent channel: 0, its operators passed over
+sil	clr	a
+	move	a,x:(r3)+
+	move	(r0)+n0
+	move	(r5)+n5
+	move	(r1)+n1
+nul	rts
+
+; FM: the modulator (its feedback) > the carrier
+fmh	move	x:(r0),b	y:(r5)+,y0	; the modulator: its phase, its step
+	add	y0,b	y:(r5)+,r4	; on; its waveform
+	move	b1,x:(r0)+		; (kept)
+	move	x:(r1)+,y0		; the feedback's factor
+	move	x:(r1)+,x1		; its last output
+	mac	x1,y0,b	x:(r1)-,x1	; x the factor; the one before
+	mac	x1,y0,b	x:(r0)+,y0	; x the factor; its gain
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1	; the index (bits 20-11)
+	and	x1,b	x:(r1)+,x1	; (its last output)
+	move	b1,n4
+	move	x1,x:(r1)-		; (the one before)
+	move	y:(r4+n4),y1		; its waveform
+	mpy	y1,y0,b			; x its gain
+	move	b,x1			; its output (limited)
+	move	x1,x:(r1)+		; (kept)
+	move	x:(r0),b	y:(r5)+,y0	; the carrier
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	add	x1,b	x:(r0)+,y0	; + the modulator's output; its gain
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b
+	move	b1,n4
+	move	(r1)+			; (the next channel's)
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a
+chend	asr	a			; / 8
+bdend	asr	a			; (/ 4)
+	asr	a
+	move	a,x:(r3)+		; (limited)
+	rts
+
+; both out: the modulator (its feedback) + the carrier
+addh	move	x:(r0),b	y:(r5)+,y0
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	x:(r1)+,y0
+	move	x:(r1)+,x1
+	mac	x1,y0,b	x:(r1)-,x1
+	mac	x1,y0,b	x:(r0)+,y0
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r1)+,x1
+	move	b1,n4
+	move	x1,x:(r1)-
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a			; (a carrier too)
+	move	a,x1
+	move	x1,x:(r1)+
+	move	x:(r0),b	y:(r5)+,y0	; the carrier: no modulation
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r0)+,y0
+	move	b1,n4
+	move	(r1)+
+	move	y:(r4+n4),y1
+	mac	y1,y0,a
+	jmp	chend
+
+; the bass drum (the rhythm mode's channel 6): FM's, twice as loud
+bdfm	move	x:(r0),b	y:(r5)+,y0
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	x:(r1)+,y0
+	move	x:(r1)+,x1
+	mac	x1,y0,b	x:(r1)-,x1
+	mac	x1,y0,b	x:(r0)+,y0
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r1)+,x1
+	move	b1,n4
+	move	x1,x:(r1)-
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x1
+	move	x1,x:(r1)+
+	move	x:(r0),b	y:(r5)+,y0
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	add	x1,b	x:(r0)+,y0
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b
+	move	b1,n4
+	move	(r1)+
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a
+	jmp	bdend
+
+; the bass drum with its connection 1: the carrier alone (the modulator
+; still on, its feedback kept)
+bdadd	move	x:(r0),b	y:(r5)+,y0
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	x:(r1)+,y0
+	move	x:(r1)+,x1
+	mac	x1,y0,b	x:(r1)-,x1
+	mac	x1,y0,b	x:(r0)+,y0
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r1)+,x1
+	move	b1,n4
+	move	x1,x:(r1)-
+	move	y:(r4+n4),y1
+	mpy	y1,y0,b
+	move	b,x1
+	move	x1,x:(r1)+
+	move	x:(r0),b	y:(r5)+,y0
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r0)+,y0
+	move	b1,n4
+	move	(r1)+
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a
+	jmp	bdend
+
+; the rhythm mode's channels 7 and 8 (8's handler nul): the hi-hat and the
+; snare, the tom and the cymbal, each made, off or not (an operator off has
+; its gain 0)
+drums	move	x:(r0),b	y:(r5)+,y0	; the hi-hat: its phase on, its index
+	add	y0,b	y:(r5)+,y1
+	move	b1,x:(r0)+
+	move	y1,x:<WH		; (its waveform)
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r0)+,y0
+	move	b1,x:<HI
+	move	y0,x:<GH		; (its gain)
+	move	x:(r0),b	y:(r5)+,y0	; the snare: its phase on
+	add	y0,b	y:(r5)+,y1
+	move	b1,x:(r0)+
+	move	y1,x:<WS
+	move	x:(r0)+,y0
+	move	y0,x:<GS
+	move	x:(r0),b	y:(r5)+,y0	; the tom: a carrier alone, into a
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r0)+,y0
+	move	b1,n4
+	nop
+	move	y:(r4+n4),y1
+	mpy	y1,y0,a
+	move	x:(r0),b	y:(r5)+,y0	; the cymbal: its phase on, its index
+	add	y0,b	y:(r5)+,r4
+	move	b1,x:(r0)+
+	move	b1,y1
+	mpy	x0,y1,b	x:<MASK,x1
+	and	x1,b	x:(r0)+,y0
+	move	y0,x:<GC
+	; ((h2 ^ h7) | (h3 ^ y5) | (y3 ^ y5)), at bit 2 of b1 (h the hi-hat's
+	; index, y the cymbal's)
+	move	b1,x1			; y
+	move	#>$200000,y1		; (x 2^-2)
+	mpy	y1,x1,b			; y >> 2
+	move	b1,y1
+	eor	x1,b			; bit 3: y3 ^ y5
+	move	b1,x1
+	tfr	y1,b			; y >> 2
+	move	x:<HI,y1
+	eor	y1,b			; bit 3: h3 ^ y5
+	or	x1,b
+	lsr	b			; (at bit 2)
+	move	b1,x:<T1
+	move	#>$40000,x1		; (x 2^-5)
+	mpy	y1,x1,b			; h >> 5
+	eor	y1,b			; bit 2: h2 ^ h7
+	move	x:<T1,x1
+	or	x1,b			; bit 2: the three's or
+	; the cymbal at its << 9 | $80; the hi-hat's at its << 9 | ($D0 when
+	; it differs from the noise, else $34)
+	move	x:<NOISE,x1
+	jclr	#2,b1,dx0
+	move	#>$280,n4
+	move	#>$2d0,y1
+	jclr	#0,x1,dx1
+	move	#>$234,y1
+	jmp	dx1
+dx0	move	#>$080,n4
+	move	#>$034,y1
+	jclr	#0,x1,dx1
+	move	#>$0d0,y1
+dx1	move	x:<GC,y0
+	move	y:(r4+n4),x1		; the cymbal
+	mac	x1,y0,a			; + the tom
+	asr	a
+	asr	a
+	move	a,x:<VOUT+8		; channel 8 (limited)
+	move	x:<WH,r4		; the hi-hat
+	move	y1,n4
+	move	x:<GH,y0
+	move	y:(r4+n4),x1
+	mpy	x1,y0,a
+	; the snare at h8 << 9 | (h8 ^ n) << 8
+	jclr	#8,x:<HI,ds0
+	move	#>$300,n4
+	jclr	#0,x:<NOISE,ds1
+	move	#>$200,n4
+	jmp	ds1
+ds0	move	#0,n4
+	jclr	#0,x:<NOISE,ds1
+	move	#>$100,n4
+ds1	move	x:<WS,r4
+	move	x:<GS,y0
+	nop
+	move	y:(r4+n4),x1
+	mac	x1,y0,a
+	asr	a
+	asr	a
+	move	a,x:(r3)+		; channel 7
+	move	(r3)+
+	move	(r1)+n1
+	move	(r1)+n1
+	rts
+
+; the noise: NSTEPS steps of its 23-bit register (in at bit 22: bit 0 ^
+; bit 14)
+noise	move	x:<NOISE,a
+	move	#>$200,y1		; (x 2^-14)
+	move	#>$400000,y0
+	do	x:<NSTEPS,nzl
+	jsr	nstep
+	nop
+nzl
+	move	a1,x:<NOISE
+	rts
+nstep	move	a1,x1
+	mpy	y1,x1,b			; n >> 14
+	eor	x1,b			; bit 0: n0 ^ n14
+	lsr	a
+	jclr	#0,b1,ns1
+	or	y0,a
+ns1	rts
+
+; ===================================================================
+; external P: the commands, the update, the start of a play
+	org	p:$7000
+
+; the SSI's underrun: its status read, then the word
+tue	movep	x:SSISR,x:JUNK
+	movep	y:(r7)+,x:TX
+	rti
+
+cmdx	move	#>1,x1
+	cmp	x1,a
+	jeq	loadx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	loady
+	move	#>9,x1
+	cmp	x1,a
+	jeq	c_run
+	move	#>10,x1
+	cmp	x1,a
+	jeq	c_play
+	move	#>12,x1
+	cmp	x1,a
+	jeq	c_reset
+	jsr	hcmd
+	jmp	cmd
+
+loadx	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,lx
+	jsr	rd
+	move	x0,x:(r0)+
+lx
+	jmp	cmd
+loady	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ly
+	jsr	rd
+	move	x0,y:(r0)+
+ly
+	jmp	cmd
+
+; a command (x0 its number), from cmd or play's loop: not a load, not RUN
+hcmd	move	x0,a
+	move	#>2,x1
+	cmp	x1,a
+	jeq	hc_op
+	move	#>3,x1
+	cmp	x1,a
+	jeq	hc_ch
+	move	#>5,x1
+	cmp	x1,a
+	jeq	hc_key
+	move	#>7,x1
+	cmp	x1,a
+	jeq	hc_lfo
+	move	#>8,x1
+	cmp	x1,a
+	jeq	hc_rhy
+	move	#>16,x1
+	cmp	x1,a
+	jeq	hc_step
+	move	#>15,x1
+	cmp	x1,a
+	jeq	hc_stat
+	rts
+
+; STATUS: the ring's least lead, to the host
+hc_stat	move	x:<MINLD,x1
+hcs1	jclr	#1,x:HSR,hcs1
+	movep	x1,x:HTX
+	rts
+
+; the operator's number i: r0 its block (OPS + 16 i), r1 its CHX/CHY pair
+; (CHX + 2 i), x:JUNK i
+opblk	jsr	rd
+	move	x0,x:JUNK
+	move	x0,x1
+	move	#>16,y1
+	mpy	x1,y1,a			; (i x 16, x 2: the product's low word)
+	asr	a
+	move	a0,a
+	move	#>OPS,x1
+	add	x1,a
+	move	a,r0
+	move	x:JUNK,a
+	asl	a
+	move	#>CHX,x1
+	add	x1,a
+	move	a,r1
+	rts
+
+; STEP i s: operator i's step alone, its step with the vibrato's too
+hc_step	jsr	opblk
+	move	#O_STEP,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	x0,y:(r1)
+	rts
+
+; OP i: step, tl, arf, d1, d2, rr, sl, am, vib, ws; its step with the
+; vibrato's the step, its waveform's base; the increment of its mode again
+hc_op	jsr	opblk
+	move	#O_STEP,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	x0,y:(r1)+
+	move	#O_TL,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_ARF,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_D1,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_D2,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_RR,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_SL,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_AM,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	move	#O_VIB,n0
+	jsr	rd
+	move	x0,x:(r0+n0)
+	jsr	rd			; ws: WAVE + 1,024 ws
+	move	#>3,x1
+	move	x0,a
+	and	x1,a
+	move	a1,x1
+	move	#>1024,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>WAVE,x1
+	add	x1,a
+	move	a1,y:(r1)
+	move	x:(r0),r3
+	jmp	setinc
+
+; the increment of the mode r3 (the operator's block r0) into its block,
+; with the mode
+setinc	move	#>e_att,a
+	move	#O_ARF,n0
+	move	r3,x1
+	cmp	x1,a
+	jeq	si1
+	move	#>e_dec,a
+	move	#O_D1,n0
+	cmp	x1,a
+	jeq	si1
+	move	#>e_sus,a
+	move	#O_D2,n0
+	cmp	x1,a
+	jeq	si1
+	move	#O_RR,n0		; (the release's; off: its, unused)
+si1	move	r3,x:(r0)
+	move	x:(r0+n0),x1
+	move	#O_INC,n0
+	nop
+	move	x1,x:(r0+n0)
+	rts
+
+; CH c: cnt, kf, left, right, dw
+hc_ch	jsr	rd
+	move	x0,x:JUNK
+	move	x0,x1
+	move	#>8,y1			; its block
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>CHS,x1
+	add	x1,a
+	move	a,r1
+	move	x:JUNK,a		; its PAN pair
+	asl	a
+	move	#>PAN,x1
+	add	x1,a
+	move	a,r2
+	move	x:JUNK,x1		; its feedback's
+	move	#>3,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>FB,x1
+	add	x1,a
+	move	a,r3
+	move	#C_CNT,n1
+	jsr	rd			; cnt
+	move	x0,x:(r1+n1)
+	jsr	rd			; the feedback's factor
+	move	x0,x:(r3)
+	jsr	rd			; left, right
+	move	x0,y:(r2)+
+	jsr	rd
+	move	x0,y:(r2)
+	move	#C_DW,n1
+	jsr	rd			; dw
+	move	x0,x:(r1+n1)
+	jmp	sethall
+
+; KEY i, ev: on, its phase 0, its attack (or its decay with no attack), the
+; channel live; off, its release (unless off)
+hc_key	jsr	opblk
+	jsr	rd
+	move	x0,a
+	move	#>1,x1
+	cmp	x1,a
+	jne	koff
+	clr	a
+	move	a,x:(r1)		; the phase
+	move	#O_ARF,n0
+	nop
+	move	x:(r0+n0),a
+	tst	a
+	jeq	kdec
+	move	#e_att,r3
+	jsr	setinc
+	jmp	klive
+kdec	clr	a
+	move	#O_ATT,n0
+	nop
+	move	a,x:(r0+n0)		; att 0
+	move	#e_dec,r3
+	jsr	setinc
+klive	move	x:JUNK,a		; the channel: i / 2, its block's live
+	lsr	a
+	move	a1,x1
+	move	#>8,y1
+	mpy	x1,y1,a
+	asr	a
+	move	a0,a
+	move	#>CHS+C_LIVE,x1
+	add	x1,a
+	move	a,r1
+	move	#>1,x1
+	move	x1,x:(r1)
+	jmp	sethall
+koff	move	x:(r0),a
+	move	#>e_off,x1
+	cmp	x1,a
+	jeq	kx
+	move	#e_rel,r3
+	jmp	setinc
+kx	rts
+
+; LFO: the tremolo's step, the vibrato's, the tremolo deep
+hc_lfo	jsr	rd
+	move	x0,x:<AMS
+	jsr	rd
+	move	x0,x:<PMS
+	jsr	rd
+	move	#>AMT,a
+	jclr	#0,x0,hl1
+	move	#>AMT+256,a
+hl1	move	a,x:<AMD
+	rts
+
+; RHY: the rhythm mode on, the noise's steps a sample
+hc_rhy	jsr	rd
+	move	x0,x:<RHY
+	jsr	rd
+	move	x0,x:<NSTEPS
+	jmp	sethall
+
+; each channel's handler: FM's, both out's, or the silent one's (neither
+; operator live); in the rhythm mode channel 6's the bass drum's, 7's the
+; drums', 8's none
+sethall	move	#CHS,r5
+	move	#HND,r1
+	move	#6,n5
+	move	#>sil,y1
+	do	#9,shl
+	move	x:(r5)+,a		; live
+	move	x:(r5)+,b		; cnt
+	move	#>fmh,x0
+	move	#>addh,x1
+	tst	b
+	tne	x1,b
+	teq	x0,b
+	tst	a
+	teq	y1,b
+	move	b1,x:(r1)+
+	move	(r5)+n5
+shl
+	jclr	#0,x:<RHY,shx
+	move	#CHS+8*6,r5
+	nop
+	move	x:(r5)+,a
+	move	x:(r5)+,b
+	move	#>bdfm,x0
+	move	#>bdadd,x1
+	tst	b
+	tne	x1,b
+	teq	x0,b
+	tst	a
+	teq	y1,b
+	move	b1,x:<HND+6
+	move	#>drums,x1
+	move	x1,x:<HND+7
+	move	#>nul,x1
+	move	x1,x:<HND+8
+shx	rts
+
+; ---- the update (each OPL_UPD samples): the tremolo, the vibrato; each
+; channel's vibrato; each operator's envelope (its mode's handler), its
+; gain, its step with the vibrato's; each channel live or not (an operator
+; not off). In the operators' loop: x0 the vibrato, y0 the tremolo, y1
+; $800, r5 the gains' table, n3 live, n2 9
+update	move	#>OPL_UPD,a
+	move	a,x:<UPD
+	move	x:<AMP,a		; the tremolo: its phase on, its top 8 bits
+	move	x:<AMS,x1
+	add	x1,a
+	move	a1,x:<AMP
+	move	a1,x1
+	move	#>$80,y1		; (x 2^-16: -128..127, modulo 256)
+	mpy	y1,x1,a
+	move	a1,n3
+	move	x:<AMD,r3
+	movec	#$ff,m3
+	nop
+	move	x:(r3+n3),x1
+	move	x1,x:<AMTV
+	move	x:<PMP,a		; the vibrato: its top 3 bits
+	move	x:<PMS,x1
+	add	x1,a
+	move	a1,x:<PMP
+	move	a1,x1
+	move	#>$4,y1			; (x 2^-21: -4..3, modulo 8)
+	mpy	y1,x1,a
+	move	a1,n3
+	move	#PMWT,r3
+	movec	#7,m3
+	nop
+	move	x:(r3+n3),x1
+	move	x1,x:<PMWV
+	movec	#$ffff,m3
+	move	#OPS,r2
+	move	#CHX+1,r0		; the gains
+	move	#CHY,r1			; the steps (Y)
+	move	#CHS,r3
+	move	r3,x:<CHSP
+	move	#GAIN,r5
+	move	#2,n0
+	move	#2,n1
+	move	#9,n2
+	move	x:<AMTV,y0
+	do	#9,uch
+	move	x:<CHSP,r3
+	move	#C_DW,n3
+	move	x:<PMWV,x1
+	move	x:(r3+n3),y1		; the vibrato: pmw x dw
+	mpy	y1,x1,a
+	move	a1,x0
+	move	#0,n3
+	move	#>$800,y1
+	do	#2,uop
+	move	x:(r2)+,r3		; its mode
+	move	x:(r2)+,x1		; its increment
+	move	x:(r2)+,b		; sl
+	move	x:(r2),a		; att
+	jmp	(r3)
+e_sus	add	x1,a
+tail	move	x:<ATTM,x1		; (at most the top)
+	cmp	x1,a	r3,n3		; (live)
+	tgt	x1,a
+	move	a1,x:(r2)+		; att
+	move	a1,x1
+	mpy	y1,x1,b	x:(r2)+,x1	; x $800 (half steps); tl
+	add	x1,b
+	jclr	#0,x:(r2)+,tn		; am: the tremolo on it
+	add	y0,b
+tn	move	b1,n5
+	jclr	#0,x:(r2)+,tnv		; vib
+	move	x:(r5+n5),x1		; its gain
+	move	x1,x:(r0)+n0
+	move	x:(r2)+n2,x1		; its step (the next block)
+	mpy	x1,x0,b			; step x vib, + step
+	add	x1,b
+	move	b1,y:(r1)+n1
+	jmp	uend
+tnv	move	x:(r5+n5),x1
+	move	x1,x:(r0)+n0
+	move	x:(r2)+n2,x1
+	move	x1,y:(r1)+n1
+uend	nop			; (jumped to: not the loop's last)
+	nop
+uop
+	move	n3,x1			; the channel's live; the next block
+	move	x:<CHSP,r3
+	nop
+	move	x1,x:(r3)
+	move	#8,n3
+	nop
+	move	(r3)+n3
+	move	r3,x:<CHSP
+uch
+	jmp	sethall
+
+; the envelope's modes: r2 the block's att, x1 the mode's increment, b sl,
+; a att; a the new att, to tail (r3 the mode)
+e_att	move	x:<AK,b			; (att + 4.5 steps) x arf - 4.5 steps
+	add	b,a
+	move	a1,y1
+	mpy	y1,x1,a
+	move	a1,x1
+	tfr	x1,a			; (its top word)
+	sub	b,a
+	move	#>$800,y1
+	jgt	tail
+	clr	a			; (at the top: the decay)
+	move	#e_dec,r3
+	move	#O_D1-O_ATT,n2
+	jsr	trans
+	jmp	tail
+e_dec	add	x1,a
+	cmp	b,a
+	jlt	tail
+	tfr	b,a			; (the sustain level: the sustain)
+	move	#e_sus,r3
+	move	#O_D2-O_ATT,n2
+	jsr	trans
+	jmp	tail
+e_rel	add	x1,a	x:<ATTM,x1
+	cmp	x1,a
+	jlt	tail
+	move	#e_off,r3		; (at the top: off)
+	move	#O_RR-O_ATT,n2
+	jsr	trans
+	jmp	tail
+e_off	move	(r0)+n0			; (passed over)
+	move	(r1)+n1
+	move	(r2)+n2			; (att + 13: the next block)
+	move	(r2)+
+	move	(r2)+
+	move	(r2)+
+	move	(r2)+
+	jmp	uend
+
+; a change of mode: r3 the new, n2 its increment's place from the att;
+; stored with it (r2 the att; n2 9 again)
+trans	move	x:(r2+n2),x1
+	move	#O_INC-O_ATT,n2
+	nop
+	move	x1,x:(r2+n2)
+	move	#O_MODE-O_ATT,n2
+	nop
+	move	r3,x:(r2+n2)
+	move	#9,n2
+	rts
+
+; ---- RUN n: n samples, each its left and right to the host
+c_run	jsr	rd
+	do	x0,run1
+	jsr	sample
+	jsr	wr
+	tfr	b,a
+	jsr	wr
+	nop
+run1
+	jmp	cmd
+wr	jclr	#1,x:HSR,wr
+	movep	a,x:HTX
+	rts
+
+; ---- RESET: all silent
+c_reset	clr	a
+	move	#0,r0
+	rep	#$100			; internal X: the state
+	move	a,x:(r0)+
+	move	#0,r0
+	rep	#$100			; internal Y: the gains, the steps, the waveforms
+	move	a,y:(r0)+
+	move	#>1,x1
+	move	x1,x:<UPD
+	move	x1,x:<NOISE
+	move	x1,x:<NSTEPS
+	move	#>$3ff,x1
+	move	x1,x:<MASK
+	move	#>AKOFF,x1
+	move	x1,x:<AK
+	move	#>ATTMAX,x1
+	move	x1,x:<ATTM
+	move	#>AMT,x1
+	move	x1,x:<AMD
+	move	#>sil,x1
+	move	#HND,r0
+	rep	#9
+	move	x1,x:(r0)+
+	move	#CHY+1,r0		; each operator's waveform: the sine
+	move	#>WAVE,x1
+	do	#18,rs0
+	move	x1,y:(r0)+
+	move	(r0)+
+rs0
+	move	#OPS,r0			; each operator: off, att at the top
+	move	#>ATTMAX,x1
+	move	#>e_off,y1
+	do	#18,rs1
+	move	y1,x:(r0)+
+	rep	#2
+	move	a,x:(r0)+
+	move	x1,x:(r0)+
+	rep	#12
+	move	a,x:(r0)+
+rs1
+	move	#CHS,r0			; each channel: not live, FM
+	rep	#72
+	move	a,x:(r0)+
+	jmp	cmd
+
+; ---- PLAY: the SSI on, the ring kept LEAD words ahead, the commands taken
+; between samples
+c_play	jsr	rd			; k: 1, or 2 (each sample twice)
+	move	x0,x:<PLX
+	clr	a
+	move	a,x:<PREVL
+	move	a,y:<PREVR
+	move	#>2047,x1
+	move	x1,x:<MINLD
+	bclr	#0,x:<PFULL
+	clr	a
+	move	#RING,r6
+	movec	#2047,m6
+	rep	#2048
+	move	a,y:(r6)+
+	move	#RING,r7
+	movec	#2047,m7
+	movep	#$1f8,x:PCC		; port C: the SSI
+	movep	#$4100,x:CRA		; 16 bits, 2 words a frame
+	movep	#$5800,x:CRB		; transmit and its interrupt, network mode
+	movep	#$3000,x:IPR		; the SSI at level 2, the host's off
+	movep	#0,x:TX
+pmt	jclr	#6,x:SSISR,pmt
+	jclr	#2,x:SSISR,pmr
+	movep	#0,x:TX
+pmt2	jclr	#6,x:SSISR,pmt2
+pmr	andi	#$fc,mr			; interrupts on: the left first
+ploop	jclr	#0,x:HSR,pgen0
+	jsr	rd
+	jsr	hcmd
+	jmp	ploop
+pgen0	jset	#3,x:HSR,ploop		; (HF0: a burst of commands still coming)
+pgen	move	r6,a
+	move	r7,x0
+	sub	x0,a
+	move	#>2047,x1
+	and	x1,a
+	move	a1,y1
+	move	y1,a
+	jclr	#0,x:<PFULL,pg0		; (its least, once it has filled: not the start)
+	move	x:<MINLD,x1
+	cmp	x1,a
+	jge	pg1
+	move	a1,x:<MINLD
+	jmp	pg1
+pg0	move	#>LEAD,x0
+	cmp	x0,a
+	jlt	pg1
+	bset	#0,x:<PFULL
+pg1	move	#>LEAD,x0
+	cmp	x0,a
+	jge	ploop
+	jsr	sample
+	jclr	#1,x:<PLX,pone
+	move	a,x1			; twice: first halfway from the one before
+	move	x:<PREVL,y1
+	move	x1,x:<PREVL
+	move	a,y0
+	tfr	y1,a
+	add	y0,a
+	asr	a
+	move	a,y:(r6)+
+	move	b,x1
+	move	y:<PREVR,y1
+	move	x1,y:<PREVR
+	move	b,y0
+	tfr	y1,b
+	add	y0,b
+	asr	b
+	move	b,y:(r6)+
+	move	x:<PREVL,a
+	move	y:<PREVR,b
+pone	move	a,y:(r6)+
+	move	b,y:(r6)+
+	jmp	ploop

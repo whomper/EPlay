@@ -35,5 +35,5 @@ if __name__ == "__main__":
     work = sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-060"
     # (PLAY060_MACHINE=Falcon-060nodsp: MP3 on the CPU)
     spec = os.environ.get("PLAY060_MACHINE", "Falcon-060") + ":256"
-    sys.argv = [sys.argv[0], work] + (sys.argv[2:] or ["vgm", "vgz", "vgmsn", "vgmopn", "vgmmd"]) + [spec]
+    sys.argv = [sys.argv[0], work] + (sys.argv[2:] or ["vgm", "vgz", "vgmsn", "vgmopn", "vgmmd", "vgmopl"]) + [spec]
     play_test.main()

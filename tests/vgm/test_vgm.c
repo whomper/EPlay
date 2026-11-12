@@ -119,6 +119,19 @@ static void ay(void *u, int reg, int val)
 	}
 }
 
+static int opl_n, opl_last_reg, opl_last_val, opl_seen[256];
+
+void opl_log(void *u, int port, int reg, int val);
+void opl_log(void *u, int port, int reg, int val)
+{
+	(void)u;
+	(void)port;
+	opl_n++;
+	opl_last_reg = reg;
+	opl_last_val = val;
+	opl_seen[reg & 255] = val;
+}
+
 static int last(int reg)
 {
 	int i;
@@ -258,6 +271,47 @@ int main(int argc, char **argv)
 	vgm_run(&r, 1);
 	same_n("2 MHz reg 0", last(0), 0x00);
 	same_n("2 MHz reg 1", last(1), 0x01);
+
+	/* the YM3812 (0x5A, its clock at 0x50): its writes passed on, kept,
+	   and a seek writing them again, the keys last */
+	{
+		VGM_OPL keep = opl_log;
+		memset(f, 0, sizeof(f));
+		memcpy(f, "Vgm ", 4);
+		put32(0x08, 0x151);
+		put32(0x34, 0x100 - 0x34);
+		put32(0x50, 3579545);
+		fn = 0x100;
+		b(0x5a); b(0x20); b(0x01);
+		b(0x5a); b(0xa0); b(0x44);
+		b(0x5a); b(0xb0); b(0x32);
+		b(0x62);
+		b(0x5a); b(0xbd); b(0x30);
+		b(0x62);
+		b(0x66);
+		put32(0x04, (unsigned long)(fn - 4));
+		put32(0x18, 1470);
+		same_n("opl head", vgm_head(f, fn, &h), 1);
+		same_n("opl clock", (long)h.ym3812_clock, 3579545);
+		same_n("opl other", h.other, 0);
+		vgm_begin(&r, f, fn, &h, 0, 0, 0);
+		r.opl_fn = keep;
+		opl_n = 0;
+		vgm_run(&r, 1);
+		same_n("opl writes", opl_n, 3);
+		same_n("opl last", opl_last_reg * 256 + opl_last_val, 0xb032);
+		vgm_run(&r, 735);
+		same_n("opl drums", opl_last_reg * 256 + opl_last_val, 0xbd30);
+		/* a seek past both: every register again, $BD's drums last */
+		vgm_begin(&r, f, fn, &h, 0, 0, 0);
+		r.opl_fn = keep;
+		opl_n = 0;
+		vgm_seek(&r, 1000);
+		same_n("opl seek: the last", opl_last_reg * 256 + opl_last_val, 0xbd30);
+		same_n("opl seek: $20", opl_seen[0x20], 0x01);
+		same_n("opl seek: $A0", opl_seen[0xa0], 0x44);
+		same_n("opl seek: $B0", opl_seen[0xb0], 0x32);
+	}
 
 	/* not a VGM */
 	same_n("not one", vgm_head((const unsigned char *)"RIFF", 4, &h), 0);

@@ -10,7 +10,8 @@
 #                   with sox and lame; WAV and AIFF against sox
 #   make dsptest    dsp/mp3.a56 against the model, bit for bit, on Hatari's
 #                   DSP core, with its cycles; dsp/sn.a56; dsp/opn.a56 (the
-#                   YM2612) against src/opnfast.c, bit for bit, its worst case's
+#                   YM2612) against src/opnfast.c and dsp/opl.a56 (the OPL2)
+#                   against src/oplfast.c, bit for bit, their worst cases'
 #                   cycles
 #   make prof       build/prof/eplay.prg for the speed rig (tests/hatari)
 #   make rig        the Hatari rigs: playing (tests/hatari/play_test.py) and
@@ -44,7 +45,7 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd dspopn opnd egmath dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -58,13 +59,13 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
-           $(B)/opn_prog.h $(B)/opntab.h
+           $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
 all: binary/eplay.prg binary/eplayst.prg binary/mp3fpu.ovl
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
-binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opntab.h | binary
+binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h | binary
 	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/st build/st/eplay.elf
 	python3 common/tools/oddaccess.py build/st/eplay.elf
 	PRGFLAGS=0x10 python3 common/tools/elf2tos.py build/st/eplay.elf $@
@@ -113,6 +114,13 @@ $(B)/sn_prog.h: dsp/sn.a56 common/dsp/mkh.py | $(B)
 $(B)/opn_prog.h: dsp/opn.a56 common/dsp/mkh.py | $(B)
 	mkdir -p $(B)/opn && cd $(B)/opn && a56 ../../dsp/opn.a56 > opn.lst && ! grep -q 'warning:\|error:' opn.lst && \
 		python3 ../../common/dsp/mkh.py a56.out ../opn_prog.h dsp_opn_prog opn.a56
+$(B)/opl_prog.h: dsp/opl.a56 common/dsp/mkh.py | $(B)
+	mkdir -p $(B)/opl && cd $(B)/opl && a56 ../../dsp/opl.a56 > opl.lst && ! grep -q 'warning:\|error:' opl.lst && \
+		python3 ../../common/dsp/mkh.py a56.out ../opl_prog.h dsp_opl_prog opl.a56
+# (the YM3812's tables: the model's, made on the build machine)
+$(B)/opltab.h: tools/mkopltab.c src/oplfast.c src/oplfast.h src/opld.h | $(B)
+	cc -O2 -Wall -Wextra -Werror -Isrc -o $(B)/mkopltab tools/mkopltab.c src/oplfast.c -lm
+	$(B)/mkopltab $@
 # (the YM2612's tables: the model's, made on the build machine)
 $(B)/opntab.h: tools/mkopntab.c src/opnfast.c src/opnfast.h src/opnd.h | $(B)
 	cc -O2 -Wall -Wextra -Werror -Isrc -o $(B)/mkopntab tools/mkopntab.c src/opnfast.c -lm
@@ -256,6 +264,7 @@ dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspmp3
 	$(MAKE) -C tests/dspsn
 	$(MAKE) -C tests/dspopn
+	$(MAKE) -C tests/dspopl
 
 # eplay.hyp from docs/GUIDE.md with the family's front page (docs/front.json,
 # common/tools/helpfront.py), and eplay.ref, its pages' names for ST-Guide's

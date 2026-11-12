@@ -13,7 +13,9 @@
  *	  periods (tones, noise, envelope) turned from the file's clock to
  *	  the Atari's 2 MHz;
  *	- the SN76489 (Master System, Game Gear, BBC Micro), its bytes as
- *	  they are (for the DSP).
+ *	  they are (for the DSP);
+ *	- the YM2612 (the Mega Drive) and the YM3812 (OPL2: AdLib and Sound
+ *	  Blaster music, MSX), their registers (for the DSP).
  *
  * A file with a loop plays it once more, the last 4 s fading out (the
  * AY's volumes turned down; one with the envelope on is left as it is),
@@ -33,7 +35,7 @@ typedef struct {
 	long total;		/* samples, the whole file once */
 	long loop_samples;	/* the loop's */
 	long gd3_at;		/* 0: none */
-	unsigned long sn_clock, ay_clock, ym2612_clock;	/* 0: not used (the second chip's bit left out) */
+	unsigned long sn_clock, ay_clock, ym2612_clock, ym3812_clock;	/* 0: not used (the second chip's bit left out) */
 	int ay_type;		/* 0 AY8910 ... 0x10 YM2149 (the header's) */
 	int sn_fb, sn_w;	/* the SN76489's noise taps and register width (0: the Master System's) */
 	int other;		/* another chip is used (one EPlay doesn't play): its clock is set */
@@ -55,6 +57,9 @@ typedef void (*VGM_SN)(void *u, int val);
 /* the YM2612 (phase 10): a register of port 0 or 1 written; reg $2A of
    port 0 is its DAC's sample (the drums), from the file's data block */
 typedef void (*VGM_OPN)(void *u, int port, int reg, int val);
+/* the YM3812 (phase 10, step 7): a register written (port 0; the YMF262's
+   second for OPL3, later) */
+typedef void (*VGM_OPL)(void *u, int port, int reg, int val);
 
 /* the YM2612's DAC over a tick (opnd_tick's): its writes, each its place
    in the tick << 16 | the byte with its top bit turned << 8 (opn.a56's
@@ -106,6 +111,7 @@ typedef struct {
 	VGM_SN sn_fn;
 	VGM_OPN opn_fn;		/* (set after vgm_begin; 0: the YM2612 passed over) */
 	VGMDAC *dac;		/* (set after vgm_begin, with opn_fn: the 0x8n samples into it; 0: through opn_fn) */
+	VGM_OPL opl_fn;		/* (set after vgm_begin; 0: the YM3812 passed over) */
 	/* a file still unpacking (a big VGZ played as it unpacks): the bytes
 	   there so far (0: all), more() for a seek to unpack further (the
 	   bytes there then, 0 all, -1 damaged); starved: the run waited at
@@ -117,6 +123,7 @@ typedef struct {
 	long waits;		/* (the runs that waited for it: the log's) */
 	unsigned char opn[2][256];	/* the YM2612's registers as written (for a seek) */
 	unsigned char opn_key[8];	/* each channel's key on/off byte ($28's), as written */
+	unsigned char opl[256];		/* the YM3812's registers as written (for a seek) */
 	long pcm_at, pcm_len;	/* the data block of the YM2612's samples (type 0): in b, its bytes */
 	long pcm_pos;		/* the next of them (the 0x8n commands, 0xE0 sets it) */
 	void *u;

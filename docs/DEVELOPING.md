@@ -47,7 +47,12 @@ docs/       the guide, the design, this file, the pictures
   sample; tags and ReplayGain; web radio's parsing under AddressSanitizer, its fuzz corpus
   replayed (`make fuzz` runs the fuzzer).
 - `make dsptest`: `dsp/mp3.a56` on Hatari's DSP core against the model, bit for bit, gapless joins
-  and ReplayGain included.
+  and ReplayGain included; `dsp/sn.a56`; `dsp/opn.a56` (the YM2612) and `dsp/opl.a56` (the YM3812)
+  against their models (`src/opnfast.c`, `src/oplfast.c`), bit for bit, with their worst cases'
+  cycles a sample.
+- `tests/ym2612/` and `tests/opl/`: the FM chips' models against Nuked-OPN2 and Nuked-OPL3 (fetched
+  for these tests only, never committed nor shipped): pitch, level, loudness curve and timbre on
+  test files of their own (`make -C tests/opl`).
 - `tests/hatari/play_test.py`: EPlay in Hatari on a stock Falcon and others, its sound recorded and
   checked (pitch, gaps, length, level): files, playlists, folders, Shuffle, Repeat, gapless,
   ReplayGain, the dialogs and the mini player.

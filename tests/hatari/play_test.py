@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -100,6 +100,10 @@ CASES["vgmopn"] = ("OPN.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 4410
 # a Mega Drive file whose sound is its SN76489 (period 112: 998.8 Hz), the
 # YM2612 silent: the PSG in opn.a56, not sn.a56
 CASES["vgmmd"] = ("MD.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (999, 999), 3)
+# step 7 (Erez, 12 Nov 2026): the YM3812 (OPL2) on the DSP at 24,585 Hz,
+# channel 0's carrier at full level (its modulator at TL 63), a sine at
+# 999.9 Hz (F-number 659, block 5, at 3,579,545 Hz)
+CASES["vgmopl"] = ("OPL.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
 # a real file, never in the repo (a game's music: EPLAY_RIG_VGM names it, a
 # VGM or VGZ kept outside), played for EPLAY_RIG_SECS (20) and quit: does
 # its place keep up with the clock, and the DSP's ring (EPlay 1.18 on Erez's
@@ -238,14 +242,28 @@ def opn_cmds():
     return c + w(0xa4, (5 << 3) | (1230 >> 8)) + w(0xa0, 1230 & 255) + w(0x28, 0xf0)
 
 
-def make_vgm(path, secs, gz, sn=False, opn=False, md=False):
+def opl_cmds():
+    """the YM3812's writes for a sine at 999.9 Hz on channel 0: both
+    operators out, the modulator at TL 63 (-47 dB), the carrier at full
+    level, their attacks at once, held"""
+    w = lambda r, v: bytes([0x5a, r, v])
+    c = w(0x01, 0x20) + w(0xbd, 0) + w(0xc0, 0x01)
+    for slot, tl in ((0, 63), (3, 0)):
+        c += w(0x20 + slot, 0x21) + w(0x40 + slot, tl) + w(0x60 + slot, 0xf0) + w(0x80 + slot, 0x0f)
+        c += w(0xe0 + slot, 0)
+    return c + w(0xa0, 659 & 255) + w(0xb0, 0x20 | 5 << 2 | 659 >> 8)
+
+
+def make_vgm(path, secs, gz, sn=False, opn=False, md=False, opl=False):
     """a VGM (phase 9): channel A of an AY at the Spectrum's 1,773,400 Hz,
     a 1 kHz tone there (period 111: 998.6 Hz; 125 at the Atari's 2 MHz,
     1000 Hz), secs long, then silent; gzipped as a VGZ. sn: the SN76489
     at the Master System's 3,579,545 Hz instead, tone 0 at period 112
     (998.8 Hz), the others silent (on the DSP)"""
     import gzip
-    if opn:
+    if opl:
+        cmds = opl_cmds()
+    elif opn:
         cmds = opn_cmds()
     elif sn or md:
         cmds = bytes([0x50, 0xbf, 0x50, 0xdf, 0x50, 0xff, 0x50, 0x80, 0x50, 0x07, 0x50, 0x90])
@@ -256,14 +274,16 @@ def make_vgm(path, secs, gz, sn=False, opn=False, md=False):
         k = min(left, 44100)
         cmds += bytes([0x61, k & 0xff, k >> 8])
         left -= k
-    cmds += bytes([0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn or md else [0xa0, 8, 0, 0x66])
+    cmds += bytes([0x5a, 0xb0, 5 << 2 | 659 >> 8, 0x66] if opl else [0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn or md else [0xa0, 8, 0, 0x66])
     head = bytearray(0x80)
     head[0:4] = b"Vgm "
     struct.pack_into("<I", head, 0x04, 0x80 + len(cmds) - 4)
     struct.pack_into("<I", head, 0x08, 0x151)
     struct.pack_into("<I", head, 0x18, secs * 44100)
     struct.pack_into("<I", head, 0x34, 0x80 - 0x34)
-    if md:
+    if opl:
+        struct.pack_into("<I", head, 0x50, 3579545)
+    elif md:
         struct.pack_into("<I", head, 0x2c, 7670453)
         struct.pack_into("<I", head, 0x0c, 3579545)
         struct.pack_into("<H", head, 0x28, 0x0009)
@@ -285,7 +305,8 @@ def make_file(hd, case):
         shutil.copy(os.environ["EPLAY_RIG_VGM"], os.path.join(hd, f))
         return f
     if f.endswith((".VGM", ".VGZ")):
-        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn", case == "vgmmd")
+        make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn", case == "vgmmd",
+                 case == "vgmopl")
         return f
     src = os.path.join(hd, "..", "src.wav")
     synth = ["synth", str(secs)] + SYNTH.get(case, ["sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else []))
