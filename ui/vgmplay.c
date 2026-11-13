@@ -57,6 +57,12 @@ typedef struct {
 #define NSNAP 64
 static VGMRUN *snap;
 static unsigned char snap_ok[NSNAP];
+/* the run as it was at Pause (vp_halt), for Play to go on from exactly
+   there with nothing run again: the seek from the last copy took up to
+   490 ms of GEM's time on a stock Falcon with a 17 MB YM2149 VGZ (the
+   speed rig, Falcon:256, 13 Nov 2026: Play's release 40 to 505 ms) */
+static VGMRUN pause_run;
+static int pause_ok;
 static long snap_every;
 
 /* the last file unpacked, kept after it stops (vp_open, vp_forget) */
@@ -274,6 +280,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		} else {
 			vp_forget();
 			memset(snap_ok, 0, sizeof(snap_ok));
+			pause_ok = 0;
 			if (size > VGM_STREAM && vgm_magic(head, got) == 2 && path) {
 				/* a big VGZ: its first part unpacked, it plays, the
 				   rest as it plays (vp_step); a 33 MB one took two
@@ -427,7 +434,11 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		run.sn_fn = 0;
 		run.opn_fn = 0;
 		run.opl_fn = 0;
-		{
+		if (pause_ok && pause_run.at >= to && pause_run.at - to <= VGM_RATE / 1000 + 1) {
+			/* (Play after Pause: where it paused, the place's milliseconds
+			   being that sample's, rounded down) */
+			vgm_seek_from(&run, &pause_run, pause_run.at);
+		} else {
 			/* (from the last copy at or before the place) */
 			long k = snap && snap_every ? to / snap_every : -1;
 			if (k >= NSNAP)
@@ -436,10 +447,12 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 				k--;
 			vgm_seek_from(&run, k >= 0 ? &snap[k] : 0, to);
 		}
+		pause_ok = 0;
 		run.sn_fn = s;
 		run.opn_fn = o;
 		run.opl_fn = l;
-	}
+	} else
+		pause_ok = 0;	/* (from its start: the copy at Pause no longer the place) */
 	run.dac = use_opn ? dspopn_dac() : 0;	/* (the drums' samples straight to the tick's DAC) */
 	open_ = 1;
 	return 1;
@@ -474,10 +487,12 @@ void vp_start(void)
 	feed_on(tick, use_opn || use_opl ? 500 : 1000);
 }
 
-void vp_stop(void)
+void vp_halt(void)
 {
 	if (playing) {
 		feed_off();
+		pause_run = run;	/* (Play after Pause goes on from here: vp_open) */
+		pause_ok = !ended;
 		if (ld || run.waits)
 			elog("VGM: %ld KB unpacked of %ld so far; the music waited for it %ld times", ld ? avail / 1024 :
 			     mem_n / 1024, mem_n / 1024, run.waits);
@@ -488,6 +503,11 @@ void vp_stop(void)
 			ym_end();
 		playing = 0;
 	}
+}
+
+void vp_stop(void)
+{
+	vp_halt();
 	if (use_sn) {
 		dspsn_close();
 		use_sn = 0;
@@ -512,6 +532,7 @@ void vp_stop(void)
 
 void vp_forget(void)
 {
+	pause_ok = 0;
 	ld_end();
 	give(kept);
 	kept = 0;

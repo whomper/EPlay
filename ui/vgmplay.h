@@ -24,6 +24,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 int vp_step(int ms);
 int vp_tags(TAGS *t);		/* its GD3 once unpacked: 1 */
 void vp_start(void);		/* the tick on, the chip sounding */
+void vp_halt(void);		/* the tick off and the chip silent, where it is (Pause: vp_ms then that place) */
 void vp_stop(void);		/* silent, the tick off; the file's memory kept for its next open */
 void vp_forget(void);
 /* the file's tags and length (ms) from it unpacked, when it is the one open

@@ -1945,6 +1945,10 @@ void play_pause(void)
 	long fr, late, wmin, wavg, k;
 	if (state != PS_PLAYING)
 		return;
+	if (vgm)
+		vp_halt();	/* (first: Play goes on from the copy of the run taken as its tick
+				   stopped, which then is this place; read before, it was some
+				   11 ms behind it, and Play ran the file there again) */
 	pause_ms = play_ms();
 	pause_byte = 0;
 	if (dsp && !kind && s_started) {
