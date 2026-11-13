@@ -1997,8 +1997,12 @@ void play_start(void)
 			     snd_matrix[3]);
 		}
 		loading = dsp ? 2 : 0;	/* (the tick loads the DSP first: not waiting for GEM) */
-		feed_on(tick, dsp && !xs ? 500 : 250);	/* (the DMA: 1024 frames a tick, 4 times what
-						   plays, XSTREAM too; the DSP: its next packet at once) */
+		/* (the DMA: 1024 frames a tick, 4 times what plays, XSTREAM too;
+		   the DSP: its next packet at once. The STE's 125 a second: its
+		   tick's own work, some 1,750 cycles each whatever it moves, was
+		   15 % of the 68000 at 250 while a CD's WAV played; its ring
+		   holds half a second) */
+		feed_on(tick, dsp && !xs ? 500 : raw8 ? 125 : 250);
 	}
 }
 

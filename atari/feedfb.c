@@ -58,7 +58,7 @@ long feed_us(void)
 {
 	unsigned char t = TADR;
 	long n = (feed_missed - m0 + ((IPRA & TA_BIT) != 0)) * dr + t0 - t;
-	return n * (cr == 3 ? 625 : 2500) / 96;
+	return n * (cr == 3 ? 625 : cr == 5 ? 2500 : 3906) / 96;
 }
 
 static void stop(void)
@@ -80,9 +80,10 @@ void feed_on(void (*tick)(void), int hz)
 {
 	if (on)
 		feed_off();
-	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154 */
-	cr = hz > 500 ? 3 : 5;
-	dr = hz > 250 && hz <= 500 ? 77 : 154;
+	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154;
+	   125: /100 and 196 */
+	cr = hz > 500 ? 3 : hz > 125 ? 5 : 6;
+	dr = hz > 250 && hz <= 500 ? 77 : hz > 125 ? 154 : 196;
 	feed_fn = tick;
 	feed_busy = 0;
 	feed_ticks = feed_missed = 0;

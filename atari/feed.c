@@ -88,7 +88,7 @@ long feed_us(void)
 	unsigned char t = TADR;
 	/* (at level 6 the next tick waits, pending, instead of being left out) */
 	long n = (feed_missed - m0 + ((IPRA & TA_BIT) != 0)) * dr + t0 - t;
-	return n * (cr == 3 ? 625 : 2500) / 96;	/* (16 or 64 of 2,457,600 Hz) */
+	return n * (cr == 3 ? 625 : cr == 5 ? 2500 : 3906) / 96;	/* (16, 64 or 100 of 2,457,600 Hz) */
 }
 
 /* the tick taken away from supervisor mode (term.c: EPlay ending however
@@ -105,9 +105,10 @@ void feed_on(void (*tick)(void), int hz)
 {
 	if (on)
 		feed_off();
-	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154 */
-	cr = hz > 500 ? 3 : 5;
-	dr = hz > 250 && hz <= 500 ? 77 : 154;
+	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154;
+	   125: /100 and 196 (125.4) */
+	cr = hz > 500 ? 3 : hz > 125 ? 5 : 6;
+	dr = hz > 250 && hz <= 500 ? 77 : hz > 125 ? 154 : 196;
 	feed_fn = tick;
 	feed_busy = 0;
 	feed_ticks = feed_missed = 0;
