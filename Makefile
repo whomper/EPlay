@@ -51,7 +51,12 @@ OWNWARN := -Wextra -Wno-unused-parameter -Werror
 LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+# (first, after the assembly: the VGM tick's path, the tick and what it
+# calls each command, at a place of their own: a stock Falcon's 68030
+# caches 256 bytes, and with them wherever the code before them put them
+# the tick took 286 to 324 us, as unrelated code grew; Erez, 13 Nov 2026)
+HOT     := feed vgm vgmplay ym dspsn dspopn dspopl
+OWN     := $(HOT) main bar art sart draw about play cmp3 prefs snd hostirq term div64 stsearch finddlg vgmfile sncmd opnd egmath opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
