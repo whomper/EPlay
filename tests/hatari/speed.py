@@ -67,8 +67,20 @@ WORK_FALCON = (85, 131)
 PLACE = "WINDOW=87,89,472,251\r\n"	# (that work area's window: 1.15's first place)
 
 
+class RigWaitFailed(Exception):
+    pass
+
+
 class Rig(speed.Rig):
     quick = False
+
+    def start(self, auto=None, ready=None, boot=None):
+        """common's start, and its ready line there or the run fails (the
+        hub, 13 Nov 2026: a wait that timed out without failing let a row
+        time the wrong thing)"""
+        super().start(auto, ready, boot)
+        if ready and ready not in self.console():
+            raise RigWaitFailed("the start's \"%s\" never came" % ready)
 
     def at(self, x, y):
         """a place in EPlay's window as on the Falcon, where the window is
@@ -142,9 +154,12 @@ class Rig(speed.Rig):
         self.results.append((what + ": the whole picture", int(got[-1]) if got else None, ref))
 
     def wait_line(self, text, secs=30):
+        """the console's line, or the run fails"""
         end = time.time() + secs
         while time.time() < end and text not in self.console():
             time.sleep(0.5)
+        if text not in self.console():
+            raise RigWaitFailed("\"%s\" never came (%d s)" % (text, secs))
 
     def press(self, x, y):
         """the button down over x, y (held: the guidelines' 5.8 times the
@@ -504,7 +519,14 @@ def main():
         # Falcon's eplay.prg on an ST's 68000 never started: 11 Nov 2026)
         print("speed: EPlay leaves out the plain ST (no DMA sound): its 68000 at 8 MHz is STE:mono's")
         return 1
-    return max(session(work, spec, k) for k in kinds)
+    rc = 0
+    for k in kinds:
+        try:
+            rc = max(rc, session(work, spec, k))
+        except RigWaitFailed as e:
+            print("FAIL  %s: %s (its rows not to be trusted)" % (k, e))
+            rc = 1
+    return rc
 
 
 if __name__ == "__main__":
