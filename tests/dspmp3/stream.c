@@ -91,15 +91,21 @@ int main(int argc, char **argv)
 	static MP3DSP md;		/* the model, the same packets */
 	static MP3RS mrs;
 	static dw pcm[2][1152], mo[2][MP3RS_MAX];
-	static unsigned short *exp_w;
+	static unsigned short *exp_w, *ref_w;	/* (ref_w: the same without the gain, SIMGAIN's reference) */
+	static MP3DSP md0;		/* (its model) */
+	static MP3RS mrs0;
+	static unsigned long pk0[PK_MAX];
+	long nref = 0;
 	long nexp = 0, nfr = 0, drop_f = -1, drop_at = 0, drop_n = 0;
 	int sim_gain = getenv("SIMGAIN") ? atoi(getenv("SIMGAIN")) : 0;
 	if (getenv("SIMDROP"))
 		sscanf(getenv("SIMDROP"), "%ld:%ld:%ld", &drop_f, &drop_at, &drop_n);
 	exp_w = malloc(CAP_MAX * sizeof(*exp_w));
+	ref_w = malloc(CAP_MAX * sizeof(*ref_w));
 	if (getenv("SIMLEAD"))
 		dropchk_pc = (unsigned)strtoul(getenv("SIMLEAD"), 0, 16);
 	mp3dsp_reset(&md);
+	mp3dsp_reset(&md0);
 	unsigned long long quiet = 0, next_word = 0, lat = getenv("SIMLAT") ? strtoull(getenv("SIMLAT"), 0, 10) : 0;
 	FILE *f;
 	if (argc < 2 || !(f = fopen(argv[1], "rb"))) {
@@ -133,6 +139,7 @@ int main(int argc, char **argv)
 		slot_cycles = 32000000ULL * 100 / (2ULL * (unsigned long long)rout *
 						     (unsigned long long)(getenv("SIMLOAD") ? atoi(getenv("SIMLOAD")) : 100));
 		mp3rs_set(&mrs, rin, rout);
+		mp3rs_set(&mrs0, rin, rout);
 		if (rsmode) {
 			MP3RS rs;
 			mp3rs_set(&rs, rin, rout);
@@ -186,6 +193,7 @@ int main(int argc, char **argv)
 				if (np < 0)
 					continue;
 				pkn = np;
+				memcpy(pk0, pk, sizeof(pk0));
 				if (sim_gain)
 					mp3_packet_gain(pk, sim_gain);	/* (ReplayGain louder or quieter) */
 				if (nfr == drop_f) {
@@ -200,6 +208,22 @@ int main(int argc, char **argv)
 					for (j = 0; j < k && nexp + 2 <= CAP_MAX; j++) {
 						exp_w[nexp++] = (unsigned short)((mo[0][j] >> 8) & 0xffff);
 						exp_w[nexp++] = (unsigned short)((mo[nch == 2 ? 1 : 0][j] >> 8) & 0xffff);
+					}
+				}
+				if (sim_gain > 0) {
+					/* (the same packet without the gain: the louder one's
+					   reference, word for word) */
+					int ns, nch, k, j;
+					if (nfr == drop_f) {
+						pk0[0] |= PK_DROP | (unsigned long)drop_n << 12;
+						pk0[1] |= (unsigned long)drop_at << 11;
+					}
+					nch = mp3dsp_frame(&md0, pk0, pcm, &ns);
+					mp3_drop_set(&mrs0, pk0);
+					k = rsmode ? mp3rs_run(&mrs0, pcm, ns, nch, mo) : mp3_copy_run(&mrs0, pcm, ns, nch, mo);
+					for (j = 0; j < k && nref + 2 <= CAP_MAX; j++) {
+						ref_w[nref++] = (unsigned short)((mo[0][j] >> 8) & 0xffff);
+						ref_w[nref++] = (unsigned short)((mo[nch == 2 ? 1 : 0][j] >> 8) & 0xffff);
 					}
 				}
 				nfr++;
@@ -231,16 +255,18 @@ int main(int argc, char **argv)
 		}
 	}
 	if (sim_gain > 0) {
-		/* louder: what reaches full scale held there, never wrapped (a
-		   jump of more than 3/4 of the range between two frames of a
-		   channel, from near one end to near the other) */
+		/* louder: what reaches full scale held there, never wrapped: a
+		   word near full scale whose sign is the opposite of the same
+		   word's without the gain (a jump from one end to the other alone
+		   can be the music's: a click clipped at both ends, CI's mix320 of
+		   13 Nov 2026, +13,498 then -8,708 at 0 dB) */
 		long k, full = 0, wraps = 0;
 		for (k = 0; k < nexp; k++) {
 			short v = (short)exp_w[k];
 			full += v == 32767 || v == -32768;
-			if (k >= 2) {
-				short w = (short)exp_w[k - 2];
-				if (labs((long)v - w) > 49152 && labs(v) > 24576 && labs(w) > 24576)
+			if (k < nref) {
+				short u = (short)ref_w[k];
+				if (labs(v) > 24576 && labs(u) > 256 && (v < 0) != (u < 0))
 					wraps++;
 			}
 		}
