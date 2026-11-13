@@ -2066,6 +2066,19 @@ What EPlay needs beyond common's layer:
   - Next, when the FireBee's turn comes: FBPROBE 2, which plays (a second of tone through
     `Setbuffer`/`Buffoper` at each `Devconnect` rate, `Buffptr` timed against the 200 Hz clock,
     and a PSG tone), for the tester to listen to and send back.
+- **What FBPROBE 2 found (the tester's FireBee, through Erez, 13 Nov 2026):** the same cookies
+  (`_CPU` 60, `_FPU` 0, `_CF_` $01032400, `_SND` $27, no DSP: its port a bus error; the DMA's
+  registers $FF00, the matrix's $FFFF), FreeMiNT 1.19 with N.AES and NVDI; ST RAM 5.4 MB free,
+  other RAM 345 MB.
+  - **The XBIOS's sound plays.** At each of 49,170, 32,780, 24,585 and 12,292 Hz `Locksnd`,
+    `Sndstatus(1)`, `Setmode` (16-bit stereo), `Devconnect`, `Setbuffer` and `Buffoper` (its
+    loop) all answered 0, and `Buffptr` moved through the ring: 48,902, 32,450, 24,436 and
+    12,168 Hz measured over 500 ms by the 200 Hz clock (0.5 to 1 % under, within what that
+    clock can tell). So the edition's sound is a ring fed through the XBIOS, `snd.c`'s Falcon
+    path with `Buffptr` in place of the DMA's registers.
+  - **MFP Timer A works:** `Xbtimer(0, 3, 154)` gave 994 interrupts in a second (997 wanted).
+    The tick stays on Timer A, set with `Xbtimer`.
+  - Whether the four tones sounded clean is the tester's ear (asked through Erez).
 - **EPlay's own assembly:** `feed.S` (the tick), `hostirq.S` (the DSP's: not built), `term.c`'s
   trap 13, `div64.c`'s 64-bit forms (the C path).
 
