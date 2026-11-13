@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * oplfast.c - the YM3812 as the DSP plays it (oplfast.h). Each step as
- * dsp/opl.a56 does it.
+ * oplfast.c - the YM3812 and the YMF262 as the DSP plays them (oplfast.h).
+ * Each step as dsp/opl.a56 does it.
  */
 #include <string.h>
 #include <math.h>
@@ -42,6 +42,12 @@ static int trem(int e)
 	return e < 7 ? 0 : e < 107 ? 1 + (e - 7) / 4 : e < 110 ? 26 : 25 - (e - 110) / 4;
 }
 
+/* the logarithmic saw's p (0-511): 2^(-p/32) of the full scale */
+long oplf_ramp(int p)
+{
+	return (long)floor(pow(2, -p / 32.0) * OPLF_FULL + 0.5);
+}
+
 void oplf_init(OPLF *f)
 {
 	int i, c, k;
@@ -55,6 +61,20 @@ void oplf_init(OPLF *f)
 		f->wave[3][i] = (i & 256) ? 0 : i < 512 ? s : -s;	/* its rising quarters */
 		f->wave[2][i] = W24(f->wave[2][i]);
 		f->wave[3][i] = W24(f->wave[3][i]);
+	}
+	/* the OPL3's (Nuked-OPL3's indexes): 4 the sine at twice the rate in the
+	   first half (its mirrored quarters' index ^ $FE: the chip's), nothing in
+	   the second; 5 its absolute value; 6 a square; 7 the logarithmic saw,
+	   2^(-p/32) and its mirror negative. From the first quarter of 0 (and
+	   oplf_ramp), so the 68030 makes them from it */
+	for (i = 0; i < 1024; i++) {
+		long q = (i & 0x80) ? f->wave[0][((i ^ 0xff) << 1) & 0xff] : f->wave[0][(i << 1) & 0xff];
+		int neg = (i & 0x300) == 0x100;
+		long r = oplf_ramp(i & 0x200 ? (i & 0x1ff) ^ 0x1ff : i);
+		f->wave[4][i] = W24(i & 0x200 ? 0 : neg ? -q : q);
+		f->wave[5][i] = W24(i & 0x200 ? 0 : q);
+		f->wave[6][i] = W24(i & 0x200 ? -OPLF_FULL : OPLF_FULL);
+		f->wave[7][i] = W24(i & 0x200 ? -r : r);
 	}
 	/* (below -78 dB the chip's output is 0: its 13 bits) */
 	for (i = 0; i < OPLF_GAINS; i++)
@@ -75,6 +95,7 @@ void oplf_init(OPLF *f)
 	f->upd = 1;
 	f->noise = 1;
 	f->nsteps = 1;
+	f->nch = 9;
 }
 
 /* ---- the commands */
@@ -92,6 +113,8 @@ static int cmd_len(const OPLF *f)
 	case OPLC_STEP:
 	case OPLC_RHY:
 		return 3;
+	case OPLC_NCH:
+		return 2;
 	}
 	return 1;
 }
@@ -112,7 +135,7 @@ static void cmd(OPLF *f, const long *w)
 		op->sl = w[8];
 		op->am = (int)w[9];
 		op->vib = (int)w[10];
-		op->ws = (int)w[11] & 3;
+		op->ws = (int)w[11] & 7;
 		break;
 	case OPLC_STEP:
 		op = &f->ch[w[1] / 2].op[w[1] % 2];
@@ -149,6 +172,9 @@ static void cmd(OPLF *f, const long *w)
 	case OPLC_RHY:
 		f->rhy = (int)w[1];
 		f->nsteps = (int)w[2];
+		break;
+	case OPLC_NCH:
+		f->nch = w[1] > 9 ? OPL_CH : 9;
 		break;
 	}
 }
@@ -262,6 +288,41 @@ static long ch_calc(OPLF *f, OPLF_CH *ch, int bd)
 	return lim(a >> (bd ? 2 : 3));
 }
 
+/* a four-operator pair (its first channel ch, its second's operators C and
+   D): its algorithm (2-5 less 2); A's feedback as a channel's modulator's.
+   An output used as a modulation is limited (the modulator's as it is) */
+static long ch4_calc(OPLF *f, OPLF_CH *ch, OPLF_CH *pr)
+{
+	OPLF_OP *a = &ch->op[0], *b = &ch->op[1], *c = &pr->op[0], *d = &pr->op[1];
+	acc_t pa, x, y;
+	pa = op_calc(f, a, 0, prod(ch->o1, ch->kf) + prod(ch->o1p, ch->kf));
+	ch->o1p = ch->o1;
+	ch->o1 = lim(pa);
+	switch (ch->cnt - 2) {
+	case 0:		/* A > B > C > D */
+		x = op_calc(f, b, ch->o1, 0);
+		x = op_calc(f, c, lim(x), 0);
+		y = op_calc(f, d, lim(x), 0);
+		break;
+	case 1:		/* A > B + C > D */
+		y = op_calc(f, b, ch->o1, 0);
+		x = op_calc(f, c, 0, 0);
+		y += op_calc(f, d, lim(x), 0);
+		break;
+	case 2:		/* A + B > C > D */
+		x = op_calc(f, b, 0, 0);
+		x = op_calc(f, c, lim(x), 0);
+		y = pa + op_calc(f, d, lim(x), 0);
+		break;
+	default:	/* A + B > C + D */
+		x = op_calc(f, b, 0, 0);
+		y = pa + op_calc(f, c, lim(x), 0);
+		y += op_calc(f, d, 0, 0);
+		break;
+	}
+	return lim(y >> 3);
+}
+
 /* the rhythm mode's channels 7 and 8: the hi-hat and the snare, the tom
    and the cymbal (each phase on, off or not). The hi-hat's, the snare's and
    the cymbal's phase indexes made from the hi-hat's phase's bits 2, 3, 7
@@ -295,12 +356,14 @@ void oplf_words(OPLF *f, long *lr, int n)
 				long b = (f->noise ^ (f->noise >> 14)) & 1;
 				f->noise = f->noise >> 1 | b << 22;
 			}
-		for (c = 0; c < OPL_CH; c++) {
+		for (c = 0; c < f->nch; c++) {
 			OPLF_CH *ch = &f->ch[c];
 			long v;
-			if (f->rhy && c >= 7)
+			if (f->rhy && c >= 7 && c < 9)
 				v = c == 7 ? drums(f) : f->v8;
-			else if (!ch->live)
+			else if (ch->cnt >= 2 && ch->cnt < OPL_PAIR2)
+				v = ch->live || f->ch[c + 3].live ? ch4_calc(f, ch, &f->ch[c + 3]) : 0;
+			else if (!ch->live || ch->cnt == OPL_PAIR2)
 				v = 0;
 			else
 				v = ch_calc(f, ch, f->rhy && c == 6);

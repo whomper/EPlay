@@ -10,7 +10,9 @@
  * increment; the key scaling's rate offset the key code (block x 2 and the
  * F-number's top bit, or the next with NTS), a quarter of it without KSR;
  * its level 6 dB an octave at most, halved and quartered. Integers only:
- * it runs on the 68030.
+ * it runs on the 68030. The OPL3 (opld.h): its rate clock / 288, so its
+ * clock / 4 is taken as an OPL2's; a four-operator pair's second channel
+ * takes its first's F-number and block, and its operators their key.
  */
 #include <string.h>
 #include "opld.h"
@@ -88,6 +90,14 @@ static void op_rates(OPLD *d, OPLD_OP *op)
 	op->sl = (long)((op->slr == 15 ? 31 : op->slr) << 4) * OPL_Q;
 }
 
+/* the channel whose F-number and block an operator of channel c takes: a
+   four-operator pair's second its first's */
+TICK_CODE("7Aopld_freq_ch")
+static const OPLD_CH *freq_ch(const OPLD *d, int c)
+{
+	return d->ch[c].type == 2 ? &d->ch[c - 3] : &d->ch[c];
+}
+
 TICK_CODE("78opld_op_level")
 static void op_level(const OPLD_CH *ch, OPLD_OP *op)
 {
@@ -105,11 +115,12 @@ TICK_CODE("75opld_ch_steps")
 static void ch_steps(OPLD *d, int c)
 {
 	OPLD_CH *ch = &d->ch[c];
-	int ksn = ch->block << 1 | ((d->nts ? ch->fnum >> 8 : ch->fnum >> 9) & 1);
+	const OPLD_CH *fc = freq_ch(d, c);
+	int ksn = fc->block << 1 | ((d->nts ? fc->fnum >> 8 : fc->fnum >> 9) & 1);
 	int i;
 	for (i = 0; i < 2; i++) {
 		OPLD_OP *op = &ch->op[i];
-		long f = ((long)ch->fnum << ch->block >> 1) * mt[op->mult];
+		long f = ((long)fc->fnum << fc->block >> 1) * mt[op->mult];
 		int rof = op->ksr ? ksn : ksn >> 2;
 		/* (the chip's 2^20 a turn at clock / 72, 2^21 here at the output's
 		   rate: x stepk (Q16), two 32-bit multiplies of its 10-bit halves) */
@@ -117,44 +128,52 @@ static void ch_steps(OPLD *d, int c)
 		long tl = op->tl;
 		op->step = (long)((t >> 6) + ((((t & 63) << 10) + (unsigned long)(f & 1023) * d->stepk + 32768) >> 16)) &
 			   0xffffff;
-		op_level(ch, op);
+		op_level(fc, op);
 		if (rof != op->rof) {
 			op->rof = rof;
 			op_rates(d, op);
-			d->op_dirty |= 1UL << (c * 2 + i);
+			d->op_dirty |= 1ULL << (c * 2 + i);
 		} else if (tl != op->tl)
-			d->op_dirty |= 1UL << (c * 2 + i);
+			d->op_dirty |= 1ULL << (c * 2 + i);
 		else
-			d->step_dirty |= 1UL << (c * 2 + i);	/* (its step alone: STEP's 3 words, not OP's 12) */
+			d->step_dirty |= 1ULL << (c * 2 + i);	/* (its step alone: STEP's 3 words, not OP's 12) */
 	}
 	/* (the vibrato's depth follows the F-number) */
 	if (ch->op[0].vib || ch->op[1].vib)
-		d->ch_dirty |= 1u << c;
+		d->ch_dirty |= 1UL << c;
+	/* (a four-operator pair's second follows its first) */
+	if (ch->type == 1)
+		ch_steps(d, c + 3);
 }
 
-/* each operator keyed by its channel, or in the rhythm mode by its drum */
+/* each operator keyed by its channel (a four-operator pair's second by its
+   first), or in the rhythm mode by its drum */
 TICK_CODE("76opld_keys")
 static void keys(OPLD *d)
 {
 	int i;
 	for (i = 0; i < 2 * OPL_CH; i++) {
-		OPLD_OP *op = &d->ch[i >> 1].op[i & 1];
-		int on = d->ch[i >> 1].key;
+		int c = i >> 1;
+		OPLD_OP *op = &d->ch[c].op[i & 1];
+		int on = d->ch[d->ch[c].type == 2 ? c - 3 : c].key;
 		if (i >= 12 && i < 18 && (d->bd & 0x20) && (d->bd & drum_bit[i - 12]))
 			on = 1;
 		if (on != op->key) {
 			d->key_event[i] = on ? OPLD_KEYON : OPLD_KEYOFF;
-			d->key_dirty |= 1UL << i;
+			d->key_dirty |= 1ULL << i;
 			op->key = on;
 		}
 	}
 }
 
-void opld_init(OPLD *d, unsigned long clock, long rate)
+static void init(OPLD *d, unsigned long clock, long rate, int opl3)
 {
 	int c, i;
 	memset(d, 0, sizeof(*d));
-	d->clock = clock;
+	d->opl3 = opl3;
+	d->nch = 9;
+	d->nch_dirty = 1;
+	d->clock = opl3 ? clock / 4 : clock;
 	d->rate = rate;
 	d->outg = OPL_OUTG;
 	d->stepk = (unsigned long)(((2ULL * clock << 16) + 36ULL * (unsigned long)rate) / (72ULL * (unsigned long)rate));
@@ -164,30 +183,90 @@ void opld_init(OPLD *d, unsigned long clock, long rate)
 			d->ch[c].op[i].rof = -1;
 			d->ch[c].op[i].egt = 0;
 		}
+		d->ch[c].sa = d->ch[c].sb = 1;
 		ch_steps(d, c);
 	}
-	d->op_dirty = (1UL << (2 * OPL_CH)) - 1;
-	d->ch_dirty = (1u << OPL_CH) - 1;
+	d->op_dirty = (1ULL << (2 * OPL_CH)) - 1;
+	d->ch_dirty = (1UL << OPL_CH) - 1;
 	d->lfo_dirty = d->rhy_dirty = 1;
+}
+
+void opld_init(OPLD *d, unsigned long clock, long rate)
+{
+	init(d, clock, rate, 0);
+}
+
+void opld_init3(OPLD *d, unsigned long clock, long rate)
+{
+	init(d, clock, rate, 1);
+}
+
+void opld_channels(OPLD *d, int n)
+{
+	d->nch = n > 9 ? OPL_CH : 9;
+	d->nch_dirty = 1;
+}
+
+/* an operator's waveform: the OPL2's with WSE, an OPL3's its eight with NEW,
+   else its first four (register 1's bit 5 not the OPL3's) */
+static int wave_of(const OPLD *d, const OPLD_OP *op)
+{
+	if (d->opl3)
+		return d->newm ? op->wsr & 7 : op->wsr & 3;
+	return d->wse ? op->wsr & 3 : 0;
+}
+
+/* 0x104: the four-operator pairs (each bit: channels 0 and 3, 1 and 4, 2
+   and 5, then the second bank's), the pairs' steps and connections again */
+static void four_op(OPLD *d, int v)
+{
+	int bit;
+	d->fourop = v & 0x3f;
+	for (bit = 0; bit < 6; bit++) {
+		int c = bit < 3 ? bit : bit + 6, on = (v >> bit) & 1;
+		d->ch[c].type = on;
+		d->ch[c + 3].type = on ? 2 : 0;
+		d->ch[c].op[0].rof = d->ch[c].op[1].rof = -1;
+		d->ch[c + 3].op[0].rof = d->ch[c + 3].op[1].rof = -1;
+		ch_steps(d, c);
+		if (!on)
+			ch_steps(d, c + 3);
+		d->ch_dirty |= 1UL << c | 1UL << (c + 3);
+		d->op_dirty |= 3ULL << (c * 2) | 3ULL << ((c + 3) * 2);
+	}
 }
 
 void opld_gain(OPLD *d, long g)
 {
 	d->outg = g;
-	d->ch_dirty = (1u << OPL_CH) - 1;
+	d->ch_dirty = (1UL << OPL_CH) - 1;
 }
 
 TICK_CODE("73opld_write")
 void opld_write(OPLD *d, int reg, int val)
 {
-	int c, i;
+	int c, i, bank = d->opl3 ? (reg >> 8) & 1 : 0;
 	OPLD_OP *op;
 	val &= 255;
+	reg &= 0xff;
+	if (bank && (reg == 0x04 || reg == 0x05)) {
+		if (reg == 0x04)
+			four_op(d, val);
+		else if ((val & 1) != d->newm) {
+			d->newm = val & 1;
+			for (i = 0; i < 2 * OPL_CH; i++) {
+				op = &d->ch[i >> 1].op[i & 1];
+				op->ws = wave_of(d, op);
+			}
+			d->op_dirty = (1ULL << (2 * OPL_CH)) - 1;
+		}
+		return;
+	}
 	if ((reg >= 0x20 && reg < 0xa0) || (reg >= 0xe0 && reg < 0xf6)) {
 		int o = reg & 0x1f;
 		if (o > 0x15 || (o & 7) >= 6)
 			return;
-		c = (o >> 3) * 3 + (o & 7) % 3;
+		c = (o >> 3) * 3 + (o & 7) % 3 + 9 * bank;
 		i = (o & 7) / 3;
 		op = &d->ch[c].op[i];
 		switch (reg & 0xe0) {
@@ -199,13 +278,15 @@ void opld_write(OPLD *d, int reg, int val)
 			op->mult = val & 15;
 			op->rof = -1;
 			ch_steps(d, c);	/* (the step, the rate offset: the rates) */
-			d->op_dirty |= 1UL << (c * 2 + i);
-			d->ch_dirty |= 1u << c;
+			d->op_dirty |= 1ULL << (c * 2 + i);
+			d->ch_dirty |= 1UL << c;
+			if (d->ch[c].type == 2)
+				d->ch_dirty |= 1UL << (c - 3);	/* (the pair's vibrato's depth) */
 			return;
 		case 0x40:
 			op->ksl = val >> 6;
 			op->tlr = val & 63;
-			op_level(&d->ch[c], op);
+			op_level(freq_ch(d, c), op);
 			break;
 		case 0x60:
 			op->ar = val >> 4;
@@ -218,22 +299,24 @@ void opld_write(OPLD *d, int reg, int val)
 			op_rates(d, op);
 			break;
 		default:
-			op->wsr = val & 3;
-			op->ws = d->wse ? op->wsr : 0;
+			op->wsr = val & 7;
+			op->ws = wave_of(d, op);
 			break;
 		}
-		d->op_dirty |= 1UL << (c * 2 + i);
+		d->op_dirty |= 1ULL << (c * 2 + i);
 		return;
 	}
-	switch (reg) {
+	if (bank && reg < 0xa0)
+		return;			/* (0x01, 0x08 and 0xBD the first bank's) */
+	switch (bank ? -1 : reg) {
 	case 0x01:
-		if ((val & 0x20) != d->wse) {
+		if (!d->opl3 && (val & 0x20) != d->wse) {
 			d->wse = val & 0x20;
 			for (i = 0; i < 2 * OPL_CH; i++) {
 				op = &d->ch[i >> 1].op[i & 1];
-				op->ws = d->wse ? op->wsr : 0;
+				op->ws = wave_of(d, op);
 			}
-			d->op_dirty = (1UL << (2 * OPL_CH)) - 1;
+			d->op_dirty = (1ULL << (2 * OPL_CH)) - 1;
 		}
 		return;
 	case 0x08:
@@ -247,7 +330,7 @@ void opld_write(OPLD *d, int reg, int val)
 		if ((val ^ d->bd) & 0x80)
 			d->lfo_dirty = 1;
 		if ((val ^ d->bd) & 0x40)
-			d->ch_dirty = (1u << OPL_CH) - 1;	/* (the vibrato's depth) */
+			d->ch_dirty = (1UL << OPL_CH) - 1;	/* (the vibrato's depth) */
 		if ((val ^ d->bd) & 0x20)
 			d->rhy_dirty = 1;
 		d->bd = val;
@@ -255,18 +338,21 @@ void opld_write(OPLD *d, int reg, int val)
 		return;
 	}
 	c = reg & 15;
-	if (c >= OPL_CH)
+	if (c >= 9)
 		return;
+	c += 9 * bank;
 	switch (reg & 0xf0) {
 	case 0xa0:
 		d->ch[c].fnum = (d->ch[c].fnum & 0x300) | val;
-		ch_steps(d, c);
+		if (d->ch[c].type != 2)
+			ch_steps(d, c);
 		break;
 	case 0xb0:
 		if ((val & 0x1f) != (d->ch[c].fnum >> 8 | d->ch[c].block << 2)) {
 			d->ch[c].fnum = (d->ch[c].fnum & 0xff) | (val & 3) << 8;
 			d->ch[c].block = (val >> 2) & 7;
-			ch_steps(d, c);
+			if (d->ch[c].type != 2)
+				ch_steps(d, c);
 		}
 		d->ch[c].key = (val >> 5) & 1;
 		keys(d);
@@ -274,13 +360,19 @@ void opld_write(OPLD *d, int reg, int val)
 	case 0xc0:
 		d->ch[c].fb = (val >> 1) & 7;
 		d->ch[c].cnt = val & 1;
-		d->ch_dirty |= 1u << c;
+		/* (an OPL3 with NEW: its outputs; else both, as the chip takes them
+		   at this write) */
+		d->ch[c].sa = d->opl3 && d->newm ? (val >> 4) & 1 : 1;
+		d->ch[c].sb = d->opl3 && d->newm ? (val >> 5) & 1 : 1;
+		d->ch_dirty |= 1UL << c;
+		if (d->ch[c].type == 2)
+			d->ch_dirty |= 1UL << (c - 3);	/* (its pair's connection, outputs) */
 		break;
 	}
 }
 
 /* (opld_send's words, sent together) */
-static long ob[512];
+static long ob[1024];		/* (an OPL3 all sent: some 680) */
 static int on_;
 #define EMIT(w)	(ob[on_++] = (w))
 
@@ -288,10 +380,15 @@ TICK_CODE("74opld_send")
 void opld_send(OPLD *d, void (*put)(void *u, long w), void *u)
 {
 	int c, k;
-	unsigned long ops = d->op_dirty | d->key_dirty | d->step_dirty;
-	if (!ops && !d->ch_dirty && !d->lfo_dirty && !d->rhy_dirty)
+	unsigned long long ops = d->op_dirty | d->key_dirty | d->step_dirty;
+	if (!ops && !d->ch_dirty && !d->lfo_dirty && !d->rhy_dirty && !d->nch_dirty)
 		return;
 	on_ = 0;
+	if (d->nch_dirty) {
+		EMIT(OPLC_NCH);
+		EMIT(d->nch);
+		d->nch_dirty = 0;
+	}
 	if (d->lfo_dirty) {
 		/* (the chip's samples an update: clock / 72 / rate x OPL_UPD; the
 		   tremolo's period 13,440 of them, 210 steps of 64; the vibrato's
@@ -311,22 +408,25 @@ void opld_send(OPLD *d, void (*put)(void *u, long w), void *u)
 	}
 	for (c = 0; c < OPL_CH; c++) {
 		OPLD_CH *ch = &d->ch[c];
-		if (!((ops >> (c * 2)) & 3) && !(d->ch_dirty & (1u << c)))
+		if (!((ops >> (c * 2)) & 3) && !(d->ch_dirty & (1UL << c)))
 			continue;
-		if (d->ch_dirty & (1u << c)) {
-			long dw = ch->fnum ? (((long)(ch->fnum >> 7) << 24) / ch->fnum) : 0;
+		if (d->ch_dirty & (1UL << c)) {
+			const OPLD_CH *fc = freq_ch(d, c);
+			/* (a pair's outputs and its second's connection: its second's) */
+			const OPLD_CH *oc = ch->type == 1 ? &d->ch[c + 3] : ch;
+			long dw = fc->fnum ? (((long)(fc->fnum >> 7) << 24) / fc->fnum) : 0;
 			EMIT(OPLC_CH);
 			EMIT(c);
-			EMIT(ch->cnt);
+			EMIT(ch->type == 1 ? 2 + (ch->cnt << 1 | oc->cnt) : ch->type == 2 ? OPL_PAIR2 : ch->cnt);
 			EMIT(ch->fb ? 1L << (ch->fb + 14) : 0);
-			EMIT(d->outg);
-			EMIT(d->outg);
+			EMIT(oc->sa ? d->outg : 0);
+			EMIT(oc->sb ? d->outg : 0);
 			EMIT(d->bd & 0x40 ? dw : dw >> 1);
 		}
 		for (k = 0; k < 2; k++) {
 			int i = c * 2 + k;
 			const OPLD_OP *op = &ch->op[k];
-			if (d->op_dirty & (1UL << i)) {
+			if (d->op_dirty & (1ULL << i)) {
 				EMIT(OPLC_OP);
 				EMIT(i);
 				EMIT(op->step);
@@ -339,7 +439,7 @@ void opld_send(OPLD *d, void (*put)(void *u, long w), void *u)
 				EMIT(op->am);
 				EMIT(op->vib);
 				EMIT(op->ws);
-			} else if (d->step_dirty & (1UL << i)) {
+			} else if (d->step_dirty & (1ULL << i)) {
 				EMIT(OPLC_STEP);
 				EMIT(i);
 				EMIT(op->step);

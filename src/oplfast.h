@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * oplfast.h - the YM3812 (OPL2) as the DSP plays it (phase 10, step 7):
+ * oplfast.h - the YM3812 (OPL2) and the YMF262 (OPL3) as the DSP plays them
+ * (phase 10, step 7):
  * dsp/opl.a56's arithmetic in C, word for word (24-bit words, the DSP's
  * multiplies, its accumulators and its limiter), as opnfast.h is the
  * YM2612's, so that the program can be held to it bit for bit. It takes
@@ -19,14 +20,19 @@
  * hi-hat's, the snare's and the cymbal's phases made from bits of the
  * hi-hat's and the cymbal's phases and the noise (a 23-bit LFSR). The
  * envelopes, the gains and the LFOs each OPL_UPD samples, an operator that
- * is off passed over; a channel with both off passed over.
+ * is off passed over; a channel with both off passed over. The OPL3: 18
+ * channels (OPLC_NCH: the first nine alone, or all), eight waveforms; a
+ * four-operator pair made by its first channel (its operators A and B, its
+ * second's C and D: algorithm 0 A>B>C>D, 1 A>B + C>D, 2 A + B>C>D, 3 A +
+ * B>C + D; A's feedback its first's), its second silent.
  */
 #ifndef EPLAY_OPLFAST_H
 #define EPLAY_OPLFAST_H
 
 #include "opld.h"
 
-#define OPLF_GAINS 2048		/* the gain table: att / OPL_Q x 2 + tl + tremolo at most */
+#define OPLF_GAINS 2048
+#define OPLF_FULL 8364000L	/* the waveforms' full scale (the chip's 4,084) */		/* the gain table: att / OPL_Q x 2 + tl + tremolo at most */
 
 typedef struct {
 	long phase, gain, step_e;	/* (the sample's) */
@@ -44,18 +50,20 @@ typedef struct {
 typedef struct {
 	OPLF_CH ch[OPL_CH];
 	long am_phase, am_step, pm_phase, pm_step;	/* 2^24 a period */
-	int am_deep, rhy, nsteps;
+	int am_deep, rhy, nsteps, nch;
 	long noise;
 	long v8;		/* (the rhythm mode's channel 8, made with 7's) */
 	int upd;		/* samples to the next update */
 	/* the tables the 68030 loads */
-	long wave[4][1024], gain_tab[OPLF_GAINS], am_tab[2][256], pmw[8];
+	long wave[8][1024], gain_tab[OPLF_GAINS], am_tab[2][256], pmw[8];
 	/* the words of a command still coming */
 	long cw[16];
 	int cn;
 } OPLF;
 
 void oplf_init(OPLF *f);
+/* the OPL3's waveform 7, p 0-511: 2^(-p/32) of OPLF_FULL */
+long oplf_ramp(int p);
 /* a word the 68030 sends (opld_send's put) */
 void oplf_word(OPLF *f, long w);
 /* n samples: the SSI's words, left and right (2 n) */
