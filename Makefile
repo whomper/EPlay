@@ -2,7 +2,8 @@
 # Copyright (C) 2026 AERA | Erez Yaary
 # EPlay.
 #   make            binary/eplay.prg (68030 code: the Falcon, the TT) and
-#                   binary/eplayst.prg (68000: the STE), with a stock m68k ELF cross
+#                   binary/eplayst.prg (68000: the STE), binary/eplayfb.prg (the
+#                   FireBee's ColdFire: make fb), with a stock m68k ELF cross
 #                   compiler (apt install gcc-m68k-linux-gnu) and a56 for its
 #                   DSP program: freestanding on common/'s runtime, the
 #                   header written by common/tools/elf2tos.py
@@ -33,16 +34,21 @@ INC     := -I$(B) -Isrc -Isrc/mp3 -Iatari -Icommon/src -Icommon/atari -Iui -Icom
 # 68060, with none of the 64-bit mulu.l/divu.l the 68060 lacks (a CT60
 # trapped on them: a tester, 9 Nov 2026); atari/div64.c gives libgcc's
 # 64-bit helpers without them
+# CPU=5475: the FireBee's ColdFire (EPLAYFB.PRG, make fb: EPLAY_FB)
 CPU     ?= 68020-60
+MCPU    := $(if $(filter 5475,$(CPU)),-mcpu=5475,-m$(CPU))
 ifeq ($(CPU),68000)
 STFLAGS := -fdisable-tree-bswap -fno-store-merging -DEPLAY_ST
 endif
-CFLAGS  := -m$(CPU) $(STFLAGS) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+ifeq ($(CPU),5475)
+STFLAGS := -DEPLAY_FB
+endif
+CFLAGS  := $(MCPU) $(STFLAGS) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
            -ffunction-sections -fdata-sections -Wall -Wno-pointer-sign \
            -nostdinc -isystem $(GCCINC) -Icommon/atari/include $(INC)
 OWNWARN := -Wextra -Wno-unused-parameter -Werror
-LDFLAGS := -m$(CPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
+LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/atari/link.ld \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
@@ -53,15 +59,27 @@ CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn ovl
 CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg net_tos sting tls_ovl
 CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip settings dlgbuild tooltip
+ifeq ($(CPU),5475)
+# the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
+# for them), the sound through the XBIOS (sndfb.c), the tick through
+# Xbtimer (feedfb.S), the 64-bit helpers common's (ll64.c)
+OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3,$(OWN)) sndfb feedfb fbstub cmp3fb
+CATARI  += ll64
+CUI     := $(filter-out cpucheck,$(CUI))
+OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feedfb_s.o $(OBJDIR)/inflate_fast_s.o \
+           $(OBJDIR)/cpucheck_cf.o \
+           $(OBJDIR)/sting_s.o $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
+else
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
 	   $(OBJDIR)/inflate_fast_s.o \
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
+endif
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
-all: binary/eplay.prg binary/eplayst.prg binary/mp3fpu.ovl
+all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
@@ -70,6 +88,14 @@ binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opn
 	python3 common/tools/oddaccess.py build/st/eplay.elf
 	PRGFLAGS=0x10 python3 common/tools/elf2tos.py build/st/eplay.elf $@
 .PHONY: st
+
+# the FireBee's: the same sources for its ColdFire, in build/fb (EPLAY_FB:
+# the sound through FireTOS's XBIOS, no DSP), EPLAYFB.PRG
+fb: binary/eplayfb.prg
+binary/eplayfb.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h | binary
+	$(MAKE) --no-print-directory CPU=5475 OBJDIR=build/fb build/fb/eplay.elf
+	PRGFLAGS=0x17 python3 common/tools/elf2tos.py build/fb/eplay.elf $@
+.PHONY: fb
 
 # FBPROBE.PRG, for the FireBee's tester (the hub, 10 Nov 2026): plain
 # 68000 code that only reads (tools/fbprobe), built with the STE's objects
@@ -151,24 +177,30 @@ $(OBJDIR)/%.o: common/atari/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: common/ui/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
+# (the FireBee's 64 KB: minimp3's scratch on it, cmp3fb.c)
 $(OBJDIR)/crt0.o: common/atari/crt0.S Makefile | $(OBJDIR)
-	$(CC) -m$(CPU) -DSTACK_SIZE=16384 -c -o $@ $<
+	$(CC) $(MCPU) -DSTACK_SIZE=$(if $(filter 5475,$(CPU)),65536,16384) -c -o $@ $<
+$(OBJDIR)/cmp3fb.o: CFLAGS += -Ithird_party/minimp3 -ffast-math
 $(OBJDIR)/crash_s.o: common/atari/crash.S | $(OBJDIR)
-	$(CC) -m$(CPU) -c -o $@ $<
+	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/nf.o: common/atari/nf.S | $(OBJDIR)
-	$(CC) -m$(CPU) -c -o $@ $<
+	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
-	$(CC) -m$(CPU) -c -o $@ $<
+	$(CC) $(MCPU) -c -o $@ $<
+$(OBJDIR)/cpucheck_cf.o: common/atari/cpucheck_cf.S | $(OBJDIR)
+	$(CC) $(MCPU) -c -o $@ $<
+$(OBJDIR)/feedfb_s.o: atari/feedfb.S | $(OBJDIR)
+	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
-	$(CC) -m$(CPU) -c -o $@ $<
+	$(CC) $(MCPU) -c -o $@ $<
 # common's inflate_piece with its hot loop in 68000 assembly (a VGZ:
 # inflate_read unpacked 200 KB/s on a 32 MHz Falcon, Erez's 33 MB VGZ took
 # two minutes)
 $(OBJDIR)/inflate_fast_s.o: common/atari/inflate_fast.S | $(OBJDIR)
-	$(CC) -m$(CPU) -c -o $@ $<
+	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/inflate.o: CFLAGS += -DINFLATE_ASM
 $(OBJDIR)/sting_s.o: common/atari/sting.S | $(OBJDIR)
-	$(CC) -m$(CPU) -c -o $@ $<
+	$(CC) $(MCPU) -c -o $@ $<
 
 binary:
 	mkdir -p $@
@@ -300,7 +332,7 @@ $(B)/mp3ovl/stack.o: mp3ovl/stack.S
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
-DIST    := binary/eplay.prg binary/eplayst.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
+DIST    := binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
            common/tlsovl/tls.ovl binary/mp3fpu.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help

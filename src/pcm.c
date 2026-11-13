@@ -197,7 +197,7 @@ void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long 
 	/* 16 bits, the most there is: a loop of its own each, no call a sample
 	   (the Atari's tick converts 49170 frames a second) */
 	if (f->bits == 16) {
-#if defined(__m68k__) && !defined(PCM_C_ONLY)
+#if defined(__m68k__) && !defined(__mcoldfire__) && !defined(PCM_C_ONLY)
 		if (f->channels == 2 && !f->big) {	/* a WAV on the Atari: a frame a long */
 			const unsigned long *s = (const unsigned long *)(const void *)src;
 			unsigned long *d = (unsigned long *)(void *)dst;
@@ -242,7 +242,7 @@ void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long 
 	   crackled on Erez's Falcon (3 Nov 2026: 330 underruns in 6 s) */
 	if (f->bits == 24 && f->channels == 2) {
 		int hi = f->big ? 0 : 2, lo = f->big ? 2 : 0;
-#if defined(__m68k__) && !defined(PCM_C_ONLY)
+#if defined(__m68k__) && !defined(__mcoldfire__) && !defined(PCM_C_ONLY)
 		/* (the tick on a stock Falcon, 4 Nov 2026: 57 % of its 68030 for
 		   a 24-bit AIFF through the C loop. A frame is 6 bytes, so each
 		   starts on an even byte: the even half of a sample a word
@@ -326,7 +326,7 @@ long pcm_spread(const short *src, long n, short *dst, long k, int step, long in,
 		long *used)
 {
 	long a = *acc, i, u = 0;
-#if defined(__m68k__) && !defined(PCM_C_ONLY)
+#if defined(__m68k__) && !defined(__mcoldfire__) && !defined(PCM_C_ONLY)
 	/* (the tick's, a frame each of 49,170 a second: the C took 40 % of a
 	   stock Falcon's 68030 with a 24-bit AIFF's conversion) */
 	{

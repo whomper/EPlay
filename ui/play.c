@@ -68,6 +68,12 @@ static int vgm;			/* a VGM or VGZ plays on the YM2149 (phase 9: vgmplay.c) */
    free), played as a WAV is: its frames decoded into the queue by fill,
    resampled there to the output's rate (16-bit big-endian stereo) */
 static int cmp;
+/* (the info line's: where the sound is made) */
+#ifdef EPLAY_FB
+#define OUT_HW "FireBee"
+#else
+#define OUT_HW "Falcon"
+#endif
 #define CMP_IN 16384
 static unsigned char cmp_in[CMP_IN];
 static long cmp_at, cmp_n;		/* the file's bytes waiting in cmp_in */
@@ -79,6 +85,26 @@ static short cmp_prev[2];
    the samples left out at the start, and how many there are to play (-1:
    not known: a file with no tag, or played from a place in it) */
 static long cmp_skip, cmp_keep;
+#ifdef EPLAY_FB
+/* (the FireBee: a WAV or AIFF through the same path, its frames made
+   16-bit stereo by pcm_convert in place of an MP3 frame's decoding, so
+   that it is resampled to the output's rate as an MP3 on the CPU is:
+   FireTOS's sound plays at the Falcon's rates alone, 49,170 Hz here) */
+static int cmp_wav;
+static PCMFMT wfmt;		/* the file's own format */
+
+static int wav_frame(const unsigned char *in, int n, short *pcm, MP3OVL_INFO *fi)
+{
+	int k = n / wfmt.bytes;
+	if (k > 1152)
+		k = 1152;
+	fi->channels = 2;
+	fi->frame_bytes = k * wfmt.bytes;
+	if (k > 0)
+		pcm_convert(&wfmt, in, pcm, k);
+	return k;
+}
+#endif
 static long open_fs;			/* the file's samples by its Xing frame (0: none) */
 static void cmp_trim(int has_lt, const MP3LAME *lt, long fs, int from_start)
 {
@@ -1070,7 +1096,12 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 			src_done = 1;
 			break;
 		}
+#ifdef EPLAY_FB
+		ns = cmp_wav ? wav_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi) :
+			       cmp3_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi);
+#else
 		ns = cmp3_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi);
+#endif
 		if (fi.frame_bytes <= 0) {
 			/* no frame in what is here: more of the file, or the end */
 			if (data_left > 0 && cmp_n < CMP_IN / 2)
@@ -1226,6 +1257,9 @@ int play_open(const char *path, char *err, int n)
 	}
 	dsp = xs = 0;
 	cmp = 0;
+#ifdef EPLAY_FB
+	cmp_wav = 0;
+#endif
 	pcm_got = 0;
 	elog("open %s (%ld bytes)", path, file_size);
 	if (play_tags.title[0] || play_tags.artist[0] || play_tags.album[0] || play_tags.pic_end)
@@ -1268,18 +1302,43 @@ int play_open(const char *path, char *err, int n)
 			data_left -= skip * fmt.bytes;
 			Fseek(fmt.data + skip * fmt.bytes, fh, 0);	/* the samples read from here into the queue */
 		}
+#ifdef EPLAY_FB
+		{
+			/* (the FireBee: its frames into the queue as 16-bit big-endian
+			   stereo, resampled to the output's rate: fill_cmp) */
+			wfmt = fmt;
+			cmp = cmp_wav = 1;
+			cmp_rin = fmt.rate;
+			cmp_at = cmp_n = 0;
+			cmp_skip = 0;
+			cmp_keep = -1;
+			cmp_pos = 0;
+			cmp_prev[0] = cmp_prev[1] = 0;
+			fmt.bits = 16;
+			fmt.channels = 2;
+			fmt.bytes = 4;
+			fmt.big = 1;
+		}
+#endif
 		if (!take_queue(fmt.bytes)) {
 			snprintf(err, n, "There isn't the memory to play.");
 			close_file();
 			return 0;
 		}
-		khz(kr, sizeof(kr), rate);
-		play_hz = rate;
-		play_kbps = (rate * fmt.channels * fmt.bits + 500) / 1000;
-		snprintf(play_info, sizeof(play_info), "%s  %d bits  %s  %s", kind == PCM_WAV ? "WAV" : "AIFF",
-			 fmt.bits, kr, fmt.channels == 2 ? "stereo" : "mono");
-		elog("%s: %ld Hz, %d bits, %d ch, %ld frames from %ld; %ld ms", kind == PCM_WAV ? "WAV" : "AIFF",
-		     fmt.rate, fmt.bits, fmt.channels, fmt.frames, fmt.data, len_ms);
+		{
+#ifdef EPLAY_FB
+			const PCMFMT *wf = &wfmt;	/* (the file's, not the queue's) */
+#else
+			const PCMFMT *wf = &fmt;
+#endif
+			khz(kr, sizeof(kr), rate);
+			play_hz = rate;
+			play_kbps = (rate * wf->channels * wf->bits + 500) / 1000;
+			snprintf(play_info, sizeof(play_info), "%s  %d bits  %s  %s", kind == PCM_WAV ? "WAV" : "AIFF",
+				 wf->bits, kr, wf->channels == 2 ? "stereo" : "mono");
+			elog("%s: %ld Hz, %d bits, %d ch, %ld frames from %ld; %ld ms", kind == PCM_WAV ? "WAV" : "AIFF",
+			     wf->rate, wf->bits, wf->channels, wf->frames, wf->data, len_ms);
+		}
 	} else {
 		MP3HDR h;
 		long at = find_mp3(&h);
@@ -1595,18 +1654,18 @@ int play_open(const char *path, char *err, int n)
 			snprintf(play_out, sizeof(play_out), "FDI %s (from %s): no signal at the FDI's input", kr, fr);
 			play_nosig = 1;
 		} else
-			snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr,
+			snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : OUT_HW, kr,
 				 fr);
 	} else if (cmp && cmp_rin != out_rate) {	/* (an MP3 on the CPU, resampled as it decodes) */
 		char fr[16];
 		khz(fr, sizeof(fr), cmp_rin);
-		snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : "Falcon", kr, fr);
+		snprintf(play_out, sizeof(play_out), "%s  %s (from %s)", ext ? "External clock" : OUT_HW, kr, fr);
 	} else if (ext)
 		snprintf(play_out, sizeof(play_out), "External clock  %s", kr);
 	else if (out_rate == rate)
-		snprintf(play_out, sizeof(play_out), "Falcon  %s", kr);
+		snprintf(play_out, sizeof(play_out), OUT_HW "  %s", kr);
 	else
-		snprintf(play_out, sizeof(play_out), "Falcon  %s (not the file's rate)", kr);
+		snprintf(play_out, sizeof(play_out), OUT_HW "  %s (not the file's rate)", kr);
 	elog("output: %ld Hz, %s%s%s; queue %ld bytes (Settings: %s)", out_rate,
 	     ext ? "the external clock" : "the Falcon's clock", dsp && out_rate != rate ? ", resampled on the DSP" : "",
 	     s_sblim < 32 ? ", the subbands above about 15 kHz left out" : "", q_size, settings_output_name(out_set));

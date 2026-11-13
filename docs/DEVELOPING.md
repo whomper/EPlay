@@ -50,6 +50,8 @@ docs/       the guide, the design, this file, the pictures
   and ReplayGain included; `dsp/sn.a56`; `dsp/opn.a56` (the YM2612) and `dsp/opl.a56` (the YM3812)
   against their models (`src/opnfast.c`, `src/oplfast.c`), bit for bit, with their worst cases'
   cycles a sample.
+- `tests/fb/`: `eplayfb.prg`'s MP3 decoder (minimp3 built for the FireBee's ColdFire) run under
+  `qemu-m68k -cpu cfv4e` on `make test`'s files, against the host's (`make -C tests/fb`).
 - `tests/ym2612/` and `tests/opl/`: the FM chips' models against Nuked-OPN2 and Nuked-OPL3 (fetched
   for these tests only, never committed nor shipped): pitch, level, loudness curve and timbre on
   test files of their own (`make -C tests/opl`).

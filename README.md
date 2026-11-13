@@ -22,6 +22,9 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
 - **Falcon, TT and STE:** WAV and AIFF on the TT's and STE's DMA sound too.
 - **68060:** a Falcon with a 68060 plays as any Falcon; where its DSP isn't free, the 68060 and its
   FPU decode MP3 themselves (`mp3fpu.ovl`; so far tested in Hatari, not yet on a real CT60).
+- **FireBee (first test edition):** `eplayfb.prg`, built for its ColdFire: MP3 decoded by the
+  ColdFire and its FPU, WAV and AIFF, through FireTOS's sound. VGM, web radio and the YM2149 not
+  yet there.
 
 ![EPlay's Settings on a Falcon in 256 colours (Hatari): its pages Playing, Stations and Files at the left; Playing shows the Output (Auto, FDI, DSP) and ReplayGain (Off, Track, Album, Auto) as buttons](docs/settings.png)
 
@@ -36,14 +39,16 @@ Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** a
 | `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it |
 | `tls.ovl`, `cacert.pem` | secure (https) stations: keep them beside the program |
 | `mp3fpu.ovl` | MP3 decoded by a 68060 with its FPU where there is no DSP free: keep it beside the program |
-| `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` (a FireBee edition is in development) |
+| `eplayfb.prg` | the program for a FireBee (a first test edition: MP3, WAV and AIFF) |
+| `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` |
 
 Start `eplay.prg`, or drop music files, a folder or a playlist on it. **File > Open...** adds more,
 **File > Open URL...** plays a station, **Help > Keys...** lists the keys. The guide
 ([docs/GUIDE.md](docs/GUIDE.md)) has the rest.
 
 **Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP, or a 68060 with its FPU), a TT,
-or an STE or Mega STE with `eplayst.prg` (WAV and AIFF); a screen 640 pixels wide. The original ST
+or an STE or Mega STE with `eplayst.prg` (WAV and AIFF), or a FireBee with `eplayfb.prg`; a screen
+640 pixels wide. The original ST
 has no DMA sound and isn't supported. Web radio needs a network card and
 STinG or MiNTnet.
 

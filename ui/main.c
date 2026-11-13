@@ -2261,7 +2261,10 @@ static void turn(int nested)
 	play_idle_give();		/* (the sound system for others while nothing plays) */
 }
 
-#ifdef EPLAY_ST
+#if defined(EPLAY_FB)
+/* EPLAYFB.PRG: common's cpucheck_cf.S asks for _CF_ */
+const char cpu_alert[] = "[3][This EPlay is for the FireBee.|On a Falcon or a TT: EPLAY.PRG;|on an STE: EPLAYST.PRG.][ Quit ]";
+#elif defined(EPLAY_ST)
 const long cpu_need = 0;	/* EPLAYST.PRG: the STE's (and any 68000 with DMA sound) */
 const char cpu_alert[] = "[3][EPlay can't run here.][ Quit ]";
 #else
@@ -2367,6 +2370,15 @@ int app_main(void)
 		elog("free memory, the largest blocks: ST RAM %ld KB, TT RAM %ld KB", st > 0 ? st / 1024 : 0,
 		     tt > 0 ? tt / 1024 : 0);
 	}
+#ifdef EPLAY_FB
+	if (1) {
+		/* the FireBee: FireTOS's XBIOS sound at 49,170 Hz, files resampled
+		   to it by the ColdFire (sndfb.c) */
+		elog("the sound: FireTOS's XBIOS (the FireBee's AC'97), 49170 Hz, files resampled by the ColdFire; "
+		     "MP3 decoded by it (minimp3)");
+		status("The FireBee's sound: MP3, WAV and AIFF.");
+	} else
+#endif
 	if (snd_dma8) {
 		/* a TT or an STE (phase 6): its 8-bit DMA, WAV and AIFF */
 		elog("the sound: 8-bit DMA (a TT's or an STE's), the music %s",

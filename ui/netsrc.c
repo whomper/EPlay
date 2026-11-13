@@ -313,7 +313,13 @@ static void tls_paths(void)
 	if (done)
 		return;
 	done = 1;
+#ifdef EPLAY_FB
+	/* (the FireBee: TLS.OVL is 68030 code; its ColdFire build, when one
+	   ships, by another name, so the 68030's is never loaded here) */
+	snprintf(tls_ovl_path, sizeof(tls_ovl_path), "%sTLSFB.OVL", d);
+#else
 	snprintf(tls_ovl_path, sizeof(tls_ovl_path), "%sTLS.OVL", d);
+#endif
 	snprintf(conn_cacert, sizeof(conn_cacert), "%sCACERT.PEM", d);
 	snprintf(tls_roots_cache, sizeof(tls_roots_cache), "%sROOTS.DAT", d);
 	snprintf(tls_seed_path, sizeof(tls_seed_path), "%sSEED.DAT", d);

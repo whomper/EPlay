@@ -2081,6 +2081,36 @@ What EPlay needs beyond common's layer:
   - Whether the four tones sounded clean is the tester's ear (asked through Erez).
 - **EPlay's own assembly:** `feed.S` (the tick), `hostirq.S` (the DSP's: not built), `term.c`'s
   trap 13, `div64.c`'s 64-bit forms (the C path).
+- **The plan (Erez, 13 Nov 2026: the FireBee before OPL3), `EPLAYFB.PRG`, built with
+  `-mcpu=5475` and `EPLAY_FB` in `build/fb`:**
+  - **F1, the build and the sound.** common's ColdFire layer as it is (crt0, the crash catcher,
+    nf, inflate, STinG, `ll64.c` for the 64-bit helpers: libgcc is 68020 code). EPlay's Falcon
+    parts not built but answered: the DSP's modules (MP3, SN76489, YM2612, YM3812) say "needs the
+    Falcon's DSP", the YM2149's is absent. `atari/sndfb.c` gives `snd.h`'s calls over the XBIOS
+    (a 16-bit stereo ring in ST RAM through `Setbuffer`, `Buffoper` looping, `Buffptr` for where
+    it plays; `Soundcmd`'s attenuation for the volume; the Falcon's rates, 49,170 to 12,292 Hz).
+    The tick on Timer A through `Xbtimer`, its handler ColdFire code (`feedfb.S`). WAV and AIFF
+    resampled on the CPU to 49,170 Hz (the linear resampler the CPU's MP3 uses). The 68030's
+    PCM loops in `pcm.c` give way to their C (bit for bit, `tests/pcm`). Released for the tester:
+    the window, the list, WAV and AIFF.
+  - **F2, MP3 on the ColdFire:** minimp3 built in (no overlay: one program), on the V4e's FPU,
+    played as the 68060's CPU MP3 is (`play.c`'s cmp path).
+  - **F3, VGM on the CPU:** the SN76489, the YM2612 and the YM3812 from their C models into the
+    queue, played ahead; the AY in software.
+  - Only the tester's FireBee can show it runs: no emulator runs FireTOS. Each step a release,
+    the tester's `EPLAY.LOG` back through Erez.
+  - **Done (13 Nov 2026), F1 and F2 together:** `make fb` builds `EPLAYFB.PRG` (in `all` and
+    the release). `fbstub.c` answers for the DSP's modules, the YM2149 and the host port;
+    `sndfb.c` and `feedfb.c`/`feedfb.S` as above; `term.c`'s handler in ColdFire forms;
+    `pcm.c`'s 68030 loops left for their C. A WAV or AIFF goes through `play.c`'s CPU path
+    (`cmp_wav`: `pcm_convert` in place of a frame's decoding, then `cmp_put`'s resampler to
+    49,170 Hz); an MP3 through `cmp3fb.c`, minimp3 built in for the V4e's FPU (the stack 64 KB
+    in this edition). The info line says "FireBee 49.2 kHz (from 44.1 kHz)". MP3s aren't dim in
+    its list; stations are (and `TLSFB.OVL`, not the 68030's `TLS.OVL`, is what it would load).
+    `tests/fb`: its minimp3 under `qemu-m68k -cpu cfv4e` against the host's on seven files,
+    within one step (some 109 dB under the music). What no test here can show, the tester's:
+    that it starts, that `Buffoper`'s loop and `Buffptr` from the tick play steadily, the
+    ColdFire's time for MP3 at 320 kbit/s, and the screen.
 
 ## Next, to propose: a Jellyfin library (Erez, 10 Nov 2026)
 

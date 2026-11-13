@@ -70,9 +70,18 @@ __asm__(
 	"	.long	0\n"
 	"	.globl	term_vec\n"
 	"term_vec:\n"
+#ifdef __mcoldfire__
+	/* (the ColdFire: no predecrementing movem) */
+	"	lea	-24(%sp),%sp\n"
+	"	movem.l	%d0-%d2/%a0-%a2,(%sp)\n"
+	"	jsr	term_c\n"
+	"	movem.l	(%sp),%d0-%d2/%a0-%a2\n"
+	"	lea	24(%sp),%sp\n"
+#else
 	"	movem.l	%d0-%d2/%a0-%a2,-(%sp)\n"
 	"	jsr	term_c\n"
 	"	movem.l	(%sp)+,%d0-%d2/%a0-%a2\n"
+#endif
 	"	move.l	term_old,-(%sp)\n"
 	"	rts\n");
 
@@ -87,7 +96,7 @@ static long setexc(short vec, long fn)
 		"trap	#13\n\t"
 		"addq.l	#8,%%sp"
 		: "=r"(r)
-		: "g"(vec), "g"(fn)
+		: "r"(vec), "r"(fn)
 		: "d1", "d2", "a0", "a1", "a2", "memory", "cc");
 	return r;
 }

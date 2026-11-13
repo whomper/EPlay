@@ -125,10 +125,18 @@ int list_add(const char *path)
 		static int dsp = -1;	/* _SND bit 3: the DSP (asked once: a Supexec) */
 		/* (a station, phase 7: its MP3 the DSP's too) */
 		if (surl_is(p) || (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4])) {
+#ifdef EPLAY_FB
+			/* (the FireBee: its ColdFire decodes a file's, cmp3fb.c; a
+			   station's MP3 isn't played on it yet) */
+			(void)dsp;
+			if (surl_is(p))
+				e->bad = 1;
+#else
 			if (dsp < 0)
 				dsp = (get_cookie(0x5F534E44L) & 8) != 0;
 			if (!dsp)
 				e->bad = 1;
+#endif
 		}
 	}
 	order_size(&list_order, n + 1);
