@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -73,6 +73,11 @@ CASES = {
             (1000, 1500), 10),
     "fsel": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
              (1000, 1500), 10),
+    # (Erez, 13 Nov 2026: File > Open as Open URL) while it plays, Add files
+    # (Control+O), ^A and Return add ANOTHER.MP3 (LONG.MP3 is in the list
+    # already): the added row plays at once
+    "addplay": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
+                (1000, 1500), 30),
     # Quality by itself (Erez, 4 Nov 2026: no longer a setting): where the
     # DSP falls behind at 49,170 Hz, the file goes on at 32,780 Hz, the
     # subbands above about 15 kHz left out (Normal), to its end. Hatari's
@@ -320,6 +325,8 @@ def make_file(hd, case):
         subprocess.run(["sox", "-n"] + fmt + [out] + synth + ["gain", "-6"], check=True)
     if case in RG_TAG:
         add_rg(out, case)
+    if case == "addplay":
+        shutil.copy(out, os.path.join(hd, "ANOTHER.MP3"))     # (the file Add files adds)
     return f
 
 
@@ -672,6 +679,41 @@ def run(work, case, spec):
             added = wait_line(log, lambda l: l.startswith("EPLAY list: "), 10) or "EPLAY list: ? files"
             if added.split()[2] != "1":
                 return False, m.describe(), "Undo in Add files: %s (wanted 1 file, nothing added)" % added
+        if case == "addplay":
+            time.sleep(1)       # (once it plays; Hatari runs fast: the 10 s go by in some 5)
+            def ctrl(scan):
+                # (Control held as a hand holds it: the AES gives the shift
+                # state when EPlay reads the key)
+                cmd(fifo, "hatari-event", "keydown", "0x1d")
+                time.sleep(0.3)
+                cmd(fifo, "hatari-event", "keypress", scan)
+                time.sleep(1)
+                cmd(fifo, "hatari-event", "keyup", "0x1d")
+            ctrl("0x18")        # ^O: Add files
+            time.sleep(1.5)
+            ctrl("0x1e")        # ^A: ANOTHER.MP3 and LONG.MP3 (already in the list) selected
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            cmd(fifo, "hatari-event", "keypress", "0x1c")      # Return: Add
+            added = wait_line(log, lambda l: l.startswith("EPLAY list: "), 10) or "EPLAY list: ? files"
+            if added.split()[2] != "2":
+                return False, m.describe(), "Add files' Return: %s (wanted 2 files: ANOTHER.MP3 added)" % added
+            lines = open(log, errors="replace").read().split("\n")
+            at_add = next(i for i, l in enumerate(lines) if l.startswith("EPLAY list: 2"))
+            if any(l.startswith("LOG played to the end") for l in lines[:at_add]):
+                return False, m.describe(), "LONG.MP3 ended before the add: not the case asked (while it plays)"
+            again = None
+            for _ in range(50):
+                n = sum(1 for l in open(log, errors="replace") if l.startswith("EPLAY playing: "))
+                if n >= 2:
+                    again = n
+                    break
+                time.sleep(0.2)
+            if not again:
+                return False, m.describe(), "the file added while one played didn't play (File > Open as Open URL)"
+            row = wait_line(log, lambda l: l.startswith("EPLAY status: Playing 2 of 2"), 10)
+            row = row if row and "playing: ANOTHER.MP3" in open(log, errors="replace").read() else None
+            return bool(row), m.describe(), "addplay: ANOTHER.MP3 added while LONG.MP3 played: %s; %s" % (
+                added, row or "not \"Playing 2 of 2\"")
         if case == "settings":
             # (once the music is heard: the DSP's program is sent first, and
             # Control+comma's key click before the music reads as a gap)

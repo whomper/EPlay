@@ -967,11 +967,10 @@ static void play_file(const char *f)
 	play_now(f);
 }
 
-/* File > Add... (^O): a file, or with none chosen the whole folder; played
-   if nothing plays */
 /* File > Open... (^O): the Add files dialog (Erez, 4 Nov 2026: several
-   files at once); the files chosen at the list's end, the first played if
-   nothing plays. The music goes on meanwhile (its queue filled) */
+   files at once); the files chosen at the list's end, the first of them
+   played at once and the list on it, as Open URL plays its station (Erez,
+   13 Nov 2026). The music goes on meanwhile (its queue filled) */
 static int first_added;
 
 static void add_one_file(const char *f)
@@ -1013,7 +1012,7 @@ static void open_file(void)
 	full_note();
 	sliders();
 	redraw(0, BP_LIST);
-	if (first_added >= 0 && play_state() != PS_PLAYING && !play_paused())
+	if (first_added >= 0)
 		play_index(first_added);
 	else {
 		if (first_added < 0)

@@ -122,7 +122,8 @@ Previous and Next with nothing before or after.
 from **Folders**), narrow the list by type and by a name mask (`*` and `?`), and sort it. Select
 files and folders with a click, Shift-click or a drag; **All** selects every file. **Add** puts them
 at the list's end: a folder with its subfolders, in the order of their names; a playlist's files in
-its order. Return opens a folder when it is the only one selected, or nothing is. The music goes on
+its order. The first of them plays at once, and the list shows its row, as Open URL plays its
+station. Return opens a folder when it is the only one selected, or nothing is. The music goes on
 while the dialog is open.
 
 **Dropped files** go into the list too: drag MP3, WAV and AIFF files, a folder or an `.M3U`
