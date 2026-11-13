@@ -69,6 +69,9 @@ void snd_wrote(long n);		/* n frames put at snd_ptr() */
 void snd_play(void);		/* the DMA started (after the first frames) */
 long snd_played(void);		/* frames played since snd_open */
 void snd_update(void);		/* snd_played brought up to date: from the tick only */
+#ifdef EPLAY_FB
+void snd_poll(void);		/* (the FireBee: GEM's turn) the tick's count put right from Buffptr */
+#endif
 extern long snd_underruns;	/* times the DMA came past what was written */
 extern long snd_first_under;	/* frames played at the first (-1: none) */
 extern long snd_least_lead;	/* the fewest frames written ahead after the first second (-1: none yet) */

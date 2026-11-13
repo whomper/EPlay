@@ -10,8 +10,13 @@
  * read or written but through the calls.
  *
  * A ring of 16-bit stereo frames in ST RAM (Mxalloc mode 0), half a second
- * long, played looping (Buffoper's repeat); where it plays from Buffptr,
- * asked by the tick. Always at 49,170 Hz: play.c resamples a file to it on
+ * long, played looping (Buffoper's repeat). Where it plays: the tick (an
+ * interrupt) may call no XBIOS (TOS isn't re-entrant: in 1.31 to 1.34 its
+ * Buffptr there rebooted the FireBee at a GEM action under FireTOS, and at
+ * once under MiNT, the tester, 13 Nov 2026), so the tick counts the frames
+ * by the 200 Hz clock (_hz_200) at the rate, and GEM's turn (snd_poll) asks
+ * Buffptr and puts right what that has drifted. Always at 49,170 Hz: play.c
+ * resamples a file to it on
  * the CPU. The volume through Soundcmd's attenuation, as the Falcon's.
  * What the Falcon's snd.c measures and sets beyond that (the external
  * clock, the FDI, the matrix, the 8-bit DMA) is answered as absent.
@@ -41,8 +46,23 @@ int snd_fw = 2;
 long snd_underruns, snd_first_under = -1, snd_least_lead = -1;
 
 static short *ring;
-static long ring_n, wpos, written, played, last_ppos;
-static int playing, locked;
+static volatile long ring_n, wpos, written, played;
+static volatile int playing;
+static int locked;
+/* (the tick's count: the 200 Hz clock when it last ran, its remainder;
+   GEM's correction, frames, for the tick to take) */
+static volatile unsigned long hz_last;
+static volatile long hz_acc, corr;
+static volatile int corr_new;
+#define HZ200 (*(volatile unsigned long *)0x4baL)
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* (a system variable's fixed address) */
+static long hz_read(void)
+{
+	return (long)HZ200;	/* (supervisor mode: Supexec) */
+}
+#pragma GCC diagnostic pop
 
 /* XBIOS: Setbuffer (131) a word and two longs; Soundcmd (130) three words;
    the arguments in registers (one addressed by %sp would move as they are
@@ -176,8 +196,8 @@ int snd_open(long rate, int ext)
 	x_devconnect(0, 8, 0, PRESCALE, 1);	/* DMA play to the DAC, 25 MHz clock, no handshake */
 	x_setbuffer(0, ring, ring + 2 * ring_n);
 	wpos = written = played = 0;
-	last_ppos = 0;
 	playing = 0;
+	corr_new = 0;
 	snd_underruns = 0;
 	snd_first_under = snd_least_lead = -1;
 	return 1;
@@ -223,34 +243,64 @@ static long hw_pos(void)
 	return a >= ring_n ? a - ring_n : a;
 }
 
-/* the frames played (snd.c's, from Buffptr): the tick's */
+/* the frames played: the tick's (an interrupt: no XBIOS), by the 200 Hz
+   clock at the rate, with GEM's correction (snd_poll) */
 void snd_update(void)
 {
-	long p, d;
+	unsigned long h;
+	long d;
 	if (!playing)
 		return;
-	p = hw_pos();
-	if (p < 0)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* (a system variable's fixed address) */
+	h = HZ200;
+#pragma GCC diagnostic pop
+	hz_acc += (long)(h - hz_last) * OUT_RATE;
+	hz_last = h;
+	d = hz_acc / 200;
+	hz_acc -= d * 200;
+	if (corr_new) {
+		d += corr;
+		corr_new = 0;
+	}
+	if (d <= 0) {
+		played += d;		/* (a correction back: the count was ahead) */
 		return;
-	d = p - last_ppos;
-	if (d < 0)
-		d += ring_n;
-	if (d > ring_n - 256)
-		d = 0;
-	if (!d)
-		return;
-	last_ppos = p;
+	}
 	if (played + d > written) {
 		if (!snd_underruns++)
 			snd_first_under = played;
 		written = played + d;
-		wpos = p;
+		wpos = (played + d) % ring_n;	/* (where the DMA is now) */
 	}
 	played += d;
 	if (played > ring_n / 2) {
 		long lead = written - played;
 		if (snd_least_lead < 0 || lead < snd_least_lead)
 			snd_least_lead = lead;
+	}
+}
+
+/* (GEM's turn, not the tick's) where the DMA is, from Buffptr: the tick's
+   count put right when it is more than 512 frames off (the clock's 5 ms is
+   245 of them) */
+void snd_poll(void)
+{
+	long p, at, diff;
+	if (!playing || corr_new)
+		return;
+	p = hw_pos();
+	if (p < 0)
+		return;
+	at = played % ring_n;
+	diff = p - at;
+	if (diff > ring_n / 2)
+		diff -= ring_n;
+	else if (diff < -ring_n / 2)
+		diff += ring_n;
+	if (diff > 512 || diff < -512) {
+		corr = diff;
+		corr_new = 1;
 	}
 }
 
@@ -303,7 +353,9 @@ void snd_write(const short *frames, long n)
 void snd_play(void)
 {
 	if (!playing) {
-		last_ppos = 0;
+		hz_last = (unsigned long)Supexec(hz_read);
+		hz_acc = 0;
+		corr_new = 0;
 		x_buffoper(3);		/* play, looping */
 		playing = 1;
 	}

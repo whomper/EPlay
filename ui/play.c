@@ -2285,6 +2285,9 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
+#ifdef EPLAY_FB
+	snd_poll();		/* (Buffptr here, never in the tick) */
+#endif
 	if (vgm) {
 		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once
 		   it is all there */

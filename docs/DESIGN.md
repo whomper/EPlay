@@ -2111,6 +2111,16 @@ What EPlay needs beyond common's layer:
     within one step (some 109 dB under the music). What no test here can show, the tester's:
     that it starts, that `Buffoper`'s loop and `Buffptr` from the tick play steadily, the
     ColdFire's time for MP3 at 320 kbit/s, and the screen.
+- **The tester's first report (1.31 to 1.34, 13 Nov 2026):** an MP3 played ("the sound is
+  really nice") and the volume worked, but under FireTOS any other GUI action rebooted the
+  FireBee, and under MiNT/MyAES it rebooted or froze soon after it started, the DMA looping its
+  ring. The cause: `Buffptr`, an XBIOS call, from the tick, an interrupt; TOS isn't re-entrant,
+  so a tick that came while GEM was inside a trap (the AES, the VDI) broke it, and MiNT's traps
+  from an interrupt break at once. **1.35:** the tick calls no XBIOS: it counts the frames
+  played by the 200 Hz clock (`_hz_200`) at 49,170 Hz, and GEM's turn (`snd_poll`, in
+  `play_step`) asks `Buffptr` and corrects the count when it is more than 512 frames off. What
+  the tick reaches holds no trap (its code read from the build), and no FPU instruction (its
+  handler saves none).
 
 ## Next, to propose: a Jellyfin library (Erez, 10 Nov 2026)
 
