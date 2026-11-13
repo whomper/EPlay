@@ -348,7 +348,10 @@ def list_session(r, src):
     at the start (as dropped on the program), their tags and lengths read
     in the background a file a turn, then a row selected, one played by a
     double click, Next, the keys"""
-    names = ["T%d.%s" % (i + 1, "MP3" if i % 2 else "WAV") for i in range(8)]
+    # (an STE plays no MP3: its list all WAV, so that its rows play as the
+    # Falcon's do and Next is a file played, not one passed over)
+    ste = r.m.name.startswith("STE")
+    names = ["T%d.%s" % (i + 1, "MP3" if i % 2 and not ste else "WAV") for i in range(8)]
     short = os.path.join(r.work, "short.wav")      # (30 s each: the rig's disk)
     subprocess.run(["sox", src, short, "trim", "0", "30"], check=True)
     src = short
@@ -391,7 +394,7 @@ def list_session(r, src):
     rc = r.report()
     lines = r.console().split("\n")
     played = [l.split()[2] for l in lines if l.startswith("EPLAY playing: ")]
-    want = ["T1.WAV", "T4.MP3", "T5.WAV", "T6.MP3"]
+    want = [names[0], names[3], names[4], names[5]]
     moved = [l for l in lines if l.startswith("EPLAY moved ")]
     if moved != ["EPLAY moved 1 to 4"]:
         print("FAIL  the drag: %s (wanted EPLAY moved 1 to 4)" % moved)

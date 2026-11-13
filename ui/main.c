@@ -1768,7 +1768,11 @@ static int track(int hit, int part)
 	AEVENT ev;
 	GRECT b;
 	int in = 1;
-	bar_area(part, &b);
+	/* (Previous and Next: drawn alone, BP_NAV, not the whole bar as they
+	   were, the album art, the title and the times again for a button's
+	   colour: 100 ms of an STE's press, 13 Nov 2026; let go anywhere on
+	   the bar, as before) */
+	bar_area(part == BP_NAV ? BP_TEXT : part, &b);
 	bar_held = hit;
 	press_draw = 1;
 	redraw(0, part);
@@ -2244,9 +2248,9 @@ static void turn(int nested)
 			drag_pos(ev.mx, ev.my);
 		else if (hit == BH_VOL)
 			drag_vol(ev.mx, ev.my);
-		else if (hit == BH_PREV && order_has_prev(&list_order, list_cur) && track(BH_PREV, BP_TEXT))
+		else if (hit == BH_PREV && order_has_prev(&list_order, list_cur) && track(BH_PREV, BP_NAV))
 			command(C_PREV);
-		else if (hit == BH_NEXT && order_has_next(&list_order, list_cur) && track(BH_NEXT, BP_TEXT))
+		else if (hit == BH_NEXT && order_has_next(&list_order, list_cur) && track(BH_NEXT, BP_NAV))
 			command(C_NEXT);
 		else if (hit == BH_LIST)
 			list_press(ev.mx, ev.my, ev.kstate, 0);
