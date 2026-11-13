@@ -448,7 +448,11 @@ def add_session(r, src):
     # (Undo: Esc empties the filter and never closes it, D28)
     r.act("Add files closed (Undo)", speed.WINDOW, lambda: r.key("Undo"))
     r.act("Add files opened again", speed.DIALOG, lambda: r.key("ctrl+o"))
-    row = lambda i: (300, 206 + 16 * i)     # the dialog's list rows (Falcon-4's 640 x 480)
+    # (the dialog centred on the screen: Falcon-4's 640 x 480 the rows'
+    # place, an STE's 640 x 400 40 pixels up; the clicks missed there)
+    from PIL import Image
+    dy = (Image.open(r.shot("add-again")).size[1] - 480) // 2
+    row = lambda i: (300, 206 + 16 * i + dy)     # the dialog's list rows
 
     def shift_click(x, y):
         r.xdo("keydown", "shift")
@@ -461,7 +465,7 @@ def add_session(r, src):
     r.act("T3 added to the selection (Shift-click)", speed.KEY, lambda: shift_click(*row(2)))
     r.act("T5 added to the selection (Shift-click)", speed.KEY, lambda: shift_click(*row(4)))
     r.shot("add-three")
-    r.act("Add: the three into the list", speed.WINDOW, lambda: r.click(455, 401))
+    r.act("Add: the three into the list", speed.WINDOW, lambda: r.click(455, 401 + dy))
     time.sleep(3)
     rc = r.report()
     lines = r.console().split("\n")
@@ -476,6 +480,7 @@ def add_session(r, src):
 
 
 MINI_PLAY = (400, 185)		# the mini player's Play/Pause (the bar alone: no slider, lower down)
+MINI_WIN = (96, 165)		# the mini window's place on Falcon-4 when MINI_PLAY was taken
 VIEW = (190, 28)		# View > Mini player (the title's x, the item's y)
 
 
@@ -485,16 +490,25 @@ def mini_session(r, src):
     window and back"""
     short = os.path.join(r.work, "short.wav")
     subprocess.run(["sox", src, short, "trim", "0", "60"], check=True)
-    subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", "192", "--tt", "Mini", "--ta", "The rig", short,
-                    os.path.join(r.hd, "MINI.MP3")], check=True)
+    if r.m.name.startswith("STE"):
+        # (an STE plays no MP3: a WAV there, refused before and never played)
+        name = "MINI.WAV"
+        shutil.copy(short, os.path.join(r.hd, name))
+    else:
+        name = "MINI.MP3"
+        subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", "192", "--tt", "Mini", "--ta", "The rig", short,
+                        os.path.join(r.hd, name)], check=True)
     r.write("eplay.inf", "MINI=1\r\n")
-    r.write("TAIL.TXT", "C:\\MINI.MP3\n")
+    r.write("TAIL.TXT", "C:\\%s\n" % name)
     r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
     r.results[-1] = ("started in the mini player, playing", "AESSTART", speed.START)
     # (MINI_PLAY is the screen's place: Rig.click would move it as if it
     # were in the full window's work area, and missed: paused 0 times)
-    r.act("Pause (mini)", speed.KEY, lambda: speed.Rig.click(r, *MINI_PLAY))
-    r.act("Play (mini)", speed.KEY, lambda: speed.Rig.click(r, *MINI_PLAY))
+    # (where the mini window opened: an STE's 27 pixels higher than Falcon-4's)
+    m = re.findall(r"EPLAY window (-?\d+) (-?\d+) \d+ \d+", r.console())
+    play = (MINI_PLAY[0] + int(m[0][0]) - MINI_WIN[0], MINI_PLAY[1] + int(m[0][1]) - MINI_WIN[1]) if m else MINI_PLAY
+    r.act("Pause (mini)", speed.KEY, lambda: speed.Rig.click(r, *play))
+    r.act("Play (mini)", speed.KEY, lambda: speed.Rig.click(r, *play))
     r.act("View > Mini player: the whole window", speed.WINDOW, lambda: r.menu(VIEW[0] - 20, VIEW[1]))
     r.act("View > Mini player: the bar alone", speed.WINDOW, lambda: r.menu(VIEW[0] - 20, VIEW[1]))
     rc = r.report()
@@ -513,6 +527,10 @@ def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-speed")
     spec = sys.argv[2] if len(sys.argv) > 2 else "Falcon-4:16"
     kinds = sys.argv[3:] or ["mp3", "wav", "list", "mini", "add"]	# (and vgm, asked for)
+    if spec.startswith("STE") and "mp3" in kinds:
+        # (an STE plays no MP3: the session's start never came, 13 Nov 2026)
+        print("speed: an STE plays no MP3: the mp3 session left out")
+        kinds = [k for k in kinds if k != "mp3"]
     if spec.split(":")[0] in ("ST", "ST-1"):
         # (EPlay leaves out the plain ST: no DMA sound, DESIGN.md; it says so
         # and stops. Its 8 MHz 68000 is the STE's edition's: STE:mono. A
