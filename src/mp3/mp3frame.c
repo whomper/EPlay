@@ -7,6 +7,7 @@
  */
 #include <string.h>
 #include "mp3frame.h"
+#include "../tickcode.h"
 
 static const short br_tab[2][16] = {
 	{ 0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0 },
@@ -27,6 +28,7 @@ static const short sfb_long[9][23] = {
 	{ 0, 12, 24, 36, 48, 60, 72, 88, 108, 132, 160, 192, 232, 280, 336, 400, 476, 566, 568, 570, 572, 574, 576 }
 };
 
+TICK_CODE("34mp3_header")
 int mp3_header(const unsigned char *p, MP3HDR *h)
 {
 	int bi, ri, v;

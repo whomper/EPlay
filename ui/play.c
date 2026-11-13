@@ -29,6 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "tos.h"
+#include "tickcode.h"
 #include "play.h"
 #include "snd.h"
 #include "feed.h"
@@ -458,6 +459,7 @@ static long sync_mp3(int rate_want)
 /* ---- the tick: the queue into the ring (interrupt: no TOS, GEM, VDI) ---- */
 
 /* the tick's q_r moved on n bytes */
+TICK_CODE("13adv")
 static void adv(long n)
 {
 	q_r += n;
@@ -469,6 +471,7 @@ static void adv(long n)
 /* (no division or modulo here: the tick runs a thousand times a second) */
 static int raw8;		/* the STE's way: snd_put8_raw (set at the play's start) */
 
+TICK_CODE("12tick_pcm")
 static void tick_pcm(void)
 {
 	long room = snd_room(), cap = 1024;	/* (a tick short: GEM goes on between; 4 times what plays) */
@@ -531,6 +534,7 @@ static volatile unsigned long t_busy, t_parse, t_push, t_t0, t_last;	/* (the tic
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* (fixed hardware addresses) */
 #define IPRB (*(volatile unsigned char *)0xfffffa0dL)
+TICK_CODE("14fine_now")
 static unsigned long fine_now(void)
 {
 	unsigned long h, h2;
@@ -551,6 +555,7 @@ static unsigned long fine_now(void)
 }
 #pragma GCC diagnostic pop
 
+TICK_CODE("1Bpeek")
 static void peek(long n)
 {
 	long at = q_roff, k = q_size - at;
@@ -564,6 +569,7 @@ static void peek(long n)
 
 /* the next n bytes whole: where they are in the queue, else (round its
    end) copied into fr */
+TICK_CODE("1Abytes_at")
 static const unsigned char *bytes_at(long n)
 {
 	if (q_size - q_roff >= n)
@@ -579,6 +585,7 @@ static int pk_n;		/* the packet made, waiting to go; 0 for none */
 static long pk_samples;
 static int src_out;		/* no frame left in the queue, nor to come */
 
+TICK_CODE("18next_packet")
 static void next_packet(void)
 {
 	int scan;
@@ -667,6 +674,7 @@ static void next_packet(void)
 static short pcmbuf[576 * 2];
 static long pcm_got;		/* frames in pcmbuf so far */
 
+TICK_CODE("19next_pcm_packet")
 static void next_pcm_packet(void)
 {
 	unsigned long *w;
@@ -715,6 +723,7 @@ static void next_pcm_packet(void)
 	pcm_got = 0;
 }
 
+TICK_CODE("17make_packet")
 static void make_packet(void)
 {
 	if (kind) {
@@ -733,6 +742,7 @@ static int s_sblim = 32;	/* the subbands the DSP keeps (Quality Normal: fewer) *
 static unsigned long s_flags, s_mute[1];
 static long s_spf;		/* a frame's samples (1152, or 576 for MPEG-2 and 2.5) */
 
+TICK_CODE("15tick_mp3")
 static void tick_mp3(void)
 {
 	dspmp3_tick_status();
@@ -777,6 +787,7 @@ static void tick_mp3(void)
    frames spread over it (pcm_spread); at the file's end two packets of
    silence that has samples (the last packet out, as PSTREAM's two), then
    zeros, and the end word to the DSP once the DMA has played them */
+TICK_CODE("16tick_xs")
 static void tick_xs(void)
 {
 	long room = snd_room(), cap = 1024;
@@ -889,6 +900,7 @@ static unsigned short m_now[4];
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* (fixed hardware addresses) */
+TICK_CODE("1Cwatch_matrix")
 static void watch_matrix(void)
 {
 	volatile unsigned short *r = (volatile unsigned short *)0xffff8930L;
@@ -905,6 +917,7 @@ static void watch_matrix(void)
 }
 #pragma GCC diagnostic pop
 
+TICK_CODE("10tick")
 static void tick(void)
 {
 	unsigned long a = fine_now();
@@ -924,6 +937,7 @@ static void tick(void)
 	t_busy += t_last - a;
 }
 
+TICK_CODE("11tick_body")
 static void tick_body(void)
 {
 	if (!dsp || xs)

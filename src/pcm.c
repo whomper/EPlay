@@ -9,6 +9,7 @@
  */
 #include <string.h>
 #include "pcm.h"
+#include "tickcode.h"
 
 static unsigned long le32(const unsigned char *p)
 {
@@ -176,6 +177,7 @@ void pcm_convert(const PCMFMT *f, const unsigned char *src, short *dst, long n)
    (step 8) has the music in the first and silence, written once, in the
    other three (Erez, 3 Nov 2026: with one track the sound DMA put the left
    channel on the Analog 8's channels 3 to 8 as well) */
+TICK_CODE("30pcm_convert_to")
 void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long n, int step)
 {
 	int b = f->bits / 8;
@@ -322,6 +324,7 @@ void pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long 
 	}
 }
 
+TICK_CODE("33pcm_spread")
 long pcm_spread(const short *src, long n, short *dst, long k, int step, long in, long out, long *acc,
 		long *used)
 {
@@ -389,11 +392,13 @@ void pcm_gain_set(PCMGAIN *s, long g)
 	s->d = s->left = 0;
 }
 
+TICK_CODE("31pcm_gain_idle")
 int pcm_gain_idle(const PCMGAIN *s, long to)
 {
 	return s->g == 32768 && to == 32768 && !s->left;
 }
 
+TICK_CODE("32pcm_gain")
 void pcm_gain(PCMGAIN *s, long to, short *p, long n, int step)
 {
 	long i, g;

@@ -10,6 +10,7 @@
  */
 #include <string.h>
 #include "opnd.h"
+#include "tickcode.h"
 #include "egmath.h"
 
 static const unsigned char dt_tab[4][32] = {
@@ -25,6 +26,7 @@ static const unsigned char eg_hi[4][8] = {
 	{ 1, 1, 1, 1, 1, 1, 1, 1 }, { 1, 1, 1, 2, 1, 1, 1, 2 }, { 1, 2, 1, 2, 1, 2, 1, 2 }, { 1, 2, 2, 2, 1, 2, 2, 2 } };
 static const int slot_op[4] = { 0, 2, 1, 3 };
 
+TICK_CODE("6Dopnd_eff")
 static int eff(int r, int ksr)
 {
 	int v;
@@ -85,6 +87,7 @@ static void rate_tables(OPND *d)
 	}
 }
 
+TICK_CODE("6Copnd_op_rates")
 static void op_rates(OPND *d, OPND_OP *op)
 {
 	int r = eff(op->ar, op->ksr);
@@ -95,6 +98,7 @@ static void op_rates(OPND *d, OPND_OP *op)
 	op->rr = d->r_mean[r > 63 ? 63 : r];
 }
 
+TICK_CODE("6Bopnd_ch_steps")
 static void ch_steps(OPND *d, int c)
 {
 	OPND_CH *ch = &d->ch[c];
@@ -162,6 +166,7 @@ void opnd_gain(OPND *d, long g)
 	d->ch_dirty = 0x3f;
 }
 
+TICK_CODE("69opnd_write")
 void opnd_write(OPND *d, int port, int reg, int val)
 {
 	int c = (reg & 3) + port * 3, i;
@@ -298,6 +303,7 @@ void opnd_send_drate(OPND *d, void (*put)(void *u, long w), void *u)
 	put(u, 0);
 }
 
+TICK_CODE("6Aopnd_tick")
 int opnd_tick(OPND *d, int (*run)(void *v, long n), long (*at)(void *v), void *v, long n,
 	      void (*put)(void *u, long w), void *u)
 {
@@ -332,6 +338,7 @@ static long ob[400];
 static int on_;
 #define EMIT(w)	(ob[on_++] = (w))
 
+TICK_CODE("6Eopnd_send")
 void opnd_send(OPND *d, void (*put)(void *u, long w), void *u)
 {
 	int c, k;

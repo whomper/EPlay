@@ -8,6 +8,7 @@
  * 249.
  */
 #include "tos.h"
+#include "tickcode.h"
 #include "feed.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
@@ -77,12 +78,14 @@ static long give_back(void)
 static unsigned char t0;
 static long m0;
 
+TICK_CODE("00feed_t0")
 void feed_t0(void)
 {
 	t0 = TADR;
 	m0 = feed_missed;
 }
 
+TICK_CODE("01feed_us")
 long feed_us(void)
 {
 	unsigned char t = TADR;

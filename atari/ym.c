@@ -7,6 +7,7 @@
  * register comes between.
  */
 #include "tos.h"
+#include "tickcode.h"
 #include "ym.h"
 #include "snd.h"
 
@@ -37,6 +38,7 @@ static void sr_back(unsigned short sr)
 	__asm__ volatile("move.w %0,%%sr" : : "d"(sr) : "cc");
 }
 
+TICK_CODE("60ym_write")
 void ym_write(int reg, int val)
 {
 	unsigned short sr;

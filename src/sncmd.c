@@ -4,6 +4,7 @@
  * sncmd.c - the SN76489's writes as sn.a56's commands (sncmd.h).
  */
 #include "sncmd.h"
+#include "tickcode.h"
 
 /* the amplitudes, 2 dB a step (0.2 of full scale at 0: four channels
    at most 0.8), and the volume's 1.5 dB steps, Q15 */
@@ -12,6 +13,7 @@ static const long amp_of[16] = { 1677722, 1332662, 1058571, 840853, 667913, 5305
 static const long att_q15[16] = { 32768, 27571, 23198, 19519, 16423, 13818, 11627, 9783,
 				  8231,  6925,  5827,  4903,  4125,  3471,  2920,  2457 };
 
+TICK_CODE("6Gsncmd_cmd")
 static void cmd(SNCMD *s, int c, long v)
 {
 	s->put(s->u, s->base + c);
@@ -20,6 +22,7 @@ static void cmd(SNCMD *s, int c, long v)
 
 /* the step of a square wave turning over every n counts (Q23 of a
    sample), 0 above a quarter of the rate (a level: held up) */
+TICK_CODE("6Ksncmd_step_of")
 static long step_of(const SNCMD *s, long n)
 {
 	long v;
@@ -29,6 +32,7 @@ static long step_of(const SNCMD *s, long n)
 	return v >= (1L << 22) ? 0 : v;
 }
 
+TICK_CODE("6Jsncmd_amp")
 static long amp(const SNCMD *s, int ch)
 {
 	if (s->mute)
@@ -36,6 +40,7 @@ static long amp(const SNCMD *s, int ch)
 	return ((amp_of[s->vol[ch] & 15] >> 8) * att_q15[s->att & 15] >> 7) >> s->shift;	/* (in 32 bits) */
 }
 
+TICK_CODE("6Hsncmd_tone")
 static void tone(SNCMD *s, int ch)
 {
 	long v = step_of(s, s->period[ch]);
@@ -44,6 +49,7 @@ static void tone(SNCMD *s, int ch)
 		cmd(s, 11, ch);		/* (held up: the volume plays it) */
 }
 
+TICK_CODE("6Isncmd_noise")
 static void noise(SNCMD *s)
 {
 	long v;
@@ -54,6 +60,7 @@ static void noise(SNCMD *s)
 	cmd(s, 3, v);
 }
 
+TICK_CODE("6Fsncmd_write")
 void sncmd_write(SNCMD *s, int b)
 {
 	int ch;

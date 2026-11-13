@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "tos.h"
+#include "tickcode.h"
 #include "vgm.h"
 #include "vgmfile.h"
 #include "vgmplay.h"
@@ -79,30 +80,35 @@ static long rd(void *u, long at, unsigned char *buf, long n)
 	return Fread((short)f->fh, n, buf);
 }
 
+TICK_CODE("53ay")
 static void ay(void *u, int reg, int val)
 {
 	(void)u;
 	ym_write(reg, val);
 }
 
+TICK_CODE("54sn")
 static void sn(void *u, int val)
 {
 	(void)u;
 	dspsn_write(val);
 }
 
+TICK_CODE("55opn_sn")
 static void opn_sn(void *u, int val)
 {
 	(void)u;
 	dspopn_sn(val);
 }
 
+TICK_CODE("56opn")
 static void opn(void *u, int port, int reg, int val)
 {
 	(void)u;
 	dspopn_write(port, reg, val);
 }
 
+TICK_CODE("57opl")
 static void opl(void *u, int port, int reg, int val)
 {
 	(void)u;
@@ -113,11 +119,13 @@ static void opl(void *u, int port, int reg, int val)
 static long t_all, t_max, t_n, t_over;	/* the tick's times (us): the whole, its longest; past 1 ms */
 static long t_lost;		/* ticks not made up (no time left) */
 
+TICK_CODE("51runn")
 static int runn(void *v, long n)
 {
 	return vgm_run(v, n);
 }
 
+TICK_CODE("52at")
 static long at(void *v)
 {
 	return ((VGMRUN *)v)->at;
@@ -142,6 +150,7 @@ static void hush(void)
 /* the tick (an interrupt): the commands of its 44.2 samples */
 static long seen;		/* feed_ticks when the tick last ran */
 
+TICK_CODE("50vp_tick")
 static void tick(void)
 {
 	long n, due, k;

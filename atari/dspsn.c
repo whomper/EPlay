@@ -9,6 +9,7 @@
  * src/sncmd.c.
  */
 #include "tos.h"
+#include "tickcode.h"
 #include "snd.h"
 #include "dspsn.h"
 #include "sncmd.h"
@@ -30,6 +31,7 @@ static long rate;
 static SNCMD sn;
 static volatile int att, mute, amp_due;
 
+TICK_CODE("61dspsn_put")
 static void put(void *u, long w)
 {
 	(void)u;
@@ -46,6 +48,7 @@ static void put(void *u, long w)
 	HTX32 = (unsigned long)w & 0xffffff;
 }
 
+TICK_CODE("62dspsn_write")
 void dspsn_write(int b)
 {
 	if (on)
@@ -139,6 +142,7 @@ void dspsn_volume(int a, int m)
 	amp_due = 1;
 }
 
+TICK_CODE("63dspsn_poll")
 void dspsn_poll(void)
 {
 	if (on && amp_due) {

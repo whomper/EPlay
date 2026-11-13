@@ -14,6 +14,7 @@
  * supervisor already).
  */
 #include "tos.h"
+#include "tickcode.h"
 #include "dspmp3.h"
 #include "mp3tab.h"
 #include "mp3_prog.h"
@@ -297,6 +298,7 @@ void dspmp3_fail_info(int *what, long *at, long *of, int *hisr)
 	*hisr = f_hisr;
 }
 
+TICK_CODE("45dspmp3_failed")
 int dspmp3_failed(void)
 {
 	return failed;
@@ -364,11 +366,13 @@ void dspmp3_tick_stream(long rin, long rout, int pcm, int sblim)
 	put(pcm == 2 ? 15 : pcm ? 14 : 12);	/* XSTREAM (from the SSI's receive), PSTREAM, STREAM */
 }
 
+TICK_CODE("41dspmp3_tick_asks")
 int dspmp3_tick_asks(void)
 {
 	return !s_have && (HISR & HF2);
 }
 
+TICK_CODE("42dspmp3_tick_offer")
 void dspmp3_tick_offer(const unsigned long *pk, int n)
 {
 	s_buf = pk;
@@ -377,6 +381,7 @@ void dspmp3_tick_offer(const unsigned long *pk, int n)
 	s_have = 1;
 }
 
+TICK_CODE("43dspmp3_tick_push")
 void dspmp3_tick_push(void)
 {
 	while (s_have) {
@@ -400,11 +405,13 @@ void dspmp3_tick_push(void)
 	}
 }
 
+TICK_CODE("44dspmp3_tick_pushing")
 int dspmp3_tick_pushing(void)
 {
 	return s_have;
 }
 
+TICK_CODE("40dspmp3_tick_status")
 void dspmp3_tick_status(void)
 {
 	while (HISR & 1) {

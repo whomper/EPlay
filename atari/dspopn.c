@@ -9,6 +9,7 @@
  * sn.a56's commands by src/sncmd.c, numbered from OPNC_SN.
  */
 #include "tos.h"
+#include "tickcode.h"
 #include "snd.h"
 #include "opnd.h"
 #include "dspopn.h"
@@ -50,6 +51,7 @@ static unsigned long sent, f_sent;
 static int f_hisr;		/* HF0 up: the tick's words coming */
 
 /* the DAC's words: one wait on the host port's flag a word, in a loop */
+TICK_CODE("64dspopn_putn")
 static void putn(void *u, const long *w, int n)
 {
 	int k;
@@ -75,6 +77,7 @@ static void putn(void *u, const long *w, int n)
 	}
 }
 
+TICK_CODE("65dspopn_put")
 static void put(void *u, long w)
 {
 	(void)u;
@@ -222,12 +225,14 @@ VGMDAC *dspopn_dac(void)
 	return on ? &chip.dq : 0;
 }
 
+TICK_CODE("66dspopn_write")
 void dspopn_write(int port, int reg, int val)
 {
 	if (on)
 		opnd_write(&chip, port, reg, val);
 }
 
+TICK_CODE("67dspopn_sn")
 void dspopn_sn(int b)
 {
 	if (on && psg_on)
@@ -239,6 +244,7 @@ int dspopn_psg(void)
 	return psg_on;
 }
 
+TICK_CODE("68dspopn_tick")
 int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long n)
 {
 	int live;

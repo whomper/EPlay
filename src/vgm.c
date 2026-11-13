@@ -7,6 +7,7 @@
  */
 #include <string.h>
 #include "vgm.h"
+#include "tickcode.h"
 #include "charset.h"
 
 static unsigned long le32(const unsigned char *p)
@@ -184,6 +185,7 @@ static int cmd_len(const unsigned char *b, long n, long p)
 
 /* the AY's period of registers lo, hi (bits of hi: mask) turned to 2 MHz,
    both written */
+TICK_CODE("5Cay_period")
 static void ay_period(VGMRUN *r, int lo, int hi, unsigned mask, unsigned long max)
 {
 	unsigned long v = (unsigned long)r->ay[lo] | (unsigned long)(r->ay[hi] & mask) << 8;
@@ -196,6 +198,7 @@ static void ay_period(VGMRUN *r, int lo, int hi, unsigned mask, unsigned long ma
 	r->ay_fn(r->u, hi, (int)(v >> 8));
 }
 
+TICK_CODE("5Bfaded")
 static int faded(const VGMRUN *r, int v)
 {
 	if (v & 0x10)
@@ -204,6 +207,7 @@ static int faded(const VGMRUN *r, int v)
 	return v < 0 ? 0 : v;
 }
 
+TICK_CODE("5Aay_write")
 static void ay_write(VGMRUN *r, int reg, int val)
 {
 	if (reg > 13)
@@ -243,6 +247,7 @@ void vgm_begin(VGMRUN *r, const unsigned char *b, long n, const VGMHEAD *h, VGM_
 }
 
 /* the SN76489's registers as the file sets them (vgm_seek's) */
+TICK_CODE("5Dsn_shadow")
 static void sn_shadow(VGMRUN *r, int v)
 {
 	int ch;
@@ -260,6 +265,7 @@ static void sn_shadow(VGMRUN *r, int v)
 }
 
 /* a YM2612 register: kept (a seek writes them again), and passed on */
+TICK_CODE("5Eopn_write")
 static void opn_write(VGMRUN *r, int port, int reg, int val)
 {
 	r->opn[port][reg & 0xff] = (unsigned char)val;
@@ -270,6 +276,7 @@ static void opn_write(VGMRUN *r, int port, int reg, int val)
 }
 
 /* a YM3812 register: kept (a seek writes them again), and passed on */
+TICK_CODE("5Fopl_write")
 static void opl_write(VGMRUN *r, int reg, int val)
 {
 	r->opl[reg & 0xff] = (unsigned char)val;
@@ -278,6 +285,7 @@ static void opl_write(VGMRUN *r, int reg, int val)
 }
 
 /* the commands until one waits; 0 at the end */
+TICK_CODE("59commands")
 static int commands(VGMRUN *r)
 {
 	const unsigned char *b = r->b;
@@ -365,6 +373,7 @@ static int commands(VGMRUN *r)
 }
 
 /* the fade's level for where it is: the AY's volumes again when it moved */
+TICK_CODE("5Ifade_to")
 static void fade_to(VGMRUN *r)
 {
 	long left = r->end - r->at;
@@ -388,6 +397,7 @@ static void fade_to(VGMRUN *r)
    no call, in registers: a stock Falcon's 68030 has thousands a second.
    Each write into the tick's DAC (r->dac), or with none (a seek) only
    kept as the register's */
+TICK_CODE("5Gdrums")
 static void drums(VGMRUN *r, long lim)
 {
 	const unsigned char *b = r->b, *pcm = b + r->pcm_at;
@@ -431,6 +441,7 @@ static void drums(VGMRUN *r, long lim)
    one, the tick 72 % of a 32 MHz Falcon's 68030). A volume register goes
    straight to the chip's function unless a fade or the attenuation is on;
    every other register through ay_write */
+TICK_CODE("5Hay_burst")
 static void ay_burst(VGMRUN *r, long lim)
 {
 	const unsigned char *b = r->b;
@@ -532,6 +543,7 @@ static void seek_run(VGMRUN *r, long to)
 	r->wait = wait;
 }
 
+TICK_CODE("58vgm_run")
 int vgm_run(VGMRUN *r, long samples)
 {
 	if (r->done)
@@ -642,6 +654,7 @@ void vgm_seek_from(VGMRUN *r, const VGMRUN *from, long to)
 	vgm_resend(r);
 }
 
+TICK_CODE("5Jvgm_set_att")
 void vgm_set_att(VGMRUN *r, int att)
 {
 	int reg;

@@ -14,6 +14,7 @@
  */
 #include <string.h>
 #include "opld.h"
+#include "tickcode.h"
 #include "egmath.h"
 
 static const unsigned char eg_lo[4][8] = {
@@ -65,6 +66,7 @@ static void rate_tables(OPLD *d)
 	}
 }
 
+TICK_CODE("79opld_eff")
 static int eff(int r, int rof)
 {
 	int v;
@@ -74,6 +76,7 @@ static int eff(int r, int rof)
 	return v > 63 ? 63 : v;
 }
 
+TICK_CODE("77opld_op_rates")
 static void op_rates(OPLD *d, OPLD_OP *op)
 {
 	int r = eff(op->ar, op->rof);
@@ -85,6 +88,7 @@ static void op_rates(OPLD *d, OPLD_OP *op)
 	op->sl = (long)((op->slr == 15 ? 31 : op->slr) << 4) * OPL_Q;
 }
 
+TICK_CODE("78opld_op_level")
 static void op_level(const OPLD_CH *ch, OPLD_OP *op)
 {
 	long k = 0;
@@ -97,6 +101,7 @@ static void op_level(const OPLD_CH *ch, OPLD_OP *op)
 
 /* a channel's steps, its key scaling (the rates where its offset changed,
    the levels), its vibrato's depth */
+TICK_CODE("75opld_ch_steps")
 static void ch_steps(OPLD *d, int c)
 {
 	OPLD_CH *ch = &d->ch[c];
@@ -128,6 +133,7 @@ static void ch_steps(OPLD *d, int c)
 }
 
 /* each operator keyed by its channel, or in the rhythm mode by its drum */
+TICK_CODE("76opld_keys")
 static void keys(OPLD *d)
 {
 	int i;
@@ -171,6 +177,7 @@ void opld_gain(OPLD *d, long g)
 	d->ch_dirty = (1u << OPL_CH) - 1;
 }
 
+TICK_CODE("73opld_write")
 void opld_write(OPLD *d, int reg, int val)
 {
 	int c, i;
@@ -277,6 +284,7 @@ static long ob[512];
 static int on_;
 #define EMIT(w)	(ob[on_++] = (w))
 
+TICK_CODE("74opld_send")
 void opld_send(OPLD *d, void (*put)(void *u, long w), void *u)
 {
 	int c, k;

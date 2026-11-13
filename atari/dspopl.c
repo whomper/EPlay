@@ -8,6 +8,7 @@
  * no sample made between.
  */
 #include "tos.h"
+#include "tickcode.h"
 #include "snd.h"
 #include "opld.h"
 #include "dspopl.h"
@@ -42,6 +43,7 @@ static int last_n;
 static unsigned long sent, f_sent;
 static int f_hisr;
 
+TICK_CODE("70dspopl_put")
 static void put(void *u, long w)
 {
 	(void)u;
@@ -167,12 +169,14 @@ long dspopl_synth(void)
 	return synth;
 }
 
+TICK_CODE("71dspopl_write")
 void dspopl_write(int port, int reg, int val)
 {
 	if (on && !port)
 		opld_write(&chip, reg, val);
 }
 
+TICK_CODE("72dspopl_tick")
 int dspopl_tick(int (*run)(void *v, long n), void *v, long n)
 {
 	int live;

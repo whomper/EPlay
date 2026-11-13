@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "tos.h"
+#include "tickcode.h"
 #include "snd.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
@@ -190,6 +191,7 @@ static inline unsigned long div16(unsigned long a, unsigned short b)
 /* a 16-bit sample to 8 bits: with its error carried to the next (a
    first-order noise shaping: the error's power moved up, out of the
    middle of what is heard), or cut */
+TICK_CODE("29to8")
 static unsigned char to8(long v, long *e, int dither)
 {
 	long w;
@@ -209,6 +211,7 @@ static unsigned char to8(long v, long *e, int dither)
 
 /* k of the file's frames in stage[] to the ring at the DMA's rate: the
    frames made */
+TICK_CODE("28put8")
 static long put8(long k)
 {
 	long made = 0;
@@ -265,6 +268,7 @@ static long put8(long k)
 static unsigned long skip8;
 static unsigned short frac8;
 
+TICK_CODE("27snd_put8_raw")
 long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x)
 {
 	unsigned char *r = ring8 + 2 * wpos, *rend = ring8 + 2 * ring_n;
@@ -1166,6 +1170,7 @@ static long hw_pos(void)
 
 /* the frames played, from the DMA's position (the tick, a thousand times
    a second: it must be asked at least once a ring) */
+TICK_CODE("20snd_update")
 void snd_update(void)
 {
 	long p, d;
@@ -1196,17 +1201,20 @@ void snd_update(void)
 	}
 }
 
+TICK_CODE("24snd_played")
 long snd_played(void)
 {
 	/* (the file's frames written, less the DMA's lead as the file's) */
 	return snd_dma8 ? (long)in_written - as_in(written - played) : played;
 }
 
+TICK_CODE("25snd_written")
 long snd_written(void)
 {
 	return snd_dma8 ? (long)in_written : written;
 }
 
+TICK_CODE("21snd_room")
 long snd_room(void)
 {
 	long r = ring_n - (written - played) - 1024;	/* a guard behind the DMA */
@@ -1218,6 +1226,7 @@ long snd_room(void)
 	return r > 0 ? r : 0;
 }
 
+TICK_CODE("22snd_ptr")
 short *snd_ptr(long *n)
 {
 	if (snd_dma8) {
@@ -1228,6 +1237,7 @@ short *snd_ptr(long *n)
 	return ring + snd_fw * wpos;
 }
 
+TICK_CODE("23snd_wrote")
 void snd_wrote(long n)
 {
 	if (snd_dma8) {
@@ -1276,6 +1286,7 @@ void snd_play(void)
 	}
 }
 
+TICK_CODE("26snd_playing")
 int snd_playing(void)
 {
 	return playing;
