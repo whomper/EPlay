@@ -17,7 +17,11 @@ jobs:
       - name: Gateway dependencies
         run: if [ -f gateway/requirements.txt ]; then pip install -r gateway/requirements.txt; fi
       - name: Tools for the test files
-        run: sudo apt-get update && sudo apt-get install -y sox lame
+        run: |
+          # (three apt mirrors and IPv4: AERA-Atari's template, fa930c9)
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y sox lame
       - name: make test
         run: make test
 
@@ -27,7 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y sox lame a56
+        run: |
+          # (three apt mirrors and IPv4: AERA-Atari's template, fa930c9)
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y sox lame a56
       - name: make dsptest
         run: make dsptest
 
@@ -38,8 +46,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: The m68k cross compiler, and a56 for the DSP's program
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu a56
+          # (three apt mirrors and IPv4: AERA-Atari's template, fa930c9)
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu a56
       - name: Build the programs
         run: make
       - name: The build changed no tracked file
@@ -54,7 +64,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y gcc-m68k-linux-gnu a56 hatari sox lame
+        run: |
+          # (three apt mirrors and IPv4: AERA-Atari's template, fa930c9)
+          printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu a56 hatari sox lame
       - name: Build
         run: make && make -C tests/hatari
       - name: The play rig (Falcon and Falcon-4, EmuTOS)
