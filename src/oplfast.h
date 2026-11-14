@@ -22,9 +22,10 @@
  * envelopes, the gains and the LFOs each OPL_UPD samples, an operator that
  * is off passed over; a channel with both off passed over. The OPL3: 18
  * channels (OPLC_NCH: the first nine alone, or all), eight waveforms; a
- * four-operator pair made by its first channel (its operators A and B, its
- * second's C and D: algorithm 0 A>B>C>D, 1 A>B + C>D, 2 A + B>C>D, 3 A +
- * B>C + D; A's feedback its first's), its second silent.
+ * four-operator pair as its two channels in their order, each its own
+ * output (its first A and B, A's feedback its; its second C and D, B's
+ * output its link: algorithm 0 A>B>C>D, 1 A>B + C>D, 2 A + B>C>D, 3 A +
+ * B>C + D).
  */
 #ifndef EPLAY_OPLFAST_H
 #define EPLAY_OPLFAST_H
@@ -44,6 +45,7 @@ typedef struct {
 	OPLF_OP op[2];
 	long kf, pl, pr, dw;
 	long o1, o1p;		/* the modulator's last two outputs */
+	long link;		/* (a four-operator pair's second) B's output, its C's modulation */
 	int cnt, live;
 } OPLF_CH;
 

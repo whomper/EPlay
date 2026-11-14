@@ -80,7 +80,7 @@ typedef struct {
 		step, tl, arf, d1, d2, rr, sl, am, vib, ws (0-7)
 	OPLC_STEP operator i, its step alone
 	OPLC_CH	channel c: connection (0 FM, 1 both out; a four-operator
-		pair's first 2 + its algorithm 0-3, its second OPL_PAIR2),
+		pair's first 2 + its algorithm 0-3, its second OPL_PAIR2 + it),
 		feedback's factor (2^(FB + 14), 0), left's and right's gains,
 		vibrato's depth (Q23: (F-number >> 7) / F-number x 2, halved for
 		the shallow)
@@ -98,7 +98,7 @@ typedef struct {
 #define OPL_X_AM 0x1000
 #define OPL_X_PMW 0x1200
 #define OPL_Y_WAVE 0x2000	/* eight waveforms of 1,024 */
-#define OPL_PAIR2 6		/* a four-operator pair's second channel: made by its first */
+#define OPL_PAIR2 6		/* a four-operator pair's second channel's connection, + the algorithm */
 
 enum { OPLC_OP = 2, OPLC_CH = 3, OPLC_KEY = 5, OPLC_LFO = 7, OPLC_RHY = 8, OPLC_RUN = 9, OPLC_PLAY = 10,
        OPLC_RESET = 12, OPLC_STATUS = 15, OPLC_STEP = 16, OPLC_NCH = 17 };

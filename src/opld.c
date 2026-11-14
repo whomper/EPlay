@@ -367,6 +367,8 @@ void opld_write(OPLD *d, int reg, int val)
 		d->ch_dirty |= 1UL << c;
 		if (d->ch[c].type == 2)
 			d->ch_dirty |= 1UL << (c - 3);	/* (its pair's connection, outputs) */
+		else if (d->ch[c].type == 1)
+			d->ch_dirty |= 1UL << (c + 3);	/* (its second's algorithm) */
 		break;
 	}
 }
@@ -412,13 +414,15 @@ void opld_send(OPLD *d, void (*put)(void *u, long w), void *u)
 			continue;
 		if (d->ch_dirty & (1UL << c)) {
 			const OPLD_CH *fc = freq_ch(d, c);
-			/* (a pair's outputs and its second's connection: its second's) */
+			/* (a pair's outputs its second's, both channels'; its algorithm
+			   both channels' connections; C no feedback) */
 			const OPLD_CH *oc = ch->type == 1 ? &d->ch[c + 3] : ch;
+			int alg = ch->type == 1 ? ch->cnt << 1 | oc->cnt : ch->type == 2 ? d->ch[c - 3].cnt << 1 | ch->cnt : 0;
 			long dw = fc->fnum ? (((long)(fc->fnum >> 7) << 24) / fc->fnum) : 0;
 			EMIT(OPLC_CH);
 			EMIT(c);
-			EMIT(ch->type == 1 ? 2 + (ch->cnt << 1 | oc->cnt) : ch->type == 2 ? OPL_PAIR2 : ch->cnt);
-			EMIT(ch->fb ? 1L << (ch->fb + 14) : 0);
+			EMIT(ch->type == 1 ? 2 + alg : ch->type == 2 ? OPL_PAIR2 + alg : ch->cnt);
+			EMIT(ch->fb && ch->type != 2 ? 1L << (ch->fb + 14) : 0);
 			EMIT(oc->sa ? d->outg : 0);
 			EMIT(oc->sb ? d->outg : 0);
 			EMIT(d->bd & 0x40 ? dw : dw >> 1);

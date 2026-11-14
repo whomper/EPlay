@@ -279,7 +279,7 @@ static long ch_calc(OPLF *f, OPLF_CH *ch, int bd)
 	p1 = op_calc(f, &o[0], 0, prod(ch->o1, ch->kf) + prod(ch->o1p, ch->kf));
 	ch->o1p = ch->o1;
 	ch->o1 = lim(p1);
-	if (!ch->cnt)
+	if (ch->cnt != 1)	/* (FM; a four-operator pair's algorithm 1, 3 and 7, its two FM too) */
 		a = op_calc(f, &o[1], ch->o1, 0);
 	else if (bd)
 		a = op_calc(f, &o[1], 0, 0);	/* (the bass drum's: the carrier alone) */
@@ -288,39 +288,41 @@ static long ch_calc(OPLF *f, OPLF_CH *ch, int bd)
 	return lim(a >> (bd ? 2 : 3));
 }
 
-/* a four-operator pair (its first channel ch, its second's operators C and
-   D): its algorithm (2-5 less 2); A's feedback as a channel's modulator's.
-   An output used as a modulation is limited (the modulator's as it is) */
-static long ch4_calc(OPLF *f, OPLF_CH *ch, OPLF_CH *pr)
+/* a four-operator pair, as two channels in their order, each its own
+   output (/ 8, limited): its first (A, with its feedback, and B) and its
+   second (C and D), three channels on, B's output its link to C where the
+   algorithm has one (an output used as a modulation limited). 0: A > B >
+   C > D (the first silent); 1: A > B, C > D (each channel FM, the
+   second's without feedback: ch_calc); 2: A, B > C > D; 3: A, B > C + D */
+static long pair1(OPLF *f, OPLF_CH *ch, OPLF_CH *pr)
 {
-	OPLF_OP *a = &ch->op[0], *b = &ch->op[1], *c = &pr->op[0], *d = &pr->op[1];
-	acc_t pa, x, y;
+	OPLF_OP *a = &ch->op[0], *b = &ch->op[1];
+	acc_t pa;
+	if (ch->cnt == 3)
+		return ch_calc(f, ch, 0);
 	pa = op_calc(f, a, 0, prod(ch->o1, ch->kf) + prod(ch->o1p, ch->kf));
 	ch->o1p = ch->o1;
 	ch->o1 = lim(pa);
-	switch (ch->cnt - 2) {
-	case 0:		/* A > B > C > D */
-		x = op_calc(f, b, ch->o1, 0);
-		x = op_calc(f, c, lim(x), 0);
-		y = op_calc(f, d, lim(x), 0);
-		break;
-	case 1:		/* A > B + C > D */
-		y = op_calc(f, b, ch->o1, 0);
-		x = op_calc(f, c, 0, 0);
-		y += op_calc(f, d, lim(x), 0);
-		break;
-	case 2:		/* A + B > C > D */
-		x = op_calc(f, b, 0, 0);
-		x = op_calc(f, c, lim(x), 0);
-		y = pa + op_calc(f, d, lim(x), 0);
-		break;
-	default:	/* A + B > C + D */
-		x = op_calc(f, b, 0, 0);
-		y = pa + op_calc(f, c, lim(x), 0);
-		y += op_calc(f, d, 0, 0);
-		break;
+	if (ch->cnt == 2) {
+		pr->link = lim(op_calc(f, b, ch->o1, 0));
+		return 0;
 	}
-	return lim(y >> 3);
+	pr->link = lim(op_calc(f, b, 0, 0));
+	return lim(pa >> 3);
+}
+
+static long pair2(OPLF *f, OPLF_CH *ch)
+{
+	OPLF_OP *c = &ch->op[0], *d = &ch->op[1];
+	acc_t x;
+	if (ch->cnt == OPL_PAIR2 + 1)
+		return ch_calc(f, ch, 0);
+	x = op_calc(f, c, ch->link, 0);
+	if (ch->cnt == OPL_PAIR2 + 3)
+		x += op_calc(f, d, 0, 0);
+	else
+		x = op_calc(f, d, lim(x), 0);
+	return lim(x >> 3);
 }
 
 /* the rhythm mode's channels 7 and 8: the hi-hat and the snare, the tom
@@ -362,8 +364,10 @@ void oplf_words(OPLF *f, long *lr, int n)
 			if (f->rhy && c >= 7 && c < 9)
 				v = c == 7 ? drums(f) : f->v8;
 			else if (ch->cnt >= 2 && ch->cnt < OPL_PAIR2)
-				v = ch->live || f->ch[c + 3].live ? ch4_calc(f, ch, &f->ch[c + 3]) : 0;
-			else if (!ch->live || ch->cnt == OPL_PAIR2)
+				v = ch->live || f->ch[c + 3].live ? pair1(f, ch, &f->ch[c + 3]) : 0;
+			else if (ch->cnt >= OPL_PAIR2)
+				v = ch->live || f->ch[c - 3].live ? pair2(f, ch) : 0;
+			else if (!ch->live)
 				v = 0;
 			else
 				v = ch_calc(f, ch, f->rhy && c == 6);

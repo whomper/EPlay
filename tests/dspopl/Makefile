@@ -6,7 +6,8 @@
 H := ../../common/tests/ec/build/hatari
 B := build
 TOP := ../..
-FILES := SINE FM ENV WAVE LFO RHYTHM CHORD KEYS
+FILES := SINE FM ENV WAVE LFO RHYTHM CHORD KEYS O3PAN O3BANK O3WAVE O3FOUR0 O3FOUR1 O3FOUR2 O3FOUR3 \
+	O3CHORD O3COMPAT
 
 run: $(B)/sim $(B)/files/.made
 	./$(B)/sim $(addprefix $(B)/files/,$(addsuffix .VGM,$(FILES)))
