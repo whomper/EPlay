@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * ref.c - a VGM's YM3812 (OPL2) as Nuked-OPL3 plays it (the reference,
- * phase 10 step 7): the file's 0x5A writes to the emulated chip, run at its
- * own rate (clock / 72: 49,716 Hz from 3,579,545 Hz), left and right to a
+ * ref.c - a VGM's YM3812 (OPL2) or YMF262 (OPL3) as Nuked-OPL3 plays it (the
+ * reference, phase 10 step 7): the file's 0x5A writes (an OPL3's 0x5E and
+ * 0x5F, its second bank's) to the emulated chip, run at its own rate (clock
+ * / 72: 49,716 Hz from 3,579,545 Hz; an OPL3's clock / 288), left and right to a
  * WAV at that rate (sox then takes it to any other). A small VGM reader of
  * its own (the waits and 0x5A): src/vgm.c learns the YM3812 later.
  *
@@ -54,6 +55,10 @@ int main(int argc, char **argv)
 	fclose(f);
 	clock = u32(b + 0x50);
 	rate = clock / 72;
+	if (!clock && n > 0x60 && u32(b + 0x5c)) {
+		clock = u32(b + 0x5c);	/* (an OPL3's clock) */
+		rate = clock / 288;
+	}
 	per = (double)rate / 44100.0;
 	p = 0x34 + (long)u32(b + 0x34);
 	OPL3_Reset(&chip, (uint32_t)rate);
@@ -72,8 +77,8 @@ int main(int argc, char **argv)
 	while (p < n) {
 		unsigned c = b[p];
 		long wait = 0;
-		if (c == 0x5A) {
-			OPL3_WriteReg(&chip, b[p + 1], b[p + 2]);
+		if (c == 0x5A || c == 0x5E || c == 0x5F) {
+			OPL3_WriteReg(&chip, (uint16_t)(b[p + 1] | (c == 0x5F ? 0x100 : 0)), b[p + 2]);
 			p += 3;
 			continue;
 		}

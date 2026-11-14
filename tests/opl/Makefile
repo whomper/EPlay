@@ -8,15 +8,21 @@
 TOP := ../..
 B := build
 N := $(B)/Nuked-OPL3
-FILES := SINE FM ENV WAVE LFO RHYTHM CHORD KEYS
+FILES2 := SINE FM ENV WAVE LFO RHYTHM CHORD KEYS
+FILES3 := O3PAN O3BANK O3WAVE O3FOUR0 O3FOUR1 O3FOUR2 O3FOUR3 O3CHORD O3COMPAT
+FILES := $(FILES2) $(FILES3)
 CF := -O2 -Wall -Wextra -Wno-unused-parameter -Werror -I$(TOP)/src
 
 run: $(B)/ref $(B)/fast $(B)/files/.made
 	for f in $(FILES); do ./$(B)/ref $(B)/files/$$f.VGM $(B)/files/$$f.ref.wav && \
 		./$(B)/fast $(B)/files/$$f.VGM $(B)/files/$$f.f49.wav 49716 && \
-		./$(B)/fast $(B)/files/$$f.VGM $(B)/files/$$f.f24.wav 24585 || exit 1; done
-	python3 compare.py $(B)/files 49716
-	python3 compare.py $(B)/files 24585
+		./$(B)/fast $(B)/files/$$f.VGM $(B)/files/$$f.f24.wav 24585 && \
+		./$(B)/fast $(B)/files/$$f.VGM $(B)/files/$$f.f16.wav 16390 || exit 1; done
+	python3 compare.py $(B)/files 49716 $(FILES2)
+	python3 compare.py $(B)/files 24585 $(FILES2)
+	python3 compare.py $(B)/files 49716 $(FILES3)
+	python3 compare.py $(B)/files 24585 $(FILES3)
+	python3 compare.py $(B)/files 16390 $(FILES3)
 $(N)/opl3.c:
 	sh fetch-ref.sh
 $(B)/ref: ref.c $(N)/opl3.c

@@ -10,7 +10,7 @@ dB where the sound is above -40 dB), the first ten harmonics' levels (the
 timbre: the largest difference, dB, of those within 30 dB of the loudest),
 left against right (the panning). Fails past the limits.
 
-    compare.py DIR RATE
+    compare.py DIR RATE [NAME...]
 
 The rhythm mode's drums (noise in three of them) have no pitch nor
 harmonics: their timbre is the levels of their spectrum's octaves.
@@ -65,7 +65,8 @@ def main():
     d = sys.argv[1]
     rate = sys.argv[2]
     bad = 0
-    for name in ("SINE", "FM", "ENV", "WAVE", "LFO", "RHYTHM", "CHORD", "KEYS"):
+    names = sys.argv[3:] or ["SINE", "FM", "ENV", "WAVE", "LFO", "RHYTHM", "CHORD", "KEYS"]
+    for name in names:
         rr, ref = load("%s/%s.ref.wav" % (d, name))
         mr, mod = load("%s/%s.f%s.wav" % (d, name, rate[:2]))
         a, b = int(0.25 * rr), int(0.75 * rr)

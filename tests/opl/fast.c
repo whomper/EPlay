@@ -39,8 +39,8 @@ static int run(long k)
 		}
 		k -= wait;
 		wait = 0;
-		if (c == 0x5A) {
-			opld_write(&chip, b[p + 1], b[p + 2]);
+		if (c == 0x5A || c == 0x5E || c == 0x5F) {
+			opld_write(&chip, b[p + 1] | (c == 0x5F ? 0x100 : 0), b[p + 2]);
 			p += 3;
 		} else if (c == 0x66)
 			return 0;
@@ -100,7 +100,22 @@ int main(int argc, char **argv)
 		return 1;
 	fclose(f);
 	p = 0x34 + (long)u32(b + 0x34);
-	opld_init(&chip, u32(b + 0x50), rate);
+	if (u32(b + 0x50))
+		opld_init(&chip, u32(b + 0x50), rate);
+	else {
+		/* an OPL3: its channels 18 where its second bank is keyed (EPlay's
+		   choice by the file: vgm.c), else its first nine */
+		long q;
+		int bank2 = 0;
+		opld_init3(&chip, u32(b + 0x5c), rate);
+		for (q = p; q + 2 < n && b[q] != 0x66; ) {
+			unsigned c = b[q];
+			if (c == 0x5F && (b[q + 1] & 0xf0) == 0xb0 && (b[q + 1] & 15) < 9 && (b[q + 2] & 0x20))
+				bank2 = 1;
+			q += c == 0x5E || c == 0x5F || c == 0x5A || c == 0x61 ? 3 : 1;
+		}
+		opld_channels(&chip, bank2 ? 18 : 9);
+	}
 	oplf_init(&dsp);
 	opld_send(&chip, put, &dsp);
 	o = fopen(argv[2], "wb");

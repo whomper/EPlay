@@ -176,7 +176,7 @@ static void init(OPLD *d, unsigned long clock, long rate, int opl3)
 	d->clock = opl3 ? clock / 4 : clock;
 	d->rate = rate;
 	d->outg = OPL_OUTG;
-	d->stepk = (unsigned long)(((2ULL * clock << 16) + 36ULL * (unsigned long)rate) / (72ULL * (unsigned long)rate));
+	d->stepk = (unsigned long)(((2ULL * d->clock << 16) + 36ULL * (unsigned long)rate) / (72ULL * (unsigned long)rate));
 	rate_tables(d);
 	for (c = 0; c < OPL_CH; c++) {
 		for (i = 0; i < 2; i++) {
