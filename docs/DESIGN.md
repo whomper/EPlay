@@ -2214,6 +2214,52 @@ What EPlay needs beyond common's layer:
   the tick reaches holds no trap (its code read from the build), and no FPU instruction (its
   handler saves none).
 
+## Phase 11: VGM on a 68060 without the Falcon's DSP (Erez, 14 Nov 2026: "VGM on 68060 first")
+
+Before the FireBee's VGM. Where a VGM's chip is the DSP's and the Falcon's DSP isn't there or free,
+on a 68060 (not a ColdFire: `_CF_` first), the chips are made on the CPU, ahead, into play.c's
+queue, which plays as a WAV of 16-bit stereo at the output's rate, as MP3 on the CPU does
+(`fill_cmp`: `vp_render` in place of a frame's decoding). `src/vgmcpu.c` runs the file a block at
+a time (32 output samples at most; a block's drums in the 96 of the file's samples VGMDAC holds)
+and makes that block's samples. A file's AY is left out then (the chip plays as it is written, the
+CPU's ahead of it). `VGMCPU=1` in eplay.inf (the rigs', never written) makes it on the CPU though
+the DSP is there (Hatari's can't be taken away). The steps, each released when done:
+
+1. **The SN76489 (done).** `src/sncpu.c`: sn.a56's arithmetic in C, in 32 bits, from sncmd.c's
+   commands; `tests/dspsn` holds it to sn.a56 bit for bit (the same commands at the samples the
+   DSP took them at: 94,207 samples of a tone, the noise, silence). 49,170 Hz on the Falcon.
+2. **The YM2612 (done).** `src/opncpu.c`: the DSP's model (`opnfast.c`) with its commands, its
+   envelopes, the DAC and the Mega Drive's SN76489 as they are, its 24 x 24-bit products (48 bits,
+   which a 68060 makes from 16-bit pieces) from each word's top 16 bits, 16 x 16 into 32. Against
+   Nuked-OPN2 at 24,585 Hz all nine files within the limits, as the DSP's model is (CHAIN's timbre
+   1.4 dB, DETUNE's level -0.5 dB). opnd.c, the 68030's half, feeds it as it feeds the DSP
+   (`opnd_tick`). On Hatari's 68060 at 32 MHz (`OPNCPU.PRG`), the worst case at 24,585 Hz takes
+   715 to 780 ms a second (the DSP's model 9,930): some 38 % of a 66 MHz 68060, 25 % at 100. A
+   Streets of Rage 3 track (kept outside the repo) played 28 s so with no underrun, the queue's
+   least lead 1,053 ms. The tables are dspopn.c's (no copy); the STE's and the FireBee's editions
+   carry none of it.
+3. **The OPL2 and OPL3**, the same way (next).
+4. **The XBIOS's sound** for a 68060 machine with no Atari DMA sound (a Milan's GSXB), and a
+   software AY where there is no YM2149.
+
+## A DSP that stalls while it plays (Erez, 14 Nov 2026)
+
+An https station through the Gateway on the FDI's 44.1 kHz stopped twice in 5 minutes, "The DSP
+stopped answering": each time the DSP had kept up (no granule late, no packet broken), had taken all
+its packets, then made no frame for 2 s and asked for none (HF2 0). Damaged frames don't do it
+(`tests/dspmp3/stream.c`'s `SIMCORRUPT=SEED:N`: five files, twelve seeds, a byte in 100 and in
+1,000 made random; mp3.a56 never stopped). A DSP waiting with nothing to do fits its output's clock
+pausing (the FDI's 44.1 kHz comes from its S/PDIF input), not proven. Now a stall while it plays is
+started again from where it was, once in 20 s (`play_seek`: a file at its place, a station
+connected again; some 4 s for a station, its queue filled first), the FDI's clock measured again
+first (its figures in the log; a clock gone, the Falcon's own); a second within 20 s stops it as
+before. `STALLAT=ms` (the rigs') takes it as stalled there: the play rig's `stall`, stream_test's
+`stall`.
+
+Its Direct connection (https, TLS.OVL) to the same station: the handshake whole, the request sent,
+the connection closed 30 ms later with no answer, twice; the same request from a computer gets the
+station's 302. Common's TLS, the hub's (14 Nov 2026).
+
 ## Next, to propose: a Jellyfin library (Erez, 10 Nov 2026)
 
 After the YM2612 (phase 10's first part), a design for Erez: EPlay browsing and playing a
