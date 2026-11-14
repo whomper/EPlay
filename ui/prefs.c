@@ -32,6 +32,7 @@ static char add_dir[FP_PATH], recent[FP_RECENT][FP_PATH];	/* the Add files dialo
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
+static long stallat;			/* STALLAT=: the rigs' (read, never written). ms: an MP3 on the DSP taken as stalled there, once */
 static int vgmcpu;			/* VGMCPU=: the rigs' (read, never written). 1: on a 68060, a VGM's chips made on the CPU though the DSP is there (phase 11) */
 static int mp3cpu;			/* MP3CPU=: the rigs' (read, never written). 1: on a 68060 with its FPU, MP3 on the CPU (MP3FPU.OVL) though the DSP is there: Hatari's DSP can't be taken away under EmuTOS */
 static int dma8low = 1;		/* DMA8LOW=: the rigs' (read, never written): the TT's or STE's underruns at which a WAV goes on at a lower rate (0: at once) */
@@ -138,6 +139,8 @@ void settings_load(void)
 		dma8low = atoi(v);
 	if (inf_get(inf, inf_n, "MP3CPU", v, sizeof(v)))
 		mp3cpu = v[0] == '1';
+	if (inf_get(inf, inf_n, "STALLAT", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
+		stallat = atol(v);
 	if (inf_get(inf, inf_n, "VGMCPU", v, sizeof(v)))
 		vgmcpu = v[0] == '1';
 	if (inf_get(inf, inf_n, "SHUFFLE", v, sizeof(v)))
@@ -176,6 +179,11 @@ int settings_mp3cpu(void)
 int settings_vgmcpu(void)
 {
 	return vgmcpu;
+}
+
+long settings_stallat(void)
+{
+	return stallat;
 }
 
 int settings_qlate(void)

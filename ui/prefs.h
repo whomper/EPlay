@@ -16,7 +16,8 @@ enum { OUT_AUTO, OUT_FDI, OUT_DSP };
    INF's QUALITY= is read no more). The granules late at High that make
    it Normal: 3, or QLATE= (the play rig's, 0: at once; never written) */
 int settings_mp3cpu(void);	/* MP3CPU=1: the rigs' */
-int settings_vgmcpu(void);	/* VGMCPU=1: the rigs' (a VGM's chips on a 68060's CPU, the DSP there or not) */
+int settings_vgmcpu(void);
+long settings_stallat(void);	/* STALLAT=ms: the rigs' (an MP3 on the DSP taken as stalled there, once) */	/* VGMCPU=1: the rigs' (a VGM's chips on a 68060's CPU, the DSP there or not) */
 int settings_qlate(void);
 /* a VGM on the DSP goes on at a lower rate when its ring's least lead is
    under 256 words, or VGMLOW= (the play rig's; never written) */

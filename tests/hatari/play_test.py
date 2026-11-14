@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), stall, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -125,6 +125,10 @@ CASES["vgmlow"] = ("LOW.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 4410
 # the same for a WAV on the TT's or STE's 8-bit DMA (theirs alone):
 # eplay.inf's DMA8LOW=0 (the rigs') takes the CPU as behind, so a CD's 44.1
 # kHz goes on at 25,033 Hz past its first second, then 12,517
+# (Erez, 14 Nov 2026: a station through the FDI stalled twice) an MP3 on
+# the DSP that stalls (eplay.inf's STALLAT=2000, the rigs': taken as
+# stalled at 2 s) goes on from there, opened again, to its end
+CASES["stall"] = ("STALL.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "128"], 49170, (1000, 1500), 6)
 CASES["wavlow"] = ("LOW.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 50066, (1000, 1500), 4)
 # a real file, never in the repo (a game's music: EPLAY_RIG_VGM names it, a
 # VGM or VGZ kept outside), played for EPLAY_RIG_SECS (20) and quit: does
@@ -192,7 +196,7 @@ CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, 
 # one playing stopped (none left)
 CASES["selall"] = CASES["keys"]
 # the cases' eplay.inf
-INFS = {"vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
+INFS = {"stall": "STALLAT=2000\r\n\r\n", "vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
         "miniwav": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
@@ -859,6 +863,12 @@ def run(work, case, spec):
         time.sleep(0.5)
         if not end:
             return False, m.describe(), played + "; never ended"
+        if case == "stall":
+            lines = [l[4:] for l in open(log, errors="replace").read().split("\n") if l.startswith("LOG ")]
+            again = [l for l in lines if l.startswith("the DSP stalled: started again from")]
+            ok = len(again) == 1 and "Played to the end" in end
+            return ok, m.describe(), "%s\n     %s\n     %s" % (played[len("EPLAY playing: "):], end,
+                                                       again[0] if again else "never started again")
         if case == "wavlow":
             lines = [l[4:] for l in open(log, errors="replace").read().split("\n") if l.startswith("LOG ")]
             why = [l for l in lines if " behind at " in l and "for this track" in l]

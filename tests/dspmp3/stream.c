@@ -17,6 +17,7 @@
  * bit for bit. SIMGAIN=N moves every packet's global_gain by N steps
  * (ReplayGain: louder or quieter). SIMDROP=F:AT:N puts a drop (gapless, PK_DROP) on frame F's
  * packet: after AT of its samples, N left out, the model the same.
+ * SIMCORRUPT=SEED:N makes one byte in N of the file a random one.
  *
  *     stream FILE.MP3 [FRAMES]
  */
@@ -114,6 +115,21 @@ int main(int argc, char **argv)
 	}
 	n = (long)fread(buf, 1, sizeof(buf), f);
 	fclose(f);
+	if (getenv("SIMCORRUPT")) {
+		/* SIMCORRUPT=SEED:N: one byte in N of the file a random one (a
+		   stream damaged on its way: the decoder must go on) */
+		unsigned long seed = 1, every = 1000, x;
+		long k;
+		sscanf(getenv("SIMCORRUPT"), "%lu:%lu", &seed, &every);
+		x = seed * 2654435761UL + 1;
+		for (k = 0; k < n; k++) {
+			x = x * 1103515245UL + 12345UL;
+			if ((x >> 8) % every == 0) {
+				x = x * 1103515245UL + 12345UL;
+				buf[k] = (unsigned char)(x >> 16);
+			}
+		}
+	}
 	sim_start(dsp_mp3_prog);
 	put(6);
 	put(DSP_MP3_PROG_EXT_AT);

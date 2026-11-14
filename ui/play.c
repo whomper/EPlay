@@ -2380,6 +2380,13 @@ int play_step(int ms)
 	}
 	if (xs && s_started && !snd_playing() && (snd_written() >= out_rate / 8 || s_end))
 		snd_play();		/* (the DSP listening: its first frames not lost) */
+	if (dsp && s_started && settings_stallat() > 0 && play_ms() >= settings_stallat()) {
+		static int done;
+		if (!done) {
+			done = 1;
+			dspmp3_stall_test();
+		}
+	}
 	if (dsp && s_started && dspmp3_stream_stalled(tos_hz200()))
 		t_failed = 1;
 	if (t_failed) {
@@ -2397,8 +2404,31 @@ int play_step(int ms)
 		elog("the stream: %s", play_stream_note());
 		if (what == 4) {
 			char note[160];
+			static unsigned long last_again;
+			unsigned long now = tos_hz200();
 			dspmp3_stall_note(note, sizeof(note));
 			elog("the stream then: %s", note);
+			/* (Erez, 14 Nov 2026: a station through the FDI stalled twice
+			   in 5 minutes, the DSP waiting, its packets all taken) once in
+			   20 s, from where it was: a file at its place, a station
+			   connected again; the FDI's clock measured again first (a
+			   clock gone, the Falcon's), its figures in the log */
+			if (!last_again || now - last_again > 20UL * 200) {
+				char err[160];
+				long at = play_ms();
+				last_again = now;
+				if (s_ext)
+					snd_ext_rate = 0;
+				elog("the DSP stalled: started again from %ld ms%s", at,
+				     s_ext ? ", the external clock measured again" : "");
+				t_failed = 0;
+				if (play_seek(at, err, sizeof(err))) {
+					elog_save();
+					play_note_new = 1;
+					return 1;
+				}
+				elog("%s", err);
+			}
 		}
 
 		play_stop();

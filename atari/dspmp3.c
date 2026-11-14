@@ -470,6 +470,11 @@ static long stall_snap(void)
 	return 0;
 }
 
+void dspmp3_stall_test(void)
+{
+	s_last -= 401;		/* (the rigs' STALLAT=: as if no frame for 2 s) */
+}
+
 int dspmp3_stream_stalled(unsigned long hz)
 {
 	if (!failed && hz - s_last > 400) {

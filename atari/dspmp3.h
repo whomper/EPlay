@@ -54,7 +54,8 @@ long dspmp3_stream_polls(void);	/* the DSP's polls in 256 of the port's slots (-
 long dspmp3_stream_fps1000(void);	/* frames a second x 1000, as they came (0: too few yet) */
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg);
 long dspmp3_stream_resyncs(void);	/* packets found broken (a word lost or doubled): the stream taken up again */
-int dspmp3_stream_stalled(unsigned long hz);	/* GEM: no frame for 2 s (hz: the 200 Hz clock) */
+int dspmp3_stream_stalled(unsigned long hz);
+void dspmp3_stall_test(void);	/* (the rigs': the next check finds it stalled) */	/* GEM: no frame for 2 s (hz: the 200 Hz clock) */
 void dspmp3_stall_note(char *b, int n);	/* what both sides were doing then, for the log */
 /* where: what 1 sending a packet, 2 reading a frame, 3 loading; the word
    it waited for, of how many; the host port's status then. 4: no frame

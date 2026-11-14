@@ -15,6 +15,8 @@ Cases:
             titles the station sends shown (EPLAY title)
   drop      the station closes the connection after 6 s: EPlay connects
             again and the music goes on
+  stall     (Erez, 14 Nov 2026) the DSP taken as stalled at 4 s (eplay.inf's
+            STALLAT=, the rigs'): EPlay connects again and the music goes on
   pls       a .PLS station list behind a redirect (302): its first station
             plays
   chunked   the station answers HTTP/1.1 with Transfer-Encoding: chunked (as
@@ -74,7 +76,7 @@ sys.path.insert(0, HERE)
 import machines  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
+CASES = ["live", "drop", "stall", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
          "find", "m3u"]
 METAINT = 8192
 KBPS = 128
@@ -425,6 +427,9 @@ def run(work, case, spec):
     # (the window at 1.15's first place: the picture cases look for the
     # art there, and 1.16 opens a first start at the desk's height)
     inf = os.path.join(hd, "eplay.inf")
+    if case == "stall":
+        with open(inf, "w", newline="") as fh:
+            fh.write("STALLAT=4000\r\n")
     old_inf = open(inf, newline="").read() if os.path.exists(inf) else ""
     if "WINDOW=" not in old_inf:
         with open(inf, "w", newline="") as fh:
@@ -535,7 +540,7 @@ def run(work, case, spec):
         played = wait_line(log, said, 90)
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
-        time.sleep(14 if case == "drop" else 10)
+        time.sleep(14 if case in ("drop", "stall") else 10)
         if case == "logo":
             wait_line(log, lambda l: "album art:" in l or ("logo" in l and "after" in l), 120)
             time.sleep(1)
@@ -553,6 +558,10 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "drop":
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
+        elif case == "stall":
+            again = [l[4:] for l in text.split("\n") if l.startswith("LOG the DSP stalled: started again")]
+            note += "; " + (again[0] if again else "never started again")
+            ok = ok and bool(again) and st.conns >= 2 and "DSP stopped answering." not in text
         elif case == "find":
             found = [l for l in text.split("\n") if "Find station:" in l]
             note += "; " + " | ".join(l[4:] for l in found)
