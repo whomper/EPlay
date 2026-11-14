@@ -80,13 +80,15 @@ $(B)/crt0_64k.o: $(A)/crt0.S | $(B)
 .PHONY: opncpu
 opncpu: $(B)/OPNCPU.PRG
 P060O   := $(P060) -Iinc060 -I../../src -I../../common/src
-$(B)/OPNCPU.elf: $(B)/crt0_64k.o $(B)/opncpu.o $(B)/opnfast60.o $(B)/opnd60.o $(B)/egmath60.o $(B)/sncmd60.o $(B)/div6460.o \
+$(B)/OPNCPU.elf: $(B)/crt0_64k.o $(B)/opncpu.o $(B)/opnfast60.o $(B)/opncpuc60.o $(B)/opnd60.o $(B)/egmath60.o $(B)/sncmd60.o $(B)/div6460.o \
 		$(B)/tos.o $(B)/libc.o $(B)/nf.o
 	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
 	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
 $(B)/opncpu.o: opncpu.c ../../build/opntab.h | $(B)
 	$(CC) $(P060O) -c -o $@ $<
 $(B)/opnfast60.o: ../../src/opnfast.c | $(B)
+	$(CC) $(P060O) -c -o $@ $<
+$(B)/opncpuc60.o: ../../src/opncpu.c | $(B)
 	$(CC) $(P060O) -c -o $@ $<
 $(B)/opnd60.o: ../../src/opnd.c | $(B)
 	$(CC) $(P060O) -c -o $@ $<

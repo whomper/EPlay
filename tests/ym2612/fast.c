@@ -14,6 +14,12 @@
 #include "vgm.h"
 #include "opnd.h"
 #include "opnfast.h"
+#ifdef OPN_CPU
+/* (cpu: the same with the CPU's model, src/opncpu.c, phase 11) */
+#include "opncpu.h"
+#define opnf_word opnc_word
+#define opnf_run opnc_run
+#endif
 
 static OPND chip;
 static OPNF dsp;
@@ -81,6 +87,13 @@ int main(int argc, char **argv)
 	fclose(f);
 	opnd_init(&chip, h.ym2612_clock, rate);
 	opnf_init(&dsp);
+#ifdef OPN_CPU
+	{
+		static OPNF t;
+		t = dsp;
+		opnc_init(&dsp, (const unsigned long *)t.sin_tab, (const unsigned long *)t.gain_tab);
+	}
+#endif
 	opnd_send_drate(&chip, put, &dsp);
 	opnd_send(&chip, put, &dsp);
 	vgm_begin(&r, b, n, &h, 0, 0, 0);

@@ -13,6 +13,7 @@
 #include "tos.h"
 #include "opnd.h"
 #include "opnfast.h"
+#include "opncpu.h"
 #include "sncmd.h"
 #include "opntab.h"
 
@@ -38,16 +39,29 @@ static void put(void *u, long w)
 	opnf_word(&model, w);
 }
 
+static int use_cpu;		/* (phase 11: src/opncpu.c, the CPU's model, in place of the DSP's) */
+
+static void put_c(void *u, long w)
+{
+	(void)u;
+	opnc_word(&model, w);
+}
+
 static long run(int alg)
 {
 	int c, k, i;
 	u32 t0;
-	opnf_init(&model);
-	for (i = 0; i < 1024; i++)
-		model.sin_tab[i] = (long)((opn_sin[i] ^ 0x800000UL) - 0x800000UL);
-	for (i = 0; i < OPNF_GAINS; i++)
-		model.gain_tab[i] = (long)opn_gain[i];
-	opnf_word(&model, 12);		/* RESET */
+	if (use_cpu) {
+		opnc_init(&model, opn_sin, opn_gain);
+		opnc_word(&model, 12);
+	} else {
+		opnf_init(&model);
+		for (i = 0; i < 1024; i++)
+			model.sin_tab[i] = (long)((opn_sin[i] ^ 0x800000UL) - 0x800000UL);
+		for (i = 0; i < OPNF_GAINS; i++)
+			model.gain_tab[i] = (long)opn_gain[i];
+		opnf_word(&model, 12);		/* RESET */
+	}
 	opnd_init(&chip, 7670453, RATE);
 	for (c = 0; c < 6; c++) {
 		int port = c / 3, ch = c % 3;
@@ -66,8 +80,8 @@ static long run(int alg)
 		opnd_write(&chip, 0, 0x28, 0xf0 | (port ? 4 : 0) | ch);
 	}
 	opnd_write(&chip, 0, 0x22, 0x0f);
-	opnd_send(&chip, put, 0);
-	sncmd_init(&psg, 3579545, RATE, 9, 16, OPNC_SN, 1, put, 0);
+	opnd_send(&chip, use_cpu ? put_c : put, 0);
+	sncmd_init(&psg, 3579545, RATE, 9, 16, OPNC_SN, 1, use_cpu ? put_c : put, 0);
 	{
 		static const unsigned char b[] = { 0x8e, 0x0f, 0x90, 0xa5, 0x0c, 0xb0, 0xc3, 0x08, 0xd0, 0xe7, 0xf0 };
 		unsigned j;
@@ -75,8 +89,12 @@ static long run(int alg)
 			sncmd_write(&psg, b[j]);
 	}
 	t0 = tos_ms();
-	for (i = 0; i < RATE; i += 512)
-		opnf_run(&model, out, 512);
+	for (i = 0; i < RATE; i += 512) {
+		if (use_cpu)
+			opnc_run(&model, out, 512);
+		else
+			opnf_run(&model, out, 512);
+	}
 	return (long)(tos_ms() - t0);
 }
 
@@ -85,12 +103,15 @@ extern int div64_cpu60;		/* atari/div64.c */
 int main(void)
 {
 	char line[160];
-	long a0, a7;
+	long a0, a7, c0, c7;
 	div64_cpu60 = 1;		/* (as EPlay sets it on a 68060, from _CPU) */
 	a0 = run(0);
 	a7 = run(7);
+	use_cpu = 1;
+	c0 = run(0);
+	c7 = run(7);
 	snprintf(line, sizeof(line), "OPNCPU the YM2612's model, a second at %ld Hz, the worst case: algorithm 0 %ld ms, "
-		 "algorithm 7 %ld ms\n", RATE, a0, a7);
+		 "algorithm 7 %ld ms; the CPU's (opncpu.c): %ld ms, %ld ms\n", RATE, a0, a7, c0, c7);
 	nf_debug(line);
 	return 0;
 }
