@@ -47,7 +47,7 @@ void opnf_init(OPNF *f)
 	/* the LFO's step s: the tremolo's triangle x 2, the vibrato's x 2^15 */
 	for (i = 0; i < 128; i++) {
 		f->triw[i] = 2 * (i < 64 ? i * 2 : (127 - i) * 2);
-		f->pmw[i] = W24((long)(i < 32 ? i * 4 : i < 96 ? (64 - i) * 4 : (i - 128) * 4) << 15);
+		f->pmw[i] = W24((long)(i < 32 ? i * 4 : i < 96 ? (64 - i) * 4 : (i - 128) * 4) * 32768L);
 	}
 	for (c = 0; c < 6; c++)
 		for (k = 0; k < 4; k++) {

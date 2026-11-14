@@ -399,7 +399,7 @@ int main(int argc, char **argv)
 		put32(0x18, 44100 + 4410);
 		same_n("cpu head", vgm_head(f, fn, &h), 1);
 		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
-		vgmcpu_init(&cpu, &h, 49170);
+		vgmcpu_init(&cpu, &h, 49170, 0, 0);
 		for (;;) {
 			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
 			got += m;
@@ -423,6 +423,75 @@ int main(int argc, char **argv)
 		for (k = 49170 + 200, nz = 0; k < got; k++)
 			nz += lr[2 * k] != 0;
 		same_n("cpu silent after", nz, 0);
+	}
+
+	/* the YM2612 made on the CPU (opncpu.c, through vgmcpu.c): algorithm
+	   7's operator 4 alone at full level, F-number 1230, block 5 at the
+	   NTSC clock (999.7 Hz), a second at 24,585 Hz, then keyed off */
+	{
+		static VGMCPU cpu;
+		static OPNF tabs;
+		static short lr[2 * 40000];
+		static const unsigned char regs[][2] = {
+			{ 0x22, 0 }, { 0x27, 0 }, { 0x2b, 0 }, { 0xb0, 0x07 }, { 0xb4, 0xc0 } };
+		static const unsigned char slots[4][2] = { { 0x00, 127 }, { 0x04, 127 }, { 0x08, 127 }, { 0x0c, 0 } };
+		long got = 0, k, cross = 0, nz = 0;
+		double sum = 0;
+		unsigned i;
+		memset(f, 0, sizeof(f));
+		memcpy(f, "Vgm ", 4);
+		put32(0x08, 0x151);
+		put32(0x34, 0x100 - 0x34);
+		put32(0x2c, 7670453);
+		fn = 0x100;
+		for (i = 0; i < sizeof(regs) / sizeof(regs[0]); i++) {
+			b(0x52); b(regs[i][0]); b(regs[i][1]);
+		}
+		for (i = 0; i < 4; i++) {
+			int sl = slots[i][0];
+			b(0x52); b(0x30 + sl); b(0x01);
+			b(0x52); b(0x40 + sl); b(slots[i][1]);
+			b(0x52); b(0x50 + sl); b(0x1f);
+			b(0x52); b(0x60 + sl); b(0);
+			b(0x52); b(0x70 + sl); b(0);
+			b(0x52); b(0x80 + sl); b(0x0f);
+		}
+		b(0x52); b(0xa4); b((5 << 3) | (1230 >> 8));
+		b(0x52); b(0xa0); b(1230 & 255);
+		b(0x52); b(0x28); b(0xf0);
+		b(0x61); b(44100 & 255); b(44100 >> 8);
+		b(0x52); b(0x28); b(0x00);		/* (keyed off) */
+		b(0x61); b(8820 & 255); b(8820 >> 8);
+		b(0x66);
+		put32(0x04, (unsigned long)(fn - 4));
+		put32(0x18, 44100 + 8820);
+		same_n("opn cpu head", vgm_head(f, fn, &h), 1);
+		opnf_init(&tabs);	/* (its tables: build/opntab.h's on the Atari) */
+		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
+		vgmcpu_init(&cpu, &h, 24585, (const unsigned long *)tabs.sin_tab, (const unsigned long *)tabs.gain_tab);
+		vgmcpu_attach(&cpu, &r);
+		for (;;) {
+			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
+			got += m;
+			if (m < 1000 || got > 38000)
+				break;
+		}
+		same_n("opn cpu frames (1.2 s at 24,585 Hz)", got > 29400 && got < 29600, 1);
+		for (k = 2000; k < 24585; k++) {
+			if ((lr[2 * k] >= 0) != (lr[2 * k - 2] >= 0))
+				cross++;
+			sum += (double)lr[2 * k] * lr[2 * k];
+			nz += lr[2 * k] != lr[2 * k + 1];
+		}
+		{
+			double hz = cross / 2.0 * 24585 / (24585 - 2000), rms = sqrt(sum / (24585 - 2000));
+			same_n("opn cpu tone (999.7 Hz, within 3)", fabs(hz - 999.7) < 3, 1);
+			same_n("opn cpu level (a channel at full: some 4,000 rms)", rms > 3000 && rms < 6000, 1);
+			same_n("opn cpu left and right the same", nz, 0);
+		}
+		for (k = 24585 + 6000, nz = 0; k < got; k++)
+			nz += lr[2 * k] != 0;
+		same_n("opn cpu silent once released", nz, 0);
 	}
 
 	/* not a VGM */

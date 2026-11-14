@@ -236,6 +236,12 @@ long dspopn_synth(void)
 	return synth;
 }
 
+/* (phase 11: the CPU's YM2612 takes the same tables, not a copy of them) */
+const unsigned long *dspopn_tab(int which)
+{
+	return which ? opn_gain : opn_sin;
+}
+
 VGMDAC *dspopn_dac(void)
 {
 	return on ? &chip.dq : 0;

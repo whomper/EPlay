@@ -22,6 +22,8 @@ void dspopn_sn(int byte);	/* (the tick's, or before it runs) a byte to the SN764
 int dspopn_psg(void);		/* the SN76489 plays with it */
 /* the DAC over a tick, for vgm_run to put the drums' samples in (0: not on) */
 VGMDAC *dspopn_dac(void);
+/* its tables (opntab.h's: 0 the sine, 1 the gains), for the CPU's model */
+const unsigned long *dspopn_tab(int which);
 void dspopn_write(int port, int reg, int val);	/* (the tick's, or before it runs) a register */
 /* (from the tick: supervisor mode) n of the file's samples run (0 at its
    end; at: its place, for the DAC's samples), then what changed sent; 0

@@ -65,6 +65,7 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 }
 void dspopn_sn(int byte) { (void)byte; }
 int dspopn_psg(void) { return 0; }
+const unsigned long *dspopn_tab(int which) { (void)which; return NULL; }
 VGMDAC *dspopn_dac(void) { return NULL; }
 void dspopn_write(int port, int reg, int val) { (void)port; (void)reg; (void)val; }
 int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long n) { (void)at; return run(v, n); }

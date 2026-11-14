@@ -45,7 +45,7 @@ def main():
         while time.time() < end and not got and p.poll() is None:
             time.sleep(2)
             for line in open(log, errors="replace"):
-                if line.startswith("MP3CPU"):
+                if line.startswith(("MP3CPU", "OPNCPU")):	# (OPNCPU.PRG: the YM2612's)
                     got = line.strip()
     finally:
         p.kill()

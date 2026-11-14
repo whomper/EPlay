@@ -44,13 +44,13 @@ void opnc_init(OPNF *f, const unsigned long *sin24, const unsigned long *gain24)
 	int i, c, k;
 	memset(f, 0, sizeof(*f));
 	for (i = 0; i < 1024; i++)
-		f->sin_tab[i] = S24(sin24[i]);
+		f->sin_tab[i] = S24(sin24[i]) >> 8;	/* (its top 16 bits: the products' operand) */
 	for (i = 0; i < OPNF_GAINS; i++)
 		f->gain_tab[i] = (long)gain24[i];
 	/* the LFO's step s: the tremolo's triangle x 2, the vibrato's x 2^15 */
 	for (i = 0; i < 128; i++) {
 		f->triw[i] = 2 * (i < 64 ? i * 2 : (127 - i) * 2);
-		f->pmw[i] = W24((long)(i < 32 ? i * 4 : i < 96 ? (64 - i) * 4 : (i - 128) * 4) << 15);
+		f->pmw[i] = W24((long)(i < 32 ? i * 4 : i < 96 ? (64 - i) * 4 : (i - 128) * 4) * 32768L);
 	}
 	for (c = 0; c < 6; c++)
 		for (k = 0; k < 4; k++) {
@@ -289,70 +289,79 @@ static void update(OPNF *f)
 /* ---- a sample */
 
 /* an operator: its phase on (stored), its modulation added, the index
-   (mpy by $1000: bits 20-11, signed; the table's 8 copies take it), the
-   sine times its gain */
-static acc_t op_calc(OPNF *f, OPNF_OP *op, long mod1, long mod2, acc_t extra)
-{
-	acc_t b = S24(op->phase) + S24(op->step_e);
-	long idx;
-	op->phase = W24(b);
-	b += S24(mod1) + S24(mod2) + extra;
-	idx = S24(b) >> 11;
-	return prod(f->sin_tab[idx & 1023], op->gain);
-}
+   (bits 20-11), the sine (its top 16 bits, sin_tab's here: opnc_init)
+   times the gain's top 16 bits; the same arithmetic as prod's, without
+   the 24-bit words' sign extensions where the values are in range */
+#define OPC(op, m) \
+	(op_b = (op)->phase + (op)->step_e, (op)->phase = op_b & 0xffffff, \
+	 (acc_t)((f->sin_tab[((op_b + (m)) >> 11) & 1023] * ((op)->gain >> 8)) >> 7))
+#define LIMV(v) ((v) > 8388607L ? 8388607L : (v) < -8388608L ? -8388608L : (v))
 
 static long ch_calc(OPNF *f, OPNF_CH *ch)
 {
 	OPNF_OP *o = ch->op;
-	acc_t a, p1, p2, p3;
+	acc_t a, p1, op_b;
 	long o1, o2, o3;
-	/* operator 1: its feedback, its last two outputs x the factor (mac) */
-	p1 = op_calc(f, &o[0], 0, 0, prod(ch->o1, ch->kf) + prod(ch->o1p, ch->kf));
+	/* operator 1: its feedback, its last two outputs x the factor */
+	{
+		long kf = S24(ch->kf) >> 8;
+		acc_t fb = (((ch->o1 >> 8) * kf) >> 7) + (((ch->o1p >> 8) * kf) >> 7);
+		p1 = OPC(&o[0], fb);
+	}
 	ch->o1p = ch->o1;
-	o1 = ch->o1 = lim(p1);
+	o1 = ch->o1 = LIMV(p1);
 	switch (ch->alg) {
 	case 0:
-		o2 = lim(op_calc(f, &o[1], o1, 0, 0));
-		o3 = lim(op_calc(f, &o[2], o2, 0, 0));
-		a = op_calc(f, &o[3], o3, 0, 0);
+		o2 = OPC(&o[1], o1);
+		o2 = LIMV(o2);
+		o3 = OPC(&o[2], o2);
+		o3 = LIMV(o3);
+		a = OPC(&o[3], o3);
 		break;
 	case 1:
-		o2 = lim(op_calc(f, &o[1], 0, 0, 0));
-		o3 = lim(op_calc(f, &o[2], o1, o2, 0));
-		a = op_calc(f, &o[3], o3, 0, 0);
+		o2 = OPC(&o[1], 0);
+		o2 = LIMV(o2);
+		o3 = OPC(&o[2], o1 + o2);
+		o3 = LIMV(o3);
+		a = OPC(&o[3], o3);
 		break;
 	case 2:
-		o2 = lim(op_calc(f, &o[1], 0, 0, 0));
-		o3 = lim(op_calc(f, &o[2], o2, 0, 0));
-		a = op_calc(f, &o[3], o1, o3, 0);
+		o2 = OPC(&o[1], 0);
+		o2 = LIMV(o2);
+		o3 = OPC(&o[2], o2);
+		o3 = LIMV(o3);
+		a = OPC(&o[3], o1 + o3);
 		break;
 	case 3:
-		o2 = lim(op_calc(f, &o[1], o1, 0, 0));
-		o3 = lim(op_calc(f, &o[2], 0, 0, 0));
-		a = op_calc(f, &o[3], o2, o3, 0);
+		o2 = OPC(&o[1], o1);
+		o2 = LIMV(o2);
+		o3 = OPC(&o[2], 0);
+		o3 = LIMV(o3);
+		a = OPC(&o[3], o2 + o3);
 		break;
 	case 4:
-		a = op_calc(f, &o[1], o1, 0, 0);
-		o3 = lim(op_calc(f, &o[2], 0, 0, 0));
-		a += op_calc(f, &o[3], o3, 0, 0);
+		a = OPC(&o[1], o1);
+		o3 = OPC(&o[2], 0);
+		o3 = LIMV(o3);
+		a += OPC(&o[3], o3);
 		break;
 	case 5:
-		a = op_calc(f, &o[1], o1, 0, 0);
-		a += op_calc(f, &o[2], o1, 0, 0);
-		a += op_calc(f, &o[3], o1, 0, 0);
+		a = OPC(&o[1], o1);
+		a += OPC(&o[2], o1);
+		a += OPC(&o[3], o1);
 		break;
 	case 6:
-		a = op_calc(f, &o[1], o1, 0, 0);
-		a += op_calc(f, &o[2], 0, 0, 0);
-		a += op_calc(f, &o[3], 0, 0, 0);
+		a = OPC(&o[1], o1);
+		a += OPC(&o[2], 0);
+		a += OPC(&o[3], 0);
 		break;
 	default:
-		p2 = op_calc(f, &o[1], 0, 0, 0);
-		p3 = op_calc(f, &o[2], 0, 0, 0);
-		a = p1 + p2 + p3 + op_calc(f, &o[3], 0, 0, 0);
+		a = p1 + OPC(&o[1], 0);
+		a += OPC(&o[2], 0);
+		a += OPC(&o[3], 0);
 		break;
 	}
-	return lim(a);
+	return LIMV(a);
 }
 
 /* the SN76489's sample (sn.a56's sample, its words as there) */
@@ -406,15 +415,17 @@ void opnc_words(OPNF *f, long *lr, int n)
 			if (c == 5 && f->dac_on)
 				v = dac_next(f);
 			else if (!ch->live)
-				v = 0;
+				continue;
 			else
 				v = ch_calc(f, ch);
-			if (c == 5 && f->sn_on)
-				sn = sn_sample(f);	/* (made after the channels, before the mix) */
-			l += prod(v, ch->pl);
-			r += prod(v, ch->pr);
+			if (v) {
+				long v16 = v >> 8;
+				l += (v16 * (S24(ch->pl) >> 8)) >> 7;
+				r += (v16 * (S24(ch->pr) >> 8)) >> 7;
+			}
 		}
-		/* (added at the accumulators' top word, as opn.a56's add) */
+		if (f->sn_on)
+			sn = sn_sample(f);	/* (made after the channels, before the mix) */
 		l += sn;
 		r += sn;
 		lr[2 * k] = W24(lim(l));
@@ -424,13 +435,15 @@ void opnc_words(OPNF *f, long *lr, int n)
 
 void opnc_run(OPNF *f, short *out, int n)
 {
-	int k, j;
-	for (k = 0; k < n; k++) {
-		long lr[2];
-		opnc_words(f, lr, 1);
-		for (j = 0; j < 2; j++) {
-			long v = (S24(lr[j]) >> 8) + out[2 * k + j];
-			out[2 * k + j] = (short)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+	long lr[2 * 64];
+	while (n > 0) {
+		int m = n < 64 ? n : 64, k;
+		opnc_words(f, lr, m);
+		for (k = 0; k < 2 * m; k++) {
+			long v = (S24(lr[k]) >> 8) + out[k];
+			out[k] = (short)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
 		}
+		out += 2 * m;
+		n -= m;
 	}
 }
