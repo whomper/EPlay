@@ -14,9 +14,10 @@
 
 /* the DSP locked, reset, loaded and sounding (silent until written): clock
    the chip's (Hz); sn_clock the Mega Drive's SN76489's (0: none), sn_fb and
-   sn_w its noise's taps and register's bits (the VGM header's). 0 with
-   why: no DSP, another program has it, it didn't answer */
-int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, const char **why);
+   sn_w its noise's taps and register's bits (the VGM header's); want a
+   rate lower than the most (0: the most; else the Falcon's clock at it).
+   0 with why: no DSP, another program has it, it didn't answer */
+int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, long want, const char **why);
 void dspopn_sn(int byte);	/* (the tick's, or before it runs) a byte to the SN76489 */
 int dspopn_psg(void);		/* the SN76489 plays with it */
 /* the DAC over a tick, for vgm_run to put the drums' samples in (0: not on) */
@@ -33,5 +34,6 @@ int dspopn_ext(void);		/* 1: on the external clock (the FDI) */
 long dspopn_rate(void);		/* the SSI's rate */
 long dspopn_synth(void);	/* the rate the chip is made at (half the SSI's at the FDI's) */
 void dspopn_term(void);		/* (supervisor: term.c) */
+long dspopn_least(void);	/* the DSP's ring's least lead since PLAY (words), as the tick last heard; -1 not yet */
 
 #endif

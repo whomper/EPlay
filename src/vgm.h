@@ -14,8 +14,9 @@
  *	  the Atari's 2 MHz;
  *	- the SN76489 (Master System, Game Gear, BBC Micro), its bytes as
  *	  they are (for the DSP);
- *	- the YM2612 (the Mega Drive) and the YM3812 (OPL2: AdLib and Sound
- *	  Blaster music, MSX), their registers (for the DSP).
+ *	- the YM2612 (the Mega Drive), the YM3812 (OPL2: AdLib and Sound
+ *	  Blaster music, MSX) and the YMF262 (OPL3: the Sound Blaster Pro 2
+ *	  and 16's), their registers (for the DSP).
  *
  * A file with a loop plays it once more, the last 4 s fading out (the
  * AY's volumes turned down; one with the envelope on is left as it is),
@@ -35,7 +36,7 @@ typedef struct {
 	long total;		/* samples, the whole file once */
 	long loop_samples;	/* the loop's */
 	long gd3_at;		/* 0: none */
-	unsigned long sn_clock, ay_clock, ym2612_clock, ym3812_clock;	/* 0: not used (the second chip's bit left out) */
+	unsigned long sn_clock, ay_clock, ym2612_clock, ym3812_clock, ymf262_clock;	/* 0: not used (the second chip's bit left out) */
 	int ay_type;		/* 0 AY8910 ... 0x10 YM2149 (the header's) */
 	int sn_fb, sn_w;	/* the SN76489's noise taps and register width (0: the Master System's) */
 	int other;		/* another chip is used (one EPlay doesn't play): its clock is set */
@@ -49,6 +50,9 @@ int vgm_head_of(const unsigned char *b, long n, long size, VGMHEAD *h);
 /* the GD3 tag: the track's name, the game's, the composer's (English,
    else the other), in the Atari character set; "" where none */
 void vgm_gd3(const unsigned char *b, long n, const VGMHEAD *h, char *title, char *album, char *artist, int len);
+/* a YMF262's file keys a channel of its second bank (in its first n
+   bytes): 18 channels to make, not 9 */
+int vgm_opl3_bank2(const unsigned char *b, long n, const VGMHEAD *h);
 /* how long it plays, in samples: once, and the loop once more */
 long vgm_length(const VGMHEAD *h);
 
@@ -57,8 +61,8 @@ typedef void (*VGM_SN)(void *u, int val);
 /* the YM2612 (phase 10): a register of port 0 or 1 written; reg $2A of
    port 0 is its DAC's sample (the drums), from the file's data block */
 typedef void (*VGM_OPN)(void *u, int port, int reg, int val);
-/* the YM3812 (phase 10, step 7): a register written (port 0; the YMF262's
-   second for OPL3, later) */
+/* the YM3812 (phase 10, step 7): a register written (port 0); the YMF262's
+   of port 0 or 1 (its second bank) */
 typedef void (*VGM_OPL)(void *u, int port, int reg, int val);
 
 /* the YM2612's DAC over a tick (opnd_tick's): its writes, each its place
@@ -123,7 +127,8 @@ typedef struct {
 	long waits;		/* (the runs that waited for it: the log's) */
 	unsigned char opn[2][256];	/* the YM2612's registers as written (for a seek) */
 	unsigned char opn_key[8];	/* each channel's key on/off byte ($28's), as written */
-	unsigned char opl[256];		/* the YM3812's registers as written (for a seek) */
+	unsigned char opl[512];		/* the YM3812's registers (the YMF262's two ports') as written (for a seek) */
+	int opl3;		/* the YMF262's commands played (0x5E, 0x5F), not the YM3812's (0x5A) */
 	long pcm_at, pcm_len;	/* the data block of the YM2612's samples (type 0): in b, its bytes */
 	long pcm_pos;		/* the next of them (the 0x8n commands, 0xE0 sets it) */
 	void *u;

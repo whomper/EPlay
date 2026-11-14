@@ -1220,6 +1220,7 @@ int play_open(const char *path, char *err, int n)
 	if (path != cur_path) {
 		snprintf(cur_path, sizeof(cur_path), "%s", path);
 		q_normal = 0;		/* (a file starts at High; a seek or Play keeps its own) */
+		vp_new_track();		/* (a VGM at its most: vp_lower) */
 	}
 	base_ms = 0;
 	if (!fbuf) {
@@ -1925,6 +1926,7 @@ static void chain_check(void)
 	chain_asked = 0;
 	chain_heard = 1;
 	q_normal = 0;
+	vp_new_track();
 	elog("gapless: %s heard after %ld ms of the queue", play_name, play_ms());
 }
 
@@ -2295,6 +2297,16 @@ int play_step(int ms)
 		if (st == 2) {
 			vp_tags(&play_tags);
 			play_tags_late = 1;	/* (main.c: the list's row again) */
+			return 1;
+		}
+		if (vp_lower()) {
+			/* (the DSP behind, or the OPL3's second bank keyed: opened
+			   again from here, a moment's break, as an MP3's Normal) */
+			char err[160];
+			if (!play_seek(play_ms(), err, sizeof(err)))
+				elog("%s", err);
+			play_via = vp_via();
+			play_note_new = 1;
 			return 1;
 		}
 		if (vp_ended()) {

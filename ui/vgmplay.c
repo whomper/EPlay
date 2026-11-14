@@ -2,7 +2,7 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * vgmplay.c - a VGM or VGZ file played on the YM2149, the DSP's SN76489,
- * the DSP's YM2612 or the DSP's YM3812 (vgmplay.h).
+ * the DSP's YM2612 or the DSP's YM3812 or YMF262 (vgmplay.h).
  */
 #include <stdio.h>
 #include <string.h>
@@ -18,6 +18,7 @@
 #include "feed.h"
 #include "snd.h"
 #include "elog.h"
+#include "prefs.h"
 
 /* the file's samples a tick, Q16: 44,100 / (2,457,600 / 16 / 154); the
    YM2612's tick 500 times a second, 44,100 / (2,457,600 / 64 / 77): its
@@ -35,6 +36,13 @@ static unsigned long acc;
 static volatile int ended;
 static volatile int att_due = -1;	/* the volume's steps for the tick to take (GEM can't reach the chip) */
 static int playing, open_, use_ay, use_sn, use_opn, use_opl;
+/* where the DSP can't keep up, a lower rate for the rest of the track
+   (Erez, 14 Nov 2026): its level (0 the most, then each the next of the
+   Falcon's rates down), and an OPL3's second bank keyed where the start
+   (OPL_LOOK) didn't: both for this track only (vp_new_track) */
+static int lvl, want18, cur_nch;
+static const long lv_rate[2][4] = { { 0, 19668, 16390, 12292 }, { 0, 12292, 9834, 0 } };
+#define OPL_LOOK (64L * 1024)	/* an OPL3 file's start looked through for its second bank (a stock Falcon: 1.4 s a MB) */
 
 static void *take(long n)
 {
@@ -228,6 +236,36 @@ int vp_on(void)
 	return open_;
 }
 
+void vp_new_track(void)
+{
+	lvl = 0;
+	want18 = 0;
+}
+
+int vp_lower(void)
+{
+	long least, next;
+	if (!playing || ended || !(use_opl || use_opn))
+		return 0;
+	if (use_opl && cur_nch <= 9 && dspopl_late2()) {
+		want18 = 1;
+		elog("VGM: the YMF262's second bank keyed at %ld ms: 18 channels from there", vp_ms());
+		return 1;
+	}
+	/* (a second into this play at least: the ring has filled; on the
+	   FDI's clock the DSP has the time, and the FDI stays) */
+	if (t_n < 500 || (use_opl ? dspopl_ext() : dspopn_ext()))
+		return 0;
+	least = use_opl ? dspopl_least() : dspopn_least();
+	next = lvl < 3 ? lv_rate[use_opl && cur_nch > 9][lvl + 1] : 0;
+	if (least < 0 || least >= settings_vgmlow() || !next)
+		return 0;
+	elog("VGM: the DSP behind at %ld Hz (its ring's least lead %ld words): %ld Hz from %ld ms, for this track",
+	     use_opl ? dspopl_synth() : dspopn_synth(), least, next, vp_ms());
+	lvl++;
+	return 1;
+}
+
 static void chip_name(char *s, int n, const char *what, unsigned long clock)
 {
 	snprintf(s, (size_t)n, "%s  %lu.%02lu MHz", what, clock / 1000000UL, clock % 1000000UL / 10000UL);
@@ -342,15 +380,16 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		vp_stop();
 		return 0;
 	}
-	elog("VGM %lx.%02lx: %ld bytes; AY %lu Hz (type $%02X), SN76489 %lu Hz, YM2612 %lu Hz, YM3812 %lu Hz%s; %ld "
-	     "samples, loop %ld from %ld", h.version >> 8, h.version & 0xff, mem_n, h.ay_clock, h.ay_type, h.sn_clock,
-	     h.ym2612_clock, h.ym3812_clock, h.other ? ", other chips" : "", h.total, h.loop_samples, h.loop_at);
+	elog("VGM %lx.%02lx: %ld bytes; AY %lu Hz (type $%02X), SN76489 %lu Hz, YM2612 %lu Hz, YM3812 %lu Hz, "
+	     "YMF262 %lu Hz%s; %ld samples, loop %ld from %ld", h.version >> 8, h.version & 0xff, mem_n, h.ay_clock,
+	     h.ay_type, h.sn_clock, h.ym2612_clock, h.ym3812_clock, h.ymf262_clock, h.other ? ", other chips" : "",
+	     h.total, h.loop_samples, h.loop_at);
 	use_ay = h.ay_clock != 0;
 	use_sn = use_opn = use_opl = 0;
 	if (h.ym2612_clock) {
 		/* the YM2612 on the DSP (the DSP rule: locked while it plays) */
 		const char *why;
-		if (dspopn_open(h.ym2612_clock, h.sn_clock, h.sn_fb, h.sn_w, &why))
+		if (dspopn_open(h.ym2612_clock, h.sn_clock, h.sn_fb, h.sn_w, lv_rate[0][lvl], &why))
 			use_opn = 1;
 		else if (!use_ay) {
 			snprintf(err, (size_t)n, "%s is music for the Mega Drive's YM2612:|EPlay %s.", name, why);
@@ -359,23 +398,44 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		} else
 			elog("VGM: its YM2612 left out (%s)", why);
 	}
-	if (h.ym3812_clock && !use_opn) {
-		/* the YM3812 on the DSP (one DSP program a file: with a YM2612
-		   too, the YM2612's) */
+	if ((h.ym3812_clock || h.ymf262_clock) && !use_opn) {
+		/* the YM3812 or the YMF262 on the DSP (one DSP program a file:
+		   with a YM2612 too, the YM2612's; with both, the YMF262's). The
+		   YMF262 at 16,390 Hz where it keys its second bank's channels
+		   (Erez, 14 Nov 2026), so the file is looked through first; one
+		   still unpacking, assumed to */
 		const char *why;
-		if (dspopl_open(h.ym3812_clock, &why))
+		int nch = 9;
+		if (h.ymf262_clock && want18)
+			nch = 18;
+		else if (h.ymf262_clock) {
+			/* (its start: a file that keys the second bank later is
+			   opened again there with 18, vp_lower) */
+			unsigned long t0 = tos_ms();
+			long k = ld ? avail : mem_n;
+			nch = vgm_opl3_bank2(mem, k < OPL_LOOK ? k : OPL_LOOK, &h) ? 18 : 9;
+			elog("VGM: the YMF262's second bank %s in its first %ld KB (%lu ms to see)",
+			     nch > 9 ? "used: 18 channels" : "not used: 9 channels", (k < OPL_LOOK ? k : OPL_LOOK) / 1024,
+			     tos_ms() - t0);
+		}
+		cur_nch = nch;
+		if (lvl && !lv_rate[nch > 9][lvl])
+			lvl--;	/* (18 channels have fewer: its lowest) */
+		if (dspopl_open(h.ymf262_clock ? h.ymf262_clock : h.ym3812_clock, h.ymf262_clock != 0, nch,
+				lv_rate[nch > 9][lvl], &why))
 			use_opl = 1;
 		else if (!use_ay && !h.sn_clock) {
-			snprintf(err, (size_t)n, "%s is music for the YM3812 (OPL2):|EPlay %s.", name, why);
+			snprintf(err, (size_t)n, "%s is music for the %s:|EPlay %s.", name,
+				 h.ymf262_clock ? "YMF262 (OPL3)" : "YM3812 (OPL2)", why);
 			vp_stop();
 			return 0;
 		} else
-			elog("VGM: its YM3812 left out (%s)", why);
+			elog("VGM: its %s left out (%s)", h.ymf262_clock ? "YMF262" : "YM3812", why);
 	}
 	if (h.sn_clock && use_opn)
 		;			/* (the Mega Drive's SN76489: in opn.a56 with it) */
 	else if (h.sn_clock && use_opl)
-		elog("VGM: its SN76489 left out (the DSP plays the YM3812)");
+		elog("VGM: its SN76489 left out (the DSP plays the %s)", h.ymf262_clock ? "YMF262" : "YM3812");
 	else if (h.sn_clock) {
 		/* the SN76489 on the DSP (locked while it plays: the DSP rule) */
 		const char *why;
@@ -406,7 +466,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	if (use_opn)
 		chip_name(info, ni, "VGM  YM2612", h.ym2612_clock);
 	else if (use_opl)
-		chip_name(info, ni, "VGM  YM3812", h.ym3812_clock);
+		chip_name(info, ni, h.ymf262_clock ? "VGM  YMF262" : "VGM  YM3812",
+			  h.ymf262_clock ? h.ymf262_clock : h.ym3812_clock);
 	else if (use_ay)
 		chip_name(info, ni, h.ay_type >= 0x10 ? "VGM  YM2149" : "VGM  AY-3-8910", h.ay_clock);
 	else
@@ -418,13 +479,15 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		snprintf(dsp, sizeof(dsp), "DSP  %ld.%ld kHz", r / 1000, r % 1000 / 100);
 		snprintf(out, (size_t)no, "%s%s%s%s", use_ay ? "YM2149" : "", use_ay && dsp_on ? " + " : "",
 			 dsp_on ? dsp : "",
-			 h.other || (h.ym2612_clock && !use_opn) || (h.ym3812_clock && !use_opl) ||
+			 h.other || (h.ym2612_clock && !use_opn) || ((h.ym3812_clock || h.ymf262_clock) && !use_opl) ||
+			 (h.ym3812_clock && h.ymf262_clock) ||
 			 (h.sn_clock && use_opl) ? " (its part alone)" : "");
 		if (use_opn)
 			elog("VGM: the YM2612%s on the DSP at %ld Hz (the SSI's %ld)",
 			     dspopn_psg() ? " and the SN76489" : "", dspopn_synth(), dspopn_rate());
 		if (use_opl)
-			elog("VGM: the YM3812 on the DSP at %ld Hz (the SSI's %ld)", dspopl_synth(), dspopl_rate());
+			elog("VGM: the %s on the DSP at %ld Hz (the SSI's %ld)", h.ymf262_clock ? "YMF262" : "YM3812",
+			     dspopl_synth(), dspopl_rate());
 	}
 	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0, use_sn ? sn : use_opn && dspopn_psg() ? opn_sn : 0, 0);
 	run.opn_fn = use_opn ? opn : 0;

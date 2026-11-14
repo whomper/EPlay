@@ -17,6 +17,9 @@ enum { OUT_AUTO, OUT_FDI, OUT_DSP };
    it Normal: 3, or QLATE= (the play rig's, 0: at once; never written) */
 int settings_mp3cpu(void);	/* MP3CPU=1: the rigs' */
 int settings_qlate(void);
+/* a VGM on the DSP goes on at a lower rate when its ring's least lead is
+   under 256 words, or VGMLOW= (the play rig's; never written) */
+int settings_vgmlow(void);
 
 void settings_load(void);	/* EPLAY.INF, at the start */
 void prefs_dialog(void);	/* the dialog (Settings); saved on OK when it changed */

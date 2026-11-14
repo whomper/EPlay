@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * dspopl.c - the YM3812 on the Falcon's DSP (dspopl.h), as dspopn.c plays
+ * dspopl.c - the YM3812 and the YMF262 on the Falcon's DSP (dspopl.h), as dspopn.c plays
  * the YM2612: the DSP's words from one place only, the tick, but for the
  * start (before the tick runs); a burst (a tick's changes) goes with the
  * host's flag 0 set, so that the DSP takes its commands one after another,
@@ -11,6 +11,7 @@
 #include "tickcode.h"
 #include "snd.h"
 #include "opld.h"
+#include "oplfast.h"
 #include "dspopl.h"
 #include "opl_prog.h"
 #include "opltab.h"
@@ -34,7 +35,7 @@ static const long att_q15[16] = { 32768, 27571, 23198, 19519, 16423, 13818, 1162
 				  8231,  6925,  5827,  4903,  4125,  3471,  2920,  2457 };
 
 static OPLD chip;
-static int locked, failed, on, twice, ext_on;
+static int locked, failed, on, times, ext_on;
 static long rate, synth;
 static volatile long gain_due = -1;	/* the volume's gain for the tick to send */
 static int burst;
@@ -42,6 +43,11 @@ static long last_w[8];		/* (the last burst's first words, for the log) */
 static int last_n;
 static unsigned long sent, f_sent;
 static int f_hisr;
+/* how the DSP keeps up, asked by the tick every 50 (100 ms): its ring's
+   least lead since PLAY, the answer read at a tick after (never waited
+   for: the DSP gives it between its samples) */
+static int st_wait, st_due;
+static volatile long st_least;
 
 TICK_CODE("70dspopl_put")
 static void put(void *u, long w)
@@ -94,6 +100,28 @@ static long boot(void)
 	load(1, OPL_X_AM, opl_am, 512);
 	load(1, OPL_X_PMW, opl_pmw, 8);
 	load(4, OPL_Y_WAVE, opl_wave, 4096);
+	/* the OPL3's waveforms 4 to 7, as oplf_init makes them: from the
+	   sine's first quarter (its mirrored quarters' index ^ $FE: the
+	   chip's) and the logarithmic saw */
+	put(0, 4);
+	put(0, OPL_Y_WAVE + 4096);
+	put(0, 4096);
+	for (i = 0; i < 4096; i++) {
+		int k = i & 1023, w = i >> 10;
+		long q = (long)opl_wave[(k & 0x80 ? (k ^ 0xff) << 1 : k << 1) & 0xff], v;
+		if (w == 0)
+			v = k & 0x200 ? 0 : (k & 0x300) == 0x100 ? -q : q;
+		else if (w == 1)
+			v = k & 0x200 ? 0 : q;
+		else if (w == 2)
+			v = k & 0x200 ? -OPLF_FULL : OPLF_FULL;
+		else {
+			v = (long)opl_ramp[k & 0x200 ? (k & 0x1ff) ^ 0x1ff : k];
+			if (k & 0x200)
+				v = -v;
+		}
+		put(0, v);
+	}
 	put(0, OPLC_RESET);
 	burst = 0;
 	return 0;
@@ -103,16 +131,18 @@ static long setup(void)
 {
 	opld_send(&chip, put, 0);
 	put(0, OPLC_PLAY);
-	put(0, twice ? 2 : 1);
+	put(0, times);
 	return 0;
 }
 
-int dspopl_open(unsigned long clock, const char **why)
+int dspopl_open(unsigned long clock, int opl3, int nch, long want, const char **why)
 {
 	int ext;
 	unsigned long t;
 	failed = 0;
 	sent = 0;
+	st_wait = st_due = 0;
+	st_least = -1;
 	if (!(get_cookie(0x5F534E44L) & 8)) {	/* _SND bit 3: a DSP */
 		*why = "needs the Falcon's DSP";
 		return 0;
@@ -134,12 +164,27 @@ int dspopl_open(unsigned long clock, const char **why)
 	while (tos_ms() - t < 10)
 		;
 	Supexec(boot);
-	/* 24,585 Hz on the Falcon's clock; at the FDI's 44.1 or 48 kHz the
-	   chip made at half of it */
+	/* 24,585 Hz on the Falcon's clock, 16,390 with the OPL3's second bank
+	   (Erez, 14 Nov 2026: its 18 channels' worst case 90 % of the DSP); at
+	   the FDI's 44.1 or 48 kHz the chip made at half of it, a third with
+	   the second bank (14,700 or 16,000 Hz) */
 	rate = snd_rate_dsp(24585, &ext);
-	twice = rate > 30000;
-	synth = twice ? rate / 2 : rate;
-	opld_init(&chip, clock ? clock : 3579545UL, synth);
+	times = !ext ? 1 : rate > 30000 ? (nch > 9 ? 3 : 2) : 1;
+	if (want || (nch > 9 && times == 1)) {
+		/* (a rate lower than the most: the Falcon's clock, not the FDI's;
+		   it's lowered when the DSP fell behind) */
+		int use = snd_ext_use;
+		snd_ext_use = 0;
+		rate = snd_rate_dsp(want ? want : 16390, &ext);
+		snd_ext_use = use;
+		times = 1;
+	}
+	synth = rate / times;
+	if (opl3)
+		opld_init3(&chip, clock ? clock : 14318180UL, synth);
+	else
+		opld_init(&chip, clock ? clock : 3579545UL, synth);
+	opld_channels(&chip, nch);
 	gain_due = -1;
 	/* on the matrix first: its clock starts the SSI, which PLAY waits for */
 	snd_dsp_out(rate, ext);
@@ -172,8 +217,8 @@ long dspopl_synth(void)
 TICK_CODE("71dspopl_write")
 void dspopl_write(int port, int reg, int val)
 {
-	if (on && !port)
-		opld_write(&chip, reg, val);
+	if (on)
+		opld_write(&chip, (port & 1) << 8 | (reg & 0xff), val);
 }
 
 TICK_CODE("72dspopl_tick")
@@ -188,11 +233,30 @@ int dspopl_tick(int (*run)(void *v, long n), void *v, long n)
 	}
 	/* HF0 goes up at the tick's first word (put), not before the file's
 	   run: the DSP makes no sample while it is up */
+	if (st_wait && (HISR & 1)) {
+		st_least = (long)(HRX32 & 0xffffff);
+		st_wait = 0;
+	}
 	live = run(v, n);
 	opld_send(&chip, put, 0);
+	if (!st_wait && ++st_due >= 50) {
+		put(0, OPLC_STATUS);
+		st_wait = 1;
+		st_due = 0;
+	}
 	HICR &= ~8;
 	burst = 0;
 	return live;
+}
+
+long dspopl_least(void)
+{
+	return st_least;
+}
+
+int dspopl_late2(void)
+{
+	return on && chip.late2;
 }
 
 void dspopl_hush(void)
@@ -202,7 +266,7 @@ void dspopl_hush(void)
 		return;
 	opld_write(&chip, 0xbd, 0);
 	for (c = 0; c < OPL_CH; c++)
-		opld_write(&chip, 0xb0 + c, chip.ch[c].block << 2 | chip.ch[c].fnum >> 8);
+		opld_write(&chip, (c < 9 ? 0xb0 : 0x1b0 - 9) + c, chip.ch[c].block << 2 | chip.ch[c].fnum >> 8);
 	opld_send(&chip, put, 0);
 	HICR &= ~8;
 	burst = 0;
@@ -220,6 +284,15 @@ static long status(void)
 {
 	unsigned long t0;
 	least = -1;
+	if (st_wait) {
+		/* (the tick's answer first) */
+		t0 = HZ200;
+		while (!(HISR & 1))
+			if (HZ200 - t0 > 40)
+				return 0;
+		(void)HRX32;
+		st_wait = 0;
+	}
 	put(0, OPLC_STATUS);
 	t0 = HZ200;
 	while (!(HISR & 1))

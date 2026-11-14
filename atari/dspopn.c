@@ -49,6 +49,11 @@ static int burst;
 static long last_w[8];
 static unsigned long sent, f_sent;
 static int f_hisr;		/* HF0 up: the tick's words coming */
+/* how the DSP keeps up, asked by the tick every 50 (100 ms): its ring's
+   least lead since PLAY, the answer read at a tick after (never waited
+   for: the DSP gives it between its samples) */
+static int st_wait, st_due;
+static volatile long st_least;
 
 /* the DAC's words: one wait on the host port's flag a word, in a loop */
 TICK_CODE("64dspopn_putn")
@@ -152,12 +157,14 @@ static long setup(void)
 	return 0;
 }
 
-int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, const char **why)
+int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, long want, const char **why)
 {
 	int ext;
 	unsigned long t;
 	failed = 0;
 	sent = 0;
+	st_wait = st_due = 0;
+	st_least = -1;
 	psg_on = 0;
 	psg_clock = sn_clock;
 	psg_fb = sn_fb;
@@ -188,6 +195,15 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 	   for six channels on a stock DSP: the chip made at half of it */
 	rate = snd_rate_dsp(24585, &ext);
 	twice = rate > 30000;
+	if (want) {
+		/* (lower than the most, the DSP having fallen behind: the
+		   Falcon's clock, not the FDI's) */
+		int use = snd_ext_use;
+		snd_ext_use = 0;
+		rate = snd_rate_dsp(want, &ext);
+		snd_ext_use = use;
+		twice = 0;
+	}
 	synth = twice ? rate / 2 : rate;
 	opnd_init(&chip, clock ? clock : 7670453UL, synth);
 	chip.putn = putn;
@@ -263,10 +279,24 @@ int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long 
 		psg_att = -1;
 		sncmd_reamp(&psg);
 	}
+	if (st_wait && (HISR & 1)) {
+		st_least = (long)(HRX32 & 0xffffff);
+		st_wait = 0;
+	}
 	live = opnd_tick(&chip, run, at, v, n, put, 0);
+	if (!st_wait && ++st_due >= 50) {
+		put(0, OPNC_STATUS);
+		st_wait = 1;
+		st_due = 0;
+	}
 	HICR &= ~8;
 	burst = 0;
 	return live;
+}
+
+long dspopn_least(void)
+{
+	return st_least;
 }
 
 void dspopn_hush(void)
@@ -299,6 +329,15 @@ static long status(void)
 {
 	unsigned long t0;
 	least = -1;
+	if (st_wait) {
+		/* (the tick's answer first) */
+		t0 = HZ200;
+		while (!(HISR & 1))
+			if (HZ200 - t0 > 40)
+				return 0;
+		(void)HRX32;
+		st_wait = 0;
+	}
 	put(0, OPNC_STATUS);
 	t0 = HZ200;
 	while (!(HISR & 1))

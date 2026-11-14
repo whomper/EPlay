@@ -355,6 +355,8 @@ void opld_write(OPLD *d, int reg, int val)
 				ch_steps(d, c);
 		}
 		d->ch[c].key = (val >> 5) & 1;
+		if (bank && d->ch[c].key && d->nch <= 9)
+			d->late2 = 1;	/* (the second bank keyed, nine channels made: opld.h) */
 		keys(d);
 		break;
 	case 0xc0:

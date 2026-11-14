@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -109,6 +109,19 @@ CASES["vgmmd"] = ("MD.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100,
 # channel 0's carrier at full level (its modulator at TL 63), a sine at
 # 999.9 Hz (F-number 659, block 5, at 3,579,545 Hz)
 CASES["vgmopl"] = ("OPL.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
+# step 7b (Erez, 14 Nov 2026): the YMF262 (OPL3) at 16,390 Hz, its second
+# bank keyed: the same sine on its channel 9 (port 1's channel 0), NEW set,
+# to the left and the right
+CASES["vgmopl3"] = ("OPL3.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
+# the same, its second bank keyed past the start EPlay looks through (64
+# KB of other writes first): nine channels at 24,585 Hz, then opened again
+# with 18 at 16,390 Hz at the key
+CASES["vgmopl3late"] = ("OPL3L.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 4)
+# where the DSP falls behind, the rest of the track at the next lower
+# rate (Erez, 14 Nov 2026): eplay.inf's VGMLOW=2048 (the rigs') takes any
+# lead as behind, so the OPL2's sine goes on at 19,668 Hz past its first
+# second, then 16,390 past its second, the tone whole
+CASES["vgmlow"] = ("LOW.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 4)
 # a real file, never in the repo (a game's music: EPLAY_RIG_VGM names it, a
 # VGM or VGZ kept outside), played for EPLAY_RIG_SECS (20) and quit: does
 # its place keep up with the clock, and the DSP's ring (EPlay 1.18 on Erez's
@@ -173,7 +186,7 @@ CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, 
 # one playing stopped (none left)
 CASES["selall"] = CASES["keys"]
 # the cases' eplay.inf
-INFS = {"repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
+INFS = {"vgmlow": "VGMLOW=2048\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
         "miniwav": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
@@ -247,27 +260,32 @@ def opn_cmds():
     return c + w(0xa4, (5 << 3) | (1230 >> 8)) + w(0xa0, 1230 & 255) + w(0x28, 0xf0)
 
 
-def opl_cmds():
+def opl_cmds(opl3=False):
     """the YM3812's writes for a sine at 999.9 Hz on channel 0: both
     operators out, the modulator at TL 63 (-47 dB), the carrier at full
-    level, their attacks at once, held"""
-    w = lambda r, v: bytes([0x5a, r, v])
-    c = w(0x01, 0x20) + w(0xbd, 0) + w(0xc0, 0x01)
+    level, their attacks at once, held. opl3: the YMF262's, on its second
+    bank's first channel, NEW set, to both outputs"""
+    if opl3:
+        w = lambda r, v: bytes([0x5f, r, v])
+        c = w(0x05, 0x01) + bytes([0x5e, 0xbd, 0]) + w(0xc0, 0x31)
+    else:
+        w = lambda r, v: bytes([0x5a, r, v])
+        c = w(0x01, 0x20) + w(0xbd, 0) + w(0xc0, 0x01)
     for slot, tl in ((0, 63), (3, 0)):
         c += w(0x20 + slot, 0x21) + w(0x40 + slot, tl) + w(0x60 + slot, 0xf0) + w(0x80 + slot, 0x0f)
         c += w(0xe0 + slot, 0)
     return c + w(0xa0, 659 & 255) + w(0xb0, 0x20 | 5 << 2 | 659 >> 8)
 
 
-def make_vgm(path, secs, gz, sn=False, opn=False, md=False, opl=False):
+def make_vgm(path, secs, gz, sn=False, opn=False, md=False, opl=False, opl3=False, filler=0):
     """a VGM (phase 9): channel A of an AY at the Spectrum's 1,773,400 Hz,
     a 1 kHz tone there (period 111: 998.6 Hz; 125 at the Atari's 2 MHz,
     1000 Hz), secs long, then silent; gzipped as a VGZ. sn: the SN76489
     at the Master System's 3,579,545 Hz instead, tone 0 at period 112
     (998.8 Hz), the others silent (on the DSP)"""
     import gzip
-    if opl:
-        cmds = opl_cmds()
+    if opl or opl3:
+        cmds = bytes([0x5e, 0x00, 0x00]) * (filler // 3) + opl_cmds(opl3)     # (register 0: nothing)
     elif opn:
         cmds = opn_cmds()
     elif sn or md:
@@ -279,14 +297,16 @@ def make_vgm(path, secs, gz, sn=False, opn=False, md=False, opl=False):
         k = min(left, 44100)
         cmds += bytes([0x61, k & 0xff, k >> 8])
         left -= k
-    cmds += bytes([0x5a, 0xb0, 5 << 2 | 659 >> 8, 0x66] if opl else [0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn or md else [0xa0, 8, 0, 0x66])
+    cmds += bytes([0x5f, 0xb0, 5 << 2 | 659 >> 8, 0x66] if opl3 else [0x5a, 0xb0, 5 << 2 | 659 >> 8, 0x66] if opl else [0x52, 0x28, 0x00, 0x66] if opn else [0x50, 0x9f, 0x66] if sn or md else [0xa0, 8, 0, 0x66])
     head = bytearray(0x80)
     head[0:4] = b"Vgm "
     struct.pack_into("<I", head, 0x04, 0x80 + len(cmds) - 4)
     struct.pack_into("<I", head, 0x08, 0x151)
     struct.pack_into("<I", head, 0x18, secs * 44100)
     struct.pack_into("<I", head, 0x34, 0x80 - 0x34)
-    if opl:
+    if opl3:
+        struct.pack_into("<I", head, 0x5c, 14318180)
+    elif opl:
         struct.pack_into("<I", head, 0x50, 3579545)
     elif md:
         struct.pack_into("<I", head, 0x2c, 7670453)
@@ -311,7 +331,8 @@ def make_file(hd, case):
         return f
     if f.endswith((".VGM", ".VGZ")):
         make_vgm(os.path.join(hd, f), secs, f.endswith(".VGZ"), case == "vgmsn", case == "vgmopn", case == "vgmmd",
-                 case == "vgmopl")
+                 case in ("vgmopl", "vgmlow"), case in ("vgmopl3", "vgmopl3late"),
+                 70 * 1024 if case == "vgmopl3late" else 0)
         return f
     src = os.path.join(hd, "..", "src.wav")
     synth = ["synth", str(secs)] + SYNTH.get(case, ["sine", "1000"] + (["sine", "1500"] if fmt[3] == "2" else []))
@@ -827,6 +848,20 @@ def run(work, case, spec):
         time.sleep(0.5)
         if not end:
             return False, m.describe(), played + "; never ended"
+        if case in ("vgmlow", "vgmopl3late"):
+            # (judged by the log, as auto: each change a moment's break)
+            lines = [l[4:] for l in open(log, errors="replace").read().split("\n") if l.startswith("LOG VGM: ")]
+            ons = [l for l in lines if " on the DSP at " in l]
+            if case == "vgmlow":
+                why = [l for l in lines if "the DSP behind at" in l]
+                ok = len(why) == 3 and len(ons) == 4 and "at 12292 Hz" in ons[-1]
+            else:
+                why = [l for l in lines if "second bank keyed" in l]
+                ok = len(why) == 1 and len(ons) == 2 and "at 24585 Hz" in ons[0] and "at 16390 Hz" in ons[-1]
+            ok = ok and "Played to the end" in end
+            return ok, m.describe(), "%s\n     %s\n     %s\n     %s" % (
+                played[len("EPLAY playing: "):], end, " / ".join(why) or "never lowered",
+                " / ".join(o[o.index(" on the DSP at ") + 15:] for o in ons))
         if case == "auto":
             # High first; behind, Normal from there; then to the end
             lines = open(log, errors="replace").read().split("\n")

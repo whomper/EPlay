@@ -57,6 +57,7 @@ int vgm_head_of(const unsigned char *b, long n, long size, VGMHEAD *h)
 		h->ym2612_clock = field(b, n, data, 0x2c) & 0x3fffffffUL;
 	if (h->version >= 0x151) {
 		h->ym3812_clock = field(b, n, data, 0x50) & 0x3fffffffUL;
+		h->ymf262_clock = field(b, n, data, 0x5c) & 0x3fffffffUL;
 		h->ay_clock = field(b, n, data, 0x74) & 0x3fffffffUL;
 		if (h->ay_clock && 0x79 < data && 0x79 < n) {
 			h->ay_type = b[0x78];
@@ -71,7 +72,7 @@ int vgm_head_of(const unsigned char *b, long n, long size, VGMHEAD *h)
 	if (h->version >= 0x110 && (field(b, n, data, 0x30) & 0x3fffffffUL))
 		h->other = 1;
 	for (o = 0x38; o < 0x74 && h->version >= 0x151; o += 4)
-		if (o != 0x3c && o != 0x50 && (field(b, n, data, o) & 0x3fffffffUL))	/* (0x3c: SegaPCM's interface) */
+		if (o != 0x3c && o != 0x50 && o != 0x5c && (field(b, n, data, o) & 0x3fffffffUL))	/* (0x3c: SegaPCM's interface) */
 			h->other = 1;
 	for (o = 0x80; o < 0xe0 && h->version >= 0x161; o += 4)
 		if (field(b, n, data, o) & 0x3fffffffUL)
@@ -244,6 +245,7 @@ void vgm_begin(VGMRUN *r, const unsigned char *b, long n, const VGMHEAD *h, VGM_
 	r->ay_fn = ay_fn;
 	r->sn_fn = sn_fn;
 	r->u = u;
+	r->opl3 = h->ymf262_clock != 0;
 }
 
 /* the SN76489's registers as the file sets them (vgm_seek's) */
@@ -275,13 +277,14 @@ static void opn_write(VGMRUN *r, int port, int reg, int val)
 		r->opn_fn(r->u, port, reg, val);
 }
 
-/* a YM3812 register: kept (a seek writes them again), and passed on */
+/* a YM3812 register, or a YMF262's of its port: kept (a seek writes them
+   again), and passed on */
 TICK_CODE("5Fopl_write")
-static void opl_write(VGMRUN *r, int reg, int val)
+static void opl_write(VGMRUN *r, int port, int reg, int val)
 {
-	r->opl[reg & 0xff] = (unsigned char)val;
+	r->opl[port << 8 | (reg & 0xff)] = (unsigned char)val;
 	if (r->opl_fn)
-		r->opl_fn(r->u, 0, reg, val);
+		r->opl_fn(r->u, port, reg, val);
 }
 
 /* the commands until one waits; 0 at the end */
@@ -351,8 +354,10 @@ static int commands(VGMRUN *r)
 				r->sn_fn(r->u, b[p + 1]);
 		} else if (c == 0x52 || c == 0x53) {
 			opn_write(r, c & 1, b[p + 1], b[p + 2]);
-		} else if (c == 0x5a) {
-			opl_write(r, b[p + 1], b[p + 2]);
+		} else if (c == 0x5a || c == 0x5e || c == 0x5f) {
+			/* (a file with both: the YMF262's) */
+			if ((c != 0x5a) == r->opl3)
+				opl_write(r, c == 0x5f, b[p + 1], b[p + 2]);
 		} else if (c == 0x67 && k >= 7) {
 			/* a data block: the YM2612's samples (type 0), the first kept */
 			if (b[p + 2] == 0 && !r->pcm_len) {
@@ -520,8 +525,9 @@ static void seek_run(VGMRUN *r, long to)
 			opn_write(r, c & 1, b[p + 1], b[p + 2]);
 			p += 3;
 			continue;
-		} else if (c == 0x5a) {
-			opl_write(r, b[p + 1], b[p + 2]);
+		} else if (c == 0x5a || c == 0x5e || c == 0x5f) {
+			if ((c != 0x5a) == r->opl3)
+				opl_write(r, c == 0x5f, b[p + 1], b[p + 2]);
 			p += 3;
 			continue;
 		} else if (c == 0x50) {
@@ -695,23 +701,33 @@ void vgm_resend(VGMRUN *r)
 			if (ch != 3 && ch != 7)
 				r->opn_fn(r->u, 0, 0x28, r->opn_key[ch] ? r->opn_key[ch] : ch);
 	}
-	if (r->opl_fn && r->h.ym3812_clock) {
-		/* the YM3812: its modes, the operators' registers, the channels'
+	if (r->opl_fn && (r->h.ym3812_clock || r->h.ymf262_clock)) {
+		/* the YM3812 (or the YMF262's two banks, its NEW and its pairs
+		   first): its modes, the operators' registers, the channels'
 		   (the keys last: $B0-$B8, then $BD's drums) */
 		static const unsigned char first[3] = { 0x01, 0x08, 0xbd };
-		int reg, k;
+		int reg, k, port, ports = r->opl3 ? 2 : 1;
+		const unsigned char *o;
+		if (r->opl3) {
+			r->opl_fn(r->u, 1, 0x05, r->opl[0x105]);
+			r->opl_fn(r->u, 1, 0x04, r->opl[0x104]);
+		}
 		for (k = 0; k < 3; k++)
 			r->opl_fn(r->u, 0, first[k], first[k] == 0xbd ? r->opl[0xbd] & 0xe0 : r->opl[first[k]]);
-		for (reg = 0x20; reg < 0xa0; reg++)
-			r->opl_fn(r->u, 0, reg, r->opl[reg]);
-		for (reg = 0xe0; reg < 0xf6; reg++)
-			r->opl_fn(r->u, 0, reg, r->opl[reg]);
-		for (reg = 0xa0; reg < 0xa9; reg++)
-			r->opl_fn(r->u, 0, reg, r->opl[reg]);
-		for (reg = 0xc0; reg < 0xc9; reg++)
-			r->opl_fn(r->u, 0, reg, r->opl[reg]);
-		for (reg = 0xb0; reg < 0xb9; reg++)
-			r->opl_fn(r->u, 0, reg, r->opl[reg]);
+		for (port = 0; port < ports; port++) {
+			o = r->opl + (port << 8);
+			for (reg = 0x20; reg < 0xa0; reg++)
+				r->opl_fn(r->u, port, reg, o[reg]);
+			for (reg = 0xe0; reg < 0xf6; reg++)
+				r->opl_fn(r->u, port, reg, o[reg]);
+			for (reg = 0xa0; reg < 0xa9; reg++)
+				r->opl_fn(r->u, port, reg, o[reg]);
+			for (reg = 0xc0; reg < 0xc9; reg++)
+				r->opl_fn(r->u, port, reg, o[reg]);
+		}
+		for (port = 0; port < ports; port++)
+			for (reg = 0xb0; reg < 0xb9; reg++)
+				r->opl_fn(r->u, port, reg, r->opl[port << 8 | reg]);
 		r->opl_fn(r->u, 0, 0xbd, r->opl[0xbd]);
 	}
 	if (r->sn_fn && r->h.sn_clock) {
@@ -724,4 +740,36 @@ void vgm_resend(VGMRUN *r)
 		for (ch = 0; ch < 4; ch++)
 			r->sn_fn(r->u, 0x90 | ch << 5 | r->sn_vol[ch]);
 	}
+}
+
+/* (the common commands' lengths at once: a pass over the whole file, at
+   the start) */
+int vgm_opl3_bank2(const unsigned char *b, long n, const VGMHEAD *h)
+{
+	long p = h->data_at;
+	while (p < n) {
+		unsigned c = b[p];
+		int k;
+		if (c == 0x5f) {
+			if (p + 2 < n && (b[p + 1] & 0xf0) == 0xb0 && (b[p + 1] & 15) < 9 && (b[p + 2] & 0x20))
+				return 1;
+			p += 3;
+			continue;
+		}
+		if (c == 0x5e || c == 0x61) {
+			p += 3;
+			continue;
+		}
+		if ((c & 0xf0) == 0x70 || c == 0x62 || c == 0x63) {
+			p++;
+			continue;
+		}
+		if (c == 0x66)
+			return 0;
+		k = cmd_len(b, n, p);
+		if (!k)
+			return 0;
+		p += k;
+	}
+	return 0;
 }

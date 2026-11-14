@@ -59,6 +59,7 @@ typedef struct {
 	int wse, nts, bd;	/* register 1's waveform select; 8's note select; 0xBD */
 	int opl3, newm, fourop;	/* an OPL3; its 0x105 bit 0; 0x104 */
 	int nch, nch_dirty;	/* the channels the DSP makes: 9 or 18 (opld_channels) */
+	int late2;		/* a channel of the second bank keyed while nine are made (the 68030 opens it again with 18) */
 	long rate;
 	unsigned long clock;
 	unsigned long stepk;	/* 2 x clock / 72 / rate (Q16): the operators' steps' factor */

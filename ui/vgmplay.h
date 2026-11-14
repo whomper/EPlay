@@ -38,5 +38,11 @@ int vp_ended(void);		/* 1 once it played to its end (its fade too) */
 void vp_volume(int att, int mute);
 const char *vp_via(void);	/* the badge: "FDI", "DSP" or "" */
 int vp_on(void);		/* a VGM is open */
+/* the DSP fell behind (its ring nearly dry), or an OPL3 made with nine
+   channels keyed its second bank: 1, for play.c to open it again where
+   it is, at the next lower rate or with 18 channels (Erez, 14 Nov 2026),
+   until vp_new_track */
+int vp_lower(void);
+void vp_new_track(void);	/* another track: the most again */
 
 #endif

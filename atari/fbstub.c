@@ -60,9 +60,9 @@ int dspsn_ext(void) { return 0; }
 long dspsn_rate(void) { return 0; }
 void dspsn_term(void) { }
 
-int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, const char **why)
+int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w, long want, const char **why)
 {
-	(void)clock; (void)sn_clock; (void)sn_fb; (void)sn_w;
+	(void)clock; (void)sn_clock; (void)sn_fb; (void)sn_w; (void)want;
 	*why = no_dsp;
 	return 0;
 }
@@ -75,13 +75,17 @@ void dspopn_volume(int att, int mute) { (void)att; (void)mute; }
 void dspopn_hush(void) { }
 void dspopn_close(void) { }
 int dspopn_ext(void) { return 0; }
+long dspopn_least(void) { return -1; }
 long dspopn_rate(void) { return 0; }
 long dspopn_synth(void) { return 0; }
 void dspopn_term(void) { }
 
-int dspopl_open(unsigned long clock, const char **why)
+int dspopl_open(unsigned long clock, int opl3, int nch, long want, const char **why)
 {
 	(void)clock;
+	(void)opl3;
+	(void)nch;
+	(void)want;
 	*why = no_dsp;
 	return 0;
 }
@@ -91,6 +95,8 @@ void dspopl_volume(int att, int mute) { (void)att; (void)mute; }
 void dspopl_hush(void) { }
 void dspopl_close(void) { }
 int dspopl_ext(void) { return 0; }
+long dspopl_least(void) { return -1; }
+int dspopl_late2(void) { return 0; }
 long dspopl_rate(void) { return 0; }
 long dspopl_synth(void) { return 0; }
 void dspopl_term(void) { }
