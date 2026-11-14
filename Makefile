@@ -65,11 +65,16 @@ CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn ovl
 CTP     := tjpgd
 CATARI  := libc tos gem crash dspjpeg net_tos sting tls_ovl
 CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text offdraw click dd popup help filepick badge busy field clip settings dlgbuild tooltip
+ifeq ($(CPU),68000)
+# the STE: no DSP, so its programs and their tables not carried (dspstub.c
+# answers for them, as on a Falcon whose DSP is missing)
+OWN     := $(filter-out dspmp3 dspsn dspopn dspopl,$(OWN)) dspstub
+endif
 ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
 # for them), the sound through the XBIOS (sndfb.c), the tick through
 # Xbtimer (feedfb.S), the 64-bit helpers common's (ll64.c)
-OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3,$(OWN)) sndfb feedfb fbstub cmp3fb
+OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
 CATARI  += ll64
 CUI     := $(filter-out cpucheck,$(CUI))
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feedfb_s.o $(OBJDIR)/inflate_fast_s.o \
