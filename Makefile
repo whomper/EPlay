@@ -89,7 +89,9 @@ endif
 # the start's paths at a place of their own, straight after the ticks'
 # (tools/pinobj.py: their sections .text.1st.*): the list's tags and
 # lengths, inflate (common's, its object renamed here), the DSP's loaders
-PIN     := tags probe list inflate dspopn dspopl dspsn
+# (the Falcon's and the TT's: the STE's 68000 has no cache, and its start
+# was within a tick of 1.35's unpinned, a tick slower pinned)
+PIN     := $(if $(filter 68000,$(CPU)),,tags probe list inflate dspopn dspopl dspsn)
 PINOBJ   = $(if $(filter $*,$(PIN)),python3 tools/pinobj.py $(CROSS)objcopy $(CROSS)objdump $@ $*)
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
