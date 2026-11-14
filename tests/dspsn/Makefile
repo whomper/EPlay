@@ -11,8 +11,8 @@ run: $(B)/sim
 $(B)/sn_prog.h: $(TOP)/dsp/sn.a56 | $(B)
 	cd $(B) && a56 ../$(TOP)/dsp/sn.a56 > a56.lst && ! grep -q 'warning:\|error:' a56.lst && \
 		python3 ../$(TOP)/common/dsp/mkh.py a56.out sn_prog.h dsp_sn_prog sn.a56
-$(B)/sim: sim.c ../dspsim.h $(B)/sn_prog.h $(H)/dsp_core.c
-	cc -O2 -w -I$(B) -I$(H) -I$(H)/stub -o $@ sim.c $(H)/dsp_core.c $(H)/dsp_cpu.c -lm
+$(B)/sim: sim.c ../dspsim.h $(B)/sn_prog.h $(H)/dsp_core.c $(TOP)/src/sncpu.c $(TOP)/src/sncpu.h
+	cc -O2 -w -I$(B) -I$(H) -I$(H)/stub -I$(TOP)/src -o $@ sim.c $(TOP)/src/sncpu.c $(H)/dsp_core.c $(H)/dsp_cpu.c -lm
 $(H)/dsp_core.c:
 	sh $(TOP)/common/tests/ec/fetch-hatari.sh
 $(B):

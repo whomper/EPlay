@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "vgm.h"
+#include "vgmcpu.h"
+#include <math.h>
 #include "vgmfile.h"
 
 static int bad;
@@ -370,6 +372,57 @@ int main(int argc, char **argv)
 		same_n("opl3 B9 no channel", vgm_opl3_bank2(f, fn, &h), 0);
 		f[0x100 + 20] = 0xb0;
 		same_n("opl3 cut short", vgm_opl3_bank2(f, 0x100 + 21, &h), 0);
+	}
+
+	/* phase 11: the SN76489 made on the CPU (vgmcpu.c, sncpu.c): a tone of
+	   period 112 at 3,579,545 Hz (998.8 Hz) at the loudest for a second,
+	   then silent; made at 49,170 Hz, its pitch by the crossings, its
+	   level sn.a56's (6,553 of 16 bits: 0.2 of full scale) */
+	{
+		static VGMCPU cpu;
+		static short lr[2 * 70000];
+		long got = 0, k, cross = 0, nz = 0;
+		double sum = 0;
+		memset(f, 0, sizeof(f));
+		memcpy(f, "Vgm ", 4);
+		put32(0x08, 0x151);
+		put32(0x34, 0x100 - 0x34);
+		put32(0x0c, 3579545);
+		fn = 0x100;
+		b(0x50); b(0x80); b(0x50); b(0x07);	/* tone 0: period 112 */
+		b(0x50); b(0x90);			/* its volume: the loudest */
+		b(0x61); b(44100 & 255); b(44100 >> 8);	/* a second */
+		b(0x50); b(0x9f);			/* silent */
+		b(0x61); b(4410 & 255); b(4410 >> 8);
+		b(0x66);
+		put32(0x04, (unsigned long)(fn - 4));
+		put32(0x18, 44100 + 4410);
+		same_n("cpu head", vgm_head(f, fn, &h), 1);
+		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
+		vgmcpu_init(&cpu, &h, 49170);
+		for (;;) {
+			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
+			got += m;
+			if (m < 1000 || got > 60000)
+				break;
+		}
+		same_n("cpu frames (1.1 s at 49,170 Hz)", got > 54000 && got < 54200, 1);
+		for (k = 2000; k < 49170; k++) {
+			if ((lr[2 * k] >= 0) != (lr[2 * k - 2] >= 0))
+				cross++;
+			sum += (double)lr[2 * k] * lr[2 * k];
+			if (lr[2 * k] != lr[2 * k + 1])
+				nz++;
+		}
+		{
+			double hz = cross / 2.0 * 49170 / (49170 - 2000), rms = sqrt(sum / (49170 - 2000));
+			same_n("cpu tone (998.8 Hz, within 3)", fabs(hz - 998.8) < 3, 1);
+			same_n("cpu level (sn.a56's 6,553)", fabs(rms - 6553) < 50, 1);
+			same_n("cpu left and right the same", nz, 0);
+		}
+		for (k = 49170 + 200, nz = 0; k < got; k++)
+			nz += lr[2 * k] != 0;
+		same_n("cpu silent after", nz, 0);
 	}
 
 	/* not a VGM */

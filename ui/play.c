@@ -69,6 +69,7 @@ static int vgm;			/* a VGM or VGZ plays on the YM2149 (phase 9: vgmplay.c) */
    free), played as a WAV is: its frames decoded into the queue by fill,
    resampled there to the output's rate (16-bit big-endian stereo) */
 static int cmp;
+static int cmp_vgm;		/* (phase 11) a VGM's chips made on the CPU (vp_render), not a file's frames */
 /* (the info line's: where the sound is made) */
 #ifdef EPLAY_FB
 #define OUT_HW "FireBee"
@@ -1085,6 +1086,16 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 		if (room < 1152L * 9 / 4 * 4 + 64)
 			break;
 		must = 0;
+		if (cmp_vgm) {
+			/* (phase 11: the VGM's chips' next frames, made here) */
+			ns = vp_render(cmp_pcm, 1152);
+			if (ns <= 0) {
+				src_done = 1;
+				break;
+			}
+			cmp_put(0, ns, 2);
+			continue;
+		}
 		if (cmp_n < CMP_IN / 2 && data_left > 0) {
 			long want = CMP_IN - cmp_at - cmp_n, r;
 			if (cmp_at > 0) {
@@ -1272,7 +1283,7 @@ int play_open(const char *path, char *err, int n)
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
 	}
 	dsp = xs = 0;
-	cmp = 0;
+	cmp = cmp_vgm = 0;
 #ifdef EPLAY_FB
 	cmp_wav = 0;
 #endif
@@ -1291,9 +1302,39 @@ int play_open(const char *path, char *err, int n)
 			close_file();
 			return 0;
 		}
+		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
+		if (vp_cpu()) {
+			/* (phase 11, Erez, 14 Nov 2026: the chips made on the CPU,
+			   ahead, into the queue: from here a WAV of 16-bit stereo at
+			   the output's rate, fill_cmp's, as an MP3 on the CPU) */
+			cmp = cmp_vgm = 1;
+			memset(&fmt, 0, sizeof(fmt));
+			fmt.kind = kind = PCM_WAV;
+			fmt.bits = 16;
+			fmt.channels = 2;
+			fmt.bytes = 4;
+			fmt.big = 1;
+			fmt.rate = rate = vp_cpu_rate();
+			cmp_rin = rate;
+			cmp_at = cmp_n = 0;
+			cmp_pos = 65536UL;
+			cmp_prev[0] = cmp_prev[1] = 0;
+			cmp_skip = 0;
+			cmp_keep = -1;
+			data_left = 0;
+			play_hz = 0;
+			play_kbps = 0;
+			if (!take_queue(4)) {
+				snprintf(err, n, "There isn't the memory to play.");
+				vp_stop();
+				close_file();
+				return 0;
+			}
+			elog("VGM: %s; made on the CPU; %ld ms%s", play_info, len_ms, base_ms ? " (from a place in it)" : "");
+			goto made_ahead;
+		}
 		vgm = 1;
 		play_via = vp_via();	/* (the bar's badge: Erez, 11 Nov 2026, saw none) */
-		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
 		rate = VGM_RATE;
 		play_hz = 0;
 		play_kbps = 0;
@@ -1549,6 +1590,7 @@ int play_open(const char *path, char *err, int n)
 			     (long)(ms_now() - t0));
 		}
 	}
+made_ahead:
 	if (!snd_take()) {
 		snd_fdi_note[0] = 0;
 		snprintf(err, n, "Another program is using the sound.");
@@ -2035,6 +2077,10 @@ static unsigned long give_at;
 void play_stop(void)
 {
 	paused = 0;
+	if (cmp_vgm) {
+		vp_stop();		/* (phase 11: the CPU's chips, the file kept for its next open) */
+		cmp_vgm = 0;
+	}
 	if (vgm) {
 		vp_stop();		/* (silent: the chip as the machine had it) */
 		vgm = 0;

@@ -57,7 +57,7 @@ LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
            -Wl,--sort-section=name \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd sncpu vgmcpu dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -277,10 +277,12 @@ $(B)/test_stsearch: tests/stsearch/test_stsearch.c src/stsearch.c src/stsearch.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/stsearch/test_stsearch.c \
 		src/stsearch.c common/src/charset.c common/src/bidi.c
 $(B)/test_vgm: tests/vgm/test_vgm.c src/vgm.c src/vgm.h src/vgmfile.c src/vgmfile.h src/tags.c src/rgain.c \
+		src/vgmcpu.c src/vgmcpu.h src/sncmd.c src/sncpu.c \
 		common/src/charset.c common/src/bidi.c common/src/inflate.c common/src/util.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/vgm/test_vgm.c \
-		src/vgm.c src/vgmfile.c src/tags.c src/rgain.c common/src/charset.c common/src/bidi.c \
-		common/src/inflate.c common/src/util.c
+		src/vgm.c src/vgmfile.c src/tags.c src/rgain.c src/vgmcpu.c src/sncmd.c src/sncpu.c \
+		common/src/charset.c common/src/bidi.c \
+		common/src/inflate.c common/src/util.c -lm
 $(B)/test_stream: tests/stream/test_stream.c src/stream.c src/stream.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/stream/test_stream.c src/stream.c
 # the stream parser's fuzz target (the guidelines, 7.1): make fuzz runs

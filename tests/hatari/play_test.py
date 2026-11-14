@@ -429,6 +429,8 @@ def analyse(rec, case):
     if not loud:
         # (MP3CPU=1, play060.py's: an MP3 decoded on the CPU goes through the DMA too)
         cpu_mp3 = "MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "")
+        # (phase 11: a VGM's chips made on the CPU play from the DMA too)
+        cpu_mp3 = cpu_mp3 or ("VGMCPU=1" in os.environ.get("EPLAY_RIG_INF", "") and case in DSP_VGM)
         if hatari_keeps_parity() and (cpu_mp3 or (not CASES[case][2] and case not in RESAMPLED)):
             # the sound DMA plays four tracks, the music in the first
             # (Erez's Analog 8: channels 3 to 8 silent). Hatari 2.4 keeps

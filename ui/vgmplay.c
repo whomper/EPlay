@@ -19,6 +19,7 @@
 #include "snd.h"
 #include "elog.h"
 #include "prefs.h"
+#include "vgmcpu.h"
 
 /* the file's samples a tick, Q16: 44,100 / (2,457,600 / 16 / 154); the
    YM2612's tick 500 times a second, 44,100 / (2,457,600 / 64 / 77): its
@@ -41,6 +42,12 @@ static int playing, open_, use_ay, use_sn, use_opn, use_opl;
    Falcon's rates down), and an OPL3's second bank keyed where the start
    (OPL_LOOK) didn't: both for this track only (vp_new_track) */
 static int lvl, want18, cur_nch;
+/* phase 11 (Erez, 14 Nov 2026): on a 68060 with no Falcon DSP free, the
+   chips made on the CPU, ahead, into play.c's queue (vp_render), as MP3
+   on the CPU is: the SN76489 so far (sncpu.c, sn.a56's arithmetic) */
+static int use_cpu;
+static long c_rate;		/* the rate they are made at: the output's */
+static VGMCPU c_chips;
 static const long lv_rate[2][4] = { { 0, 19668, 16390, 12292 }, { 0, 12292, 9834, 0 } };
 #define OPL_LOOK (64L * 1024)	/* an OPL3 file's start looked through for its second bank (a stock Falcon: 1.4 s a MB) */
 
@@ -234,6 +241,42 @@ const char *vp_via(void)
 int vp_on(void)
 {
 	return open_;
+}
+
+int vp_cpu_can(void)
+{
+	/* (a 68060, not a ColdFire: FireTOS says _CPU 60 there too, FBPROBE 1) */
+	return !get_cookie(0x5F43465FL) && get_cookie(0x5F435055L) >= 60;
+}
+
+int vp_cpu(void)
+{
+	return open_ && use_cpu;
+}
+
+long vp_cpu_rate(void)
+{
+	return c_rate;
+}
+
+int vp_render(short *lr, int frames)
+{
+	int made;
+	if (!open_ || !use_cpu || ended)
+		return 0;
+	made = vgmcpu_render(&c_chips, &run, lr, frames);
+	if (made < frames)
+		ended = 1;
+	if (snap) {
+		/* (a copy of the run, the first in each part of the file: a seek's
+		   start, as the tick takes them) */
+		long s = run.at / snap_every;
+		if (s < NSNAP && !snap_ok[s]) {
+			snap[s] = run;
+			snap_ok[s] = 1;
+		}
+	}
+	return made;
 }
 
 void vp_new_track(void)
@@ -437,10 +480,27 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	else if (h.sn_clock && use_opl)
 		elog("VGM: its SN76489 left out (the DSP plays the %s)", h.ymf262_clock ? "YMF262" : "YM3812");
 	else if (h.sn_clock) {
-		/* the SN76489 on the DSP (locked while it plays: the DSP rule) */
-		const char *why;
-		if (dspsn_open(h.sn_clock, h.sn_fb, h.sn_w, &why))
+		/* the SN76489 on the DSP (locked while it plays: the DSP rule);
+		   where it isn't there or free, on a 68060's CPU */
+		const char *why = "";
+		if (vp_cpu_can() && settings_vgmcpu())
+			use_cpu = 1;
+		else if (dspsn_open(h.sn_clock, h.sn_fb, h.sn_w, &why))
 			use_sn = 1;
+		else if (vp_cpu_can())
+			use_cpu = 1;
+		if (use_cpu) {
+			int ext;
+			c_rate = snd_rate_for(VGM_RATE, &ext);
+			vgmcpu_init(&c_chips, &h, c_rate);
+			elog("VGM: the SN76489 on the CPU at %ld Hz, made ahead (%s)", c_rate,
+			     settings_vgmcpu() ? "VGMCPU=1" : why);
+			if (use_ay) {
+				use_ay = 0;	/* (the chip plays as it is written, the CPU's ahead) */
+				elog("VGM: its AY left out (the SN76489 made ahead on the CPU)");
+			}
+		} else if (use_sn)
+			;
 		else if (!use_ay) {
 			snprintf(err, (size_t)n, "%s is music for the SN76489:|EPlay %s.", name, why);
 			vp_stop();
@@ -448,7 +508,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		} else
 			elog("VGM: its SN76489 left out (%s)", why);
 	}
-	if (!use_ay && !use_sn && !use_opn && !use_opl) {
+	if (!use_ay && !use_sn && !use_opn && !use_opl && !use_cpu) {
 		snprintf(err, (size_t)n, "%s is music for a sound chip|EPlay doesn't play yet.", name);
 		vp_stop();
 		return 0;
@@ -474,9 +534,9 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		chip_name(info, ni, "VGM  SN76489", h.sn_clock);
 	{
 		char dsp[24];
-		long r = use_sn ? dspsn_rate() : use_opn ? dspopn_synth() : use_opl ? dspopl_synth() : 0;
-		int dsp_on = use_sn || use_opn || use_opl;
-		snprintf(dsp, sizeof(dsp), "DSP  %ld.%ld kHz", r / 1000, r % 1000 / 100);
+		long r = use_sn ? dspsn_rate() : use_opn ? dspopn_synth() : use_opl ? dspopl_synth() : c_rate;
+		int dsp_on = use_sn || use_opn || use_opl || use_cpu;
+		snprintf(dsp, sizeof(dsp), "%s  %ld.%ld kHz", use_cpu ? "CPU" : "DSP", r / 1000, r % 1000 / 100);
 		snprintf(out, (size_t)no, "%s%s%s%s", use_ay ? "YM2149" : "", use_ay && dsp_on ? " + " : "",
 			 dsp_on ? dsp : "",
 			 h.other || (h.ym2612_clock && !use_opn) || ((h.ym3812_clock || h.ymf262_clock) && !use_opl) ||
@@ -489,7 +549,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 			elog("VGM: the %s on the DSP at %ld Hz (the SSI's %ld)", h.ymf262_clock ? "YMF262" : "YM3812",
 			     dspopl_synth(), dspopl_rate());
 	}
-	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0, use_sn ? sn : use_opn && dspopn_psg() ? opn_sn : 0, 0);
+	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0,
+		  use_sn ? sn : use_opn && dspopn_psg() ? opn_sn : use_cpu ? vgmcpu_sn : 0, use_cpu ? &c_chips : 0);
 	run.opn_fn = use_opn ? opn : 0;
 	run.opl_fn = use_opl ? opl : 0;
 	run.avail = ld ? avail : 0;	/* (still unpacking: so far; a seek unpacks further) */
@@ -525,6 +586,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		run.opl_fn = l;
 	} else
 		pause_ok = 0;	/* (from its start: the copy at Pause no longer the place) */
+	if (use_cpu && run.at > 0)
+		vgm_resend(&run);	/* (the CPU's chips as the file has them there: no tick to) */
 	run.dac = use_opn ? dspopn_dac() : 0;	/* (the drums' samples straight to the tick's DAC) */
 	open_ = 1;
 	return 1;
@@ -580,6 +643,7 @@ void vp_halt(void)
 void vp_stop(void)
 {
 	vp_halt();
+	use_cpu = 0;
 	if (use_sn) {
 		dspsn_close();
 		use_sn = 0;

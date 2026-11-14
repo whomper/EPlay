@@ -7,12 +7,43 @@
  * Master System's 3,579,545 Hz (998.8 Hz), at the loudest; what the SSI
  * sends measured: its pitch (from the crossings), its level, left and
  * right the same (the slots paired either way: the chip is mono); then the noise (white) on its own: its level, and no
- * tone in it; then silence.
+ * tone in it; then silence. And the CPU's SN76489 (src/sncpu.c, phase 11)
+ * held to it bit for bit: the same commands at the samples the DSP took
+ * them at (its ring's writes counted), each of its samples against what
+ * the SSI sent.
  */
 #include <math.h>
 #include <string.h>
 #include "sn_prog.h"
 #include "../dspsim.h"
+#include "sncpu.h"
+
+/* the CPU's model, in step: the DSP's samples made so far (its ring's
+   words / 2), the model's */
+static SNCPU cpu;
+static long gen_words, model_n;
+static unsigned last_r6;
+#define MODEL_MAX (1L << 19)
+static short model[MODEL_MAX];
+
+static short gen[2 * MODEL_MAX];	/* the DSP's samples as it wrote them to its ring (Y:0) */
+
+static void track(void)
+{
+	unsigned r6 = dsp_core.registers[DSP_REG_R6] & 255;
+	while (last_r6 != r6) {
+		if (gen_words < 2 * MODEL_MAX)
+			gen[gen_words] = (short)(dsp_core.ramint[DSP_SPACE_Y][last_r6] >> 8);
+		gen_words++;
+		last_r6 = (last_r6 + 1) & 255;
+	}
+}
+
+static void model_to(long n)
+{
+	while (model_n < n && model_n < MODEL_MAX)
+		model[model_n++] = (short)(sncpu_sample(&cpu) >> 8);
+}
 
 static unsigned long long slot_cycles = 325, next_slot;
 static int slot0 = 1;
@@ -48,6 +79,7 @@ static void run(unsigned long long n)
 		if (!step())
 			dead = 1;
 		clock_ssi();
+		track();
 	}
 }
 
@@ -55,8 +87,21 @@ static void cmd(int c, unsigned long v)
 {
 	put((unsigned long)c);
 	clock_ssi();
+	track();
 	put(v & 0xffffff);
 	clock_ssi();
+	track();
+	/* (until the DSP has read the value: the command takes effect there,
+	   before its next sample) */
+	while (!dead && (dsp_core.periph[DSP_SPACE_X][DSP_HOST_HSR] & 1)) {
+		if (!step())
+			dead = 1;
+		clock_ssi();
+		track();
+	}
+	model_to(gen_words / 2);
+	sncpu_word(&cpu, c);
+	sncpu_word(&cpu, (long)(v & 0xffffff));
 }
 
 /* (as atari/dspsn.c works them out) */
@@ -73,6 +118,8 @@ int main(void)
 	double sum = 0, lr = 0, lr2 = 0;
 	int bad = 0;
 	sim_start(dsp_sn_prog);
+	sncpu_init(&cpu);
+	last_r6 = dsp_core.registers[DSP_REG_R6] & 255;
 	run(32000000ULL / 100);		/* (its start waits for the SSI's frame) */
 	q11 = (long)((3579545L / 16) << 11) / rate;
 	cmd(9, 9);
@@ -146,6 +193,26 @@ int main(void)
 			bad = 1;
 			break;
 		}
+	{
+		/* the CPU's model against the SSI's words: each sample sent twice
+		   (left, right), the model's from the first the DSP made */
+		long k, diff = 0, first = -1, n;
+		model_to(gen_words / 2);
+		n = model_n;
+		for (k = 0; k < n; k++)
+			if (gen[2 * k] != model[k] || gen[2 * k + 1] != model[k]) {
+				if (first < 0)
+					first = k;
+				diff++;
+			}
+		printf("sncpu.c: %ld samples against those sn.a56 made, %s\n", k,
+		       diff ? "DIFFERENT" : "the same, bit for bit");
+		if (diff) {
+			printf("  %ld differ, the first at %ld: DSP %d %d, model %d\n", diff, first, gen[2 * first],
+			       gen[2 * first + 1], model[first]);
+			bad = 1;
+		}
+	}
 	if (sim_done())
 		bad = 1;
 	printf(bad ? "sn.a56: FAILED\n" : "sn.a56: all passed\n");

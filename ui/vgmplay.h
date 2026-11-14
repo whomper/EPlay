@@ -44,5 +44,14 @@ int vp_on(void);		/* a VGM is open */
    until vp_new_track */
 int vp_lower(void);
 void vp_new_track(void);	/* another track: the most again */
+/* phase 11 (Erez, 14 Nov 2026): a 68060 (not a ColdFire), where a VGM's
+   DSP chips are made on the CPU when the Falcon's DSP isn't there or free */
+int vp_cpu_can(void);
+/* the VGM open is made on the CPU, ahead: play.c plays vp_render's frames
+   (16-bit stereo at vp_cpu_rate) from its queue, as a WAV; vp_render's 0
+   at the end */
+int vp_cpu(void);
+long vp_cpu_rate(void);
+int vp_render(short *lr, int frames);
 
 #endif
