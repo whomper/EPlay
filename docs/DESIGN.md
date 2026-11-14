@@ -2249,7 +2249,23 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    Streets of Rage 3 track (kept outside the repo) played 28 s so with no underrun, the queue's
    least lead 1,053 ms. The tables are dspopn.c's (no copy); the STE's and the FireBee's editions
    carry none of it.
-3. **The OPL2 and OPL3**, the same way (next).
+3. **The OPL2 and OPL3 (done).** `src/oplcpu.c`: the DSP's model (`oplfast.c`) in 32 bits as
+   opncpu.c is the YM2612's, its products from each word's top 16 bits, the feedback a shift (opld
+   makes its factor 2^(FB + 14)). It runs each channel a block at a time (to the next envelope
+   update, 32 samples at most), its state in registers, then the next: the DSP's order is a sample
+   at a time, every channel, and the arithmetic is the same either way (the four-operator pairs'
+   link and the drums' noise kept a block's worth); the output is byte for byte the sample-at-a-
+   time version's, and on Hatari's 68060 half its time. Against Nuked-OPL3 all seventeen files
+   within the limits at 24,585 Hz and the OPL3's nine at 16,390, as the DSP's model is
+   (`tests/opl`, its `cpu`). On Hatari's 68060 at 32 MHz (`OPLCPU.PRG`), the worst case (every
+   channel keyed and loud, feedback 7, the tremolo and the vibrato): the OPL2's nine channels at
+   24,585 Hz 580 ms a second, the OPL3's eighteen at 16,390 Hz 730 ms (24,585 Hz 1,080: too much),
+   so its rates are the DSP's, by the file's start (OPL_LOOK): 24,585 Hz, 16,390 with the second
+   bank. All eighteen are made (a channel not keyed costs nothing), so a file that keys its second
+   bank later plays it, at the rate it started at. A file's SN76489 is left out with them, as on
+   the DSP. The tables are dspopl.c's (`dspopl_tabs`); the chips' state (some 70 KB) is taken when
+   a file first plays on the CPU, not carried in the program's BSS (1.37 carried some 27 KB of it in
+   every edition).
 4. **The XBIOS's sound** for a 68060 machine with no Atari DMA sound (a Milan's GSXB), and a
    software AY where there is no YM2149.
 

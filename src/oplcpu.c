@@ -46,7 +46,7 @@ void oplc_init(OPLF *f, const OPLC_TABS *t)
 			f->ch[c].op[k].att = OPL_ATTMAX;
 			f->ch[c].op[k].mode = M_OFF;
 		}
-	f->upd = 1;
+	f->upd = 0;
 	f->noise = 1;
 	f->nsteps = 1;
 	f->nch = 9;
@@ -199,126 +199,243 @@ static void update(OPLF *f)
 	f->upd = OPL_UPD;
 }
 
-/* ---- a sample */
+/* ---- a block: each channel's samples to the next update (at most
+   OPL_UPD), its state in registers, then the next channel's (the DSP's
+   order is a sample at a time, every channel; each channel's arithmetic
+   is the same either way: only the four-operator pairs' link and the
+   drums' noise go between channels, kept a block's worth here) */
 
-/* an operator: its phase on (stored), its modulation added, the index
-   (bits 20-11), its waveform (its top 16 bits) times its gain's */
-#define OPC(op, m) \
-	(op_b = (op)->phase + (op)->step_e, (op)->phase = op_b & 0xffffff, \
-	 (f->wave[(op)->ws][((op_b + (m)) >> 11) & 1023] * (op)->gain) >> 7)
-/* (a drum's: at a phase index made for it) */
-#define OPAT(op, idx) ((f->wave[(op)->ws][idx] * (op)->gain) >> 7)
-/* the modulator's feedback: its last two outputs x the factor */
-#define FB(ch) (PROD((ch)->o1, (ch)->kf) + PROD((ch)->o1p, (ch)->kf))
+/* (the waveform's word at a phase and its modulation, times the gain:
+   the products' top words, 2^23 = 1.0) */
+#define WAV(w, p, m, g) (((w)[(((p) + (m)) >> 11) & 1023] * (g)) >> 7)
 
-static long ch_calc(OPLF *f, OPLF_CH *ch, int bd)
+/* the modulator's feedback: its last two outputs x the factor, which
+   opld makes 2^(FB + 14) (a shift: exact), or 0 */
+static int fb_shift(long kf)
 {
-	OPLF_OP *o = ch->op;
-	long a, p1, op_b;
-	p1 = OPC(&o[0], FB(ch));
-	ch->o1p = ch->o1;
-	ch->o1 = LIMV(p1);
-	if (ch->cnt != 1)
-		a = OPC(&o[1], ch->o1);
-	else if (bd)
-		a = OPC(&o[1], 0);	/* (the bass drum's: the carrier alone) */
-	else
-		a = p1 + OPC(&o[1], 0);
-	a >>= bd ? 2 : 3;
-	return LIMV(a);
+	int e = 0;
+	if (kf <= 0)
+		return -1;
+	while (!(kf & 1)) {
+		kf >>= 1;
+		e++;
+	}
+	return kf == 1 && e >= 15 ? e - 15 : -2;
 }
 
-/* a four-operator pair (oplfast.c's pair1 and pair2) */
-static long pair1(OPLF *f, OPLF_CH *ch, OPLF_CH *pr)
+#define FBK(o1, o1p, kf, fs) \
+	((fs) >= 0 ? (((o1) >> 8) + ((o1p) >> 8)) << (fs) : (fs) == -1 ? 0 : PROD(o1, kf) + PROD(o1p, kf))
+
+/* a two-operator channel (oplfast.c's ch_calc): bd the rhythm mode's bass
+   drum (the carrier alone when additive, / 4) */
+static void ch_block(OPLF *f, OPLF_CH *ch, int bd, long *v, int m)
 {
 	OPLF_OP *a = &ch->op[0], *b = &ch->op[1];
-	long pa, x, op_b;
-	if (ch->cnt == 3)
-		return ch_calc(f, ch, 0);
-	pa = OPC(a, FB(ch));
-	ch->o1p = ch->o1;
-	ch->o1 = LIMV(pa);
-	if (ch->cnt == 2) {
-		x = OPC(b, ch->o1);
-		pr->link = LIMV(x);
-		return 0;
-	}
-	x = OPC(b, 0);
-	pr->link = LIMV(x);
-	pa >>= 3;
-	return LIMV(pa);
+	const long *wa = f->wave[a->ws], *wb = f->wave[b->ws];
+	long pa = a->phase, sa = a->step_e, ga = a->gain;
+	long pb = b->phase, sb = b->step_e, gb = b->gain;
+	long o1 = ch->o1, o1p = ch->o1p, kf = ch->kf;
+	int k, fs = fb_shift(kf), sh = bd ? 2 : 3;
+	if (ch->cnt != 1)
+		for (k = 0; k < m; k++) {
+			long x, fb = FBK(o1, o1p, kf, fs);
+			pa = (pa + sa) & 0xffffff;
+			x = WAV(wa, pa, fb, ga);
+			o1p = o1;
+			o1 = LIMV(x);
+			pb = (pb + sb) & 0xffffff;
+			x = WAV(wb, pb, o1, gb) >> sh;
+			v[k] = LIMV(x);
+		}
+	else
+		for (k = 0; k < m; k++) {
+			long x, p1, fb = FBK(o1, o1p, kf, fs);
+			pa = (pa + sa) & 0xffffff;
+			p1 = WAV(wa, pa, fb, ga);
+			o1p = o1;
+			o1 = LIMV(p1);
+			pb = (pb + sb) & 0xffffff;
+			x = WAV(wb, pb, 0, gb);
+			if (!bd)
+				x += p1;
+			x >>= sh;
+			v[k] = LIMV(x);
+		}
+	a->phase = pa;
+	b->phase = pb;
+	ch->o1 = o1;
+	ch->o1p = o1p;
 }
 
-static long pair2(OPLF *f, OPLF_CH *ch)
+/* a four-operator pair's first channel (oplfast.c's pair1): A and B, B's
+   output the second's link (lk) */
+static void pair1_block(OPLF *f, OPLF_CH *ch, OPLF_CH *pr, long *v, long *lk, int m)
+{
+	OPLF_OP *a = &ch->op[0], *b = &ch->op[1];
+	const long *wa = f->wave[a->ws], *wb = f->wave[b->ws];
+	long pa = a->phase, sa = a->step_e, ga = a->gain;
+	long pb = b->phase, sb = b->step_e, gb = b->gain;
+	long o1 = ch->o1, o1p = ch->o1p, kf = ch->kf;
+	int k, fs = fb_shift(kf);
+	if (ch->cnt == 3) {
+		ch_block(f, ch, 0, v, m);
+		return;
+	}
+	for (k = 0; k < m; k++) {
+		long x, p1, fb = FBK(o1, o1p, kf, fs);
+		pa = (pa + sa) & 0xffffff;
+		p1 = WAV(wa, pa, fb, ga);
+		o1p = o1;
+		o1 = LIMV(p1);
+		pb = (pb + sb) & 0xffffff;
+		if (ch->cnt == 2) {
+			x = WAV(wb, pb, o1, gb);
+			lk[k] = LIMV(x);
+			v[k] = 0;
+		} else {
+			x = WAV(wb, pb, 0, gb);
+			lk[k] = LIMV(x);
+			p1 >>= 3;
+			v[k] = LIMV(p1);
+		}
+	}
+	a->phase = pa;
+	b->phase = pb;
+	ch->o1 = o1;
+	ch->o1p = o1p;
+	pr->link = lk[m - 1];
+}
+
+/* its second (oplfast.c's pair2): C (modulated by the link) and D */
+static void pair2_block(OPLF *f, OPLF_CH *ch, long *v, const long *lk, int m)
 {
 	OPLF_OP *c = &ch->op[0], *d = &ch->op[1];
-	long x, op_b;
-	if (ch->cnt == OPL_PAIR2 + 1)
-		return ch_calc(f, ch, 0);
-	x = OPC(c, ch->link);
-	if (ch->cnt == OPL_PAIR2 + 3)
-		x += OPC(d, 0);
-	else {
-		x = LIMV(x);
-		x = OPC(d, x);
+	const long *wc = f->wave[c->ws], *wd = f->wave[d->ws];
+	long pc = c->phase, sc = c->step_e, gc = c->gain;
+	long pd = d->phase, sd = d->step_e, gd = d->gain;
+	int k;
+	if (ch->cnt == OPL_PAIR2 + 1) {
+		ch_block(f, ch, 0, v, m);
+		return;
 	}
-	x >>= 3;
-	return LIMV(x);
+	for (k = 0; k < m; k++) {
+		long x;
+		pc = (pc + sc) & 0xffffff;
+		x = WAV(wc, pc, lk[k], gc);
+		pd = (pd + sd) & 0xffffff;
+		if (ch->cnt == OPL_PAIR2 + 3)
+			x += WAV(wd, pd, 0, gd);
+		else {
+			x = LIMV(x);
+			x = WAV(wd, pd, x, gd);
+		}
+		x >>= 3;
+		v[k] = LIMV(x);
+	}
+	c->phase = pc;
+	d->phase = pd;
 }
 
-/* the rhythm mode's channels 7 and 8 (oplfast.c's drums) */
-static long drums(OPLF *f)
+/* the rhythm mode's channels 7 and 8 (oplfast.c's drums), the noise's bit
+   at each sample in nb */
+static void drums_block(OPLF *f, const int *nb, long *v7, long *v8, int m)
 {
 	OPLF_OP *hh = &f->ch[7].op[0], *sd = &f->ch[7].op[1], *tt = &f->ch[8].op[0], *cy = &f->ch[8].op[1];
-	long h, y, n = f->noise & 1, x, a, b, op_b;
-	hh->phase = W24(hh->phase + hh->step_e);
-	h = hh->phase >> 11 & 1023;
-	sd->phase = W24(sd->phase + sd->step_e);
-	b = OPC(tt, 0);
-	cy->phase = W24(cy->phase + cy->step_e);
-	y = cy->phase >> 11 & 1023;
-	x = (((h >> 2) ^ (h >> 7)) | ((h >> 3) ^ (y >> 5)) | ((y >> 3) ^ (y >> 5))) & 1;
-	b += OPAT(cy, x << 9 | 0x80);
-	b >>= 2;
-	f->v8 = LIMV(b);
-	a = OPAT(hh, x << 9 | ((x ^ n) ? 0xd0 : 0x34));
-	a += OPAT(sd, (h >> 8 & 1) << 9 | ((h >> 8 ^ n) & 1) << 8);
-	a >>= 2;
-	return LIMV(a);
+	const long *whh = f->wave[hh->ws], *wsd = f->wave[sd->ws], *wtt = f->wave[tt->ws], *wcy = f->wave[cy->ws];
+	int k;
+	for (k = 0; k < m; k++) {
+		long h, y, n = nb[k], x, a, b;
+		hh->phase = W24(hh->phase + hh->step_e);
+		h = hh->phase >> 11 & 1023;
+		sd->phase = W24(sd->phase + sd->step_e);
+		tt->phase = W24(tt->phase + tt->step_e);
+		b = WAV(wtt, tt->phase, 0, tt->gain);
+		cy->phase = W24(cy->phase + cy->step_e);
+		y = cy->phase >> 11 & 1023;
+		x = (((h >> 2) ^ (h >> 7)) | ((h >> 3) ^ (y >> 5)) | ((y >> 3) ^ (y >> 5))) & 1;
+		b += (wcy[x << 9 | 0x80] * cy->gain) >> 7;
+		b >>= 2;
+		v8[k] = LIMV(b);
+		a = (whh[x << 9 | ((x ^ n) ? 0xd0 : 0x34)] * hh->gain) >> 7;
+		a += (wsd[(h >> 8 & 1) << 9 | ((h >> 8 ^ n) & 1) << 8] * sd->gain) >> 7;
+		a >>= 2;
+		v7[k] = LIMV(a);
+	}
+	f->v8 = v8[m - 1];
+}
+
+/* a channel's samples into the mix by its gains (the DSP's: each
+   channel's product, summed) */
+static void mix(const OPLF_CH *ch, const long *v, long *l, long *r, int m)
+{
+	int k;
+	if (ch->pl == ch->pr) {
+		long g = ch->pl;
+		if (!g)
+			return;
+		for (k = 0; k < m; k++) {
+			long t = PROD(v[k], g);
+			l[k] += t;
+			r[k] += t;
+		}
+	} else
+		for (k = 0; k < m; k++) {
+			l[k] += PROD(v[k], ch->pl);
+			r[k] += PROD(v[k], ch->pr);
+		}
 }
 
 void oplc_words(OPLF *f, long *lr, int n)
 {
-	int k, c, j;
-	for (k = 0; k < n; k++) {
-		long l = 0, r = 0;
-		if (!--f->upd)
+	static long l[OPL_UPD], r[OPL_UPD], v[OPL_UPD], v8[OPL_UPD], lk[OPL_CH][OPL_UPD];
+	static int nb[OPL_UPD];
+	while (n > 0) {
+		int m, k, c, j;
+		/* (upd: the samples to the next update; oplc_init's 0, an update
+		   before the first, as the DSP's) */
+		if (!f->upd)
 			update(f);
+		m = n < f->upd ? n : f->upd;
+		memset(l, 0, (size_t)m * sizeof(l[0]));
+		memset(r, 0, (size_t)m * sizeof(r[0]));
 		if (f->rhy)
-			for (j = 0; j < f->nsteps; j++) {
-				long b = (f->noise ^ (f->noise >> 14)) & 1;
-				f->noise = f->noise >> 1 | b << 22;
+			for (k = 0; k < m; k++) {
+				for (j = 0; j < f->nsteps; j++) {
+					long b = (f->noise ^ (f->noise >> 14)) & 1;
+					f->noise = f->noise >> 1 | b << 22;
+				}
+				nb[k] = (int)(f->noise & 1);
 			}
 		for (c = 0; c < f->nch; c++) {
 			OPLF_CH *ch = &f->ch[c];
-			long v;
-			if (f->rhy && c >= 7 && c < 9)
-				v = c == 7 ? drums(f) : f->v8;
-			else if (ch->cnt >= 2 && ch->cnt < OPL_PAIR2)
-				v = ch->live || f->ch[c + 3].live ? pair1(f, ch, &f->ch[c + 3]) : 0;
-			else if (ch->cnt >= OPL_PAIR2)
-				v = ch->live || f->ch[c - 3].live ? pair2(f, ch) : 0;
-			else if (!ch->live)
+			if (f->rhy && c == 7) {
+				drums_block(f, nb, v, v8, m);
+				mix(ch, v, l, r, m);
+				mix(&f->ch[8], v8, l, r, m);
+				c++;
+				continue;
+			}
+			if (ch->cnt >= 2 && ch->cnt < OPL_PAIR2) {
+				if (!ch->live && !f->ch[c + 3].live)
+					continue;
+				pair1_block(f, ch, &f->ch[c + 3], v, lk[c + 3], m);
+			} else if (ch->cnt >= OPL_PAIR2) {
+				if (!ch->live && !f->ch[c - 3].live)
+					continue;
+				pair2_block(f, ch, v, lk[c], m);
+			} else if (!ch->live)
 				continue;
 			else
-				v = ch_calc(f, ch, f->rhy && c == 6);
-			if (v) {
-				l += PROD(v, ch->pl);
-				r += PROD(v, ch->pr);
-			}
+				ch_block(f, ch, f->rhy && c == 6, v, m);
+			mix(ch, v, l, r, m);
 		}
-		lr[2 * k] = W24(LIMV(l));
-		lr[2 * k + 1] = W24(LIMV(r));
+		for (k = 0; k < m; k++) {
+			lr[2 * k] = W24(LIMV(l[k]));
+			lr[2 * k + 1] = W24(LIMV(r[k]));
+		}
+		f->upd -= m;
+		lr += 2 * m;
+		n -= m;
 	}
 }
 

@@ -892,6 +892,13 @@ def run(work, case, spec):
             # (judged by the log, as auto: each change a moment's break)
             lines = [l[4:] for l in open(log, errors="replace").read().split("\n") if l.startswith("LOG VGM: ")]
             ons = [l for l in lines if " on the DSP at " in l]
+            cpus = [l for l in lines if " on the CPU at " in l]
+            if case == "vgmopl3late" and cpus:
+                # (VGMCPU=1, phase 11: the CPU makes all eighteen from the
+                # start, at the rate its start chose: no switch)
+                ok = (len(cpus) == 1 and "18 channels) on the CPU at 24585 Hz" in cpus[0] and
+                      "Played to the end" in end and "EPLAY ended: 0 underruns" in open(log, errors="replace").read())
+                return ok, m.describe(), "%s\n     %s\n     %s" % (played[len("EPLAY playing: "):], end, cpus[0])
             if case == "vgmlow":
                 why = [l for l in lines if "the DSP behind at" in l]
                 ok = len(why) == 3 and len(ons) == 4 and "at 12292 Hz" in ons[-1]

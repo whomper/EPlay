@@ -147,6 +147,37 @@ int main(int argc, char **argv)
 	put16(o, 16);
 	fwrite("data\0\0\0\0", 1, 8, o);
 	/* the tick as the 68030's, its commands before the samples after it */
+#ifdef OPL_CPU
+	/* (the CPU's: a tick's samples in one call, as vgmcpu.c makes them, so
+	   that its blocks are run as they are there) */
+	{
+		static short blk[2 * 4096];
+		int pend = 0, k;
+		while (live) {
+			tick += TICK_HZ / rate;
+			if (tick >= 1 || pend == 4096) {
+				memset(blk, 0, (size_t)pend * 4);
+				oplc_run(&dsp, blk, pend);
+				for (k = 0; k < 2 * pend; k++)
+					put16(o, (unsigned)blk[k]);
+				pend = 0;
+			}
+			if (tick >= 1) {
+				tick -= 1;
+				vacc += STEP;
+				live = run((long)(vacc >> 16));
+				opld_send(&chip, put, &dsp);
+				vacc &= 0xffff;
+			}
+			pend++;
+			frames++;
+		}
+		memset(blk, 0, (size_t)pend * 4);
+		oplc_run(&dsp, blk, pend);
+		for (k = 0; k < 2 * pend; k++)
+			put16(o, (unsigned)blk[k]);
+	}
+#else
 	while (live) {
 		short s[2] = { 0, 0 };
 		tick += TICK_HZ / rate;
@@ -162,6 +193,7 @@ int main(int argc, char **argv)
 		put16(o, (unsigned)s[1]);
 		frames++;
 	}
+#endif
 	fseek(o, 4, SEEK_SET);
 	put32(o, (unsigned long)(36 + frames * 4));
 	fseek(o, 40, SEEK_SET);
