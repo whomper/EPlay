@@ -12,6 +12,8 @@
 #include <string.h>
 #include "vgm.h"
 #include "vgmcpu.h"
+#include "oplexp.h"
+#include "opltab.h"
 #include <math.h>
 #include "vgmfile.h"
 
@@ -399,7 +401,7 @@ int main(int argc, char **argv)
 		put32(0x18, 44100 + 4410);
 		same_n("cpu head", vgm_head(f, fn, &h), 1);
 		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
-		vgmcpu_init(&cpu, &h, 49170, 0, 0);
+		vgmcpu_init(&cpu, &h, 49170, 0, 0, 0);
 		for (;;) {
 			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
 			got += m;
@@ -468,7 +470,7 @@ int main(int argc, char **argv)
 		same_n("opn cpu head", vgm_head(f, fn, &h), 1);
 		opnf_init(&tabs);	/* (its tables: build/opntab.h's on the Atari) */
 		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
-		vgmcpu_init(&cpu, &h, 24585, (const unsigned long *)tabs.sin_tab, (const unsigned long *)tabs.gain_tab);
+		vgmcpu_init(&cpu, &h, 24585, (const unsigned long *)tabs.sin_tab, (const unsigned long *)tabs.gain_tab, 0);
 		vgmcpu_attach(&cpu, &r);
 		for (;;) {
 			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
@@ -492,6 +494,65 @@ int main(int argc, char **argv)
 		for (k = 24585 + 6000, nz = 0; k < got; k++)
 			nz += lr[2 * k] != 0;
 		same_n("opn cpu silent once released", nz, 0);
+	}
+
+	/* the YM3812 made on the CPU (oplcpu.c, through vgmcpu.c): channel 0's
+	   carrier alone (its modulator silent), F-number 577, block 4 at the
+	   chip's 3,579,545 Hz (437.7 Hz), a second at 24,585 Hz, then keyed
+	   off; its tables the Atari's (build/opltab.h) */
+	{
+		static VGMCPU cpu;
+		static short lr[2 * 40000];
+		static const OPLC_TABS tabs = { opl_gain, opl_am, opl_pmw, opl_sinq, opl_rq, OPL_GAIN_N };
+		static const unsigned char regs[][2] = {
+			{ 0x01, 0x20 }, { 0x20, 0x01 }, { 0x23, 0x21 }, { 0x40, 0x3f }, { 0x43, 0x00 },
+			{ 0x60, 0xf0 }, { 0x63, 0xf0 }, { 0x80, 0x0f }, { 0x83, 0x0f }, { 0xc0, 0x00 },
+			{ 0xa0, 577 & 255 }, { 0xb0, 0x20 | 4 << 2 | 577 >> 8 } };
+		long got = 0, k, cross = 0, nz = 0;
+		double sum = 0;
+		unsigned i;
+		memset(f, 0, sizeof(f));
+		memcpy(f, "Vgm ", 4);
+		put32(0x08, 0x151);
+		put32(0x34, 0x100 - 0x34);
+		put32(0x50, 3579545);
+		fn = 0x100;
+		for (i = 0; i < sizeof(regs) / sizeof(regs[0]); i++) {
+			b(0x5a); b(regs[i][0]); b(regs[i][1]);
+		}
+		b(0x61); b(44100 & 255); b(44100 >> 8);
+		b(0x5a); b(0xb0); b(4 << 2 | 577 >> 8);		/* (keyed off) */
+		b(0x61); b(8820 & 255); b(8820 >> 8);
+		b(0x66);
+		put32(0x04, (unsigned long)(fn - 4));
+		put32(0x18, 44100 + 8820);
+		same_n("opl cpu head", vgm_head(f, fn, &h), 1);
+		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
+		vgmcpu_init(&cpu, &h, 24585, 0, 0, &tabs);
+		same_n("opl cpu: the OPL made, not the SN76489", cpu.has_opl && !cpu.has_opn && !cpu.has_sn, 1);
+		vgmcpu_attach(&cpu, &r);
+		for (;;) {
+			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
+			got += m;
+			if (m < 1000 || got > 38000)
+				break;
+		}
+		same_n("opl cpu frames (1.2 s at 24,585 Hz)", got > 29400 && got < 29600, 1);
+		for (k = 2000; k < 24585; k++) {
+			if ((lr[2 * k] >= 0) != (lr[2 * k - 2] >= 0))
+				cross++;
+			sum += (double)lr[2 * k] * lr[2 * k];
+			nz += lr[2 * k] != lr[2 * k + 1];
+		}
+		{
+			double hz = cross / 2.0 * 24585 / (24585 - 2000), rms = sqrt(sum / (24585 - 2000));
+			same_n("opl cpu tone (437.7 Hz, within 3)", fabs(hz - 437.7) < 3, 1);
+			same_n("opl cpu level (an operator at full: some 2,900 rms)", rms > 2000 && rms < 4000, 1);
+			same_n("opl cpu left and right the same", nz, 0);
+		}
+		for (k = 24585 + 6000, nz = 0; k < got; k++)
+			nz += lr[2 * k] != 0;
+		same_n("opl cpu silent once released", nz, 0);
 	}
 
 	/* not a VGM */

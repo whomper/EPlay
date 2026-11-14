@@ -14,6 +14,15 @@
 #include <string.h>
 #include "opld.h"
 #include "oplfast.h"
+#ifdef OPL_CPU
+/* (cpu: the same with the CPU's model, src/oplcpu.c, phase 11 step 3; its
+   tables the Atari's, build/opltab.h) */
+#include "oplcpu.h"
+#include "oplexp.h"
+#include "opltab.h"
+#define oplf_word oplc_word
+#define oplf_run oplc_run
+#endif
 
 static OPLD chip;
 static OPLF dsp;
@@ -116,7 +125,14 @@ int main(int argc, char **argv)
 		}
 		opld_channels(&chip, bank2 ? 18 : 9);
 	}
+#ifdef OPL_CPU
+	{
+		static const OPLC_TABS t = { opl_gain, opl_am, opl_pmw, opl_sinq, opl_rq, OPL_GAIN_N };
+		oplc_init(&dsp, &t);
+	}
+#else
 	oplf_init(&dsp);
+#endif
 	opld_send(&chip, put, &dsp);
 	o = fopen(argv[2], "wb");
 	if (!o)

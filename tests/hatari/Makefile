@@ -96,6 +96,21 @@ $(B)/egmath60.o: ../../src/egmath.c | $(B)
 	$(CC) $(P060O) -c -o $@ $<
 $(B)/sncmd60.o: ../../src/sncmd.c | $(B)
 	$(CC) $(P060O) -c -o $@ $<
+# OPLCPU.PRG (oplcpu.c): the YM3812's and the YMF262's C model on the CPU
+# (src/oplcpu.c) built for the 68060, timed
+# (python3 mp3cpu.py WORK ANY.MP3 6 OPLCPU.PRG)
+.PHONY: oplcpu
+oplcpu: $(B)/OPLCPU.PRG
+$(B)/OPLCPU.elf: $(B)/crt0_64k.o $(B)/oplcpu.o $(B)/oplcpuc60.o $(B)/opld60.o $(B)/egmath60.o $(B)/div6460.o \
+		$(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) -m68060 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
+	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+$(B)/oplcpu.o: oplcpu.c ../../build/opltab.h | $(B)
+	$(CC) $(P060O) -c -o $@ $<
+$(B)/oplcpuc60.o: ../../src/oplcpu.c | $(B)
+	$(CC) $(P060O) -c -o $@ $<
+$(B)/opld60.o: ../../src/opld.c | $(B)
+	$(CC) $(P060O) -c -o $@ $<
 # (EPlay's own 64-bit helpers, the 68060's path: libgcc's use its 64-bit divu.l)
 $(B)/div6460.o: ../../atari/div64.c | $(B)
 	$(CC) $(P060O) -c -o $@ $<

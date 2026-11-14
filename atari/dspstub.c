@@ -96,6 +96,7 @@ void dspopl_close(void) { }
 int dspopl_ext(void) { return 0; }
 long dspopl_least(void) { return -1; }
 int dspopl_late2(void) { return 0; }
+const OPLC_TABS *dspopl_tabs(void) { return NULL; }
 long dspopl_rate(void) { return 0; }
 long dspopl_synth(void) { return 0; }
 void dspopl_term(void) { }
