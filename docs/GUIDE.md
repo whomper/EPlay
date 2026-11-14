@@ -15,7 +15,7 @@ after another, and the music goes on while you work in other dialogs and menus.
 | `icons/` | the desktop icons: `eplay.rsc` (`eplaynv.rsc` under NVDI with its own palette), or `eplay.icn` and `eplaymk.icn` for desktops that take them |
 
 - **Install:** copy `eplay.prg` into a folder of its own, such as `C:\EPLAY\`. It keeps its
-  settings (`EPLAY.INF`), its log (`EPLAY.LOG`), the album art it has unpacked (`cache\`) and any
+  settings (`EPLAY.INF`), its log (`EPLAY.LOG`, with Options > Write a log ticked), the album art it has unpacked (`cache\`) and any
   `CRASH.LOG` beside itself. Copy `tls.ovl` and `CACERT.PEM` beside it too, for stations at
   https addresses.
 - **This guide:** copy `eplay.hyp` and `eplay.ref` into `C:\GUIDES\`, or beside `eplay.prg`.
@@ -119,7 +119,8 @@ neither: it stays as small as it is.)
   it is; **Repeat** goes round Off, All (the list again from its start) and One (the file again).
   `EPLAY.INF` keeps both.
 - **Options:** Settings... (^,); Direct connection or Through the Gateway, how a station is
-  reached (see **Web radio**).
+  reached (see **Web radio**); Write a log, `EPLAY.LOG` kept beside EPlay (off until you tick it;
+  Settings' Files page has the same tick).
 - **Help:** EPlay help (Help), this guide; Keys..., EPlay's keys in a box.
 
 A command that can't act now is greyed, and its key does nothing: Save playlist and Clear the list
@@ -270,7 +271,8 @@ at the nearest rate instead.
   network card.
 - **A station stops now and then.** The network fell behind for longer than the three seconds
   EPlay gathered. With STinG, check the Delay in `STING.CPX` (10 on a Falcon).
-- **`EPLAY.LOG`**, beside the program, says what EPlay found and did: the external clock and how it
+- **`EPLAY.LOG`**, beside the program, once **Options > Write a log** is ticked (off until then:
+  EPlay writes nothing to the disk without it), says what EPlay found and did: the external clock and how it
   set the FDI, each file's format and length, how playing ended, how the DSP and the 68030 kept
   up, and how each connection to a station went (the secure connection's steps among them). Each
   run adds to it, as in the family's other programs, each line with its time. Please send it, and

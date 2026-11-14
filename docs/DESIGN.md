@@ -2214,6 +2214,17 @@ What EPlay needs beyond common's layer:
   the tick reaches holds no trap (its code read from the build), and no FPU instruction (its
   handler saves none).
 
+## Write a log (Erez, 14 Nov 2026; the guidelines' 6.5, AERA-Atari 84aeb6e)
+
+"No log without its switch": EPLAY.LOG is written only with **Options > Write a log** ticked (last
+in Options, after a line; Settings' Files page, "Write a log (EPLAY.LOG)", the same setting, the
+two ticks in step), `LOG=` in EPLAY.INF, off until ticked. With it off nothing goes to the disk
+(`elog_switch`: conn.c's file name empty, the lines held since the start dropped, a crash's report
+CRASH.LOG's alone); each line still goes to the emulator's console for the rigs. The status line's
+"see EPLAY.LOG" (the FDI's clock) says "tick Write a log" with it off. The play rig's `quit` (no
+EPLAY.LOG) and `quitlog` (`LOG=1`: written, the quit's steps in it); the speed rig's MP3 session
+reads the console's lines where there is no file.
+
 ## Phase 11: VGM on a 68060 without the Falcon's DSP (Erez, 14 Nov 2026: "VGM on 68060 first")
 
 Before the FireBee's VGM. Where a VGM's chip is the DSP's and the Falcon's DSP isn't there or free,

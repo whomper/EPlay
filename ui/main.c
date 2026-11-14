@@ -50,7 +50,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL, C_LOG };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -93,6 +93,8 @@ static const MBAR_ITEM m_options[] = {
 	{ "-", 0, 0 },
 	{ "Direct connection", 0, C_DIRECT },	/* (how a station is reached: Erez, 8 Nov 2026) */
 	{ "Through the Gateway", 0, C_GATEWAY },
+	{ "-", 0, 0 },
+	{ "Write a log", 0, C_LOG },	/* (the guidelines' 6.5: no log without its switch; last, EFTP's words) */
 	{ 0, 0, 0 }
 };
 /* NAME help and Keys... (MENUS 1.5, D10): eplay.hyp at its first page */
@@ -129,6 +131,7 @@ static void conn_menu_shown(void)
 {
 	menu_icheck(mb.tree, mbar_object(&mb, C_DIRECT), !settings_gateway());
 	menu_icheck(mb.tree, mbar_object(&mb, C_GATEWAY), settings_gateway());
+	menu_icheck(mb.tree, mbar_object(&mb, C_LOG), settings_log());
 }
 
 static void play_menu_shown(void)
@@ -1560,8 +1563,13 @@ static void command(int c)
 		conn_menu_shown();
 		elog("stations: %s", c == C_GATEWAY ? "through the Gateway" : "a Direct connection");
 		break;
+	case C_LOG:
+		settings_set_log(!settings_log());
+		conn_menu_shown();
+		break;
 	case C_SETTINGS:
 		prefs_dialog();
+		conn_menu_shown();	/* (Write a log: the menu's tick in step with Settings') */
 		play_rgain_changed();	/* (ReplayGain: at once, gliding) */
 		break;
 	case C_CLEAR:
@@ -2339,6 +2347,7 @@ int app_main(void)
 		return 1;
 	}
 	settings_load();		/* (after snd_init: what the machine has) */
+	elog_switch(settings_log());	/* (what was logged before, held: written or dropped) */
 	help_init();
 	order_init(&list_order, tos_ms());
 	list_order.shuffle = settings_shuffle();
@@ -2398,7 +2407,8 @@ int app_main(void)
 		status(snd_ext_rate == 44100 ? "An external clock at 44.1 kHz (the FDI)." :
 					       "An external clock at 48 kHz (the FDI).");
 	else if (snd_fdi)
-		status("The FDI's driver is there, but no clock came from it: see EPLAY.LOG.");
+		status(settings_log() ? "The FDI's driver is there, but no clock came from it: see EPLAY.LOG." :
+		       "The FDI's driver is there, but no clock came from it: tick Write a log.");
 	else
 		status("No external clock: the Falcon's own rates.");
 	}

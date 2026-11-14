@@ -32,6 +32,7 @@ static char add_dir[FP_PATH], recent[FP_RECENT][FP_PATH];	/* the Add files dialo
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
+static int log_on;			/* LOG=: Options > Write a log (guidelines 6.5): off until ticked */
 static long stallat;			/* STALLAT=: the rigs' (read, never written). ms: an MP3 on the DSP taken as stalled there, once */
 static int vgmcpu;			/* VGMCPU=: the rigs' (read, never written). 1: on a 68060, a VGM's chips made on the CPU though the DSP is there (phase 11) */
 static int mp3cpu;			/* MP3CPU=: the rigs' (read, never written). 1: on a 68060 with its FPU, MP3 on the CPU (MP3FPU.OVL) though the DSP is there: Hatari's DSP can't be taken away under EmuTOS */
@@ -139,6 +140,8 @@ void settings_load(void)
 		dma8low = atoi(v);
 	if (inf_get(inf, inf_n, "MP3CPU", v, sizeof(v)))
 		mp3cpu = v[0] == '1';
+	if (inf_get(inf, inf_n, "LOG", v, sizeof(v)))
+		log_on = v[0] == '1';
 	if (inf_get(inf, inf_n, "STALLAT", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		stallat = atol(v);
 	if (inf_get(inf, inf_n, "VGMCPU", v, sizeof(v)))
@@ -283,12 +286,17 @@ static void save_in(void)
 		    "; ReplayGain: OFF, TRACK, ALBUM or AUTO (the album's in order, the track's\r\n"
 		    "; shuffled); louder only as far as the peak lets it go\r\n";
 		static const char fnote[] = "; Files: 1 for the system's file selector, 0 EPlay's own (Settings)\r\n";
+		static const char lnote[] = "; Write a log: 1 to keep EPLAY.LOG beside EPlay (Options > Write a log), 0 not\r\n";
 		n = inf_set(inf3, n, "REPLAYGAIN", rg_names[rgain], gnote, inf2, INF_MAX);
 		if (n < 0)
 			return;
 		n = inf_set(inf2, n, "SYSFSEL", filepick_system ? "1" : "0", fnote, inf3, INF_MAX);
 		if (n < 0)
 			return;
+		n = inf_set(inf3, n, "LOG", log_on ? "1" : "0", lnote, inf2, INF_MAX);
+		if (n < 0)
+			return;
+		memcpy(inf3, inf2, (size_t)n);
 	}
 	{
 		/* the stations' keys, a key at a time between the two buffers,
@@ -370,7 +378,7 @@ const char *settings_output_name(int out)
    Stations (the Gateway's address and port), Files (the system's file
    selector or EPlay's own) ---- */
 
-static short d_out, d_rg, d_fsel;
+static short d_out, d_rg, d_fsel, d_log;
 static char d_gate[sizeof(gate)], d_port[6];
 static short f_port;
 
@@ -405,6 +413,7 @@ static void page_files(SETTINGS *s, short x, short y, void *user)
 	(void)y;
 	(void)user;
 	set_tick(s, x, set_y(s, 0), "Use the system file selector", &d_fsel);
+	set_tick(s, x, set_y(s, 2), "Write a log (EPLAY.LOG)", &d_log);
 }
 
 /* an out-of-range port refused, saying what to type (D30, C21); left
@@ -431,6 +440,7 @@ void prefs_dialog(void)
 	d_out = (short)eff;
 	d_rg = (short)rgain;
 	d_fsel = filepick_system;
+	d_log = (short)log_on;
 	snprintf(d_gate, sizeof(d_gate), "%s", gate);
 	snprintf(d_port, sizeof(d_port), "%ld", gateport > 0 ? gateport : 8580L);
 	memset(&d, 0, sizeof(d));
@@ -459,6 +469,8 @@ void prefs_dialog(void)
 		save();
 		elog("Settings: the system file selector %s", filepick_system ? "on" : "off");
 	}
+	if (d_log != log_on)
+		settings_set_log(d_log);
 	/* (as it was, nothing saved: an FDI chosen and its driver not loaded
 	   this time stays chosen) */
 	if (d_out != eff) {
@@ -466,6 +478,25 @@ void prefs_dialog(void)
 		save();
 		elog("Settings: output %s (from the next Play)", labels[settings_output()]);
 	}
+}
+
+int settings_log(void)
+{
+	return log_on;
+}
+
+/* (Options > Write a log, and Settings' tick: one setting) saved at once */
+void settings_set_log(int on)
+{
+	if ((on != 0) == log_on)
+		return;
+	if (!on)
+		elog("Write a log: off");
+	log_on = on != 0;
+	elog_switch(log_on);
+	if (log_on)
+		elog("Write a log: on");
+	save();
 }
 
 int settings_rgain(void)

@@ -327,8 +327,13 @@ def session(work, spec, kind):
             for n in ("eplay.log", "EPLAY.LOG"):
                 if os.path.exists(os.path.join(r.hd, n)):
                     log = open(os.path.join(r.hd, n), errors="replace").read()
-            # (each line "hh:mm:ss.cc EPlay -- ...": common's conn.c logger)
+            # (each line "hh:mm:ss.cc EPlay -- ...": common's conn.c logger;
+            # without the file, Write a log off since 1.37, the console's
+            # "LOG ..." lines: the same, EPlay's elog sends each there too)
             lines_log = [re.sub(r"^\d\d:\d\d:\d\d\.\d\d EPlay -- ", "", l) for l in log.split("\n")]
+            if not log:
+                lines_log = [l[4:] for l in lines if l.startswith("LOG ")]
+                log = "\n".join(lines_log)
             art = [l for l in lines_log if l.startswith("album art")]
             # the job rule while a cover is unpacked (the hub, 3 Nov 2026):
             # no turn over 50 ms; EPlay logs its longest between the

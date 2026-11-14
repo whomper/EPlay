@@ -25,10 +25,11 @@
 extern const char app_version[];
 
 static int ready;
+static int off;		/* Options > Write a log not ticked (guidelines 6.5, Erez 14 Nov 2026) */
 
 void elog_init(void)
 {
-	if (ready)
+	if (ready || off)
 		return;
 	ready = 1;
 	snprintf(conn_logfile, sizeof(conn_logfile), "%seplay.log", app_dir());
@@ -64,4 +65,27 @@ void elog(const char *fmt, ...)
 void elog_save(void)
 {
 	conn_log_flush();
+}
+
+void elog_switch(int on)
+{
+	if (on) {
+		off = 0;
+		elog_init();
+		return;
+	}
+	/* (nothing more to the disk: the file's name gone, the lines held
+	   given back with the buffer, a crash's report CRASH.LOG's alone) */
+	off = 1;
+	ready = 0;
+	conn_logfile[0] = 0;
+	conn_log("EPlay", " -- ", "", 0);
+	conn_log_hold(0);
+	if (crash_report == conn_log_append)
+		crash_report = 0;
+}
+
+int elog_on(void)
+{
+	return !off;
 }

@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), stall, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), stall, firstrun, quitlog, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -196,7 +196,7 @@ CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, 
 # one playing stopped (none left)
 CASES["selall"] = CASES["keys"]
 # the cases' eplay.inf
-INFS = {"stall": "STALLAT=2000\r\n\r\n", "vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
+INFS = {"quitlog": "LOG=1\r\n\r\n", "stall": "STALLAT=2000\r\n\r\n", "vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
         "miniwav": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
@@ -251,6 +251,10 @@ CASES["firstrun"] = CASES["wav"]
 # crash catcher off (the hub, 10 Nov 2026: EFTP's and EMail's quit bombs,
 # the catcher hooked over), no CRASH.LOG
 CASES["quit"] = CASES["wav"]
+# (the guidelines' 6.5, Erez 14 Nov 2026: no log without its switch) the
+# same with Write a log ticked (LOG=1): EPLAY.LOG written, the quit's steps
+# in it; quit's own, the log off as it is by default, leaves none
+CASES["quitlog"] = CASES["wav"]
 QUIT_STEPS = ("the sound stopped", "settings saved", "the window closed", "colours, menu bar and VDI given back",
               "crash catcher off", "out of the AES")
 
@@ -675,7 +679,7 @@ def run(work, case, spec):
             got = [l.strip()[4:] for l in open(log, errors="replace")
                    if l.startswith("LOG ") and ("stopped at" in l or "least lead" in l or "VGM" in l)]
             return True, m.describe(), "after %.0f s of the host's clock: %s" % (secs, " | ".join(got))
-        if case == "quit":
+        if case in ("quit", "quitlog"):
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x10")
             cmd(fifo, "hatari-event", "keyup", "0x1d")
@@ -687,10 +691,17 @@ def run(work, case, spec):
             # (the catcher left in a chain it couldn't walk: the vector
             # leads into EPlay's memory once it has gone)
             stuck = any("not taken off" in x for x in steps)
-            if not out or missing or stuck or os.path.exists(crashed):
-                return False, m.describe(), "quit: %s%s" % ("; ".join(steps) or "no quit lines",
-                                                            ", CRASH.LOG written" if os.path.exists(crashed) else "")
-            return True, m.describe(), "quit: " + "; ".join(steps)
+            logf = machines.ci_path(hd, "EPLAY.LOG")
+            has_log = os.path.exists(logf)
+            in_log = has_log and "quit: out of the AES" in open(logf, errors="replace").read()
+            log_ok = in_log if case == "quitlog" else not has_log
+            if not out or missing or stuck or os.path.exists(crashed) or not log_ok:
+                return False, m.describe(), "quit: %s%s; EPLAY.LOG %s" % (
+                    "; ".join(steps) or "no quit lines", ", CRASH.LOG written" if os.path.exists(crashed) else "",
+                    "written" + (" with the quit" if in_log else "") if has_log else "not written")
+            return True, m.describe(), "quit: %s; EPLAY.LOG %s" % ("; ".join(steps),
+                                                                    "written, the quit in it" if has_log else
+                                                                    "not written (Write a log off)")
         if case == "place":
             wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
             v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]
