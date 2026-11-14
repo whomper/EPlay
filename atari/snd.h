@@ -28,6 +28,7 @@ extern long snd_ext_rate;
 extern int snd_dma8;		/* the TT's or STE's 8-bit DMA sound, not the Falcon's */
 extern int snd_dma8_interp;	/* it interpolates and dithers (a 68030), else the nearest sample */
 extern long snd_in_rate;	/* the file's rate, for the 8-bit DMA's resampling (before snd_open) */
+extern long snd_dma8_max;	/* the 8-bit DMA's highest rate for this track (0: its own; snd_rate_for) */
 /* the STE's way: a file's frames (bpf bytes; the left's and right's top bytes at ol, orr;
    x 0x80 for unsigned 8-bit) into the ring at the DMA's rate, the nearest; the frames taken */
 long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x);

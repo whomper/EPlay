@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), firstrun, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -122,6 +122,10 @@ CASES["vgmopl3late"] = ("OPL3L.VGM", ["-r", "44100", "-c", "1", "-b", "16"], Non
 # lead as behind, so the OPL2's sine goes on at 19,668 Hz past its first
 # second, then 16,390 past its second, the tone whole
 CASES["vgmlow"] = ("LOW.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 4)
+# the same for a WAV on the TT's or STE's 8-bit DMA (theirs alone):
+# eplay.inf's DMA8LOW=0 (the rigs') takes the CPU as behind, so a CD's 44.1
+# kHz goes on at 25,033 Hz past its first second, then 12,517
+CASES["wavlow"] = ("LOW.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 50066, (1000, 1500), 4)
 # a real file, never in the repo (a game's music: EPLAY_RIG_VGM names it, a
 # VGM or VGZ kept outside), played for EPLAY_RIG_SECS (20) and quit: does
 # its place keep up with the clock, and the DSP's ring (EPlay 1.18 on Erez's
@@ -186,7 +190,7 @@ CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, 
 # one playing stopped (none left)
 CASES["selall"] = CASES["keys"]
 # the cases' eplay.inf
-INFS = {"vgmlow": "VGMLOW=2048\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
+INFS = {"vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
         "miniwav": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
@@ -848,6 +852,14 @@ def run(work, case, spec):
         time.sleep(0.5)
         if not end:
             return False, m.describe(), played + "; never ended"
+        if case == "wavlow":
+            lines = [l[4:] for l in open(log, errors="replace").read().split("\n") if l.startswith("LOG ")]
+            why = [l for l in lines if " behind at " in l and "for this track" in l]
+            to = [l for l in lines if " to the DMA's " in l]
+            ok = (len(why) == 2 and "at 50066 Hz" in why[0] and "at 25033 Hz" in why[1] and
+                  len(to) == 3 and "12517 Hz" in to[-1] and "Played to the end" in end)
+            return ok, m.describe(), "%s\n     %s\n     %s\n     %s" % (
+                played[len("EPLAY playing: "):], end, " / ".join(why) or "never lowered", " / ".join(to))
         if case in ("vgmlow", "vgmopl3late"):
             # (judged by the log, as auto: each change a moment's break)
             lines = [l[4:] for l in open(log, errors="replace").read().split("\n") if l.startswith("LOG VGM: ")]
@@ -932,6 +944,8 @@ def main():
         for case in cases:
             if case == "mini" and no_dsp(spec):
                 case = "miniwav"
+            if case == "wavlow" and spec.split(":")[0] not in ("TT", "STE", "STE-1"):
+                continue        # (the 8-bit DMA's: a Falcon's WAV keeps up on its DMA)
             n = len(SKIPS)
             ok, what, found = run(work, case, spec)
             print("%s %s on %s: %s" % ("ok  " if ok else "FAIL", case, what, found), flush=True)

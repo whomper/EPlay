@@ -1928,6 +1928,81 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
 - **Its level is the reference's:** one channel at full level is -18 dB of full scale, as a
   real OPL2 is against its DAC's range; music with several channels is louder.
 
+**Done (OPL3, 14 Nov 2026):**
+
+- **The model** takes the YMF262 as Nuked-OPL3 has it: the second bank's nine channels (0x100 to
+  0x1FF; VGM's 0x5E and 0x5F, the clock at 0x5C, 14,318,180 Hz: its rate clock / 288, as an
+  OPL2's clock / 72), NEW (0x105) with eight waveforms (4 to 7: the sine at twice its rate in the
+  first half, its absolute value, a square, the logarithmic saw 2^(-p/32)), the outputs to the
+  left and the right (C0's bits 4 and 5; both with NEW clear), the four-operator pairs (0x104:
+  channels 0 and 3, 1 and 4, 2 and 5, and the second bank's), the rhythm mode the first bank's.
+  The nine OPL3 test files (`O3PAN`, `O3BANK`, `O3WAVE`, `O3FOUR0` to `3`, `O3CHORD`, `O3COMPAT`)
+  within the limits against the reference at 49,716, 24,585 and 16,390 Hz; the OPL2 files' output
+  bit for bit as before. (A chain of three modulations at deep levels can't be compared at all:
+  Nuked against itself with one operator 0.75 dB lower differs 4 to 21 dB in timbre; the pairs'
+  test patches are moderate.)
+- **The program**, bit for bit with the model on all 17 files and the 11 worst cases. Each
+  channel's handler reads the next one's from its table and jumps to it (no loop over the
+  channels); a pair is two linked handlers (the first's B to the second's C, by algorithm:
+  `fmlink`, `outlink`, `fmin`, `addin`); the loops run over the channels in use (9 or 18:
+  NCH); the handlers are chosen again only after an operator went off; the noise is branch-free.
+  Its worst cases, cycles a sample, at 16,390 Hz (1,952 on a stock Falcon): 18 channels in FM
+  1,626 (83 %), 18 to both outputs 1,698 (87 %), the rhythm mode with the second bank's nine in
+  FM 1,751 (**89.7 %**, the worst), six pairs with six channels 1,602 to 1,626; the OPL2's worst
+  1,106 down to 1,013 (78 % at 24,585 Hz).
+- **The rate, by the file (Erez, 13 and 14 Nov 2026):** 24,585 Hz where the file never keys its
+  second bank (nine channels), else 16,390 Hz ("16,390 Hz, go on with the 68030 side"). The
+  Falcon's clock has no 14,049 Hz (its prescale 6 can't be set): below 16,390 come 12,292 and
+  9,834. A stock Falcon looks through a MB of commands in 1.4 s, so only a file's first 64 KB are
+  (65 ms at most); a file that keys its second bank later is opened again there with 18 channels
+  (`opld`'s `late2`, `vp_lower`: a moment's break). A big VGZ playing as it unpacks is looked
+  through in what is there. On the FDI's 44.1 or 48 kHz the 18 channels are made at a third of
+  it, 14,700 or 16,000 Hz (PLAY 3: each sample three times, the first two a third and two thirds
+  of the way); nine at half, as the OPL2.
+- **The player:** the info line "VGM  YMF262  14.31 MHz", the bar's rate. The play rig's
+  `vgmopl3` (a sine on the second bank's first channel, to both outputs: 16,390 Hz, its least lead
+  1,534 words) and `vgmopl3late` (the key past the first 64 KB: 24,585 Hz, then 16,390 with 18)
+  pass on Falcon-4 with TOS 4.04 and NVDI.
+
+### A rate lowered where EPlay can't keep up (Erez, 14 Nov 2026)
+
+"EPlay should detect when it can not keep up and automatically reduce audio resolution to match.
+This should be only for a given track, once another track is played or an audio station EPlay
+starts with the maximum designed for that type."
+
+- **MP3 on the DSP** did it already (Quality by itself, 4 Nov 2026): 49,170 Hz, and where the DSP
+  falls behind 32,780 Hz with the subbands above about 15 kHz left out, from where it is, until
+  another file.
+- **A VGM on the DSP** (the YM2612 and its SN76489, the YM3812, the YMF262): the tick asks the
+  DSP's ring's least lead every 100 ms (STATUS within the tick's burst; its answer read at a later
+  tick, never waited for). Past the play's first second, on the Falcon's clock, a lead under 256
+  words (of 1,536: about 5 ms) is the DSP behind: `vp_lower` says so and play.c opens the file
+  again where it is (as a seek: about a quarter of a second's break on Falcon-4, the DSP's
+  program loaded again) at the next lower rate: 24,585, 19,668, 16,390, 12,292 Hz (the YM2612,
+  the OPL2), or 16,390, 12,292, 9,834 (the OPL3's 18 channels). The log says why and from where;
+  the bar shows the rate. Another track (`vp_new_track`, where an MP3's Normal is cleared) starts
+  at the most. On the FDI's clock the DSP has the time (at most 87.5 %: 18 channels at 16,000 Hz)
+  and the FDI isn't left. `VGMLOW=` in eplay.inf (the rigs', never written) sets the lead; the
+  play rig's `vgmlow` (`VGMLOW=2048`: any lead) steps an OPL2 sine down to 12,292 Hz, a step a
+  second.
+- **Not lowered:**
+  - **A station's MP3.** Its granules late may be the network's, and a lower rate there means
+    connecting again (seconds of silence, the live stream from then). A station starts at High,
+    as every track.
+  - **The 68030's own tick for a VGM** (the commands, Mega Drive drums): a lower rate doesn't
+    lighten it; there the music slows rather than GEM stopping, as since 1.20.
+  - **A WAV or AIFF on the Falcon.** Its DMA plays the file's own samples, and the DSP's
+    resampler keeps up with every file.
+- **A WAV or AIFF on the TT's or STE's 8-bit DMA:** the STE's 50,066 Hz for a CD's 44.1 kHz
+  takes some 72 % of its 68000. Where the DMA comes past what was written (an underrun) a second
+  into the play, the CPU (or the disk) is behind, and the file goes on at the next lower rate from
+  there: 50,066, 25,033, 12,517 Hz (`snd_dma8_max`, cleared for another track), half the work a
+  frame each. The STE's nearest-sample loop in assembly now also steps a whole frame and its
+  fraction (44.1 and 48 kHz at 25,033 Hz), two adds more a frame; at 12,517 the C loop. `DMA8LOW=`
+  (the rigs', never written: the underruns, 0 at once) sets it. The play rig's `wavlow` on Hatari's
+  STE (`DMA8LOW=0`): 50,066 to 25,033 to 12,517 Hz, the 1,000 and 1,500 Hz tones whole at each
+  (99 and 98 % of their power at 25,033 Hz), a break of about 0.3 s at each change.
+
 ### The 68030's tick with drums (1.19, 1.20: Erez's Falcon, 11 Nov 2026)
 
 EPlay 1.18 played "Spinning Machine" (Streets of Rage 3, its drums 44 DAC samples a millisecond)

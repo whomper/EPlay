@@ -73,8 +73,13 @@ own pitch.
   and its drums) plays on the Falcon's DSP at 24.6 kHz, or at half the FDI's rate through the
   FDI, with the Mega Drive's second chip, its SN76489, in the same program. A file for the YM3812
   (OPL2: AdLib and Sound Blaster music for the PC, MSX music: its nine FM channels, its four
-  waveforms and its drums) plays on the Falcon's DSP the same way. While one plays, the keyboard's
-  click and the bell are off. Music for another chip (an arcade board's) says so and isn't played
+  waveforms and its drums) plays on the Falcon's DSP the same way, and one for the YMF262 (OPL3:
+  Sound Blaster Pro 2 and Sound Blaster 16 music: its eight waveforms, its four-operator voices
+  and its stereo) too, at 16.4 kHz when it uses all 18 of its channels (24.6 kHz when nine). Where
+  the DSP can't keep up with a file, it goes on at a lower rate from there, after a moment's
+  break, and the bar shows the rate; the next file starts at the most again (so does a WAV or
+  AIFF on the TT or the STE that the CPU can't keep up with, and an MP3 on the Falcon's DSP). While one plays, the
+  keyboard's click and the bell are off. Music for another chip (an arcade board's) says so and isn't played
   yet.
 
 ## Windows and menus

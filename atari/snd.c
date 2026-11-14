@@ -283,14 +283,15 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 	}
 #if defined(__m68k__)
 	/* the common case in assembly: signed samples (not 8-bit WAV), at or
-	   below the DMA's rate (no whole frame stepped over). What fits is
+	   below the DMA's rate (no whole frame stepped over), or up to twice
+	   it (one: a rate lowered, the 68000 behind). What fits is
 	   worked out first (to the ring's end, and while the file's frames
 	   last), so the loop holds no test but the fraction's carry: for
 	   16-bit stereo one movep.w (the two top bytes, two apart) and one
 	   move.w a frame, else two byte moves. Hatari's STE profile (7 Nov
 	   2026, a CD's 44.1 kHz at 50,066 Hz): the loop with its tests took
 	   101 cycles a frame, 63 % of the 68000 */
-	while (!x && !whole && made < room && k < nin) {
+	while (!x && whole <= 1 && made < room && k < nin) {
 		const unsigned char *a2 = sp + ol;
 		long left = nin - k, n, run;
 		unsigned short d = (unsigned short)(orr - ol);
@@ -298,9 +299,11 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 		short cnt;
 		if (left > 16384)
 			left = 16384;	/* (left << 16 within 32 bits) */
-		/* outputs j = 0.. at f + j st while under left << 16 */
+		/* outputs j = 0.. at f + j st while under left << 16; with a
+		   whole frame stepped (a rate lowered: 44.1 kHz at 25,033 Hz),
+		   output j's frame is 2 j at most */
 		lim = ((unsigned long)left << 16) - f - 1;
-		n = (long)div16(lim, st) + 1;
+		n = whole ? (left - 1) / 2 + 1 : (long)div16(lim, st) + 1;
 		if (n > room - made)
 			n = room - made;
 		run = (long)(rend - r) / 2;
@@ -311,7 +314,31 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 		if (n <= 0)
 			break;
 		cnt = (short)(n - 1);
-		if (d == 2 && n >= 2) {
+		if (whole) {
+			/* (a frame and the fraction's: one more where it carries) */
+			if (d == 2)
+				__asm__ volatile("1:\tmovep.w\t0(%0),%%d0\n"
+						 "\tmove.w\t%%d0,(%1)+\n"
+						 "\tadda.w\t%5,%0\n"
+						 "\tadd.w\t%4,%2\n"
+						 "\tbcc.s\t2f\n"
+						 "\tadda.w\t%5,%0\n"
+						 "2:\tdbra\t%3,1b"
+						 : "+a"(a2), "+a"(r), "+d"(f), "+d"(cnt)
+						 : "d"(st), "d"((short)bpf)
+						 : "d0", "cc", "memory");
+			else
+				__asm__ volatile("1:\tmove.b\t(%0),(%1)+\n"
+						 "\tmove.b\t0(%0,%6.w),(%1)+\n"
+						 "\tadda.w\t%5,%0\n"
+						 "\tadd.w\t%4,%2\n"
+						 "\tbcc.s\t2f\n"
+						 "\tadda.w\t%5,%0\n"
+						 "2:\tdbra\t%3,1b"
+						 : "+a"(a2), "+a"(r), "+d"(f), "+d"(cnt)
+						 : "d"(st), "d"((short)bpf), "d"(d)
+						 : "cc", "memory");
+		} else if (d == 2 && n >= 2) {
 			/* (two frames a pass: half the dbra's; an odd one first) */
 			if (n & 1)
 				__asm__ volatile("\tmovep.w\t0(%0),%%d0\n"
@@ -909,12 +936,16 @@ long snd_rate_for(long rate, int *ext)
 	*ext = 0;
 	if (snd_dma8) {
 		/* the lowest at or above the file's (it's resampled up to it),
-		   else the highest: 44.1 and 48 kHz at 50,066, 22.05 at 25,033 */
+		   else the highest: 44.1 and 48 kHz at 50,066, 22.05 at 25,033;
+		   none above snd_dma8_max (a rate lowered: the CPU behind) */
 		int j;
-		best = rates8[0];
-		for (j = 0; j < nrates8; j++)
-			if (rates8[j] >= rate)
+		best = 0;
+		for (j = 0; j < nrates8; j++) {
+			if (snd_dma8_max && rates8[j] > snd_dma8_max && j < nrates8 - 1)
+				continue;
+			if (!best || rates8[j] >= rate)
 				best = rates8[j];
+		}
 		return best;
 	}
 	if (snd_ext_use && snd_ext_rate && (rate - snd_ext_rate < snd_ext_rate / 100 && snd_ext_rate - rate < snd_ext_rate / 100)) {
@@ -967,6 +998,7 @@ int snd_open_feed(long rate, int ext)
 }
 
 long snd_in_rate;		/* the file's rate, for the 8-bit DMA's resampling (play.c sets it) */
+long snd_dma8_max;		/* the 8-bit DMA's highest rate for this track (0: its own) */
 
 static int open8(long rate)
 {

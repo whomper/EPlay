@@ -20,6 +20,10 @@ int settings_qlate(void);
 /* a VGM on the DSP goes on at a lower rate when its ring's least lead is
    under 256 words, or VGMLOW= (the play rig's; never written) */
 int settings_vgmlow(void);
+/* a WAV or AIFF on the TT's or STE's DMA goes on at a lower rate at its
+   first underrun past its first second, or DMA8LOW='s (the play rig's,
+   0: at once; never written) */
+int settings_dma8low(void);
 
 void settings_load(void);	/* EPLAY.INF, at the start */
 void prefs_dialog(void);	/* the dialog (Settings); saved on OK when it changed */

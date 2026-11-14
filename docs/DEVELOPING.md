@@ -47,7 +47,7 @@ docs/       the guide, the design, this file, the pictures
   sample; tags and ReplayGain; web radio's parsing under AddressSanitizer, its fuzz corpus
   replayed (`make fuzz` runs the fuzzer).
 - `make dsptest`: `dsp/mp3.a56` on Hatari's DSP core against the model, bit for bit, gapless joins
-  and ReplayGain included; `dsp/sn.a56`; `dsp/opn.a56` (the YM2612) and `dsp/opl.a56` (the YM3812)
+  and ReplayGain included; `dsp/sn.a56`; `dsp/opn.a56` (the YM2612) and `dsp/opl.a56` (the YM3812 and the YMF262)
   against their models (`src/opnfast.c`, `src/oplfast.c`), bit for bit, with their worst cases'
   cycles a sample.
 - `tests/fb/`: `eplayfb.prg`'s MP3 decoder (minimp3 built for the FireBee's ColdFire) run under

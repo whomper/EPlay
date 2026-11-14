@@ -33,6 +33,7 @@ static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
 static int mp3cpu;			/* MP3CPU=: the rigs' (read, never written). 1: on a 68060 with its FPU, MP3 on the CPU (MP3FPU.OVL) though the DSP is there: Hatari's DSP can't be taken away under EmuTOS */
+static int dma8low = 1;		/* DMA8LOW=: the rigs' (read, never written): the TT's or STE's underruns at which a WAV goes on at a lower rate (0: at once) */
 static int vgmlow = 256;		/* VGMLOW=: the rigs' (read, never written): the DSP's ring's least lead (words) under which a VGM goes on at a lower rate */
 static int qlate = 1;			/* QLATE=: the rigs' (read, never written). 1: Normal at the first granule late past the start (3 let a heavy file crackle six times first: Erez, 5 Nov 2026) */
 static int shuffle, shuffle_saved, repeat, repeat_saved;	/* the Play menu's, saved at the end */
@@ -132,6 +133,8 @@ void settings_load(void)
 		qlate = atoi(v);
 	if (inf_get(inf, inf_n, "VGMLOW", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		vgmlow = atoi(v);
+	if (inf_get(inf, inf_n, "DMA8LOW", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
+		dma8low = atoi(v);
 	if (inf_get(inf, inf_n, "MP3CPU", v, sizeof(v)))
 		mp3cpu = v[0] == '1';
 	if (inf_get(inf, inf_n, "SHUFFLE", v, sizeof(v)))
@@ -175,6 +178,11 @@ int settings_qlate(void)
 int settings_vgmlow(void)
 {
 	return vgmlow;
+}
+
+int settings_dma8low(void)
+{
+	return dma8low;
 }
 
 static void save_in(void);

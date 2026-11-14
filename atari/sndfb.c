@@ -32,7 +32,7 @@
 int snd_adder_adc;
 long snd_ext_rate;
 int snd_dma8, snd_dma8_interp;
-long snd_in_rate;
+long snd_in_rate, snd_dma8_max;
 int snd_ext_use, snd_ext_only;
 int snd_ta_busy;
 long snd_ext_raw, snd_ext_clock;

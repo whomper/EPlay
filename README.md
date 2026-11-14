@@ -15,7 +15,7 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
 - **Steady sound:** fed by an interrupt from memory, so menus, dialogs and other programs don't break it up.
 - **Gapless:** an album encoded with LAME plays from one track into the next with no gap.
 - **ReplayGain:** evens out the loudness of tracks or albums from their tags.
-- **VGM and VGZ game music:** AY and YM2149 files on the Atari's own YM2149 (Falcon, TT, STE); SN76489 files (Master System, Game Gear), YM2612 files (Mega Drive) and YM3812 (OPL2) files (AdLib and Sound Blaster music, MSX) on the Falcon's DSP.
+- **VGM and VGZ game music:** AY and YM2149 files on the Atari's own YM2149 (Falcon, TT, STE); SN76489 files (Master System, Game Gear), YM2612 files (Mega Drive), YM3812 (OPL2) files (AdLib and Sound Blaster music, MSX) and YMF262 (OPL3) files (Sound Blaster Pro 2 and 16) on the Falcon's DSP, a file's rate lowered where the DSP can't keep up with it.
 - **Web radio:** Icecast and Shoutcast stations, http or https, with titles and pictures; Find station searches by genre, country and language.
 - **Playlists:** files, folders and `.M3U`; reorder by dragging; Shuffle and Repeat.
 - **Mini player:** the bar alone, in a small window.

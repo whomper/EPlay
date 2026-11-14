@@ -205,7 +205,9 @@ def session(work, spec, kind):
     external clock: the most a stock Falcon is asked), then the user's
     actions while it plays"""
     # (AERA_WITH_NVDI=1: under Erez's NVDI, as the hub runs it)
-    r = Rig(os.path.join(work, kind), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1")
+    # (EPLAY_SPEED_DISPLAY: an X display of its own, for two runs side by side)
+    r = Rig(os.path.join(work, kind), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1",
+            display=os.environ.get("EPLAY_SPEED_DISPLAY", ":91"))
     try:
         # (an STE: the 68000's edition, make profst, under the same name)
         r.put(os.path.join(TOP, "build", "profst" if r.m.name.startswith("STE") else "prof", "eplay.prg"))

@@ -1221,6 +1221,7 @@ int play_open(const char *path, char *err, int n)
 		snprintf(cur_path, sizeof(cur_path), "%s", path);
 		q_normal = 0;		/* (a file starts at High; a seek or Play keeps its own) */
 		vp_new_track();		/* (a VGM at its most: vp_lower) */
+		snd_dma8_max = 0;	/* (the 8-bit DMA's too) */
 	}
 	base_ms = 0;
 	if (!fbuf) {
@@ -1617,7 +1618,8 @@ int play_open(const char *path, char *err, int n)
 		raw8 = snd_dma8 && !snd_dma8_interp;
 		if (snd_dma8) {
 			if (out_rate != rate)
-				elog("%ld Hz up to the DMA's %ld Hz by the 68%s0: %s", rate, out_rate,
+				elog("%ld Hz %s to the DMA's %ld Hz by the 68%s0: %s", rate, out_rate > rate ? "up" : "down",
+				     out_rate,
 				     snd_dma8_interp ? "03" : "00", snd_dma8_interp ? "interpolated, dithered to 8 bits" :
 				     "the nearest sample");
 		} else if (out_rate != rate) {
@@ -1927,6 +1929,7 @@ static void chain_check(void)
 	chain_heard = 1;
 	q_normal = 0;
 	vp_new_track();
+	snd_dma8_max = 0;	/* (from its next open: this one goes on as it is) */
 	elog("gapless: %s heard after %ld ms of the queue", play_name, play_ms());
 }
 
@@ -2392,6 +2395,23 @@ int play_step(int ms)
 				snprintf(play_out, sizeof(play_out), "The station's connection ended.");
 			}
 		}
+	}
+	/* the TT's or STE's DMA past what was written, a second into this play:
+	   the CPU (or the disk) behind, so the next lower rate from here, for
+	   this track (Erez, 14 Nov 2026), half the CPU's work a frame; a moment's
+	   break, as an MP3's Normal. Not a station: it can't be opened again
+	   where it was */
+	if (snd_dma8 && kind && !net && !t_end && snd_underruns >= settings_dma8low() && play_ms() - base_ms > 1000 &&
+	    out_rate > 12517) {
+		char err[160];
+		long at = play_ms(), next = out_rate > 25033 ? 25033 : out_rate > 12517 ? 12517 : 6258;
+		elog("the 68%s0 behind at %ld Hz (%ld underruns): %ld Hz from %ld ms, for this track",
+		     snd_dma8_interp ? "03" : "00", out_rate, snd_underruns, next, at);
+		snd_dma8_max = next;
+		if (!play_seek(at, err, sizeof(err)))
+			elog("%s", err);
+		play_note_new = 1;
+		return 1;
 	}
 	/* (not a station: its frames late are the network's, not the DSP's,
 	   and it can't be opened again where it was) */
