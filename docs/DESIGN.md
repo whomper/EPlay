@@ -1968,6 +1968,14 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
   program is 12.8 KB smaller than 1.35's. The STE's edition no longer carries the DSP's programs at
   all (`atari/dspstub.c`, as the FireBee's): 178 KB less. The STE's nearest-sample loop that steps a
   whole frame (below) is the STE's alone, so the Falcon's tick code sits where 1.35's did.
+  The start's paths are pinned after the ticks' too (`tools/pinobj.py`, the Falcon's and the TT's
+  build: the list's tags and lengths, common's inflate, the VGM chips' DSP loaders), as the hub
+  asked. **What was left, accepted by Erez (14 Nov 2026, "Release EPlay"):** a few rows 10 to 30
+  ms slower than 1.35's in both runs, from where the code sits against the 68030's 256-byte caches
+  rather than from work (others came faster by as much): on Falcon-4:16 the mini player's start
+  (535 to 565 ms), the VGZ's start (2,400 to 2,430), the About box with a VGM playing (200 to 220);
+  under NVDI the About box with an MP3 playing (270 to 280), the mini player's window (140 to 150),
+  Settings closed with a VGM playing (75 to 90). The STE's: none.
 - **The player:** the info line "VGM  YMF262  14.31 MHz", the bar's rate. The play rig's
   `vgmopl3` (a sine on the second bank's first channel, to both outputs: 16,390 Hz, its least lead
   1,534 words) and `vgmopl3late` (the key past the first 64 KB: 24,585 Hz, then 16,390 with 18)
