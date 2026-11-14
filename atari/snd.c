@@ -267,6 +267,13 @@ static long put8(long k)
    file's frames taken back, at most nin */
 static unsigned long skip8;
 static unsigned short frac8;
+/* (a whole frame stepped in the assembly too: the STE's edition alone, its
+   rate lowered; the 68030's is as it was, where the ticks' code sits) */
+#ifdef EPLAY_ST
+#define PUT8_WHOLE 1
+#else
+#define PUT8_WHOLE 0
+#endif
 
 TICK_CODE("27snd_put8_raw")
 long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x)
@@ -291,7 +298,7 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 	   move.w a frame, else two byte moves. Hatari's STE profile (7 Nov
 	   2026, a CD's 44.1 kHz at 50,066 Hz): the loop with its tests took
 	   101 cycles a frame, 63 % of the 68000 */
-	while (!x && whole <= 1 && made < room && k < nin) {
+	while (!x && (PUT8_WHOLE ? whole <= 1 : !whole) && made < room && k < nin) {
 		const unsigned char *a2 = sp + ol;
 		long left = nin - k, n, run;
 		unsigned short d = (unsigned short)(orr - ol);
@@ -303,7 +310,7 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 		   whole frame stepped (a rate lowered: 44.1 kHz at 25,033 Hz),
 		   output j's frame is 2 j at most */
 		lim = ((unsigned long)left << 16) - f - 1;
-		n = whole ? (left - 1) / 2 + 1 : (long)div16(lim, st) + 1;
+		n = PUT8_WHOLE && whole ? (left - 1) / 2 + 1 : (long)div16(lim, st) + 1;
 		if (n > room - made)
 			n = room - made;
 		run = (long)(rend - r) / 2;
@@ -314,7 +321,7 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 		if (n <= 0)
 			break;
 		cnt = (short)(n - 1);
-		if (whole) {
+		if (PUT8_WHOLE && whole) {
 			/* (a frame and the fraction's: one more where it carries) */
 			if (d == 2)
 				__asm__ volatile("1:\tmovep.w\t0(%0),%%d0\n"

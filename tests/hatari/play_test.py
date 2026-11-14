@@ -132,6 +132,8 @@ CASES["wavlow"] = ("LOW.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 5006
 # Falcon: 6.4 s of music in 15, the ring dry)
 CASES["vgmreal"] = ("REAL.VGZ", None, None, 0, (0, 0), 0)
 SQUARE = {"vgm", "vgz", "vgmsn", "vgmmd"}
+# the VGM cases of the DSP's chips (refused on a machine without one)
+DSP_VGM = {"vgmsn", "vgmopn", "vgmmd", "vgmopl", "vgmopl3", "vgmopl3late", "vgmlow"}
 		# (a square wave: 81 % of its power in the tone)
 # the cases' sounds, where not sine tones
 SYNTH = {"auto": ["square", "100", "pinknoise"]}
@@ -640,6 +642,9 @@ def run(work, case, spec):
         if no_dsp(spec) and played and CASES[case][0].endswith(".MP3"):
             # (no DSP: an MP3 refused, in Erez's words, 7 Nov 2026)
             return "MP3 needs a Falcon's DSP" in played, m.describe(), "refused without a DSP: " + played
+        if no_dsp(spec) and played and case in DSP_VGM:
+            # (no DSP: the DSP's chips' music refused, as their own words say)
+            return "needs the Falcon's DSP" in played, m.describe(), "refused without a DSP: " + played
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
         time.sleep(1.5)

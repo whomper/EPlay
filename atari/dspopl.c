@@ -11,7 +11,7 @@
 #include "tickcode.h"
 #include "snd.h"
 #include "opld.h"
-#include "oplfast.h"
+#include "oplexp.h"
 #include "dspopl.h"
 #include "opl_prog.h"
 #include "opltab.h"
@@ -96,32 +96,21 @@ static long boot(void)
 	for (i = 0; i < 512; i++)
 		put(0, (long)dsp_opl_prog[i]);
 	load(6, DSP_OPL_PROG_EXT_AT, dsp_opl_prog_ext, DSP_OPL_PROG_EXT_N);
-	load(1, OPL_X_GAIN, opl_gain, sizeof(opl_gain) / sizeof(opl_gain[0]));
+	/* the gains not 0, then the rest of the table's 0s */
+	put(0, 1);
+	put(0, OPL_X_GAIN);
+	put(0, OPLF_GAINS);
+	for (i = 0; i < OPLF_GAINS; i++)
+		put(0, i < OPL_GAIN_N ? (long)opl_gain[i] : 0);
 	load(1, OPL_X_AM, opl_am, 512);
 	load(1, OPL_X_PMW, opl_pmw, 8);
-	load(4, OPL_Y_WAVE, opl_wave, 4096);
-	/* the OPL3's waveforms 4 to 7, as oplf_init makes them: from the
-	   sine's first quarter (its mirrored quarters' index ^ $FE: the
-	   chip's) and the logarithmic saw */
+	/* the eight waveforms, made as they go (oplexp.h: oplfast.c's, word for
+	   word, from the sine's first quarter and the saw's 32 factors) */
 	put(0, 4);
-	put(0, OPL_Y_WAVE + 4096);
-	put(0, 4096);
-	for (i = 0; i < 4096; i++) {
-		int k = i & 1023, w = i >> 10;
-		long q = (long)opl_wave[(k & 0x80 ? (k ^ 0xff) << 1 : k << 1) & 0xff], v;
-		if (w == 0)
-			v = k & 0x200 ? 0 : (k & 0x300) == 0x100 ? -q : q;
-		else if (w == 1)
-			v = k & 0x200 ? 0 : q;
-		else if (w == 2)
-			v = k & 0x200 ? -OPLF_FULL : OPLF_FULL;
-		else {
-			v = (long)opl_ramp[k & 0x200 ? (k & 0x1ff) ^ 0x1ff : k];
-			if (k & 0x200)
-				v = -v;
-		}
-		put(0, v);
-	}
+	put(0, OPL_Y_WAVE);
+	put(0, 8192);
+	for (i = 0; i < 8192; i++)
+		put(0, (long)oplx_wave(opl_sinq, opl_rq, i >> 10, i & 1023));
 	put(0, OPLC_RESET);
 	burst = 0;
 	return 0;

@@ -155,7 +155,7 @@ $(B)/opl_prog.h: dsp/opl.a56 common/dsp/mkh.py | $(B)
 	mkdir -p $(B)/opl && cd $(B)/opl && a56 ../../dsp/opl.a56 > opl.lst && ! grep -q 'warning:\|error:' opl.lst && \
 		python3 ../../common/dsp/mkh.py a56.out ../opl_prog.h dsp_opl_prog opl.a56
 # (the YM3812's tables: the model's, made on the build machine)
-$(B)/opltab.h: tools/mkopltab.c src/oplfast.c src/oplfast.h src/opld.h | $(B)
+$(B)/opltab.h: tools/mkopltab.c src/oplfast.c src/oplfast.h src/oplexp.h src/opld.h | $(B)
 	cc -O2 -Wall -Wextra -Werror -Isrc -o $(B)/mkopltab tools/mkopltab.c src/oplfast.c -lm
 	$(B)/mkopltab $@
 # (the YM2612's tables: the model's, made on the build machine)

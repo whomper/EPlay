@@ -1959,6 +1959,15 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
   through in what is there. On the FDI's 44.1 or 48 kHz the 18 channels are made at a third of
   it, 14,700 or 16,000 Hz (PLAY 3: each sample three times, the first two a third and two thirds
   of the way); nine at half, as the OPL2.
+- **What it costs the start (the hub, 14 Nov 2026: a start within a tick of 1.35's).** The OPL3
+  added 9 KB of program, and the speed rig's starts came 10 ms later. So the program carries less
+  of the DSP's tables: the eight waveforms (32 KB as words) are made as they are sent from the
+  sine's first quarter (256 words) and 32 factors of 2^(-k/32) in 40 bits (`src/oplexp.h`), the
+  gain table's 832 words that aren't 0 are sent and then 0s. `tools/mkopltab.c` checks each of
+  the 8,192 waveform words against `oplfast.c`'s and stops the build if one differs. The Falcon's
+  program is 12.8 KB smaller than 1.35's. The STE's edition no longer carries the DSP's programs at
+  all (`atari/dspstub.c`, as the FireBee's): 178 KB less. The STE's nearest-sample loop that steps a
+  whole frame (below) is the STE's alone, so the Falcon's tick code sits where 1.35's did.
 - **The player:** the info line "VGM  YMF262  14.31 MHz", the bar's rate. The play rig's
   `vgmopl3` (a sine on the second bank's first channel, to both outputs: 16,390 Hz, its least lead
   1,534 words) and `vgmopl3late` (the key past the first 64 KB: 24,585 Hz, then 16,390 with 18)
