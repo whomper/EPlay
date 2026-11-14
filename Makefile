@@ -86,6 +86,11 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 endif
+# the start's paths at a place of their own, straight after the ticks'
+# (tools/pinobj.py: their sections .text.1st.*): the list's tags and
+# lengths, inflate (common's, its object renamed here), the DSP's loaders
+PIN     := tags probe list inflate dspopn dspopl dspsn
+PINOBJ   = $(if $(filter $*,$(PIN)),python3 tools/pinobj.py $(CROSS)objcopy $(CROSS)objdump $@ $*)
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
@@ -168,10 +173,13 @@ $(B)/mp3_prog.h: dsp/mp3.a56 $(B)/mp3tab.h common/dsp/mkh.py
 
 $(OBJDIR)/%.o: ui/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
+	$(PINOBJ)
 $(OBJDIR)/%.o: atari/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
+	$(PINOBJ)
 $(OBJDIR)/%.o: src/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
+	$(PINOBJ)
 $(OBJDIR)/%.o: src/mp3/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
 # the first code, built for the 68000: on an ST it says EPlay needs a
@@ -180,6 +188,7 @@ $(OBJDIR)/cpucheck.o: common/atari/cpucheck.c | $(OBJDIR)
 	$(CC) $(subst -m$(CPU),-m68000,$(CFLAGS)) -c -o $@ $<
 $(OBJDIR)/%.o: common/src/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
+	$(PINOBJ)
 # the album art's JPEGs (common's pic.c; GIF left out: an album's art
 # never is one)
 $(OBJDIR)/tjpgd.o: common/third_party/tjpgd/tjpgd.c $(wildcard common/third_party/tjpgd/*.h) | $(OBJDIR)
