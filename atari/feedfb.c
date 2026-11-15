@@ -72,9 +72,15 @@ long feed_us(void)
 	return n * (cr == 3 ? 625 : cr == 5 ? 2500 : 3906) / 96;
 }
 
+/* stopped: Timer A's interrupt disabled first (Jdisint: nothing pending
+   comes after it), then the vector as it was. Not Xbtimer: it enables the
+   interrupt it sets, and with the tick at 1 kHz one is nearly always
+   pending, taken at once through the vector found at the start, which on
+   FireTOS needn't be a handler: 1.38's FireBee went to a black screen at
+   every Pause, seek and track's end (the tester, 15 Nov 2026). mxPlay
+   stops the same way: Buffoper(0), Jdisint */
 static void stop(void)
 {
-	xbtimer(0, 0, 0, old_vec);
 	trap14_ww(26, 13);		/* Jdisint: Timer A */
 	setexc(TA_VECNO, old_vec);
 }

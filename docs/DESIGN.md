@@ -2321,7 +2321,13 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    the MFP's vector or registers, as EPLAYFB.PRG's); WAV, AIFF and a file's AY play, MP3 and the DSP's
    chips are EPLAYFB.PRG's or refused. Common's machines.py from AERA-Atari b4d9cf7 (alone) gives the
    rigs a FireBee stand-in (a 68060 Falcon with FireTOS's cookies): play_test on FireBee:16 wav,
-   aiff, vgm, quit play; mp3, vgmsn refused, list passes the MP3 over.
+   aiff, vgm, quit play; mp3, vgmsn refused, list passes the MP3 over. **The FireBee's crash at a
+   stop** (the tester, 15 Nov 2026, EPLAYFB.PRG 1.38 under FireTOS and MiNT: a black screen at
+   every Pause, seek and track's end, playing and the volume fine): the tick's stop called Xbtimer
+   to put the old vector back, and Xbtimer enables the interrupt it sets; at 1 kHz one is nearly
+   always pending, taken at once through a vector FireTOS needn't have filled. Now Jdisint first,
+   then Setexc, as mxPlay (Mikro's, GPL 2) stops: Buffoper(0), Jdisint. The stand-in can't show it
+   (EmuTOS's vector is a handler); the tester's run will.
 
 **1.38's speed against 1.37, accepted by Erez (15 Nov 2026):** the rows slower beyond a tick in both
 runs, with phase 11's step 3, the log at once, Timer A's limits and NATFEATS. On Falcon-4:16: a Mega
