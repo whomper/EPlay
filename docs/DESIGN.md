@@ -2225,6 +2225,14 @@ CRASH.LOG's alone); each line still goes to the emulator's console for the rigs.
 EPLAY.LOG) and `quitlog` (`LOG=1`: written, the quit's steps in it); the speed rig's MP3 session
 reads the console's lines where there is no file.
 
+**1.37's speed against 1.36, accepted by Erez (15 Nov 2026):** three rows slower in both runs. On
+Falcon-4:16, Settings opened with a VGM playing (165 and 185 ms to 195 and 205): Settings builds all
+its pages, this tick some 10 ms more, and a VGM's tick takes some 60 % of the 68030 (with an MP3 or
+a WAV playing the row is level). Under NVDI, Play let go with a VGM playing (160 and 150 to 185 and
+190): its cause still to find. On the STE, Delete (265 and 255 to 315 and 310): timing, not work;
+the Delete's own steps take the same (280 ms to its drawing's end, the log on or off), the queue's
+refill falling into its turn with the log off (275 with `LOG=1`; 1.37 without this commit 260).
+
 ## Phase 11: VGM on a 68060 without the Falcon's DSP (Erez, 14 Nov 2026: "VGM on 68060 first")
 
 Before the FireBee's VGM. Where a VGM's chip is the DSP's and the Falcon's DSP isn't there or free,
