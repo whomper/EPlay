@@ -2306,6 +2306,20 @@ The VGM's own start is no slower (its file opened in 1,613 ms against 1,624): 45
 that 1.37 spent in an AES idle call, which a row leaves out, now count. The STE's pairs on TOS 1.62 ran
 after the release, for the record.
 
+**1.39: TOS 1.x has no Mxalloc (15 Nov 2026).** On a real STE (TOS 1.62) EPlay 1.38 and before
+couldn't add a file: GEMDOS answers Mxalloc with EINVFN (-32), which EPlay took for no memory ("the list
+full at 0 files"). EmuTOS has Mxalloc, so the rigs never saw it until they ran on Erez's TOS images.
+`atari/xalloc.h`'s x_alloc: Mxalloc, else Malloc (all RAM is ST RAM there; TT RAM alone, mode 1, has
+none), at every one of EPlay's own calls. Erez accepted two rows under NVDI against 1.38: started with a
+WAV playing 695 to 705 ms, with a Mega Drive VGM 2,610 to 2,640.
+
+**The STE's baseline on TOS 1.62 (1.39, the first rows on Erez's real STE TOS, two runs alike).** Many
+over the guidelines' times (8 MHz, the 8-bit DMA, the nearest sample): the About box with a WAV playing
+230, 235 ms (150); Settings opened 345 (150); Pause let go 90 (50); Play let go 150, 180 (50); the
+position bar let go 180 (50); the 5 s while it plays 55 to 60 (50); a row selected 75 (50); a row played,
+the whole picture 365, 370 (165); Next 405, 410 (185); Down 250, 235 (50); Return 355 (145); Delete 315
+(300). Recorded, not worked on: the STE's speed as a phase of its own is Erez's to decide.
+
 ## A DSP that stalls while it plays (Erez, 14 Nov 2026)
 
 An https station through the Gateway on the FDI's 44.1 kHz stopped twice in 5 minutes, "The DSP
