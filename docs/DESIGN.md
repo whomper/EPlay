@@ -2297,6 +2297,15 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
 4. **The XBIOS's sound** for a 68060 machine with no Atari DMA sound (a Milan's GSXB), and a
    software AY where there is no YM2149.
 
+**1.38's speed against 1.37, accepted by Erez (15 Nov 2026):** the rows slower beyond a tick in both
+runs, with phase 11's step 3, the log at once, Timer A's limits and NATFEATS. On Falcon-4:16: a Mega
+Drive VGM's start (2,410 to 2,455 ms), the About box with it playing (210 and 215 to 220 and 230), its
+3 s after a seek (20 and 25 to 40). Under NVDI: the VGM's start (2,570 to 2,610), the About box (460 to
+475 and 470), Settings opened with it playing (275 to 300), Settings closed (65 and 55 to 75 and 65).
+The VGM's own start is no slower (its file opened in 1,613 ms against 1,624): 45 ms of its first turn
+that 1.37 spent in an AES idle call, which a row leaves out, now count. The STE's pairs on TOS 1.62 ran
+after the release, for the record.
+
 ## A DSP that stalls while it plays (Erez, 14 Nov 2026)
 
 An https station through the Gateway on the FDI's 44.1 kHz stopped twice in 5 minutes, "The DSP
