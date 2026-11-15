@@ -44,14 +44,11 @@ void elog_init(void)
 	}
 }
 
-void elog(const char *fmt, ...)
+static void elog_line(const char *fmt, va_list ap)
 {
 	char line[600];
-	va_list ap;
 	long n;
-	va_start(ap, fmt);
 	vsnprintf(line, sizeof(line) - 2, fmt, ap);
-	va_end(ap);
 	n = (long)strlen(line);
 	elog_init();
 	conn_log("EPlay", " -- ", line, n);
@@ -60,6 +57,33 @@ void elog(const char *fmt, ...)
 	line[n] = 0;
 	nf_debug("LOG ");
 	nf_debug(line);
+}
+
+void elog(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	elog_line(fmt, ap);
+	va_end(ap);
+}
+
+void elog_warn(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	elog_line(fmt, ap);
+	va_end(ap);
+	conn_log_flush();
+}
+
+void elog_tick(void)
+{
+	static unsigned long last;
+	unsigned long now = tos_hz200();
+	if (off || now - last < 2000)
+		return;
+	last = now;
+	conn_log_flush();		/* (nothing waiting: nothing written) */
 }
 
 void elog_save(void)

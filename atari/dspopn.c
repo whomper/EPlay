@@ -368,11 +368,11 @@ void dspopn_close(void)
 			elog("VGM: the DSP's ring's least lead %ld words (%ld ms)%s", least,
 			     least * 500 / (rate ? rate : 24585), least < 64 ? ": it fell behind" : "");
 		else
-			elog("VGM: the DSP didn't say how it kept up");
+			elog_warn("VGM: the DSP didn't say how it kept up");
 	}
 	if (on && failed) {
 		/* the DSP stopped taking words: the last burst's first ones */
-		elog("VGM: the DSP stopped taking the 68030's words after %lu; HISR $%02X; the last burst began "
+		elog_warn("VGM: the DSP stopped taking the 68030's words after %lu; HISR $%02X; the last burst began "
 		     "%lX %lX %lX %lX %lX %lX %lX %lX", f_sent, f_hisr,
 		     last_w[0], last_w[1], last_w[2], last_w[3], last_w[4], last_w[5], last_w[6], last_w[7]);
 	}

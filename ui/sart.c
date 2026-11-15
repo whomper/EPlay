@@ -288,13 +288,13 @@ static int fetch_show(const char *what, const char *u0, const char *name, unsign
 	conn_stop = 0;
 	if (r != 1) {
 		if (!quiet || strncmp(why, "answered 404", 12))
-			elog("%s: %s, after %lu ms", what, r == 2 ? "redirected too often" : why, pf_ms() - t0);
+			elog_warn("%s: %s, after %lu ms", what, r == 2 ? "redirected too often" : why, pf_ms() - t0);
 		return 0;
 	}
 	elog("%s: %ld bytes in %lu ms", what, len, pf_ms() - t0);
 	r = art_station(name, key, d, len);
 	if (!r)
-		elog("%s: not unpacked (memory, or another picture being made)", what);
+		elog_warn("%s: not unpacked (memory, or another picture being made)", what);
 	free(d);
 	return r;
 }

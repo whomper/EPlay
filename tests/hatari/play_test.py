@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), stall, firstrun, quitlog, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), stall, firstrun, quitlog, logasgo, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -196,7 +196,7 @@ CASES["keys"] = ("K1.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, 
 # one playing stopped (none left)
 CASES["selall"] = CASES["keys"]
 # the cases' eplay.inf
-INFS = {"quitlog": "LOG=1\r\n\r\n", "stall": "STALLAT=2000\r\n\r\n", "vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
+INFS = {"quitlog": "LOG=1\r\n\r\n", "logasgo": "LOG=1\r\n\r\n", "stall": "STALLAT=2000\r\n\r\n", "vgmlow": "VGMLOW=2048\r\n\r\n", "wavlow": "DMA8LOW=0\r\n\r\n", "repeat": "REPEAT=ALL\r\n\r\n", "shuffle": "SHUFFLE=1\r\n\r\n", "aiff44": "OUTPUT=DSP\r\n\r\n", "auto": "QLATE=0\r\n\r\n", "wavvol": "VOLUME=8\r\n\r\n", "mini": "MINI=1\r\n\r\n",
         "miniwav": "MINI=1\r\n\r\n"}
 # the mini player (eplay.inf's MINI=1): the bar alone, playing as ever
 CASES["mini"] = CASES["mp3"]
@@ -255,6 +255,9 @@ CASES["quit"] = CASES["wav"]
 # same with Write a log ticked (LOG=1): EPLAY.LOG written, the quit's steps
 # in it; quit's own, the log off as it is by default, leaves none
 CASES["quitlog"] = CASES["wav"]
+# (Write a log ticked: EPLAY.LOG on the disk while it plays, its start in it,
+# so a crash keeps it: Erez, 15 Nov 2026; the sound as the wav case's)
+CASES["logasgo"] = CASES["wav"]
 QUIT_STEPS = ("the sound stopped", "settings saved", "the window closed", "colours, menu bar and VDI given back",
               "crash catcher off", "out of the AES")
 
@@ -659,6 +662,12 @@ def run(work, case, spec):
             return False, m.describe(), played or "nothing played"
         time.sleep(1.5)
         cmd(fifo, "hatari-shortcut", "screenshot")
+        if case == "logasgo":
+            logf = machines.ci_path(hd, "EPLAY.LOG")
+            text = open(logf, errors="replace").read() if os.path.exists(logf) else ""
+            if "open C:\\" not in text or "quit:" in text:
+                return False, m.describe(), "EPLAY.LOG while it plays: %s" % (
+                    "not there" if not text else "no start in it" if "open C:" not in text else "a quit in it")
         if case == "firstrun":
             wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
             v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]

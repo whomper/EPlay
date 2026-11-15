@@ -548,6 +548,7 @@ static void play_now(const char *f)
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
 		nf_debug(line);
+		elog_save();		/* (what went before it on the disk: Write a log's) */
 		alert(1, "[3][%s][ OK ]", err);
 		redraw(&work, BP_ALL);
 		return;
@@ -1642,6 +1643,7 @@ static void command(int c)
 			} else
 				ok = play_resume(err, sizeof(err));
 			if (!ok) {
+				elog_save();		/* (what went before it on the disk: Write a log's) */
 				alert(1, "[3][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
@@ -1737,6 +1739,8 @@ static void step(int playing)
 	}
 	if (bar_scroll_step())
 		redraw(0, BP_TITLE);	/* (a step of the title's scroll: its two lines) */
+	if (playing)
+		elog_tick();	/* (Write a log's lines written every 10 s at most while it plays) */
 	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
 		if (play_tags_late) {
 			/* (a big VGZ's GD3, at its end: its row read again, now from
@@ -1907,6 +1911,7 @@ static void do_seek(void)
 	seek_to = -1;
 	bar_drag = -1;
 	if (!play_seek(to, err, sizeof(err))) {
+		elog_save();		/* (what went before it on the disk: Write a log's) */
 		alert(1, "[3][%s][ OK ]", err);
 		status("Stopped.");
 		redraw(0, BP_PLAY | BP_TIME);
