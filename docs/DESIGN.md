@@ -2295,7 +2295,14 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    a file first plays on the CPU, not carried in the program's BSS (1.37 carried some 27 KB of it in
    every edition).
 4. **The XBIOS's sound** for a 68060 machine with no Atari DMA sound (a Milan's GSXB), and a
-   software AY where there is no YM2149.
+   software AY where there is no YM2149. The AY first (done): `src/aycpu.c`, the YM2149 at the
+   Atari's 2 MHz (vgm.c turns an AY's periods to it): three square tones, the 17-bit noise, the
+   envelope's 32 steps and 16 shapes, the mixer, 32 levels of 1.5 dB; a tone faster than the output
+   shows is its average, and the DC is taken out as the Atari's capacitor does. It plays a file's AY
+   where the machine has no YM2149 (`vp_has_ym`: _MCH 0 to 3 and no _CF_; not a Milan's), and with
+   the other chips when they are made on the CPU (the file's AY was left out before). tests/vgm: a
+   440.1 Hz tone (440.3 measured), the noise, silence; play060 with VGMCPU=1: the AY's tone heard
+   right (vgm, vgz), vgmsn and vgmmd as before. The XBIOS's sound next.
 
 **1.38's speed against 1.37, accepted by Erez (15 Nov 2026):** the rows slower beyond a tick in both
 runs, with phase 11's step 3, the log at once, Timer A's limits and NATFEATS. On Falcon-4:16: a Mega

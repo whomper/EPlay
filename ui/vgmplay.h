@@ -47,6 +47,7 @@ void vp_new_track(void);	/* another track: the most again */
 /* phase 11 (Erez, 14 Nov 2026): a 68060 (not a ColdFire), where a VGM's
    DSP chips are made on the CPU when the Falcon's DSP isn't there or free */
 int vp_cpu_can(void);
+int vp_has_ym(void);	/* the machine has a YM2149 (phase 11, step 4: else the AY made on the CPU) */
 /* the VGM open is made on the CPU, ahead: play.c plays vp_render's frames
    (16-bit stereo at vp_cpu_rate) from its queue, as a WAV; vp_render's 0
    at the end */

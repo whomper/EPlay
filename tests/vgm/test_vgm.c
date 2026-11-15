@@ -401,7 +401,7 @@ int main(int argc, char **argv)
 		put32(0x18, 44100 + 4410);
 		same_n("cpu head", vgm_head(f, fn, &h), 1);
 		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
-		vgmcpu_init(&cpu, &h, 49170, 0, 0, 0);
+		vgmcpu_init(&cpu, &h, 49170, 0, 0, 0, 0);
 		for (;;) {
 			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
 			got += m;
@@ -470,7 +470,7 @@ int main(int argc, char **argv)
 		same_n("opn cpu head", vgm_head(f, fn, &h), 1);
 		opnf_init(&tabs);	/* (its tables: build/opntab.h's on the Atari) */
 		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
-		vgmcpu_init(&cpu, &h, 24585, (const unsigned long *)tabs.sin_tab, (const unsigned long *)tabs.gain_tab, 0);
+		vgmcpu_init(&cpu, &h, 24585, (const unsigned long *)tabs.sin_tab, (const unsigned long *)tabs.gain_tab, 0, 0);
 		vgmcpu_attach(&cpu, &r);
 		for (;;) {
 			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
@@ -528,7 +528,7 @@ int main(int argc, char **argv)
 		put32(0x18, 44100 + 8820);
 		same_n("opl cpu head", vgm_head(f, fn, &h), 1);
 		vgm_begin(&r, f, fn, &h, 0, vgmcpu_sn, &cpu);
-		vgmcpu_init(&cpu, &h, 24585, 0, 0, &tabs);
+		vgmcpu_init(&cpu, &h, 24585, 0, 0, &tabs, 0);
 		same_n("opl cpu: the OPL made, not the SN76489", cpu.has_opl && !cpu.has_opn && !cpu.has_sn, 1);
 		vgmcpu_attach(&cpu, &r);
 		for (;;) {
@@ -553,6 +553,70 @@ int main(int argc, char **argv)
 		for (k = 24585 + 6000, nz = 0; k < got; k++)
 			nz += lr[2 * k] != 0;
 		same_n("opl cpu silent once released", nz, 0);
+	}
+
+	/* the YM2149 made on the CPU (aycpu.c, through vgmcpu.c, phase 11 step
+	   4): channel A's tone alone at period 284 (2 MHz: 440.1 Hz), its level
+	   15, a second at 49,170 Hz; then the noise alone; then silent */
+	{
+		static VGMCPU cpu;
+		static short lr[2 * 160000];
+		static const unsigned char regs[][2] = {
+			{ 7, 0x3e }, { 0, 284 & 255 }, { 1, 284 >> 8 }, { 8, 15 }, { 9, 0 }, { 10, 0 }, { 6, 8 } };
+		long got = 0, k, cross = 0, nz = 0;
+		double sum = 0;
+		unsigned i;
+		memset(f, 0, sizeof(f));
+		memcpy(f, "Vgm ", 4);
+		put32(0x08, 0x151);
+		put32(0x34, 0x100 - 0x34);
+		put32(0x74, 2000000);
+		f[0x78] = 0x10;
+		fn = 0x100;
+		for (i = 0; i < sizeof(regs) / sizeof(regs[0]); i++) {
+			b(0xa0); b(regs[i][0]); b(regs[i][1]);
+		}
+		b(0x61); b(44100 & 255); b(44100 >> 8);
+		b(0xa0); b(7); b(0x37);		/* (the noise alone on A) */
+		b(0x61); b(44100 & 255); b(44100 >> 8);
+		b(0xa0); b(8); b(0);			/* (silent) */
+		b(0x61); b(44100 & 255); b(44100 >> 8);
+		b(0x66);
+		put32(0x04, (unsigned long)(fn - 4));
+		put32(0x18, 3 * 44100);
+		same_n("ay cpu head", vgm_head(f, fn, &h), 1);
+		vgm_begin(&r, f, fn, &h, vgmcpu_ay, 0, &cpu);
+		vgmcpu_init(&cpu, &h, 49170, 0, 0, 0, 1);
+		same_n("ay cpu: the AY made alone", cpu.has_ay && !cpu.has_sn && !cpu.has_opn && !cpu.has_opl, 1);
+		vgmcpu_attach(&cpu, &r);
+		for (;;) {
+			int m = vgmcpu_render(&cpu, &r, lr + 2 * got, 1000);
+			got += m;
+			if (m < 1000 || got > 155000)
+				break;
+		}
+		same_n("ay cpu frames (3 s at 49,170 Hz)", got > 147000 && got < 148000, 1);
+		for (k = 4000; k < 49170; k++) {
+			if ((lr[2 * k] >= 0) != (lr[2 * k - 2] >= 0))
+				cross++;
+			sum += (double)lr[2 * k] * lr[2 * k];
+			nz += lr[2 * k] != lr[2 * k + 1];
+		}
+		{
+			double hz = cross / 2.0 * 49170 / (49170 - 4000), rms = sqrt(sum / (49170 - 4000));
+			same_n("ay cpu tone (440.1 Hz, within 3)", fabs(hz - 440.1) < 3, 1);
+			same_n("ay cpu level (a square at 15: some 4,000 rms)", rms > 3000 && rms < 5000, 1);
+			same_n("ay cpu left and right the same", nz, 0);
+		}
+		for (k = 49170 + 2000, cross = 0, sum = 0; k < 2 * 49170; k++) {
+			if ((lr[2 * k] >= 0) != (lr[2 * k - 2] >= 0))
+				cross++;
+			sum += (double)lr[2 * k] * lr[2 * k];
+		}
+		same_n("ay cpu noise (many crossings, a level)", cross > 5000 && sqrt(sum / 47170) > 2000, 1);
+		for (k = 2 * 49170 + 10000, sum = 0; k < got; k++)
+			sum += (double)lr[2 * k] * lr[2 * k];
+		same_n("ay cpu silent at level 0 (its DC gone)", sqrt(sum / (got - 2 * 49170 - 10000)) < 50, 1);
 	}
 
 	/* not a VGM */

@@ -7,7 +7,9 @@
  * samples, 16-bit stereo at the output's rate. The SN76489 (sncpu.c:
  * sn.a56's arithmetic from sncmd.c's commands) and the YM2612 (opncpu.c:
  * the DSP's model in 32 bits, from opnd.c's commands, its drums and the
- * Mega Drive's SN76489 in it as opn.a56 has them), the YM3812 and the
+ * Mega Drive's SN76489 in it as opn.a56 has them), the file's AY or
+ * YM2149 (aycpu.c, step 4: with_ay, where there's no YM2149 or the chips
+ * are made ahead), the YM3812 and the
  * YMF262 (oplcpu.c: the DSP's model in 32 bits, from opld.c's commands;
  * one of the two FM models a file, the YM2612's first, as on the DSP; the
  * OPL3's eighteen channels made, those not keyed passed over). No hardware:
@@ -23,6 +25,7 @@
 #include "opncpu.h"
 #include "opld.h"
 #include "oplcpu.h"
+#include "aycpu.h"
 
 typedef struct {
 	long rate;		/* the output's */
@@ -35,7 +38,8 @@ typedef struct {
 		OPNF fm;
 		OPLF fl;
 	};
-	int has_sn, has_opn, has_opl;
+	AYCPU ay;		/* (phase 11, step 4) the file's AY or YM2149, with_ay */
+	int has_sn, has_opn, has_opl, has_ay;
 } VGMCPU;
 
 /* the chips h has (that it can make) at rate, the YM2612's tables (build/
@@ -43,7 +47,9 @@ typedef struct {
    for them; then vgm_begin with vgmcpu_sn and the VGMCPU as u, and
    vgmcpu_attach */
 void vgmcpu_init(VGMCPU *c, const VGMHEAD *h, long rate, const unsigned long *opn_sin,
-		 const unsigned long *opn_gain, const OPLC_TABS *opl);
+		 const unsigned long *opn_gain, const OPLC_TABS *opl, int with_ay);
+/* (vgm_begin's AY callback, u the VGMCPU: with_ay) */
+void vgmcpu_ay(void *u, int reg, int val);
 /* the run's other callbacks and the drums' queue set for it */
 void vgmcpu_attach(VGMCPU *c, VGMRUN *r);
 /* (vgm_begin's SN76489 callback, u the VGMCPU) */

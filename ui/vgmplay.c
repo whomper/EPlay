@@ -275,16 +275,27 @@ static void cpu_open(const VGMHEAD *h, long want, const char *why)
 	}
 	use_cpu = 1;
 	c_rate = snd_rate_for(want, &ext);
-	vgmcpu_init(cc, h, c_rate, dspopn_tab(0), dspopn_tab(1), dspopl_tabs());
+	vgmcpu_init(cc, h, c_rate, dspopn_tab(0), dspopn_tab(1), dspopl_tabs(), 1);
 	elog("VGM: the %s on the CPU at %ld Hz, made ahead (%s)",
 	     cc->has_opn ? cc->has_sn ? "YM2612 and the SN76489" : "YM2612" :
-	     cc->has_opl ? h->ymf262_clock ? "YMF262 (its 18 channels)" : "YM3812" : "SN76489", c_rate, why);
+	     cc->has_opl ? h->ymf262_clock ? "YMF262 (its 18 channels)" : "YM3812" :
+	     cc->has_sn ? "SN76489" : "AY", c_rate, why);
 	if (cc->has_opl && h->sn_clock)
 		elog("VGM: its SN76489 left out (the CPU makes the %s)", h->ymf262_clock ? "YMF262" : "YM3812");
 	if (use_ay) {
+		/* (step 4: the file's AY made with them, in step, not the chip
+		   that plays as it is written) */
 		use_ay = 0;
-		elog("VGM: its AY left out (the chips made ahead on the CPU)");
+		if (cc->has_sn || cc->has_opn || cc->has_opl)
+			elog("VGM: its AY made on the CPU with them");
 	}
+}
+
+/* the machine has a YM2149 (an ST, an STE, a TT, a Falcon: _MCH 0 to 3;
+   not a Milan's 4, nor a FireBee) */
+int vp_has_ym(void)
+{
+	return (get_cookie(0x5F4D4348L) >> 16) <= 3 && !get_cookie(0x5F43465FL);
 }
 
 int vp_cpu_can(void)
@@ -554,6 +565,10 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 		} else
 			elog("VGM: its SN76489 left out (%s)", why);
 	}
+	if (use_ay && !use_cpu && CPU_ON && (!vp_has_ym() || (vp_cpu_can() && settings_vgmcpu())))
+		/* (phase 11, step 4) no YM2149 here (a Milan's): the AY made on
+		   the CPU */
+		cpu_open(&h, 49170, vp_has_ym() ? "VGMCPU=1" : "no YM2149 here");
 	if (!use_ay && !use_sn && !use_opn && !use_opl && !use_cpu) {
 		snprintf(err, (size_t)n, "%s is music for a sound chip|EPlay doesn't play yet.", name);
 		vp_stop();
@@ -574,7 +589,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	else if (use_opl || (use_cpu && cc->has_opl))
 		chip_name(info, ni, h.ymf262_clock ? "VGM  YMF262" : "VGM  YM3812",
 			  h.ymf262_clock ? h.ymf262_clock : h.ym3812_clock);
-	else if (use_ay)
+	else if (use_ay || (use_cpu && cc->has_ay && !cc->has_sn))
 		chip_name(info, ni, h.ay_type >= 0x10 ? "VGM  YM2149" : "VGM  AY-3-8910", h.ay_clock);
 	else
 		chip_name(info, ni, "VGM  SN76489", h.sn_clock);
@@ -597,6 +612,8 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	}
 	vgm_begin(&run, mem, mem_n, &h, use_ay ? ay : 0,
 		  use_sn ? sn : use_opn && dspopn_psg() ? opn_sn : CPU_ON && use_cpu ? vgmcpu_sn : 0, use_cpu ? cc : 0);
+	if (CPU_ON && use_cpu && cc->has_ay)
+		run.ay_fn = vgmcpu_ay;	/* (the file's AY, made with the others) */
 	run.opn_fn = use_opn ? opn : 0;
 	run.opl_fn = use_opl ? opl : 0;
 	if (CPU_ON && use_cpu)

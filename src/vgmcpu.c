@@ -16,6 +16,11 @@ static void opn_put(void *u, long w)
 	opnc_word(&((VGMCPU *)u)->fm, w);
 }
 
+void vgmcpu_ay(void *u, int reg, int val)
+{
+	aycpu_write(&((VGMCPU *)u)->ay, reg, val);
+}
+
 void vgmcpu_sn(void *u, int val)
 {
 	sncmd_write(&((VGMCPU *)u)->psg, val);
@@ -47,7 +52,7 @@ static long at_fn(void *v)
 }
 
 void vgmcpu_init(VGMCPU *c, const VGMHEAD *h, long rate, const unsigned long *opn_sin,
-		 const unsigned long *opn_gain, const OPLC_TABS *opl)
+		 const unsigned long *opn_gain, const OPLC_TABS *opl, int with_ay)
 {
 	memset(c, 0, sizeof(*c));
 	c->rate = rate;
@@ -57,6 +62,9 @@ void vgmcpu_init(VGMCPU *c, const VGMHEAD *h, long rate, const unsigned long *op
 	/* (with the OPL, its SN76489 left out: as on the DSP) */
 	c->has_sn = h->sn_clock != 0 && !c->has_opl;
 	sncpu_init(&c->sn);
+	c->has_ay = with_ay && h->ay_clock != 0;
+	if (c->has_ay)
+		aycpu_init(&c->ay, rate);
 	if (c->has_opl) {
 		oplc_init(&c->fl, opl);
 		if (h->ymf262_clock) {
@@ -132,6 +140,8 @@ int vgmcpu_render(VGMCPU *c, VGMRUN *r, short *lr, int n)
 				o[2 * k + 1] = v;
 			}
 		}
+		if (c->has_ay)
+			aycpu_run(&c->ay, o, blk);	/* (added to the block's other chips) */
 		made += blk;
 	}
 	return made;
