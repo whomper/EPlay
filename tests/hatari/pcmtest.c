@@ -16,6 +16,9 @@
 #include "tos.h"
 #include "pcm.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 /* src/pcm.c built with its C alone, its names prefixed (pcmtest_c.c) */
 void c_pcm_convert_to(const PCMFMT *f, const unsigned char *src, short *dst, long n, int step);
 long c_pcm_spread(const short *src, long n, short *dst, long k, int step, long in, long out, long *acc,

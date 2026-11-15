@@ -9,6 +9,9 @@
  */
 #include "tos.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 static short v[1024], d[512];
 static volatile long sink;
 

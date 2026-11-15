@@ -12,6 +12,9 @@
 #include "tos.h"
 #include "huff68.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 #define MAXG 4096
 static const unsigned long *gs[MAXG];
 static const unsigned char *ds[MAXG];

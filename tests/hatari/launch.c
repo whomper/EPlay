@@ -11,6 +11,9 @@
 #include "tos.h"
 #include "gem.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 int main(void)
 {
 	static char tail[128];

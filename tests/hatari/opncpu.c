@@ -17,6 +17,9 @@
 #include "sncmd.h"
 #include "opntab.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 #define RATE 24585L
 
 /* (opnf_init makes its tables with sin and pow, and this build has no

@@ -82,13 +82,15 @@ static int has(int out)
 	return 1;
 }
 
-void settings_load(void)
+static int inf_read;
+
+void settings_read(void)
 {
-	char path[200], v[16];
+	char path[200], v[4];
 	long h;
-	int i;
 	inf_path(path, sizeof(path), "eplay.inf");
 	inf_n = 0;
+	inf_read = 1;
 	h = Fopen(path, 0);
 	if (h < 0) {
 		inf_path(path, sizeof(path), "eplay.in$");	/* (a save cut short after the old one went) */
@@ -99,6 +101,21 @@ void settings_load(void)
 		Fclose((short)h);
 		inf_n = r > 0 ? r : 0;
 	}
+	/* NATFEATS=1 (the rigs', never written; not in Settings): the
+	   emulator's console looked for only then, before EPlay's first line
+	   (Erez, 15 Nov 2026: "a .INF setting so that it can be added in our
+	   testing but have no bearing outside"). Else nf_debug does nothing
+	   and no machine runs NatFeats' probe */
+	if (inf_get(inf, inf_n, "NATFEATS", v, sizeof(v)) && v[0] == '1')
+		nf_on = 1;
+}
+
+void settings_load(void)
+{
+	char v[16];
+	int i;
+	if (!inf_read)
+		settings_read();
 	if (inf_get(inf, inf_n, "OUTPUT", v, sizeof(v)))
 		for (i = 0; i < NOUT; i++)
 			if (!strcmp(v, names[i]))

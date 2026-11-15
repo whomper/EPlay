@@ -102,6 +102,8 @@ class Rig(speed.Rig):
         stay where the rows are; play_test's firstrun checks the new place)"""
         if name == "eplay.inf" and "WINDOW=" not in text:
             text = text + PLACE
+        if name == "eplay.inf" and "NATFEATS=" not in text:
+            text = text + "NATFEATS=1\r\n\r\n"	# (EPlay's console lines, the AESGAPs: the rigs' alone)
         super().write(name, text)
 
     def still(self, most=30):

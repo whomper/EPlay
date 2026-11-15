@@ -17,6 +17,9 @@
 #include "oplexp.h"
 #include "opltab.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 static OPLD chip;
 static OPLF model;
 static short out[2 * 512];

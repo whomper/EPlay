@@ -2235,8 +2235,14 @@ machine starting EPlay. Two causes taken out: the external clock's measure (`m_l
 supervisor mode with no limit; each wait now has one from the 200 Hz clock (100 ms for the first 20, 300
 for the 200), and a Timer A that reads stopped but doesn't count times it by the 200 Hz clock instead (the
 log: "timed by the 200 Hz clock: Timer A didn't count"). And NatFeats' probe (the rigs' console, nf_debug)
-put its handler at 0x10 though the vector table is at VBR on a 68010 or later: common's nf.S and tos.c
-from AERA-Atari eea4949 (the VBR read as words, none on a ColdFire). The FireBee's quit says "the XBIOS's sound given back", and the start's speed line
+ran an instruction illegal on real hardware with its handler at 0x10, though the vector table is at VBR
+on a 68010 or later. Now NatFeats are looked for only where EPLAY.INF has `NATFEATS=1` (Erez, 15 Nov
+2026: "a .INF setting so that it can be added in our testing but have no bearing outside"): read at the
+start's first step (`settings_read`, before EPlay's first line), not in Settings, never written by
+EPlay; on a real machine nf_debug does nothing and no probe runs. Common's nf.S, tos.c and tos.h from
+AERA-Atari e6c65c3 (nf.S finds VBR itself). The rigs write `NATFEATS=1` (tests/hatari/natfeats.py; the
+speed rig's INF), and the test programs set `nf_on` themselves; without it EPlay says nothing on the
+console (checked: `EPLAY_RIG_NONATFEATS=1`). The FireBee's quit says "the XBIOS's sound given back", and the start's speed line
 "the CPU" (it said the 68030's on every machine).
 
 **1.37's speed against 1.36, accepted by Erez (15 Nov 2026):** three rows slower in both runs. On

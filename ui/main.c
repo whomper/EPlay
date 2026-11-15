@@ -2298,6 +2298,7 @@ int app_main(void)
 	ap_id = appl_init();
 	if (ap_id < 0)
 		return 1;
+	settings_read();		/* (NATFEATS=: before EPlay's first line) */
 	vdi_h = graf_handle(&gl_wchar, &gl_hchar, &d, &d);
 	cw = gl_wchar;
 	ch = gl_hchar;

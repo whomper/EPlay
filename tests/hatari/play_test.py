@@ -33,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = os.path.join(HERE, "..", "..")
 sys.path.insert(0, os.path.join(TOP, "common", "tools"))
 import machines  # noqa: E402
+from natfeats import natfeats  # noqa: E402
 
 REC_RATE = 48000
 
@@ -633,6 +634,7 @@ def run(work, case, spec):
         # (lines added to eplay.inf: play060.py's MP3CPU=1)
         with open(os.path.join(hd, "eplay.inf"), "a", newline="") as fh:
             fh.write(os.environ["EPLAY_RIG_INF"].replace(";", "\r\n") + "\r\n")
+    natfeats(hd)		# (EPlay's console lines: NATFEATS=1, the rigs' alone)
     m = machines.Machine(spec, hd)
     args = m.args()
     rec = os.path.join(w, "rec.wav")

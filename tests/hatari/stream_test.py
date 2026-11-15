@@ -74,6 +74,7 @@ TOP = os.path.join(HERE, "..", "..")
 sys.path.insert(0, os.path.join(TOP, "common", "tools"))
 sys.path.insert(0, HERE)
 import machines  # noqa: E402
+from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
 CASES = ["live", "drop", "stall", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
@@ -436,6 +437,7 @@ def run(work, case, spec):
             fh.write(old_inf + "WINDOW=87,89,472,251\r\n\r\n")
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
         fh.write(("" if case in ("url", "urledit", "find") else "C:\\RADIO.M3U" if case == "m3u" else url) + "\r\n")
+    natfeats(hd)		# (EPlay's console lines: NATFEATS=1, the rigs' alone)
     m = machines.Machine(spec, hd)
     net = m.network(40000)
     margs = m.args()                    # (makes Hatari's home and its config folder)

@@ -22,6 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = os.path.join(HERE, "..", "..")
 sys.path.insert(0, os.path.join(TOP, "common", "tools"))
 import machines  # noqa: E402
+from natfeats import natfeats  # noqa: E402
 
 SPEC = "Falcon:256"
 ALBUM = "Signals"
@@ -143,6 +144,7 @@ def run(work, mini):
         fh.write("VOLUME=12\r\n\r\n" + ("MINI=1\r\n\r\n" if mini else "") +
                  "GATE=192.168.1.20\r\n\r\nGATEPORT=8580\r\n\r\n" +
                  "WINDOW=87,89,472,251\r\n\r\n")	# (the pictures' size: a first start takes the desk's height)
+    natfeats(hd)		# (EPlay's console lines: NATFEATS=1, the rigs' alone)
     m = machines.Machine(SPEC, hd)
     fifo, shots, log = os.path.join(w, "cmd.fifo"), os.path.join(w, "shots"), os.path.join(w, "hatari.log")
     os.makedirs(shots)

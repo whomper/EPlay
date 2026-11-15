@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = os.path.join(HERE, "..", "..")
 sys.path.insert(0, os.path.join(TOP, "common", "tools"))
 import machines  # noqa: E402
+from natfeats import natfeats  # noqa: E402
 
 
 def main():
@@ -26,6 +27,7 @@ def main():
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
     shutil.copy(os.path.join(HERE, "build", "PCMTEST.PRG"), hd)
+    natfeats(hd)		# (EPlay's console lines: NATFEATS=1, the rigs' alone)
     m = machines.Machine(spec, hd)
     log = os.path.join(w, "hatari.log")
     args = ["hatari"] + m.args() + ["--fast-boot", "yes", "--natfeats", "yes", "--log-level", "warn",

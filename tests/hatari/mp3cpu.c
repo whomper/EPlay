@@ -14,6 +14,9 @@
 #include "mp3frame.h"
 #include "mp3dsp.h"
 
+/* (a test program: the emulator's console on, common's tos.h) */
+long nf_on = 1;
+
 #define MAXF (1024L * 1024)
 
 static unsigned char buf[MAXF];

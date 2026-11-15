@@ -31,6 +31,7 @@ int settings_vgmlow(void);
    0: at once; never written) */
 int settings_dma8low(void);
 
+void settings_read(void);	/* EPLAY.INF read (once, the start's first thing): NATFEATS= */
 void settings_load(void);	/* EPLAY.INF, at the start */
 void prefs_dialog(void);	/* the dialog (Settings); saved on OK when it changed */
 int settings_output(void);	/* OUT_...: as set, or Auto where the machine hasn't it */
