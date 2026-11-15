@@ -10,6 +10,7 @@
 #include "ovl.h"
 #include "elog.h"
 #include "cmp3.h"
+#include "xalloc.h"
 
 static const char path[] = "mp3fpu.ovl";
 static const MP3OVL *ov;
@@ -43,7 +44,7 @@ int cmp3_load(char *err, int n)
 		snprintf(err, n, "MP3FPU.OVL isn't this EPlay's: copy it from its release.");
 		return 0;
 	}
-	st = Mxalloc(o->state_size, 3);
+	st = x_alloc(o->state_size, 3);
 	if ((long)st <= 0) {
 		st = 0;
 		free((void *)o);

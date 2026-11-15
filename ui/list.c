@@ -12,6 +12,7 @@
 #include "probe.h"
 #include "vgmfile.h"
 #include "vgmplay.h"
+#include "xalloc.h"
 
 ORDER list_order;		/* which plays next: kept in step with the list here */
 
@@ -33,16 +34,16 @@ int list_full;			/* a file not added for that: the window says so */
 
 static void *take(long size)
 {
-	void *p = Mxalloc(size, 1);	/* TT RAM alone */
+	void *p = x_alloc(size, 1);	/* TT RAM alone */
 	long st;
 	if ((long)p > 0)
 		return p;
-	st = (long)Mxalloc(-1L, 0);
+	st = (long)x_alloc(-1L, 0);
 	if (st - size < LIST_RESERVE) {
 		list_full = 1;
 		return 0;
 	}
-	p = Mxalloc(size, 0);
+	p = x_alloc(size, 0);
 	return (long)p > 0 ? p : 0;
 }
 
@@ -335,7 +336,7 @@ static long rd(void *u, long at, unsigned char *buf, long k)
 
 static void *vtake(long n)
 {
-	void *p = (void *)Mxalloc(n, 3);
+	void *p = x_alloc(n, 3);
 	return (long)p > 0 ? p : 0;
 }
 

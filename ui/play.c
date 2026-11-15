@@ -49,6 +49,7 @@
 #include "vgm.h"
 #include "vgmfile.h"
 #include "vgmplay.h"
+#include "xalloc.h"
 
 #define FBUF (64L * 1024)	/* the file's start: what it is, where it starts */
 #define PIECE 32768L		/* the most read at once (guidelines 6.5) */
@@ -1003,7 +1004,7 @@ static void free_queue(void)
 /* the queue taken for this file: 0 if there isn't the memory */
 static int take_queue(int unit)
 {
-	long big = (long)Mxalloc(-1L, 3), n = big / 3;
+	long big = (long)x_alloc(-1L, 3), n = big / 3;
 	free_queue();
 	if (n > QMAX)
 		n = QMAX;
@@ -1012,7 +1013,7 @@ static int take_queue(int unit)
 	if (n > big - 32768)
 		return 0;
 	n -= n % unit;
-	q = Mxalloc(n, 3);		/* TT RAM where there is some */
+	q = x_alloc(n, 3);		/* TT RAM where there is some */
 	if ((long)q <= 0) {
 		q = 0;
 		return 0;
@@ -1236,9 +1237,9 @@ int play_open(const char *path, char *err, int n)
 	}
 	base_ms = 0;
 	if (!fbuf) {
-		fbuf = Mxalloc(FBUF, 3);	/* TT RAM where there is some */
+		fbuf = x_alloc(FBUF, 3);	/* TT RAM where there is some */
 		if ((long)fbuf <= 0)
-			fbuf = Mxalloc(FBUF, 0);
+			fbuf = x_alloc(FBUF, 0);
 		if ((long)fbuf <= 0) {
 			fbuf = 0;
 			snprintf(err, n, "There isn't the memory to play.");

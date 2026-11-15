@@ -13,6 +13,7 @@
 #include <string.h>
 #include "ui.h"
 #include "text.h"
+#include "xalloc.h"
 
 static short cur_mode = -1, cur_fill = -1, cur_line = -1, cur_tcol = -1, cur_fx = -1, cur_h = -1, fill_set;
 
@@ -52,7 +53,7 @@ static unsigned short *st_buf;
 void *st_ram(long n)
 {
 	if (!st_buf) {
-		void *p = Mxalloc(sizeof(st_fallback), 0);
+		void *p = x_alloc(sizeof(st_fallback), 0);
 		st_buf = (long)p > 0 ? p : st_fallback;
 	}
 	return n <= (long)sizeof(st_fallback) ? st_buf : 0;

@@ -13,6 +13,7 @@
 #include "tos.h"
 #include "tickcode.h"
 #include "snd.h"
+#include "xalloc.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
@@ -1040,7 +1041,7 @@ static int open8(long rate)
 	if (!ring8) {
 		/* ST RAM: Mxalloc where GEMDOS has it (TOS 2 and on), else
 		   Malloc, which an STE's TOS gives from ST RAM, all it has */
-		unsigned char *p = Mxalloc(RING8_MAX * 2, 0);
+		unsigned char *p = x_alloc(RING8_MAX * 2, 0);
 		if ((long)p == -32)	/* (EINVFN: a GEMDOS without Mxalloc) */
 			p = (unsigned char *)Malloc(RING8_MAX * 2);
 		if ((long)p <= 0)
@@ -1088,7 +1089,7 @@ static int open_to(long rate, int ext, int feed)
 		return feed ? 0 : open8(rate);
 	if (!ring) {
 		long n = RING_MAX;
-		short *p = Mxalloc(n * 2 * FW, 0);
+		short *p = x_alloc(n * 2 * FW, 0);
 		if ((long)p <= 0)
 			return 0;
 		memset(p, 0, (size_t)n * 2 * FW);	/* (the three silent tracks: once) */

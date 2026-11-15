@@ -24,6 +24,7 @@
 #include "art.h"
 #include "list.h"
 #include "badge.h"
+#include "xalloc.h"
 
 int bar_held = BH_NONE, bar_drag = -1, bar_vdrag = -1;
 
@@ -53,7 +54,7 @@ void bar_colours(void)
 	themed = planes >= 8;
 	if (!pool) {
 		/* (ST RAM at the start, before any file's queue: 0.13's lesson) */
-		void *p = Mxalloc((long)POOL_WORDS * 2, 0);
+		void *p = x_alloc((long)POOL_WORDS * 2, 0);
 		pool = (long)p > 0 ? p : 0;
 	}
 	if (themed) {

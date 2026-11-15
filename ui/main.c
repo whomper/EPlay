@@ -43,6 +43,7 @@
 #include "bar.h"
 #include "art.h"
 #include "sart.h"
+#include "xalloc.h"
 
 extern const char app_version[];
 
@@ -904,7 +905,7 @@ static void full_note(void)
 {
 	static int said;
 	if (list_full && !said) {
-		long st = (long)Mxalloc(-1L, 0);
+		long st = (long)x_alloc(-1L, 0);
 		said = 1;
 		status("The list is full: no memory for more files.");
 		elog("the list full at %d files: the largest free ST RAM block %ld KB (%ld kept free for the AES)",
@@ -2380,7 +2381,7 @@ int app_main(void)
 	/* (TT RAM is the DFB1's: Erez's logs of 0.11 had a queue of 1.9 MB,
 	   8 MB with it, and nothing else to say whether it was on) */
 	{
-		long st = (long)Mxalloc(-1L, 0), tt = (long)Mxalloc(-1L, 1);
+		long st = (long)x_alloc(-1L, 0), tt = (long)x_alloc(-1L, 1);
 		elog("free memory, the largest blocks: ST RAM %ld KB, TT RAM %ld KB", st > 0 ? st / 1024 : 0,
 		     tt > 0 ? tt / 1024 : 0);
 	}
@@ -2440,7 +2441,7 @@ int app_main(void)
 			if (list_step(&row))
 				row_redraw(row);
 			else {
-				long st = (long)Mxalloc(-1L, 0);
+				long st = (long)x_alloc(-1L, 0);
 				list_unread = 0;
 				elog("the list: %d files read, %ld KB; the largest free ST RAM block %ld KB", list_count(),
 				     (list_memory() + 1023) / 1024, st > 0 ? st / 1024 : 0);

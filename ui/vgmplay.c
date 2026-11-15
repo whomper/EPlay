@@ -20,6 +20,7 @@
 #include "elog.h"
 #include "prefs.h"
 #include "vgmcpu.h"
+#include "xalloc.h"
 
 /* the file's samples a tick, Q16: 44,100 / (2,457,600 / 16 / 154); the
    YM2612's tick 500 times a second, 44,100 / (2,457,600 / 64 / 77): its
@@ -68,7 +69,7 @@ static const long lv_rate[2][4] = { { 0, 19668, 16390, 12292 }, { 0, 12292, 9834
 
 static void *take(long n)
 {
-	void *p = (void *)Mxalloc(n, 3);	/* TT RAM where there is some */
+	void *p = x_alloc(n, 3);	/* TT RAM where there is some */
 	return (long)p > 0 ? p : 0;
 }
 
@@ -453,7 +454,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 	}
 	if (!mem) {
 		elog("VGM: %s %s (%ld bytes, %ld unpacked; the largest free block %ld)", name, why, size, vgm_need,
-		     (long)Mxalloc(-1L, 3));
+		     (long)x_alloc(-1L, 3));
 		if (vgm_need > 0 && strstr(why, "memory"))
 			snprintf(err, (size_t)n, "%s needs %ld KB of memory|to play, which isn't free.", name,
 				 (vgm_need + 1023) / 1024);

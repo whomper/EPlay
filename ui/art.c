@@ -38,6 +38,7 @@
 #include "dspjpeg.h"
 #include "jpegdc.h"
 #include "elog.h"
+#include "xalloc.h"
 
 enum { A_NONE, A_READ, A_DECODE, A_DITHER, A_PENS, A_READY, A_FAILED };
 
@@ -110,7 +111,7 @@ void art_init(short size)
 	wpl = (short)((side + 15) / 16);
 	n = (long)wpl * 2 * side * (planes > 8 ? 16 : planes);
 	if (!form) {
-		void *p = Mxalloc(n, 0);	/* (at the start, before any queue: 0.13's lesson) */
+		void *p = x_alloc(n, 0);	/* (at the start, before any queue: 0.13's lesson) */
 		form = (long)p > 0 ? p : 0;
 	}
 }
@@ -366,7 +367,7 @@ int art_begin(const char *path)
 	}
 	/* the key: the length and the first 4 KB (FNV-1a) */
 	k = blen < KEY_BYTES ? blen : KEY_BYTES;
-	buf = Mxalloc(blen + 16, 3);
+	buf = x_alloc(blen + 16, 3);
 	if ((long)buf <= 0) {
 		buf = 0;
 		fail("no memory for it");
@@ -449,7 +450,7 @@ int art_station(const char *name, unsigned long ukey, const unsigned char *d, lo
 	if (!rgb)
 		return 0;
 	drop();
-	buf = Mxalloc(len + 16, 3);
+	buf = x_alloc(len + 16, 3);
 	if ((long)buf <= 0) {
 		buf = 0;
 		return 0;

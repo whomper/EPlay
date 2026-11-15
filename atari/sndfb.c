@@ -24,6 +24,7 @@
 #include <string.h>
 #include "tos.h"
 #include "snd.h"
+#include "xalloc.h"
 
 #define OUT_RATE 49170L
 #define PRESCALE 1		/* (Devconnect's: 49,170 Hz at the 25 MHz clock) */
@@ -181,7 +182,7 @@ int snd_open(long rate, int ext)
 {
 	(void)ext;
 	if (!ring) {
-		short *p = Mxalloc(RING_MAX * 4, 0);	/* (ST RAM: where the sound's DMA reads) */
+		short *p = x_alloc(RING_MAX * 4, 0);	/* (ST RAM: where the sound's DMA reads) */
 		if ((long)p <= 0)
 			return 0;
 		ring = p;
