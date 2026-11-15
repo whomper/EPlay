@@ -12,6 +12,8 @@
 #ifndef EPLAY_DSPOPL_H
 #define EPLAY_DSPOPL_H
 
+#include "oplcpu.h"
+
 /* the DSP locked, reset, loaded and sounding (silent until written): clock
    the chip's (Hz), opl3 a YMF262, nch the channels made (9, or 18 with its
    second bank), want a rate lower than the most (0: the most; else the
@@ -30,6 +32,9 @@ long dspopl_rate(void);		/* the SSI's rate */
 long dspopl_synth(void);	/* the rate the chip is made at (half the SSI's at the FDI's) */
 void dspopl_term(void);		/* (supervisor: term.c) */
 long dspopl_least(void);	/* the DSP's ring's least lead since PLAY (words, of 1,536), as the tick last heard; -1 not yet */
-int dspopl_late2(void);		/* an OPL3 made with nine channels keyed one of its second bank's */
+int dspopl_late2(void);
+/* (phase 11) the tables the DSP is loaded with, for the CPU's model
+   (oplcpu.c) */
+const OPLC_TABS *dspopl_tabs(void);		/* an OPL3 made with nine channels keyed one of its second bank's */
 
 #endif

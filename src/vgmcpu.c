@@ -26,6 +26,16 @@ static void opn_write(void *u, int port, int reg, int val)
 	opnd_write(&((VGMCPU *)u)->opn, port, reg, val);
 }
 
+static void opl_put(void *u, long w)
+{
+	oplc_word(&((VGMCPU *)u)->fl, w);
+}
+
+static void opl_write(void *u, int port, int reg, int val)
+{
+	opld_write(&((VGMCPU *)u)->dl, (port & 1) << 8 | (reg & 0xff), val);
+}
+
 static int run_fn(void *v, long n)
 {
 	return vgm_run(v, n);
@@ -37,14 +47,25 @@ static long at_fn(void *v)
 }
 
 void vgmcpu_init(VGMCPU *c, const VGMHEAD *h, long rate, const unsigned long *opn_sin,
-		 const unsigned long *opn_gain)
+		 const unsigned long *opn_gain, const OPLC_TABS *opl)
 {
 	memset(c, 0, sizeof(*c));
 	c->rate = rate;
 	c->step = (unsigned long)(((unsigned long long)VGM_RATE << 16) / (unsigned long)rate);
 	c->has_opn = h->ym2612_clock != 0;
-	c->has_sn = h->sn_clock != 0;
+	c->has_opl = !c->has_opn && (h->ym3812_clock || h->ymf262_clock) && opl;
+	/* (with the OPL, its SN76489 left out: as on the DSP) */
+	c->has_sn = h->sn_clock != 0 && !c->has_opl;
 	sncpu_init(&c->sn);
+	if (c->has_opl) {
+		oplc_init(&c->fl, opl);
+		if (h->ymf262_clock) {
+			opld_init3(&c->dl, h->ymf262_clock, rate);
+			opld_channels(&c->dl, OPL_CH);
+		} else
+			opld_init(&c->dl, h->ym3812_clock, rate);
+		opld_send(&c->dl, opl_put, c);
+	}
 	if (c->has_opn) {
 		opnc_init(&c->fm, opn_sin, opn_gain);
 		opnd_init(&c->opn, h->ym2612_clock, rate);
@@ -67,6 +88,8 @@ void vgmcpu_attach(VGMCPU *c, VGMRUN *r)
 		r->opn_fn = opn_write;
 		r->dac = &c->opn.dq;	/* (the drums' samples straight to its queue) */
 	}
+	if (c->has_opl)
+		r->opl_fn = opl_write;
 }
 
 int vgmcpu_render(VGMCPU *c, VGMRUN *r, short *lr, int n)
@@ -93,6 +116,13 @@ int vgmcpu_render(VGMCPU *c, VGMRUN *r, short *lr, int n)
 				break;
 			memset(o, 0, (size_t)blk * 4);
 			opnc_run(&c->fm, o, blk);
+		} else if (c->has_opl) {
+			int live = vgm_run(r, fs);
+			opld_send(&c->dl, opl_put, c);
+			if (!live)
+				break;
+			memset(o, 0, (size_t)blk * 4);
+			oplc_run(&c->fl, o, blk);
 		} else {
 			if (!vgm_run(r, fs))
 				break;

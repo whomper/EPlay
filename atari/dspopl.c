@@ -238,6 +238,12 @@ int dspopl_tick(int (*run)(void *v, long n), void *v, long n)
 	return live;
 }
 
+const OPLC_TABS *dspopl_tabs(void)
+{
+	static const OPLC_TABS t = { opl_gain, opl_am, opl_pmw, opl_sinq, opl_rq, OPL_GAIN_N };
+	return &t;
+}
+
 long dspopl_least(void)
 {
 	return st_least;

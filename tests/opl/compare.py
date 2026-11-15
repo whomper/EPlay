@@ -68,7 +68,9 @@ def main():
     names = sys.argv[3:] or ["SINE", "FM", "ENV", "WAVE", "LFO", "RHYTHM", "CHORD", "KEYS"]
     for name in names:
         rr, ref = load("%s/%s.ref.wav" % (d, name))
-        mr, mod = load("%s/%s.f%s.wav" % (d, name, rate[:2]))
+        # (c24585: the CPU's model's, src/oplcpu.c)
+        tag = "c" + rate[1:3] if rate.startswith("c") else "f" + rate[:2]
+        mr, mod = load("%s/%s.%s.wav" % (d, name, tag))
         a, b = int(0.25 * rr), int(0.75 * rr)
         am, bm = int(0.25 * mr), int(0.75 * mr)
         s_ref = (ref[a:b, 0] + ref[a:b, 1]) / 2
