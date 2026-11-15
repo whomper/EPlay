@@ -75,7 +75,7 @@ static int cmp_vgm;		/* (phase 11) a VGM's chips made on the CPU (vp_render), no
 #ifdef EPLAY_FB
 #define OUT_HW "FireBee"
 #else
-#define OUT_HW "Falcon"
+#define OUT_HW (SND_XB ? "XBIOS" : "Falcon")	/* (phase 11, step 4: the XBIOS's sound alone) */
 #endif
 #define CMP_IN 16384
 static unsigned char cmp_in[CMP_IN];
@@ -88,11 +88,12 @@ static short cmp_prev[2];
    the samples left out at the start, and how many there are to play (-1:
    not known: a file with no tag, or played from a place in it) */
 static long cmp_skip, cmp_keep;
-#ifdef EPLAY_FB
-/* (the FireBee: a WAV or AIFF through the same path, its frames made
-   16-bit stereo by pcm_convert in place of an MP3 frame's decoding, so
-   that it is resampled to the output's rate as an MP3 on the CPU is:
-   FireTOS's sound plays at the Falcon's rates alone, 49,170 Hz here) */
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+/* (the FireBee, and the XBIOS's sound alone in EPLAY.PRG: a WAV or AIFF
+   through the same path, its frames made 16-bit stereo by pcm_convert in
+   place of an MP3 frame's decoding, so that it is resampled to the
+   output's rate as an MP3 on the CPU is: the XBIOS's sound plays at the
+   Falcon's rates alone, 49,170 Hz here) */
 static int cmp_wav;
 static PCMFMT wfmt;		/* the file's own format */
 
@@ -1122,7 +1123,7 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 			src_done = 1;
 			break;
 		}
-#ifdef EPLAY_FB
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
 		ns = cmp_wav ? wav_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi) :
 			       cmp3_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi);
 #else
@@ -1285,7 +1286,7 @@ int play_open(const char *path, char *err, int n)
 	}
 	dsp = xs = 0;
 	cmp = cmp_vgm = 0;
-#ifdef EPLAY_FB
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
 	cmp_wav = 0;
 #endif
 	pcm_got = 0;
@@ -1360,10 +1361,11 @@ int play_open(const char *path, char *err, int n)
 			data_left -= skip * fmt.bytes;
 			Fseek(fmt.data + skip * fmt.bytes, fh, 0);	/* the samples read from here into the queue */
 		}
-#ifdef EPLAY_FB
-		{
-			/* (the FireBee: its frames into the queue as 16-bit big-endian
-			   stereo, resampled to the output's rate: fill_cmp) */
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+		if (SND_XB) {
+			/* (the FireBee, the XBIOS's sound alone: its frames into the
+			   queue as 16-bit big-endian stereo, resampled to the output's
+			   rate: fill_cmp) */
 			wfmt = fmt;
 			cmp = cmp_wav = 1;
 			cmp_rin = fmt.rate;
@@ -1384,8 +1386,8 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 		{
-#ifdef EPLAY_FB
-			const PCMFMT *wf = &wfmt;	/* (the file's, not the queue's) */
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+			const PCMFMT *wf = SND_XB ? &wfmt : &fmt;	/* (the file's, not the queue's) */
 #else
 			const PCMFMT *wf = &fmt;
 #endif
@@ -1723,9 +1725,9 @@ made_ahead:
 	} else if (ext)
 		snprintf(play_out, sizeof(play_out), "External clock  %s", kr);
 	else if (out_rate == rate)
-		snprintf(play_out, sizeof(play_out), OUT_HW "  %s", kr);
+		snprintf(play_out, sizeof(play_out), "%s  %s", OUT_HW, kr);
 	else
-		snprintf(play_out, sizeof(play_out), OUT_HW "  %s (not the file's rate)", kr);
+		snprintf(play_out, sizeof(play_out), "%s  %s (not the file's rate)", OUT_HW, kr);
 	elog("output: %ld Hz, %s%s%s; queue %ld bytes (Settings: %s)", out_rate,
 	     ext ? "the external clock" : "the Falcon's clock", dsp && out_rate != rate ? ", resampled on the DSP" : "",
 	     s_sblim < 32 ? ", the subbands above about 15 kHz left out" : "", q_size, settings_output_name(out_set));
@@ -2337,8 +2339,9 @@ int play_step(int ms)
 	long sec;
 	if (state != PS_PLAYING)
 		return 0;
-#ifdef EPLAY_FB
-	snd_poll();		/* (Buffptr here, never in the tick) */
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+	if (SND_XB)
+		snd_poll();	/* (Buffptr here, never in the tick) */
 #endif
 	if (vgm) {
 		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once

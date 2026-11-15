@@ -57,7 +57,7 @@ LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
            -Wl,--sort-section=name \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -68,13 +68,13 @@ CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text of
 ifeq ($(CPU),68000)
 # the STE: no DSP, so its programs and their tables not carried (dspstub.c
 # answers for them, as on a Falcon whose DSP is missing)
-OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu,$(OWN)) dspstub
+OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb,$(OWN)) dspstub
 endif
 ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
 # for them), the sound through the XBIOS (sndfb.c), the tick through
 # Xbtimer (feedfb.S), the 64-bit helpers common's (ll64.c)
-OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sncpu vgmcpu opncpu oplcpu aycpu,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
+OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sncpu vgmcpu opncpu oplcpu aycpu sndxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
 CATARI  += ll64
 CUI     := $(filter-out cpucheck,$(CUI))
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feedfb_s.o $(OBJDIR)/inflate_fast_s.o \
@@ -176,6 +176,10 @@ $(B)/mp3_prog.h: dsp/mp3.a56 $(B)/mp3tab.h common/dsp/mkh.py
 $(OBJDIR)/%.o: ui/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
 	$(PINOBJ)
+# (phase 11, step 4) the FireBee's XBIOS sound in EPLAY.PRG too, for a
+# machine with no Atari sound of its own: sndfb.c again, its calls sx_*
+$(OBJDIR)/sndxb.o: atari/sndfb.c atari/sndxb.h $(HDRS) | $(OBJDIR)
+	$(CC) $(CFLAGS) $(OWNWARN) -DSND_XB_IN -c -o $@ $<
 $(OBJDIR)/%.o: atari/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(OWNWARN) -c -o $@ $<
 	$(PINOBJ)

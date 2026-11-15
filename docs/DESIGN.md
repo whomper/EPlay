@@ -2302,7 +2302,19 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    where the machine has no YM2149 (`vp_has_ym`: _MCH 0 to 3 and no _CF_; not a Milan's), and with
    the other chips when they are made on the CPU (the file's AY was left out before). tests/vgm: a
    440.1 Hz tone (440.3 measured), the noise, silence; play060 with VGMCPU=1: the AY's tone heard
-   right (vgm, vgz), vgmsn and vgmmd as before. The XBIOS's sound next.
+   right (vgm, vgz), vgmsn and vgmmd as before. **The XBIOS's sound (done):** EPLAY.PRG plays
+   through the XBIOS's sound calls alone where the machine has no Atari sound hardware of its own
+   (_MCH past the Falcon's 3, with _SND bit 5: a Milan's GSXB), as the FireBee's edition does:
+   `atari/sndfb.c` built again as `sndxb.o` (its calls `sx_*`, snd.c giving each of its calls to
+   them when `snd_xb` is set at the start), files resampled to 49,170 Hz by the CPU (play.c's
+   path for the FireBee, now chosen at run time), a VGM's chips played at their own Falcon rate
+   (Devconnect's prescale), Buffptr read in GEM's turn and the tick counting by the 200 Hz clock.
+   No DSP is used then (its programs refuse; Settings' DSP greyed), MP3 decoded by a 68060 with
+   MP3FPU.OVL, a station's MP3 not played yet, a file's AY made on the CPU (no YM2149). The tick's
+   MFP Timer A is taken as on the Falcon (a Milan has the MFP). `SNDXBIOS=1` (the rigs') makes it so
+   on a Falcon: play_test on Falcon-4:256 (wav, aiff, list, quit; MP3 refused, as on a 68030 with
+   no DSP) and play060 (wav, aiff, mp3, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3) pass. Not run on a
+   Milan: none here; a tester's report to come.
 
 **1.38's speed against 1.37, accepted by Erez (15 Nov 2026):** the rows slower beyond a tick in both
 runs, with phase 11's step 3, the log at once, Timer A's limits and NATFEATS. On Falcon-4:16: a Mega

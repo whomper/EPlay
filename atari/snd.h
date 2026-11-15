@@ -14,6 +14,21 @@
 /* the sound: 0 when the machine has no Falcon sound matrix (_SND bits 2, 4)
    or another program holds the sound system (Locksnd), with why in why */
 int snd_init(const char **why);
+/* (phase 11, step 4) the sound through the XBIOS's calls alone, as the
+   FireBee's edition plays it (sndfb.c, in EPLAY.PRG as sndxb.o): a machine
+   with no Atari sound hardware of its own (_MCH past the Falcon's) but
+   the calls (_SND bit 5), a Milan's GSXB; or snd_xb_want (the rigs'
+   SNDXBIOS=1). Its files at 49,170 Hz, resampled on the CPU */
+#if defined(EPLAY_FB)
+#define SND_XB 1
+#elif defined(EPLAY_ST)
+#define SND_XB 0
+#else
+#define SND_XB_ON 1
+extern int snd_xb;
+#define SND_XB snd_xb
+#endif
+extern int snd_xb_want;
 void snd_exit(void);
 /* the sound system (Locksnd) while EPlay plays: 1, or 0 when another
    program has it; snd_give puts the matrix back and lets it go */
@@ -71,8 +86,8 @@ void snd_wrote(long n);		/* n frames put at snd_ptr() */
 void snd_play(void);		/* the DMA started (after the first frames) */
 long snd_played(void);		/* frames played since snd_open */
 void snd_update(void);		/* snd_played brought up to date: from the tick only */
-#ifdef EPLAY_FB
-void snd_poll(void);		/* (the FireBee: GEM's turn) the tick's count put right from Buffptr */
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+void snd_poll(void);		/* (the XBIOS's sound alone: GEM's turn) the tick's count put right from Buffptr */
 #endif
 extern long snd_underruns;	/* times the DMA came past what was written */
 extern long snd_first_under;	/* frames played at the first (-1: none) */

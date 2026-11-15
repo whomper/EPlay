@@ -40,6 +40,7 @@
 #include "charset.h"
 #include "elog.h"
 #include "snd.h"
+#include "vgmplay.h"
 #include "bar.h"
 #include "art.h"
 #include "sart.h"
@@ -920,7 +921,7 @@ static void full_note(void)
 static void none_playable(int before)
 {
 	if (list_count() > before && play_state() != PS_PLAYING && !play_paused() &&
-	    !(get_cookie(0x5F534E44L) & 8)) {
+	    (!(get_cookie(0x5F534E44L) & 8) || SND_XB) && !vp_cpu_can()) {
 		nf_debug("EPLAY refused: MP3 needs a Falcon's DSP.\n");
 		status("MP3 needs a Falcon's DSP.");
 	}
@@ -2393,6 +2394,14 @@ int app_main(void)
 		     "MP3 decoded by it (minimp3)");
 		status("The FireBee's sound: MP3, WAV and AIFF.");
 	} else
+#elif defined(SND_XB_ON)
+	if (snd_xb) {
+		/* (phase 11, step 4) no Atari sound hardware: the XBIOS's calls
+		   alone (a Milan's GSXB), 49,170 Hz, files resampled by the CPU */
+		elog("the sound: the XBIOS's calls alone%s, the Falcon's rates (a file resampled to 49170 Hz by the CPU); MP3 %s",
+		     snd_xb_want ? " (SNDXBIOS=1)" : "", vp_cpu_can() ? "decoded by it (MP3FPU.OVL)" : "not played");
+		status(vp_cpu_can() ? "The XBIOS's sound: MP3, WAV and AIFF." : "The XBIOS's sound: WAV and AIFF.");
+	} else
 #endif
 	if (snd_dma8) {
 		/* a TT or an STE (phase 6): its 8-bit DMA, WAV and AIFF */
@@ -2452,11 +2461,10 @@ int app_main(void)
 	play_log_stop();
 	play_stop();
 	snd_exit();
-#ifdef EPLAY_FB
-	quit_step("the sound stopped, the XBIOS's sound given back");
-#else
-	quit_step("the sound stopped, the DSP and the matrix given back");
-#endif
+	if (SND_XB)
+		quit_step("the sound stopped, the XBIOS's sound given back");
+	else
+		quit_step("the sound stopped, the DSP and the matrix given back");
 	remember_place();
 	settings_flush();		/* (the volume, if it changed) */
 	quit_step("settings saved");

@@ -77,7 +77,7 @@ int dspsn_open(unsigned long clock, int fb, int width, const char **why)
 	int ext;
 	unsigned long t;
 	failed = 0;
-	if (!(get_cookie(0x5F534E44L) & 8)) {	/* _SND bit 3: a DSP */
+	if (!(get_cookie(0x5F534E44L) & 8) || SND_XB) {	/* (the XBIOS's sound alone: no matrix to the DSP) */	/* _SND bit 3: a DSP */
 		*why = "needs the Falcon's DSP";
 		return 0;
 	}

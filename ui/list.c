@@ -8,6 +8,7 @@
 #include "tos.h"
 #include "stream.h"
 #include "list.h"
+#include "snd.h"
 #include "tags.h"
 #include "probe.h"
 #include "vgmfile.h"
@@ -133,9 +134,12 @@ int list_add(const char *path)
 			if (surl_is(p))
 				e->bad = 1;
 #else
+			/* (1 the DSP; 2 none, but a 68060 decodes a file's with
+			   MP3FPU.OVL, phase 11 step 4: a Milan's, with the XBIOS's
+			   sound; a station's isn't played on it yet) */
 			if (dsp < 0)
-				dsp = (get_cookie(0x5F534E44L) & 8) != 0;
-			if (!dsp)
+				dsp = (get_cookie(0x5F534E44L) & 8) && !SND_XB ? 1 : SND_XB && vp_cpu_can() ? 2 : 0;
+			if (!dsp || (dsp == 2 && surl_is(p)))
 				e->bad = 1;
 #endif
 		}

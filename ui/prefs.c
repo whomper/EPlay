@@ -77,7 +77,7 @@ static int has(int out)
 	case OUT_FDI:
 		return snd_fdi;
 	case OUT_DSP:
-		return (get_cookie(0x5F534E44L) & 8) != 0;	/* _SND bit 3: the DSP */
+		return (get_cookie(0x5F534E44L) & 8) != 0 && !SND_XB;	/* _SND bit 3: the DSP (not with the XBIOS's sound alone) */
 	}
 	return 1;
 }
@@ -108,6 +108,11 @@ void settings_read(void)
 	   and no machine runs NatFeats' probe */
 	if (inf_get(inf, inf_n, "NATFEATS", v, sizeof(v)) && v[0] == '1')
 		nf_on = 1;
+	/* SNDXBIOS=1 (the rigs', never written): the sound through the XBIOS's
+	   calls alone, as on a machine with no Atari sound of its own (phase
+	   11, step 4), before snd_init */
+	if (inf_get(inf, inf_n, "SNDXBIOS", v, sizeof(v)) && v[0] == '1')
+		snd_xb_want = 1;
 }
 
 void settings_load(void)

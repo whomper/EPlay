@@ -16,6 +16,7 @@
 #include "tos.h"
 #include "tickcode.h"
 #include "dspmp3.h"
+#include "snd.h"
 #include "mp3tab.h"
 #include "mp3_prog.h"
 #include "mp3frame.h"
@@ -130,7 +131,7 @@ int dspmp3_tick_load(void)
 
 int dspmp3_open(void)
 {
-	if (!(get_cookie(0x5F534E44L) & 8))	/* _SND bit 3: a DSP */
+	if (!(get_cookie(0x5F534E44L) & 8) || SND_XB)	/* _SND bit 3: a DSP (and the matrix's sound) */
 		return DSPMP3_NONE;
 	if (Dsp_Lock() == -1)
 		return DSPMP3_BUSY;

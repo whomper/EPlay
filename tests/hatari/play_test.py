@@ -539,6 +539,10 @@ def hatari_keeps_parity():
 
 def no_dsp(spec):
     """a TT or an STE: no DSP, MP3 files passed over (phase 6)"""
+    # (SNDXBIOS=1, the XBIOS's sound alone: the DSP not used, MP3 on a
+    # 68060 alone, MP3FPU.OVL)
+    if "SNDXBIOS=1" in os.environ.get("EPLAY_RIG_INF", "") and "060" not in spec:
+        return True
     return spec.split(":")[0] in ("TT", "STE", "STE-1")
 
 
@@ -879,7 +883,7 @@ def run(work, case, spec):
             return ok, m.describe(), "played in turn: %s (wanted %s)%s" % (
                 " ".join(names), " ".join(wanted), "" if end else "; never ended")
         end = wait_line(log, lambda l: l.startswith("EPLAY status: ") and "Playing" not in l and
-                        "clock" not in l and "DMA sound" not in l, 120)
+                        "clock" not in l and "DMA sound" not in l and "XBIOS's sound" not in l, 120)
         time.sleep(1.0)
         cmd(fifo, "hatari-shortcut", "recsound")
         time.sleep(0.5)

@@ -13,7 +13,27 @@
 #include "tos.h"
 #include "tickcode.h"
 #include "snd.h"
+#ifdef SND_XB_ON
+#include "sndxb.h"
+#endif
 #include "xalloc.h"
+
+int snd_xb_want;		/* the rigs' SNDXBIOS=1 (prefs.c, before snd_init) */
+#ifdef SND_XB_ON
+int snd_xb;			/* (phase 11, step 4) the XBIOS's calls alone: sndxb.o */
+#define XB(call) do { if (snd_xb) return call; } while (0)
+#define XBV(call) do { if (snd_xb) { call; return; } } while (0)
+
+/* (GEM's turn) where the XBIOS's sound is: the tick's count put right */
+void snd_poll(void)
+{
+	if (snd_xb)
+		sx_poll();
+}
+#else
+#define XB(call) do { } while (0)
+#define XBV(call) do { } while (0)
+#endif
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
@@ -279,6 +299,7 @@ static unsigned short frac8;
 TICK_CODE("27snd_put8_raw")
 long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x)
 {
+	XB(sx_put8_raw(src, nin, bpf, ol, orr, x));
 	unsigned char *r = ring8 + 2 * wpos, *rend = ring8 + 2 * ring_n;
 	unsigned short f = frac8, st = (unsigned short)step8;
 	long whole = (long)(step8 >> 16), wb = (long)mul16((unsigned long)whole, (unsigned long)bpf), room = ring_n - (written - played) - 1024, made = 0,
@@ -724,6 +745,7 @@ static void wait_ms(long ms)
 
 int snd_fdi_set(long rate)
 {
+	XB(sx_fdi_set(rate));
 	static const int v44[5] = { 2, 5, 3, 7, 0 }, v48[5] = { 3, 7, 2, 5, 0 };
 	const int *v;
 	int k, n = 0;
@@ -831,6 +853,7 @@ static long mfp_read(void)
 
 void snd_mfp_note(char *b, int n)
 {
+	XBV(sx_mfp_note(b, n));
 	Supexec(mfp_read);
 	snprintf(b, (size_t)n, "GPIP $%02X, AER $%02X, IERA $%02X, IERB $%02X, IMRA $%02X, IMRB $%02X", mfp_now[0],
 		 mfp_now[1], mfp_now[2], mfp_now[3], mfp_now[4], mfp_now[5]);
@@ -853,6 +876,7 @@ static long read_matrix(void)
    the DSP joined to the matrix (Dsptristate) */
 void snd_dsp_out(long rate, int ext)
 {
+	XBV(sx_dsp_out(rate, ext));
 	short pre = 1;
 	unsigned i;
 	if (ext)
@@ -875,6 +899,7 @@ void snd_dsp_out(long rate, int ext)
 /* the DSP off the matrix, the matrix as EPlay found it */
 void snd_dsp_off(void)
 {
+	XBV(sx_dsp_off());
 	Dsptristate(0, 0);
 	Supexec(put_regs);
 }
@@ -883,6 +908,7 @@ void snd_dsp_off(void)
    XBIOS (term.c: EPlay ending however it ends) */
 void snd_term(void)
 {
+	XBV(sx_term());
 	*(volatile unsigned char *)0xffff8901L = 0;	/* the DMA's play off */
 	if (snd_dma8)
 		return;
@@ -893,6 +919,13 @@ void snd_term(void)
 int snd_init(const char **why)
 {
 	long snd = get_cookie(0x5F534E44L);	/* _SND: bit 2 the codec, 4 the matrix */
+#ifdef SND_XB_ON
+	if (snd_xb_want || ((get_cookie(0x5F4D4348L) >> 16) > 3 && (snd & 0x20))) {
+		/* (no Atari sound hardware of its own: a Milan's GSXB) */
+		snd_xb = 1;
+		return sx_init(why);
+	}
+#endif
 	if ((snd & 0x14) != 0x14) {
 		/* the TT's or the STE's 8-bit DMA (_SND bit 1) */
 		if (!(snd & 2)) {
@@ -921,6 +954,7 @@ int snd_init(const char **why)
    put back: 1, or 0 when another program has it */
 int snd_take(void)
 {
+	XB(sx_take());
 	if (snd_dma8 || locked)
 		return 1;
 	if (Locksnd() != 1)
@@ -938,6 +972,7 @@ int snd_take(void)
 /* the matrix as EPlay found it, and the sound system given back */
 void snd_give(void)
 {
+	XBV(sx_give());
 	if (snd_dma8 || !locked)
 		return;
 	Supexec(put_regs);
@@ -947,6 +982,7 @@ void snd_give(void)
 
 void snd_exit(void)
 {
+	XBV(sx_exit());
 	snd_close();
 	if (snd_dma8) {
 		Supexec(put_regs8);
@@ -966,6 +1002,7 @@ int snd_ext_use = 1, snd_ext_only;
 
 long snd_rate_for(long rate, int *ext)
 {
+	XB(sx_rate_for(rate, ext));
 	long best = internal[0], d, bd = 1L << 30;
 	unsigned i;
 	*ext = 0;
@@ -1003,6 +1040,7 @@ long snd_rate_for(long rate, int *ext)
    at or above the rate (49170 for 44.1 kHz: x1.115). The DSP resamples */
 long snd_rate_dsp(long rate, int *ext)
 {
+	XB(sx_rate_dsp(rate, ext));
 	long best = internal[0];
 	unsigned i;
 	*ext = 0;
@@ -1021,6 +1059,7 @@ long snd_rate_dsp(long rate, int *ext)
 
 int snd_open(long rate, int ext)
 {
+	XB(sx_open(rate, ext));
 	return open_to(rate, ext, 0);
 }
 
@@ -1029,6 +1068,7 @@ int snd_open(long rate, int ext)
    word a sample */
 int snd_open_feed(long rate, int ext)
 {
+	XB(sx_open_feed(rate, ext));
 	return open_to(rate, ext, 1);
 }
 
@@ -1157,6 +1197,7 @@ int snd_adder_adc;		/* 1 while a VGM plays on the YM2149 (ym.c): the ADC added t
 
 void snd_dac_volume(int att, int mute)
 {
+	XBV(sx_dac_volume(att, mute));
 	if (snd_dma8) {
 		/* the STE (the 68000's way, no gain on the samples): its LMC1992;
 		   EPlay's steps of 1.5 dB as its 2 dB, silent at the bottom. A TT
@@ -1182,6 +1223,7 @@ void snd_dac_volume(int att, int mute)
 
 void snd_close(void)
 {
+	XBV(sx_close());
 	if (snd_dma8) {
 		if (ring8)
 			Supexec(stop8);
@@ -1196,6 +1238,7 @@ void snd_close(void)
 
 long snd_ring_frames(void)
 {
+	XB(sx_ring_frames());
 	return ring_n;
 }
 
@@ -1240,6 +1283,7 @@ static long hw_pos(void)
 TICK_CODE("20snd_update")
 void snd_update(void)
 {
+	XBV(sx_update());
 	long p, d;
 	if (!playing)
 		return;
@@ -1271,6 +1315,7 @@ void snd_update(void)
 TICK_CODE("24snd_played")
 long snd_played(void)
 {
+	XB(sx_played());
 	/* (the file's frames written, less the DMA's lead as the file's) */
 	return snd_dma8 ? (long)in_written - as_in(written - played) : played;
 }
@@ -1278,12 +1323,14 @@ long snd_played(void)
 TICK_CODE("25snd_written")
 long snd_written(void)
 {
+	XB(sx_written());
 	return snd_dma8 ? (long)in_written : written;
 }
 
 TICK_CODE("21snd_room")
 long snd_room(void)
 {
+	XB(sx_room());
 	long r = ring_n - (written - played) - 1024;	/* a guard behind the DMA */
 	if (snd_dma8 && r > 0) {
 		r = in_for(r) - 1;	/* (the file's frames that fill it, one spare for the step) */
@@ -1296,6 +1343,7 @@ long snd_room(void)
 TICK_CODE("22snd_ptr")
 short *snd_ptr(long *n)
 {
+	XB(sx_ptr(n));
 	if (snd_dma8) {
 		*n = STAGE_N;
 		return stage;
@@ -1307,6 +1355,7 @@ short *snd_ptr(long *n)
 TICK_CODE("23snd_wrote")
 void snd_wrote(long n)
 {
+	XBV(sx_wrote(n));
 	if (snd_dma8) {
 		long m = put8(n);
 		in_written += (unsigned long)n;
@@ -1324,6 +1373,7 @@ void snd_wrote(long n)
 
 void snd_write(const short *frames, long n)
 {
+	XBV(sx_write(frames, n));
 	while (n > 0) {
 		long k;
 		short *p = snd_ptr(&k);
@@ -1341,6 +1391,7 @@ void snd_write(const short *frames, long n)
 
 void snd_play(void)
 {
+	XBV(sx_play());
 	if (!playing) {
 		/* the DMA starts at the ring's start; Buffptr, until it has,
 		   may still say where the last one stopped (measure_ext's) */
@@ -1356,5 +1407,6 @@ void snd_play(void)
 TICK_CODE("26snd_playing")
 int snd_playing(void)
 {
+	XB(sx_playing());
 	return playing;
 }

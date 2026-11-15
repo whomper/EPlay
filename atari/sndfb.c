@@ -26,10 +26,46 @@
 #include "snd.h"
 #include "xalloc.h"
 
+#ifdef SND_XB_IN
+/* (EPLAY.PRG's: this file built again as sndxb.o for a machine with no
+   Atari sound of its own but the XBIOS's sound calls, a Milan's GSXB
+   (phase 11, step 4); its calls sx_*, snd.c's chosen at its start
+   (snd_xb), the variables snd.c's) */
+#include "sndxb.h"
+#define snd_init sx_init
+#define snd_take sx_take
+#define snd_give sx_give
+#define snd_exit sx_exit
+#define snd_term sx_term
+#define snd_rate_for sx_rate_for
+#define snd_rate_dsp sx_rate_dsp
+#define snd_fdi_set sx_fdi_set
+#define snd_dsp_out sx_dsp_out
+#define snd_dsp_off sx_dsp_off
+#define snd_mfp_note sx_mfp_note
+#define snd_put8_raw sx_put8_raw
+#define snd_open sx_open
+#define snd_open_feed sx_open_feed
+#define snd_dac_volume sx_dac_volume
+#define snd_close sx_close
+#define snd_ring_frames sx_ring_frames
+#define snd_update sx_update
+#define snd_poll sx_poll
+#define snd_played sx_played
+#define snd_written sx_written
+#define snd_room sx_room
+#define snd_ptr sx_ptr
+#define snd_wrote sx_wrote
+#define snd_write sx_write
+#define snd_play sx_play
+#define snd_playing sx_playing
+#endif
+
 #define OUT_RATE 49170L
 #define PRESCALE 1		/* (Devconnect's: 49,170 Hz at the 25 MHz clock) */
-#define RING_MAX (OUT_RATE / 2)
+#define RING_MAX (49170L / 2)
 
+#ifndef SND_XB_IN
 int snd_adder_adc;
 long snd_ext_rate;
 int snd_dma8, snd_dma8_interp;
@@ -45,6 +81,8 @@ char snd_fdi_note[512];
 unsigned short snd_matrix[4];
 int snd_fw = 2;
 long snd_underruns, snd_first_under = -1, snd_least_lead = -1;
+int snd_xb_want;
+#endif
 
 static short *ring;
 static volatile long ring_n, wpos, written, played;
@@ -99,7 +137,7 @@ int snd_init(const char **why)
 {
 	/* the XBIOS's sound there and free: Locksnd answers 1 */
 	if (x_locksnd() != 1) {
-		*why = "EPlay can't play: FireTOS's sound is in use by another program.";
+		*why = "EPlay can't play: the sound is in use by another program.";
 		return 0;
 	}
 	x_unlocksnd();
@@ -138,11 +176,34 @@ void snd_term(void)
 	playing = 0;
 }
 
+#ifdef SND_XB_IN
+/* (EPLAY.PRG's, the XBIOS's sound alone: a rate of the Falcon's own, as a
+   VGM's chips are made at, played at it, Devconnect's prescale; any other
+   at 49,170 Hz, resampled by play.c. The FireBee's edition keeps 49,170
+   alone, what its tester's FireTOS was heard at) */
+static const long xb_rates[8] = { 49170, 32780, 24585, 19668, 16390, 12292, 9834, 8195 };
+static const short xb_pre[8] = { 1, 2, 3, 4, 5, 7, 9, 11 };
+static long out_rate = OUT_RATE;
+static short out_pre = PRESCALE;
+#undef OUT_RATE
+#define OUT_RATE out_rate
+#undef PRESCALE
+#define PRESCALE out_pre
+#endif
+
 long snd_rate_for(long rate, int *ext)
 {
-	(void)rate;
 	*ext = 0;
-	return OUT_RATE;
+#ifdef SND_XB_IN
+	{
+		int i;
+		for (i = 0; i < 8; i++)
+			if (rate == xb_rates[i])
+				return rate;
+	}
+#endif
+	(void)rate;
+	return 49170L;
 }
 
 long snd_rate_dsp(long rate, int *ext)
@@ -181,6 +242,18 @@ long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, 
 int snd_open(long rate, int ext)
 {
 	(void)ext;
+#ifdef SND_XB_IN
+	{
+		int i;
+		out_rate = 49170L;
+		out_pre = 1;
+		for (i = 0; i < 8; i++)
+			if (rate == xb_rates[i]) {
+				out_rate = rate;
+				out_pre = xb_pre[i];
+			}
+	}
+#endif
 	if (!ring) {
 		short *p = x_alloc(RING_MAX * 4, 0);	/* (ST RAM: where the sound's DMA reads) */
 		if ((long)p <= 0)
@@ -196,6 +269,7 @@ int snd_open(long rate, int ext)
 	x_setmode(1);			/* 16-bit stereo */
 	x_devconnect(0, 8, 0, PRESCALE, 1);	/* DMA play to the DAC, 25 MHz clock, no handshake */
 	x_setbuffer(0, ring, ring + 2 * ring_n);
+	snd_fw = 2;			/* (EPLAY.PRG's variable too: 16-bit stereo, no tracks) */
 	wpos = written = played = 0;
 	playing = 0;
 	corr_new = 0;
