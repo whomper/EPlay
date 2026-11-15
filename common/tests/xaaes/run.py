@@ -99,6 +99,39 @@ EXT2_SETTLE = 8	# s, longer than MiNT's sync interval (5 s)
 SHELL = "reverting to internal shell"	# MiNT didn't read MINT.CNF: no XaAES
 RETRY = 2
 
+# --machine ct60: a CT60's stand-in. Hatari 2.4's 68060 has no MMU (movec to
+# ITT0 is an illegal instruction there, with --mmu on), so FreeMiNT turns
+# its memory protection off on it ("PMMU is requested but not present"); a
+# 68040's MMU is there, and FreeMiNT protects a 68040's memory with the same
+# code as a 68060's (sys/arch/mprot040.c). On a 68040 or 68060 FreeMiNT
+# takes the MMU only where TOS has turned it on, with page tables (TC's E
+# bit, then the tree from URP, copied), as a CT60's TOS does and EmuTOS
+# doesn't. AUTO\0MMU040.PRG first (68040 code, m68k-linux-gnu-as): Super;
+# in its BSS, 512-aligned, a root table, three pointer tables and 320 page
+# tables mapping the first 80 MB 1:1 in 4 KB pages (ST RAM, ROM, the 24-bit
+# hardware area $F00000-$FFFFFF not cached, TT RAM from $01000000), each page
+# resident; ITT1 = DTT1 = $FF00C040 ($FF000000 up, the hardware, not
+# cached); ITT0 = DTT0 = 0; URP = SRP = the root; TC = $8000; back to user
+# mode; Ptermres to the tables' end. (With RAM under transparent translation
+# instead, FreeMiNT says "Couldn't initialize memory protection" and
+# stops.) MiNT then says "Memory protection enabled". AUTO\ZCPU060.PRG
+# after MiNT (which builds its own cookie jar with the CPU it finds) sets
+# _CPU to 60, as a CT60's TOS says, so that a program takes a 68060's ways;
+# code built for the 68060 alone may not run (fintrz is a 68040's
+# unimplemented instruction).
+MMU040 = bytes.fromhex(
+    "2c6f000442a73f3c00204e415c8f2a40202e00180680000001ff0280fffffe002040"
+    "2248323c01ff429951c9fffc45e8020047ea060074002602ee8b2803e18cd88449f2"
+    "48002a0c00850000000221853c00260202830000007f2a0b00850000000229853c00"
+    "2c027e12efae723f2a060c8500f00000650e0c850100000064060085000000400085"
+    "0000000126c506860000100051c9ffd852820c82000001406596203cff00c0404e7b"
+    "00054e7b000770004e7b00044e7b000620084e7b08064e7b0807203c000080004e7b"
+    "00032f0d3f3c00204e415c8f4267200b908e2f003f3c00314e41")
+MMU040_BSS = 511 + 2048 + 320 * 256
+CPU060 = bytes.fromhex(
+    "42a73f3c00204e415c8f2a40207805a020086716201067120c805f4350556606703c"
+    "21400004508860ea2f0d3f3c00204e415c8f42674e41")
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -115,9 +148,14 @@ def main():
     ap.add_argument("--cnf", action="append", default=[], metavar="LINE")
     ap.add_argument("--ext2", metavar="DIR")
     ap.add_argument("--start", metavar="PATH")
-    ap.add_argument("--machine", default="falcon", choices=["falcon", "tt"],
+    ap.add_argument("--machine", default="falcon", choices=["falcon", "tt", "ct60"],
                     help="falcon: VGA, 14 MB, the IDE disk (default); tt: a TT030 at 32 MHz with 4 MB + 16 MB TT RAM on "
-                         "its high resolution monitor (1280x960 mono), the same IDE disk")
+                         "its high resolution monitor (1280x960 mono), the same IDE disk; ct60: a CT60's stand-in, a "
+                         "Falcon with a 68040 at 32 MHz, its FPU, 14 MB + 64 MB TT RAM, VGA, the 68040's kernel, "
+                         "_CPU 60 (see CT60 above)")
+    ap.add_argument("--nvdi", action="store_true",
+                    help="Erez's NVDI (~/.aera/nvdi/x, or AERA_NVDI) in AUTO before MiNT, NVDI.INF, ASSIGN.SYS, GEMSYS "
+                         "and BTFONTS in the root; never kept: WORK's hd, out and disk image are deleted at the end")
     ap.add_argument("--mem-prot", action="store_true",
                     help="MEM_PROT=YES in mint.ini and Hatari's --mmu on: FreeMiNT's memory protection, which a program "
                          "that touches its own memory from an interrupt, or while another process runs, may not survive "
@@ -156,6 +194,21 @@ def run(a):
         (shutil.copytree if os.path.isdir(f) else shutil.copy)(f, dst)
     mintdir = os.path.join(hd, "mint")
     ver = [d for d in os.listdir(mintdir) if d[0].isdigit()][0]
+    auto = os.path.join(hd, "auto")
+    if a.machine == "ct60":
+        # (AUTO runs in its names' order, fatimg.py's: the MMU's first,
+        # then NVDI's, MiNT's, OPNWK's, the cookie's after MiNT's)
+        os.remove(os.path.join(auto, "mint030.prg"))
+        shutil.copy(os.path.join(HERE, "build", "ct60", "MINT040.PRG"), os.path.join(auto, "mint040.prg"))
+        shutil.copy(os.path.join(HERE, "build", "ct60", "xaaes.km"), os.path.join(mintdir, ver, "xaaes", "xaaes.km"))
+        machines.write_prg(os.path.join(auto, "0mmu040.prg"), MMU040, MMU040_BSS)
+        machines.write_prg(os.path.join(auto, "zcpu060.prg"), CPU060)
+    if a.nvdi:
+        if not machines.Machine("Falcon-4", hd).nvdi():
+            sys.exit("run.py: --nvdi, but no NVDI here")
+        os.rename(os.path.join(hd, "AUTO", "NVDI.PRG"), os.path.join(auto, "1nvdi.prg"))
+        if os.path.normcase(os.path.join(hd, "AUTO")) != os.path.normcase(auto):
+            os.rmdir(os.path.join(hd, "AUTO"))
     if a.mem_prot:
         ini = os.path.join(mintdir, ver, "mint.ini")
         with open(ini) as f:
@@ -198,6 +251,10 @@ def run(a):
                           *(["--machine", "falcon", "--monitor", "vga", "--dsp", a.dsp, "--memsize", "14",
                              *(["--mmu", "on"] if a.mem_prot else []),
                              "--ide-master", img, *(["--ide-slave", img2] if img2 else [])] if a.machine == "falcon" else
+                            ["--machine", "falcon", "--cpulevel", "4", "--cpuclock", "32", "--fpu", "internal",
+                             "--monitor", "vga", "--dsp", a.dsp, "--memsize", "14", "--ttram", "64", "--addr24", "off",
+                             *(["--mmu", "on"] if a.mem_prot else []),
+                             "--ide-master", img, *(["--ide-slave", img2] if img2 else [])] if a.machine == "ct60" else
                             ["--machine", "tt", "--cpuclock", "32", "--fpu", "68882", "--memsize", "4", "--ttram", "16",
                              "--addr24", "off", "--monitor", "mono", *(["--mmu", "on"] if a.mem_prot else []),
                              "--ide-master", img, *(["--ide-slave", img2] if img2 else [])]),
@@ -357,6 +414,19 @@ def run(a):
                     f.write("".join(n + "\n" for n in ext2img.ls(img2)))
             except Exception as e:
                 print("could not read the ext2 disk back: %s" % e)
+        if a.nvdi:
+            # (Erez's NVDI never kept: the work drive and its image deleted,
+            # NVDI's files taken out of what was read back)
+            shutil.rmtree(hd, ignore_errors=True)
+            if os.path.exists(img):
+                os.remove(img)
+            for top, dirs, files in os.walk(out, topdown=False):
+                for f in files:
+                    if f.upper() in ("1NVDI.PRG", "NVDI.PRG", "NVDI.INF", "ASSIGN.SYS"):
+                        os.remove(os.path.join(top, f))
+                for d in dirs:
+                    if d.upper() in ("GEMSYS", "BTFONTS"):
+                        shutil.rmtree(os.path.join(top, d), ignore_errors=True)
     if stop["shell"]:
         return RETRY
     print(sorted(os.listdir(shots)))
