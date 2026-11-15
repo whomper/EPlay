@@ -5,7 +5,6 @@
  * commands in C.
  */
 #include "sncpu.h"
-#include "tickcode.h"
 
 void sncpu_init(SNCPU *s)
 {
@@ -58,7 +57,6 @@ static void shift(SNCPU *s)
 	s->lfsr = fb ? (a >> 1) | s->topb : a >> 1;
 }
 
-TICK_CODE("8Asncpu_sample")
 long sncpu_sample(SNCPU *s)
 {
 	long b = 0;
