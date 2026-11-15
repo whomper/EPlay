@@ -920,8 +920,10 @@ int snd_init(const char **why)
 {
 	long snd = get_cookie(0x5F534E44L);	/* _SND: bit 2 the codec, 4 the matrix */
 #ifdef SND_XB_ON
-	if (snd_xb_want || ((get_cookie(0x5F4D4348L) >> 16) > 3 && (snd & 0x20))) {
-		/* (no Atari sound hardware of its own: a Milan's GSXB) */
+	if (snd_xb_want || get_cookie(0x5F43465FL) || ((get_cookie(0x5F4D4348L) >> 16) > 3 && (snd & 0x20))) {
+		/* (no Atari sound hardware of its own: a Milan's GSXB; or a
+		   FireBee running EPLAY.PRG, its _SND $27 taken for a TT's 8-bit
+		   DMA before, which isn't there, the tester's log, 14 Nov 2026) */
 		snd_xb = 1;
 		return sx_init(why);
 	}

@@ -543,7 +543,9 @@ def no_dsp(spec):
     # 68060 alone, MP3FPU.OVL)
     if "SNDXBIOS=1" in os.environ.get("EPLAY_RIG_INF", "") and "060" not in spec:
         return True
-    return spec.split(":")[0] in ("TT", "STE", "STE-1")
+    # (the FireBee's stand-in running EPLAY.PRG: no DSP, and a ColdFire's
+    # MP3 is EPLAYFB.PRG's)
+    return spec.split(":")[0] in ("TT", "STE", "STE-1", "FireBee")
 
 
 def run(work, case, spec):

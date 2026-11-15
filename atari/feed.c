@@ -10,6 +10,15 @@
 #include "tos.h"
 #include "tickcode.h"
 #include "feed.h"
+#include "snd.h"
+#ifdef SND_XB_ON
+#include "feedxb.h"
+#define FX(call) do { if (snd_xb) return call; } while (0)
+#define FXV(call) do { if (snd_xb) { call; return; } } while (0)
+#else
+#define FX(call) do { } while (0)
+#define FXV(call) do { } while (0)
+#endif
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
@@ -81,6 +90,7 @@ static long m0;
 TICK_CODE("00feed_t0")
 void feed_t0(void)
 {
+	FXV(fx_t0());
 	t0 = TADR;
 	m0 = feed_missed;
 }
@@ -88,6 +98,7 @@ void feed_t0(void)
 TICK_CODE("01feed_us")
 long feed_us(void)
 {
+	FX(fx_us());
 	unsigned char t = TADR;
 	/* (at level 6 the next tick waits, pending, instead of being left out) */
 	long n = (feed_missed - m0 + ((IPRA & TA_BIT) != 0)) * dr + t0 - t;
@@ -98,6 +109,7 @@ long feed_us(void)
    it ends, killed too) */
 void feed_term(void)
 {
+	FXV(fx_term());
 	if (on) {
 		give_back();
 		on = 0;
@@ -106,6 +118,7 @@ void feed_term(void)
 
 void feed_on(void (*tick)(void), int hz)
 {
+	FXV(fx_on(tick, hz));
 	if (on)
 		feed_off();
 	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154;
@@ -121,6 +134,7 @@ void feed_on(void (*tick)(void), int hz)
 
 void feed_off(void)
 {
+	FXV(fx_off());
 	if (on) {
 		Supexec(give_back);
 		on = 0;

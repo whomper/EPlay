@@ -11,6 +11,17 @@
  */
 #include "tos.h"
 #include "feed.h"
+#ifdef FEED_XB_IN
+/* (EPLAY.PRG's: this file built again as feedxb.o, the tick through
+   Xbtimer where the sound is the XBIOS's alone (snd_xb: a FireBee's, a
+   Milan's), feed.c giving its calls to these) */
+#include "feedxb.h"
+#define feed_t0 fx_t0
+#define feed_us fx_us
+#define feed_term fx_term
+#define feed_on fx_on
+#define feed_off fx_off
+#endif
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
