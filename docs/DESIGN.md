@@ -2345,6 +2345,17 @@ full at 0 files"). EmuTOS has Mxalloc, so the rigs never saw it until they ran o
 none), at every one of EPlay's own calls. Erez accepted two rows under NVDI against 1.38: started with a
 WAV playing 695 to 705 ms, with a Mega Drive VGM 2,610 to 2,640.
 
+**1.40's speed against 1.39, accepted by Erez (15 Nov 2026):** with TLSFB.OVL, phase 11's step 4
+(the AY on the CPU, the XBIOS's sound alone) and the FireBee's fixes, two rows slower beyond a tick in
+both runs, the start with eight files given: Falcon-4:16 635 to 660 ms, STE:mono 1,955 to 1,965. Under
+NVDI none; a Mega Drive VGM's start on Falcon-4:16 faster (2,455 to 2,430). Built at each commit since
+1.39, step 4b brings both. No work of its own runs there (the first file a WAV, played at once; the rest
+constants on these machines): on the STE, whose 68000 has no cache, step 4b with either half of its UI
+changes taken out is back at 1,950 to 1,955, so the start crosses a 5 ms step of the 200 Hz clock as
+the code's size changes. One round of pads (the hub's rule, AERA-Atari 098183d) put every pinned
+function, the ticks' and the start's, at 1.39's place modulo 256: the row stayed at 660 and Volume +
+went from under 20 to 25 ms, so the pads were left out.
+
 **The STE's baseline on TOS 1.62 (1.39, the first rows on Erez's real STE TOS, two runs alike).** Many
 over the guidelines' times (8 MHz, the 8-bit DMA, the nearest sample): the About box with a WAV playing
 230, 235 ms (150); Settings opened 345 (150); Pause let go 90 (50); Play let go 150, 180 (50); the
