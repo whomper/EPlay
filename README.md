@@ -38,6 +38,7 @@ Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** a
 | `eplayst.prg` | the program for an STE |
 | `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it |
 | `tls.ovl`, `cacert.pem` | secure (https) stations: keep them beside the program |
+| `tlsfb.ovl` | the same on a FireBee: EPlay loads it there instead of `tls.ovl` |
 | `mp3fpu.ovl` | MP3 decoded by a 68060 with its FPU where there is no DSP free: keep it beside the program |
 | `eplayfb.prg` | the program for a FireBee (a first test edition: MP3, WAV and AIFF) |
 | `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` |

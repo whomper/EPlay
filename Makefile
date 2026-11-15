@@ -359,7 +359,7 @@ $(B)/mp3ovl/stack.o: mp3ovl/stack.S
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
 DIST    := binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl binary/mp3fpu.ovl
+           common/tlsovl/tls.ovl common/tlsovl/tlsfb.ovl binary/mp3fpu.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
 	rm -rf dist

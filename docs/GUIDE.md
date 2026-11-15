@@ -11,13 +11,14 @@ after another, and the music goes on while you work in other dialogs and menus.
 | `eplay.prg` | the program, for the Falcon |
 | `eplay.hyp`, `eplay.ref` | this guide, for EHypView or ST-Guide |
 | `tls.ovl`, `CACERT.PEM` | the family's secure connections and the root certificates, for web radio stations at https addresses |
+| `tlsfb.ovl` | the same secure connections for a FireBee (its ColdFire); EPlay picks it there by itself |
 | `notices.txt` | the licences of the parts EPlay is made with |
 | `icons/` | the desktop icons: `eplay.rsc` (`eplaynv.rsc` under NVDI with its own palette), or `eplay.icn` and `eplaymk.icn` for desktops that take them |
 
 - **Install:** copy `eplay.prg` into a folder of its own, such as `C:\EPLAY\`. It keeps its
   settings (`EPLAY.INF`), its log (`EPLAY.LOG`, with Options > Write a log ticked), the album art it has unpacked (`cache\`) and any
   `CRASH.LOG` beside itself. Copy `tls.ovl` and `CACERT.PEM` beside it too, for stations at
-  https addresses.
+  https addresses (on a FireBee, `tlsfb.ovl` too).
 - **This guide:** copy `eplay.hyp` and `eplay.ref` into `C:\GUIDES\`, or beside `eplay.prg`.
   **Help** in EPlay opens it in EHypView or ST-Guide.
 - **Play something:** start EPlay and choose **File > Open...** (^O), or drop MP3, WAV or AIFF
