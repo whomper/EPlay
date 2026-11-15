@@ -2449,7 +2449,11 @@ int app_main(void)
 	play_log_stop();
 	play_stop();
 	snd_exit();
+#ifdef EPLAY_FB
+	quit_step("the sound stopped, the XBIOS's sound given back");
+#else
 	quit_step("the sound stopped, the DSP and the matrix given back");
+#endif
 	remember_place();
 	settings_flush();		/* (the volume, if it changed) */
 	quit_step("settings saved");

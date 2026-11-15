@@ -1339,6 +1339,7 @@ int play_open(const char *path, char *err, int n)
 		play_hz = 0;
 		play_kbps = 0;
 		elog("VGM: %s; %s; %ld ms%s", play_info, play_out, len_ms, base_ms ? " (from a place in it)" : "");
+		elog_save();		/* (Write a log ticked: the lines so far on the disk, as below) */
 		return 1;
 	}
 	if (!net && pcm_probe(fbuf, fend, &fmt, &why)) {
@@ -1750,6 +1751,10 @@ made_ahead:
 	nx_delay = nx_pad = -1;
 	drop_set = 0;
 	fr_base = pcm_base = 0;
+	/* (Write a log ticked: the lines so far written at each start, so a
+	   crash or a freeze while it plays keeps them; a FireBee's crashed
+	   under MiNT with none, 14 Nov 2026. Nothing with it off) */
+	elog_save();
 	return 1;
 }
 

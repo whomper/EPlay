@@ -104,7 +104,7 @@ void art_init(short size)
 	long n;
 	cpu_turns = spin();
 	cpu_fast = cpu_turns >= FAST_TURNS;
-	elog("the 68030: %ld turns in 50 ms (album art unpacked by it from %ld; else on the DSP%s)", cpu_turns,
+	elog("the CPU: %ld turns in 50 ms (album art unpacked by it from %ld; else on the DSP%s)", cpu_turns,
 	     FAST_TURNS, dspjpeg_present() ? "" : ", which this machine hasn't");
 	side = size > REC_SIDE ? REC_SIDE : size;
 	wpl = (short)((side + 15) / 16);

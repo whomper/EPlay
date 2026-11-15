@@ -2223,7 +2223,11 @@ two ticks in step), `LOG=` in EPLAY.INF, off until ticked. With it off nothing g
 CRASH.LOG's alone); each line still goes to the emulator's console for the rigs. The status line's
 "see EPLAY.LOG" (the FDI's clock) says "tick Write a log" with it off. The play rig's `quit` (no
 EPLAY.LOG) and `quitlog` (`LOG=1`: written, the quit's steps in it); the speed rig's MP3 session
-reads the console's lines where there is no file.
+reads the console's lines where there is no file. With it ticked, the lines held so far are written at each
+file's or station's start (`play_open`), so a crash or a freeze while it plays keeps them: a FireBee
+tester's EPlay 1.36 crashed (under MiNT and under FireTOS) and left neither its lines nor CRASH.LOG
+(14 Nov 2026). The FireBee's quit says "the XBIOS's sound given back", and the start's speed line
+"the CPU" (it said the 68030's on every machine).
 
 **1.37's speed against 1.36, accepted by Erez (15 Nov 2026):** three rows slower in both runs. On
 Falcon-4:16, Settings opened with a VGM playing (165 and 185 ms to 195 and 205): Settings builds all
