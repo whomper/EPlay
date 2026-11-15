@@ -527,11 +527,21 @@ static long m_n, m_t;		/* frames counted, Timer A's counts (< 0: the 200 Hz cloc
 int snd_ta_busy;		/* the last measure timed by the 200 Hz clock: Timer A in use */
 static int m_by200;		/* 1: timed by the 200 Hz clock all the same (a second opinion, for the log) */
 
+/* (each wait on Timer A has a limit from the 200 Hz clock, $4BA, read
+   here in supervisor mode: an MFP whose Timer A reads stopped but doesn't
+   count (a Vampire V4SA's new Atari core hung there, its whole machine,
+   15 Nov 2026) is timed by the 200 Hz clock instead, as when Timer A is in
+   use) */
+#define HZ200 (*(volatile unsigned long *)0x4baL)
+int snd_ta_stuck;		/* the last measure found Timer A not counting */
+
 static long m_loop(void)
 {
 	long a, b, d, n = 0, t = 0, t0 = 0;
+	unsigned long h0 = HZ200;
 	unsigned char prev = 0, cur;
 	int ta = !m_by200 && TA_CR == 0 && !(*(volatile unsigned char *)0xfffffa07L & 0x20);	/* (stopped, its interrupt off) */
+	snd_ta_stuck = 0;
 	if (ta) {
 		TA_DR = 0;		/* (256) */
 		TA_CR = 7;		/* delay mode, / 200 */
@@ -546,19 +556,36 @@ static long m_loop(void)
 			prev = cur;
 			if (t >= TA_HZ / 50)
 				break;
+			if (HZ200 - h0 >= 20) {
+				/* (100 ms and not its 20: Timer A doesn't count) */
+				TA_CR = 0;
+				ta = 0;
+				snd_ta_stuck = 1;
+				t0 = (long)tos_ms();
+			}
 		} else if ((long)tos_ms() - t0 >= 20)
 			break;
 	}
 	t = 0;
 	if (!ta)
 		t0 = (long)tos_ms();
+	h0 = HZ200;		/* (not tos_ms here: its first call measures its clock, counted into Timer A's time) */
 	a = play_pos();
 	do {
 		if (ta) {
 			cur = TA_DR;
 			t += (unsigned char)(prev - cur);
 			prev = cur;
-		} else
+			if (HZ200 - h0 >= 60) {
+				/* (300 ms and not its 200: the 200 Hz clock's 5 ms
+				   steps from the loop's start) */
+				TA_CR = 0;
+				ta = 0;
+				snd_ta_stuck = 1;
+				t0 = (long)tos_ms() - (long)(HZ200 - h0) * 5;
+			}
+		}
+		if (!ta)
 			t = (long)tos_ms() - t0;
 		b = play_pos();
 		if (a < 0) {

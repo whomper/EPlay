@@ -548,7 +548,6 @@ static void play_now(const char *f)
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
 		nf_debug(line);
-		elog_save();		/* (what went before it on the disk: Write a log's) */
 		alert(1, "[3][%s][ OK ]", err);
 		redraw(&work, BP_ALL);
 		return;
@@ -1643,7 +1642,6 @@ static void command(int c)
 			} else
 				ok = play_resume(err, sizeof(err));
 			if (!ok) {
-				elog_save();		/* (what went before it on the disk: Write a log's) */
 				alert(1, "[3][%s][ OK ]", err);
 				status("Stopped.");
 			} else {
@@ -1739,8 +1737,6 @@ static void step(int playing)
 	}
 	if (bar_scroll_step())
 		redraw(0, BP_TITLE);	/* (a step of the title's scroll: its two lines) */
-	if (playing)
-		elog_tick();	/* (Write a log's lines written every 10 s at most while it plays) */
 	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
 		if (play_tags_late) {
 			/* (a big VGZ's GD3, at its end: its row read again, now from
@@ -1911,7 +1907,6 @@ static void do_seek(void)
 	seek_to = -1;
 	bar_drag = -1;
 	if (!play_seek(to, err, sizeof(err))) {
-		elog_save();		/* (what went before it on the disk: Write a log's) */
 		alert(1, "[3][%s][ OK ]", err);
 		status("Stopped.");
 		redraw(0, BP_PLAY | BP_TIME);
@@ -2404,7 +2399,8 @@ int app_main(void)
 		status("8-bit DMA sound: WAV and AIFF. MP3 needs a Falcon's DSP.");
 	} else {
 	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz, timed by %s); taken as %ld Hz",
-	     snd_ext_raw, snd_ext_clock, snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
+	     snd_ext_raw, snd_ext_clock, snd_ta_stuck ? "the 200 Hz clock: Timer A didn't count" :
+	     snd_ta_busy ? "the 200 Hz clock: Timer A in use" : "Timer A", snd_ext_rate);
 	elog("the DSP port's GPIO: direction %d, data %d%s%s", snd_gpio_dir, snd_gpio_data,
 	     snd_ext_note[0] ? "; tried " : "", snd_ext_note);
 	elog("Settings: output %s", settings_output_name(settings_output()));

@@ -1339,7 +1339,6 @@ int play_open(const char *path, char *err, int n)
 		play_hz = 0;
 		play_kbps = 0;
 		elog("VGM: %s; %s; %ld ms%s", play_info, play_out, len_ms, base_ms ? " (from a place in it)" : "");
-		elog_save();		/* (Write a log ticked: the lines so far on the disk, as below) */
 		return 1;
 	}
 	if (!net && pcm_probe(fbuf, fend, &fmt, &why)) {
@@ -1521,7 +1520,7 @@ int play_open(const char *path, char *err, int n)
 				}
 				cmp = 1;
 				dsp = 0;
-				elog_warn("MP3 on the CPU (%s): the DSP %s", cmp3_what(), dr == DSPMP3_BUSY ? "in use" : "not there");
+				elog("MP3 on the CPU (%s): the DSP %s", cmp3_what(), dr == DSPMP3_BUSY ? "in use" : "not there");
 			}
 			if (!take_queue(cmp ? 4 : 1)) {
 				snprintf(err, n, "There isn't the memory to play.");
@@ -1751,10 +1750,6 @@ made_ahead:
 	nx_delay = nx_pad = -1;
 	drop_set = 0;
 	fr_base = pcm_base = 0;
-	/* (Write a log ticked: the lines so far written at each start, so a
-	   crash or a freeze while it plays keeps them; a FireBee's crashed
-	   under MiNT with none, 14 Nov 2026. Nothing with it off) */
-	elog_save();
 	return 1;
 }
 
@@ -2358,7 +2353,7 @@ int play_step(int ms)
 			   again from here, a moment's break, as an MP3's Normal) */
 			char err[160];
 			if (!play_seek(play_ms(), err, sizeof(err)))
-				elog_warn("%s", err);
+				elog("%s", err);
 			play_via = vp_via();
 			play_note_new = 1;
 			return 1;
@@ -2399,10 +2394,10 @@ int play_step(int ms)
 		long at, of;
 		dspmp3_fail_info(&what, &at, &of, &hisr);
 		if (what == 4)
-			elog_warn("the DSP stopped answering while it played: no frame for 2 s after its frame %ld (host "
+			elog("the DSP stopped answering while it played: no frame for 2 s after its frame %ld (host "
 			     "status $%02X), %ld frames sent; %ld ms played", at, hisr, t_frames, play_ms());
 		else
-			elog_warn("the DSP stopped answering %s word %ld of %ld (host status $%02X), frame %ld; %ld ms "
+			elog("the DSP stopped answering %s word %ld of %ld (host status $%02X), frame %ld; %ld ms "
 			     "played, %ld underruns", what == 1 ? "sending" : what == 2 ? "reading" : "loading", at, of,
 			     hisr, t_frames, play_ms(), snd_underruns);
 		elog("the sound: %s", play_keep_up());
@@ -2424,7 +2419,7 @@ int play_step(int ms)
 				last_again = now;
 				if (s_ext)
 					snd_ext_rate = 0;
-				elog_warn("the DSP stalled: started again from %ld ms%s", at,
+				elog("the DSP stalled: started again from %ld ms%s", at,
 				     s_ext ? ", the external clock measured again" : "");
 				t_failed = 0;
 				if (play_seek(at, err, sizeof(err))) {
@@ -2432,7 +2427,7 @@ int play_step(int ms)
 					play_note_new = 1;
 					return 1;
 				}
-				elog_warn("%s", err);
+				elog("%s", err);
 			}
 		}
 
@@ -2470,7 +2465,7 @@ int play_step(int ms)
 				elog("connected again (try %d)", tries + 1);
 				play_net_lost = 0;
 			} else if (conn_stop || ++tries >= 5) {
-				elog_warn(conn_stop ? "connecting again stopped" : "not connected again after 5 tries: %s", err);
+				elog(conn_stop ? "connecting again stopped" : "not connected again after 5 tries: %s", err);
 				conn_stop = 0;
 				src_done = 1;	/* (what the queue holds plays, then the end) */
 				snprintf(play_out, sizeof(play_out), "The station's connection ended.");
@@ -2486,11 +2481,11 @@ int play_step(int ms)
 	    out_rate > 12517) {
 		char err[160];
 		long at = play_ms(), next = out_rate > 25033 ? 25033 : out_rate > 12517 ? 12517 : 6258;
-		elog_warn("the 68%s0 behind at %ld Hz (%ld underruns): %ld Hz from %ld ms, for this track",
+		elog("the 68%s0 behind at %ld Hz (%ld underruns): %ld Hz from %ld ms, for this track",
 		     snd_dma8_interp ? "03" : "00", out_rate, snd_underruns, next, at);
 		snd_dma8_max = next;
 		if (!play_seek(at, err, sizeof(err)))
-			elog_warn("%s", err);
+			elog("%s", err);
 		play_note_new = 1;
 		return 1;
 	}
@@ -2504,10 +2499,10 @@ int play_step(int ms)
 			char err[160];
 			long at = play_ms();
 			q_normal = 1;
-			elog_warn("the DSP behind at 49,170 Hz (%ld granules late by its frame %ld): Normal from %ld ms, "
+			elog("the DSP behind at 49,170 Hz (%ld granules late by its frame %ld): Normal from %ld ms, "
 			     "32,780 Hz, up to about 15 kHz", late, fr, at);
 			if (!play_seek(at, err, sizeof(err)))
-				elog_warn("%s", err);
+				elog("%s", err);
 			play_note_new = 1;
 			return 1;
 		}

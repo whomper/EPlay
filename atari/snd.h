@@ -33,6 +33,7 @@ extern long snd_dma8_max;	/* the 8-bit DMA's highest rate for this track (0: its
    x 0x80 for unsigned 8-bit) into the ring at the DMA's rate, the nearest; the frames taken */
 long snd_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x);
 extern int snd_ext_use, snd_ext_only;	/* Settings' Output: DSP (no external clock), FDI (it at any ratio) */
+extern int snd_ta_stuck;	/* (with snd_ta_busy) Timer A read stopped but didn't count: the 200 Hz clock's */
 extern int snd_ta_busy;	/* the last measure timed by the 200 Hz clock (Timer A in use), not Timer A */
 extern long snd_ext_raw;	/* the DMA's rate on it at prescale 1, as measured (0: no clock) */
 extern long snd_ext_clock;	/* the clock's frequency from that, Hz */

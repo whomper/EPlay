@@ -2223,15 +2223,20 @@ two ticks in step), `LOG=` in EPLAY.INF, off until ticked. With it off nothing g
 CRASH.LOG's alone); each line still goes to the emulator's console for the rigs. The status line's
 "see EPLAY.LOG" (the FDI's clock) says "tick Write a log" with it off. The play rig's `quit` (no
 EPLAY.LOG) and `quitlog` (`LOG=1`: written, the quit's steps in it); the speed rig's MP3 session
-reads the console's lines where there is no file. With it ticked, EPLAY.LOG is written as it goes, not
-held for the run (Erez, 15 Nov 2026: "if the LOG is only written in the end, when the app crashes there
-will be no log"; a FireBee tester's 1.36 crashed under MiNT and under FireTOS and left neither its lines
-nor CRASH.LOG): the lines so far at each file's or station's start (`play_open`), at once at an error or
-a warning (`elog_warn`: a station not reached or closed, the DSP stalled or behind, a decoder failing,
-a lower rate taken), before an error's alert, and every 10 s at most while it plays when lines wait
-(`elog_tick`, the main loop's, never the tick's). Each write one open and one append (conn.c). The play
-rig's `logasgo` (`LOG=1`: EPLAY.LOG on the disk while it plays, its start in it; the sound as `wav`'s,
-no gap). The FireBee's quit says "the XBIOS's sound given back", and the start's speed line
+reads the console's lines where there is no file. With it ticked, EPLAY.LOG is written as it goes, each
+line at once (Erez, 15 Nov 2026: "if the LOG is only written in the end, when the app crashes there will
+be no log"; a FireBee tester's 1.36 crashed under MiNT and under FireTOS and left neither its lines nor
+CRASH.LOG): common's conn.c from AERA-Atari c9a6896 (one open and one append a line; conn_log_hold holds
+nothing), taken alone into EPlay's common. The play rig's `logasgo` (`LOG=1`: EPLAY.LOG on the disk while
+it plays, its start in it; the sound as `wav`'s, no gap).
+
+**Hangs on an odd MFP or a moved VBR (15 Nov 2026).** A Vampire V4SA's new Atari core hung its whole
+machine starting EPlay. Two causes taken out: the external clock's measure (`m_loop`) waited on Timer A in
+supervisor mode with no limit; each wait now has one from the 200 Hz clock (100 ms for the first 20, 300
+for the 200), and a Timer A that reads stopped but doesn't count times it by the 200 Hz clock instead (the
+log: "timed by the 200 Hz clock: Timer A didn't count"). And NatFeats' probe (the rigs' console, nf_debug)
+put its handler at 0x10 though the vector table is at VBR on a 68010 or later: common's nf.S and tos.c
+from AERA-Atari eea4949 (the VBR read as words, none on a ColdFire). The FireBee's quit says "the XBIOS's sound given back", and the start's speed line
 "the CPU" (it said the 68030's on every machine).
 
 **1.37's speed against 1.36, accepted by Erez (15 Nov 2026):** three rows slower in both runs. On

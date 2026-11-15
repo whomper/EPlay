@@ -146,7 +146,7 @@ static int ask(char *u, char *err, int n)
 		elog("the station: connected in %lu ms%s%s", pf_ms() - t0, s.tls ? ", " : "", conn_security(c));
 	if (!c) {
 		/* (conn's own words to the log; the user's are the station's) */
-		elog_warn("the station %s:%u: %s", s.host, s.port, err[0] ? err : "no connection");
+		elog("the station %s:%u: %s", s.host, s.port, err[0] ? err : "no connection");
 		if (s.tls && !conn_stop && strstr(err, "TLS.OVL"))
 			snprintf(err, (size_t)n, "A secure station needs TLS.OVL and CACERT.PEM beside EPlay.");
 		else
@@ -165,7 +165,7 @@ static int ask(char *u, char *err, int n)
 	for (;;) {
 		long r = conn_read(c, head + got, HEAD_MAX - got);
 		if (r <= 0) {
-			elog_warn("the station: %s after %lu ms, %ld bytes of its answer (%s)",
+			elog("the station: %s after %lu ms, %ld bytes of its answer (%s)",
 			     r < 0 ? "no answer" : "closed", pf_ms() - t0, got, c->err[0] ? c->err : "closed");
 			snprintf(err, (size_t)n, "The station closed the connection.");
 			ns_close();

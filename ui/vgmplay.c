@@ -269,7 +269,7 @@ static void cpu_open(const VGMHEAD *h, long want, const char *why)
 	if (!cc)
 		cc = take((long)sizeof(VGMCPU));
 	if (!cc) {
-		elog_warn("VGM: no memory for the chips on the CPU (%ld bytes)", (long)sizeof(VGMCPU));
+		elog("VGM: no memory for the chips on the CPU (%ld bytes)", (long)sizeof(VGMCPU));
 		return;
 	}
 	use_cpu = 1;
@@ -346,7 +346,7 @@ int vp_lower(void)
 	next = lvl < 3 ? lv_rate[use_opl && cur_nch > 9][lvl + 1] : 0;
 	if (least < 0 || least >= settings_vgmlow() || !next)
 		return 0;
-	elog_warn("VGM: the DSP behind at %ld Hz (its ring's least lead %ld words): %ld Hz from %ld ms, for this track",
+	elog("VGM: the DSP behind at %ld Hz (its ring's least lead %ld words): %ld Hz from %ld ms, for this track",
 	     use_opl ? dspopl_synth() : dspopn_synth(), least, next, vp_ms());
 	lvl++;
 	return 1;

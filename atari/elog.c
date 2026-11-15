@@ -6,10 +6,9 @@
  * applications"): one file beside the program, added to across runs, each
  * line with its time; the network's lines (conn, TLS) in the same file.
  * A line at each start (conn_log_start), the file capped at 256 KB and
- * rolled over to EPLAY.OLD (common's). The lines held in memory (16 KB,
- * conn_log_hold) and written in one go
- * (the guidelines, 6.5) at elog_save, when the buffer is full and at an
- * error; a crash's report goes in it too. Each line also goes to the
+ * rolled over to EPLAY.OLD (common's). Each line written at once (conn.c
+ * since AERA-Atari c9a6896, the guidelines' 6.5: conn_log_hold holds
+ * nothing now); a crash's report goes in it too. Each line also goes to the
  * emulator's console (nf_debug), for the rigs.
  */
 #include <stdio.h>
@@ -44,11 +43,14 @@ void elog_init(void)
 	}
 }
 
-static void elog_line(const char *fmt, va_list ap)
+void elog(const char *fmt, ...)
 {
 	char line[600];
+	va_list ap;
 	long n;
+	va_start(ap, fmt);
 	vsnprintf(line, sizeof(line) - 2, fmt, ap);
+	va_end(ap);
 	n = (long)strlen(line);
 	elog_init();
 	conn_log("EPlay", " -- ", line, n);
@@ -57,33 +59,6 @@ static void elog_line(const char *fmt, va_list ap)
 	line[n] = 0;
 	nf_debug("LOG ");
 	nf_debug(line);
-}
-
-void elog(const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	elog_line(fmt, ap);
-	va_end(ap);
-}
-
-void elog_warn(const char *fmt, ...)
-{
-	va_list ap;
-	va_start(ap, fmt);
-	elog_line(fmt, ap);
-	va_end(ap);
-	conn_log_flush();
-}
-
-void elog_tick(void)
-{
-	static unsigned long last;
-	unsigned long now = tos_hz200();
-	if (off || now - last < 2000)
-		return;
-	last = now;
-	conn_log_flush();		/* (nothing waiting: nothing written) */
 }
 
 void elog_save(void)
