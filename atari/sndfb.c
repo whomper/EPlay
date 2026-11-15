@@ -174,6 +174,10 @@ void snd_term(void)
 	if (playing)
 		x_buffoper(0);
 	playing = 0;
+	if (locked) {
+		x_unlocksnd();	/* (a crash too: the sound not left locked) */
+		locked = 0;
+	}
 }
 
 #ifdef SND_XB_IN

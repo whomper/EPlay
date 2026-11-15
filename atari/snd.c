@@ -912,8 +912,11 @@ void snd_term(void)
 	*(volatile unsigned char *)0xffff8901L = 0;	/* the DMA's play off */
 	if (snd_dma8)
 		return;
-	if (locked)
+	if (locked) {
 		put_regs();
+		Unlocksnd();	/* (term.c: EPlay ending however it ends, a crash too) */
+		locked = 0;
+	}
 }
 
 int snd_init(const char **why)

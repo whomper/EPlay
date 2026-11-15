@@ -34,6 +34,8 @@ void draw_forget(void);	/* the VDI's attributes not as draw.c left them (the Abo
 void font_sys_push(void);
 void font_sys_pop(void);
 void *st_ram(long n);
+/* ST RAM for a raster the VDI copies from, 16 bytes of guard each side (draw.c) */
+void *st_raster(long n);
 int rc_intersect(const GRECT *a, GRECT *b);
 
 void dlg_about(void);

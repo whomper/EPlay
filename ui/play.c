@@ -2393,6 +2393,8 @@ int play_step(int ms)
 	}
 	if (dsp && s_started && dspmp3_stream_stalled(tos_hz200()))
 		t_failed = 1;
+	if (settings_crashat() > 0 && play_ms() >= settings_crashat())
+		__asm__ volatile("illegal");	/* (the rigs': a crash while playing, the locks given back by term.c) */
 	if (t_failed) {
 		int what, hisr;
 		long at, of;

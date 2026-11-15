@@ -14,12 +14,15 @@ LDFLAGS := -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.
            -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 B       := build
 
-all: $(B)/LAUNCH.PRG $(B)/PCMTEST.PRG
+all: $(B)/LAUNCH.PRG $(B)/PCMTEST.PRG $(B)/LOCKCHK.PRG
 .PHONY: mp3cpu
 mp3cpu: $(B)/MP3CPU.PRG
 $(B)/%.PRG: $(B)/%.elf ../../common/tools/elf2tos.py
 	python3 ../../common/tools/elf2tos.py $< $@
 $(B)/LAUNCH.elf: $(B)/crt0.o $(B)/launch.o $(B)/gem.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) $(LDFLAGS) -o $@ $^ -lgcc
+# (the crash case under FreeMiNT: the sound's and the DSP's locks after EPlay crashed)
+$(B)/LOCKCHK.elf: $(B)/crt0.o $(B)/lockchk.o $(B)/gem.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
 	$(CC) $(LDFLAGS) -o $@ $^ -lgcc
 # (as EPlay builds it: the 68030, -O2)
 P030    := -m68030 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \

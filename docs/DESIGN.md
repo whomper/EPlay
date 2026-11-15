@@ -2245,6 +2245,47 @@ speed rig's INF), and the test programs set `nf_on` themselves; without it EPlay
 console (checked: `EPLAY_RIG_NONATFEATS=1`). The FireBee's quit says "the XBIOS's sound given back", and the start's speed line
 "the CPU" (it said the 68030's on every machine).
 
+**FreeMiNT, XaAES and NVDI with memory protection (15 Nov 2026).** A tester's Falcon with a CT60 and
+a SuperVidel, under FreeMiNT, XaAES and NVDI, ran EPlay 1.36: the window at the desk's full height (W11,
+Erez's); a MEMORY VIOLATION (type SUPER) on loading an MP3; and after that crash the sound and the DSP
+stayed locked. Erez: "fix the unlock and setup a FreeMiNT XaAES NVDI testing rig. We must test this
+scenario as I assume most 68060 configs will use this setup."
+- **The violation: NVDI reads the word before a raster.** A blit shifted by some pixels (vrt_cpyfm,
+  vro_cpyfm) reads a long from the word before each line's first, and under MiNT's memory protection
+  a block starts on a page whose page before is another process's, or the kernel's. The rig found it
+  at once with a second program started before EPlay (LOCKCHK.PRG): "PROCESS EPLAY KILLED: MEMORY
+  VIOLATION. Type: private, Addr: 00045FFE", its PC in NVDI's blit loop (move.l (a0),d6; ror.l;
+  or.w to each plane), a0 at the bar's mask pool, which began at $46000, its first mask the disc.
+  On the tester's machine the page before was the kernel's: type SUPER. Every ST RAM raster EPlay
+  gives the VDI now comes from `st_raster` (draw.c): 16 bytes of EPlay's own before and after it (the
+  bar's masks, the album art's form, the small st_ram block). With it the same run plays to the end.
+  Common's offdraw.c and aboutbox.c take their ST RAM rasters the same way, without the guard: to
+  the hub, for common.
+- **The locks given back at a crash.** term.c's handler (etv_term, set with Setexc, which MiNT calls at
+  a memory violation, an illegal instruction and a kill, not at SIGKILL) stopped the DMA and put the
+  matrix back, but called no XBIOS, so Locksnd's and Dsp_Lock's flags stayed set: the next start found
+  the sound "in use by another program". Now snd_term gives the sound system back (Unlocksnd) where
+  EPlay holds it, and the handler the DSP (Dsp_Unlock) where EPlay's own note says it holds it
+  (`atari/dsplock.h`: TOS keeps one flag with no owner, so only EPlay's note can tell it is EPlay's; the
+  DSP modules take it through it). Common's dspec.c (album art on the DSP) takes the lock for itself,
+  inside one call; a crash in the middle of one would still leave it (to the hub). The FireBee's
+  edition gives its XBIOS sound back the same way.
+- **The rig: common's tests/xaaes** (FreeMiNT 1.17 and XaAES on an IDE image, EmuTOS; the hub's), with
+  two additions sent to the hub for common: `--machine ct60` and `--nvdi`. Hatari 2.4's 68060 has no
+  MMU (movec to ITT0 is an illegal instruction), so FreeMiNT turns its protection off there; the CT60
+  is played by a 68040 with its MMU, which MiNT protects with the same code as a 68060's
+  (mprot040.c), the MMU turned on with page tables first as a CT60's TOS does (0MMU040.PRG: MiNT
+  takes it only so, and with RAM under transparent translation says "Couldn't initialize memory
+  protection"), _CPU set to 60 after MiNT (ZCPU060.PRG). memprot.py passes on it (a private
+  program's interrupt killed under protection, a global one's counting). `--nvdi` puts Erez's NVDI
+  in AUTO before MiNT and deletes the work drive after. The crash case: EPLAY.INF's CRASHAT=1500 (the
+  rigs' key: an illegal instruction 1.5 s into playing) with LOCKCHK.PRG started beside it, asking for
+  the sound system and the DSP: "sound -129 dsp -1" without the fix (as the tester found), "sound 1
+  dsp 0" with it. MP3FPU.OVL can't be tried on the 68040 (its code is a 68060's: fintrz).
+- **What the rig showed on the way** (a rig of EPlay's own, given up for common's): the album art's
+  status ended play_test's recording early (now let through: the mp3art case, an MP3 with a 500 x 500
+  JPEG and tags); under XaAES the first focus is the shell's unless xaaes.cnf names the program.
+
 **1.37's speed against 1.36, accepted by Erez (15 Nov 2026):** three rows slower in both runs. On
 Falcon-4:16, Settings opened with a VGM playing (165 and 185 ms to 195 and 205): Settings builds all
 its pages, this tick some 10 ms more, and a VGM's tick takes some 60 % of the 68030 (with an MP3 or

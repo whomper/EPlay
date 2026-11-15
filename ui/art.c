@@ -39,6 +39,7 @@
 #include "jpegdc.h"
 #include "elog.h"
 #include "xalloc.h"
+#include "ui.h"
 
 enum { A_NONE, A_READ, A_DECODE, A_DITHER, A_PENS, A_READY, A_FAILED };
 
@@ -111,8 +112,7 @@ void art_init(short size)
 	wpl = (short)((side + 15) / 16);
 	n = (long)wpl * 2 * side * (planes > 8 ? 16 : planes);
 	if (!form) {
-		void *p = x_alloc(n, 0);	/* (at the start, before any queue: 0.13's lesson) */
-		form = (long)p > 0 ? p : 0;
+		form = st_raster(n);	/* (at the start, before any queue: 0.13's lesson; draw.c: its guard) */
 	}
 }
 

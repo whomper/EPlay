@@ -25,6 +25,7 @@
 #include "list.h"
 #include "badge.h"
 #include "xalloc.h"
+#include "ui.h"
 
 int bar_held = BH_NONE, bar_drag = -1, bar_vdrag = -1;
 
@@ -54,8 +55,7 @@ void bar_colours(void)
 	themed = planes >= 8;
 	if (!pool) {
 		/* (ST RAM at the start, before any file's queue: 0.13's lesson) */
-		void *p = x_alloc((long)POOL_WORDS * 2, 0);
-		pool = (long)p > 0 ? p : 0;
+		pool = st_raster((long)POOL_WORDS * 2);	/* (draw.c: its guard, for NVDI's blits) */
 	}
 	if (themed) {
 		for (i = 0; i < TPENS; i++) {

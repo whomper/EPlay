@@ -47,14 +47,29 @@ void clip_off(void)
 	text_noclip(vdi_h);
 }
 
+/* ST RAM for a raster the VDI copies from (vro_cpyfm, vrt_cpyfm), with 16
+   bytes of EPlay's own before it and after it: a blit shifted by some
+   pixels reads the word before a line's first (NVDI's: a long from the word
+   before), and under MiNT's memory protection a block starts on a page
+   whose page before is another process's, or the kernel's. A tester's CT60
+   under FreeMiNT, XaAES and NVDI: a MEMORY VIOLATION (type SUPER) as an MP3
+   was loaded, 15 Nov 2026; the rig (common's tests/xaaes, a 68040 with its
+   MMU) found it at the bar's disc, its mask pool's first, NVDI reading
+   $45FFE for a pool at $46000, the page before a private one's */
+void *st_raster(long n)
+{
+	char *p = x_alloc(n + 32, 0);
+	return (long)p > 0 ? (void *)(p + 16) : 0;
+}
+
 /* bitmaps the VDI copies must be in ST RAM: one small block */
 static unsigned short st_fallback[256];
 static unsigned short *st_buf;
 void *st_ram(long n)
 {
 	if (!st_buf) {
-		void *p = x_alloc(sizeof(st_fallback), 0);
-		st_buf = (long)p > 0 ? p : st_fallback;
+		void *p = st_raster(sizeof(st_fallback));
+		st_buf = p ? p : st_fallback;
 	}
 	return n <= (long)sizeof(st_fallback) ? st_buf : 0;
 }

@@ -14,6 +14,7 @@
  * supervisor already).
  */
 #include "tos.h"
+#include "dsplock.h"
 #include "tickcode.h"
 #include "dspmp3.h"
 #include "snd.h"
@@ -31,8 +32,8 @@
 #define HTX32  (*(volatile unsigned long *)0xffffa204L)	/* 0, then the word's 3 bytes */
 #define HRX16  (*(volatile short *)0xffffa206L)		/* the word's low 16 bits */
 
-#define Dsp_Lock()	trap14_w(104)
-#define Dsp_Unlock()	trap14_w(105)
+#define Dsp_Lock()	dsp_lock()	/* (dsplock.h: EPlay's own note of it, for term.c) */
+#define Dsp_Unlock()	dsp_unlock()
 #define Ongibit(b)	trap14_ww(30, (b))
 #define Offgibit(b)	trap14_ww(29, (b))
 

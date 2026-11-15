@@ -62,6 +62,13 @@ CASES = {
     "wav22": ("HALF.WAV", ["-r", "22050", "-c", "1", "-b", "16"], None, 24585, (1000, 1000), 3),
     "mp3": ("TONE.MP3", ["-r", "32000", "-c", "2", "-b", "16"], ["-b", "128", "-m", "s"], 32780,
             (1000, 1500), 3),
+    # the same with album art, as a shop's MP3 has (a 500 x 500 JPEG, some
+    # 100 KB: unpacked on the DSP by common's picture code), tags too: a
+    # tester's CT60 under FreeMiNT's memory protection met a MEMORY
+    # VIOLATION at an MP3 (15 Nov 2026)
+    "mp3art": ("ART.MP3", ["-r", "32000", "-c", "2", "-b", "16"], ["-b", "128", "-m", "s", "ART",
+                                                                 "--tt", "Tone", "--ta", "The rig", "--tl", "Art"],
+               32780, (1000, 1500), 3),
     # ten seconds at 320 kbit/s: the ring wraps four times, the file
     # buffer (64 KB) is refilled six times across the bit reservoir
     "mp3long": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
@@ -358,8 +365,19 @@ def make_file(hd, case):
     if lame:
         subprocess.run(["sox", "-n"] + fmt + [src] + synth + ["gain", "-6"], check=True)
         tag = [] if "XING" in lame else ["-t"]          # (-t: no header frame)
-        subprocess.run(["lame"] + tag + ["--quiet", "--noreplaygain"] + [a for a in lame if a != "XING"] +
-                       [src, out], check=True)
+        art = []
+        if "ART" in lame:
+            from PIL import Image, ImageFilter
+            import random
+            random.seed(1)
+            img = Image.new("RGB", (500, 500))
+            img.putdata([(x * 255 // 499, y * 255 // 499, random.randrange(256))
+                         for y in range(500) for x in range(500)])
+            cover = os.path.join(hd, "..", "cover.jpg")
+            img.filter(ImageFilter.GaussianBlur(1)).save(cover, quality=90)
+            art = ["--ti", cover]
+        subprocess.run(["lame"] + tag + ["--quiet", "--noreplaygain"] + art +
+                       [a for a in lame if a not in ("XING", "ART")] + [src, out], check=True)
     else:
         subprocess.run(["sox", "-n"] + fmt + [out] + synth + ["gain", "-6"], check=True)
     if case in RG_TAG:
@@ -555,7 +573,8 @@ def run(work, case, spec):
     os.makedirs(hd)
     # (an STE runs the 68000 edition under its own name, as it is shipped)
     prg = "eplayst.prg" if spec.startswith("STE") else "eplay.prg"
-    shutil.copy(os.path.join(TOP, "binary", prg), os.path.join(hd, prg))
+    # (EPLAY_RIG_PRG: another build of it, a release's, to try a report on)
+    shutil.copy(os.environ.get("EPLAY_RIG_PRG") or os.path.join(TOP, "binary", prg), os.path.join(hd, prg))
     # (MP3FPU.OVL beside it, as a release has it: a 68060 with no DSP decodes MP3 with it)
     if os.path.exists(os.path.join(TOP, "binary", "mp3fpu.ovl")):
         shutil.copy(os.path.join(TOP, "binary", "mp3fpu.ovl"), hd)
@@ -885,7 +904,8 @@ def run(work, case, spec):
             return ok, m.describe(), "played in turn: %s (wanted %s)%s" % (
                 " ".join(names), " ".join(wanted), "" if end else "; never ended")
         end = wait_line(log, lambda l: l.startswith("EPLAY status: ") and "Playing" not in l and
-                        "clock" not in l and "DMA sound" not in l and "XBIOS's sound" not in l, 120)
+                        "clock" not in l and "DMA sound" not in l and "XBIOS's sound" not in l and
+                        "album art" not in l, 120)
         time.sleep(1.0)
         cmd(fifo, "hatari-shortcut", "recsound")
         time.sleep(0.5)
