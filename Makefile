@@ -86,6 +86,18 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 endif
+# (the 68030's build alone: tools/mkpad.py's pads, each function at the
+# place 1.41 had it modulo the 68030's 256-byte cache; the map beside the
+# program to recheck them with, PADS=no to link without them for that. Not
+# the STE's 68000, which has no cache, nor the FireBee's ColdFire)
+comma   := ,
+ifeq ($(filter 68000 5475,$(CPU))$(PADS),)
+OBJS    += $(OBJDIR)/pad_s.o
+PADLD   := $(addprefix -Wl$(comma)-u$(comma),$(shell sed -n 's/^\(ep_pad_[0-9]*\):.*/\1/p' atari/pad.S))
+endif
+ifeq ($(filter 68000 5475,$(CPU)),)
+PADLD   += -Wl,-Map,$(OBJDIR)/eplay.map
+endif
 # the start's paths at a place of their own, straight after the ticks'
 # (tools/pinobj.py: their sections .text.1st.*): the list's tags and
 # lengths, inflate (common's, its object renamed here), the DSP's loaders
@@ -147,7 +159,7 @@ $(OBJDIR)/version.o: $(OBJDIR)/version.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(OBJDIR)/eplay.elf: $(OBJS) $(OBJDIR)/version.o common/atari/link.ld
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(OBJDIR)/version.o -lgcc
+	$(CC) $(LDFLAGS) $(PADLD) -o $@ $(OBJS) $(OBJDIR)/version.o -lgcc
 
 # the tables and the DSP program (as C arrays), made here, never committed
 $(B)/mp3tab.h: tools/mkmp3tab.py data/mp3huff.txt data/mp3window.txt | $(B)
@@ -218,6 +230,8 @@ $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
 $(OBJDIR)/cpucheck_cf.o: common/atari/cpucheck_cf.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
+	$(CC) $(MCPU) -c -o $@ $<
+$(OBJDIR)/pad_s.o: atari/pad.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 # common's inflate_piece with its hot loop in 68000 assembly (a VGZ:
 # inflate_read unpacked 200 KB/s on a 32 MHz Falcon, Erez's 33 MB VGZ took

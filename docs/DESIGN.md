@@ -2393,7 +2393,18 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    same values every 100 ms got nine; written once and left alone, one. Its sound can't change, so the
    drops are the emulator's, not EPlay's (EPlay's own crossbar path, on the 68030 and the 68060
    Falcons, has none). The rig moves its measuring window off them on the stand-in and says how many
-   there were; on a Falcon one still fails the case. A VGM's AY is made on the CPU even where a YM2149 is there
+   there were; on a Falcon one still fails the case.
+   **Pads, 1.42 (Erez, 16 Nov 2026: "Approve your recommendations", the hub's reading):** the XBIOS
+   path's tick (`feedxb.o`, never run on a Falcon) lost 700 bytes with Xbtimer, and every function
+   sorting after it moved: a Falcon's start 610 -> 630 ms, and under NVDI 675 -> 705 (a WAV), 560 ->
+   575 (the mini player), 2,555 -> 2,580 (a Mega Drive VGM), in every pair against 1.41, no work added.
+   `tools/mkpad.py` writes `atari/pad.S`: a pad after each section whose size changed (14, 2,012
+   bytes), every one of the 68030 build's 1,416 code sections at 1.41's address mod 256. The Falcon's
+   rows go; under NVDI two remain, accepted by Erez (PERF-REVISIT, AERA-Atari 544f68d): started with a
+   WAV 675 -> 700, in the mini player 560 -> 580. The pads hold against 1.41's map until the next
+   release that moves code: recheck at every change (`make PADS=no`, `tools/mkpad.py` against the
+   same map, each section's shift 0 mod 256), as the other apps do. The STE's and the FireBee's
+   builds have none (no cache; ColdFire). A VGM's AY is made on the CPU even where a YM2149 is there
    (`vp_has_ym`), so nothing writes the chip. The Falcon, the TT and the STE keep Timer A: there GEM
    can't feed the ring through a menu or the file selector, and their tick is the hardware's own.
 
