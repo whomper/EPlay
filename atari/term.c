@@ -27,6 +27,7 @@
 #include "term.h"
 #include "ym.h"
 #include "dsplock.h"
+#include "pic.h"
 
 volatile short dsp_held;
 
@@ -69,6 +70,10 @@ void term_c(void)
 	snd_term();		/* (the sound system's lock too, if EPlay's) */
 	if (dsp_held)
 		dsp_unlock();
+	/* (common's: the DSP given back where an album art's decode holds it,
+	   dspjpeg.c's own note; weak, absent where no picture code is linked) */
+	if (pic_dsp_give_back)
+		pic_dsp_give_back();
 }
 
 __asm__(

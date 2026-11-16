@@ -757,8 +757,16 @@ static struct {
 
 extern short _is_acc;		/* crt0.S: started as a desk accessory */
 
+/* GUARD bytes of our own each side of the buffer the VDI blits from: NVDI's
+   shifted copy reads a long from the word before a line's first, and under
+   MiNT's memory protection the page before a block may be another
+   process's or the kernel's (EPlay, 15 Nov 2026: MEMORY VIOLATION on a
+   CT60 with FreeMiNT, XaAES and NVDI). buf_free takes what draw_off gave */
+#define GUARD 16
+
 static void buf_free(void *p)
 {
+	p = (unsigned char *)p - GUARD;
 	if (_is_acc)
 		free(p);
 	else
@@ -786,20 +794,21 @@ static int draw_off(void (*draw)(int framed))
 		/* an accessory takes no GEMDOS memory once it runs (the
 		   guidelines, 2.2): its heap's, in ST RAM (the blitter's), or
 		   the box drawn on the screen */
-		buf = malloc(size);
-		if (buf && (unsigned long)buf + size > 0x01000000UL) {
+		buf = malloc(size + 2 * GUARD);
+		if (buf && (unsigned long)buf + size + 2 * GUARD > 0x01000000UL) {
 			free(buf);
 			buf = 0;
 		}
 	} else {
-		buf = Mxalloc(size, 0);		/* ST RAM, where the blitter reaches */
+		buf = Mxalloc(size + 2 * GUARD, 0);	/* ST RAM, where the blitter reaches */
 		if ((long)buf == -32 || !buf)	/* no Mxalloc: Malloc's is ST RAM */
-			buf = Malloc(size);
+			buf = Malloc(size + 2 * GUARD);
 		if ((long)buf <= 0)
 			buf = 0;
 	}
 	if (!buf)
 		return 0;
+	buf += GUARD;
 	ob.under = malloc(ob.n * ob.rows);
 	if (!ob.under) {
 		buf_free(buf);
