@@ -1,118 +1,93 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * feedfb.c - the FireBee's tick (feed.h), as feed.c's on Timer A, set
- * through the XBIOS rather than the MFP's registers: FireTOS keeps the
- * ColdFire's vectors where its VBR is, not at $134. Xbtimer sets the
- * vector, the control and the data and enables the interrupt (FBPROBE 2:
- * 994 a second of 997); off, the timer stopped, its interrupt disabled
- * (Jdisint) and the vector as it was (Setexc). The time in the tick from
- * Timer A's count, read at its register (FBPROBE: the MFP answers there).
+ * feedfb.c - the tick where the sound is the XBIOS's alone (EPLAYFB.PRG's
+ * feed.h; EPLAY.PRG's feedxb.o): no interrupt at all. mxPlay's way on the
+ * FireBee (its plugins "100% system friendly, not a single HW access":
+ * Timer A only in its ARAnyM build, whose DMA pointer runs away): the
+ * XBIOS plays a ring of two seconds, and GEM's turns refill it. Each turn
+ * (feed_poll, from play_step: the window's, a dialog's, the file dialog's)
+ * runs the tick once, in supervisor mode by Supexec, after snd_poll has
+ * asked Buffptr where the sound plays. No vector, no MFP register, no
+ * Xbtimer: 1.38's FireBee went to a black screen at each Pause, seek and
+ * track's end with the tick on Timer A (the tester, 15 Nov 2026), and
+ * mxPlay's notes warn of the same from a player that takes the OS's
+ * vectors or timers. The time in the tick from the 200 Hz clock alone.
  */
 #include "tos.h"
 #include "feed.h"
 #ifdef FEED_XB_IN
-/* (EPLAY.PRG's: this file built again as feedxb.o, the tick through
-   Xbtimer where the sound is the XBIOS's alone (snd_xb: a FireBee's, a
-   Milan's), feed.c giving its calls to these) */
+/* (EPLAY.PRG's: this file built again as feedxb.o, feed.c giving its calls
+   to these where the sound is the XBIOS's alone: snd_xb) */
 #include "feedxb.h"
 #define feed_t0 fx_t0
 #define feed_us fx_us
 #define feed_term fx_term
 #define feed_on fx_on
 #define feed_off fx_off
+#define feed_poll fx_poll
+#else
+volatile long feed_ticks, feed_missed;
 #endif
 
-#pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* (a system variable's fixed address) */
+#define HZ200 (*(volatile unsigned long *)0x4baL)
 
-#define MFP(o)	(*(volatile unsigned char *)(0xfffffa00L + (o)))
-#define IPRA	MFP(0x0b)
-#define TADR	MFP(0x1f)
-#define TA_BIT	0x20
-#define TA_VECNO 77		/* $134 / 4: the MFP's base $40, Timer A 13 */
+static void (*fn)(void);
+static int on, busy;
+static long rate;
+static unsigned long h0, t0;
 
-extern void feed_vec(void);
-extern void (*feed_fn)(void);
-extern volatile short feed_busy;
-
-static long old_vec;
-static unsigned char cr, dr;
-static int on;
-
-/* XBIOS Xbtimer (31): timer, control, data, vector; Jdisint (26) */
-static long xbtimer(short t, short c, short d, long v)
+static long mark(void)
 {
-	register long r __asm__("d0");
-	__asm__ volatile("move.l %5,-(%%sp)\n\tmove.w %4,-(%%sp)\n\tmove.w %3,-(%%sp)\n\tmove.w %2,-(%%sp)\n\t"
-			 "move.w %1,-(%%sp)\n\ttrap #14\n\tlea 12(%%sp),%%sp"
-			 : "=r"(r) : "r"((short)31), "r"(t), "r"(c), "r"(d), "r"(v) : TRAP_CLOBBER);
-	return r;
+	h0 = HZ200;
+	return 0;
 }
 
-static long setexc(short n, long v)
+/* (supervisor mode) the ticks the rate would have had since feed_on, for
+   whoever counts them (feed_ticks), and the tick */
+static long run(void)
 {
-	return trap13_wwl(5, n, v);
+	feed_ticks = (long)((HZ200 - h0) * (unsigned long)rate / 200);
+	fn();
+	return 0;
 }
 
-/* the time since feed_t0 (in the tick), from Timer A's count down and the
-   ticks that came meanwhile, in microseconds (feed.c's) */
-static unsigned char t0;
-static long m0;
+void feed_poll(void)
+{
+	if (on && !busy) {
+		busy = 1;
+		Supexec(run);
+		busy = 0;
+	}
+}
 
+/* (in the tick: supervisor mode) */
 void feed_t0(void)
 {
-	t0 = TADR;
-	m0 = feed_missed;
+	t0 = HZ200;
 }
 
 long feed_us(void)
 {
-	unsigned char t = TADR;
-	long n = (feed_missed - m0 + ((IPRA & TA_BIT) != 0)) * dr + t0 - t;
-	return n * (cr == 3 ? 625 : cr == 5 ? 2500 : 3906) / 96;
-}
-
-/* stopped: Timer A's interrupt disabled first (Jdisint: nothing pending
-   comes after it), then the vector as it was. Not Xbtimer: it enables the
-   interrupt it sets, and with the tick at 1 kHz one is nearly always
-   pending, taken at once through the vector found at the start, which on
-   FireTOS needn't be a handler: 1.38's FireBee went to a black screen at
-   every Pause, seek and track's end (the tester, 15 Nov 2026). mxPlay
-   stops the same way: Buffoper(0), Jdisint */
-static void stop(void)
-{
-	trap14_ww(26, 13);		/* Jdisint: Timer A */
-	setexc(TA_VECNO, old_vec);
+	return (long)(HZ200 - t0) * 5000;
 }
 
 void feed_term(void)
 {
-	if (on) {
-		stop();
-		on = 0;
-	}
+	on = 0;
 }
 
 void feed_on(void (*tick)(void), int hz)
 {
-	if (on)
-		feed_off();
-	/* 1000 a second: /16 and 154; 500: /64 and 77; 250: /64 and 154;
-	   125: /100 and 196 */
-	cr = hz > 500 ? 3 : hz > 125 ? 5 : 6;
-	dr = hz > 250 && hz <= 500 ? 77 : hz > 125 ? 154 : 196;
-	feed_fn = tick;
-	feed_busy = 0;
+	fn = tick;
+	rate = hz;
 	feed_ticks = feed_missed = 0;
-	old_vec = setexc(TA_VECNO, -1L);
-	xbtimer(0, cr, dr, (long)feed_vec);
+	Supexec(mark);
 	on = 1;
 }
 
 void feed_off(void)
 {
-	if (on) {
-		stop();
-		on = 0;
-	}
+	on = 0;
 }

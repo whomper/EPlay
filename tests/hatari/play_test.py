@@ -446,8 +446,22 @@ WAV_LEVEL = 32767 * 10 ** (-6 / 20) / math.sqrt(2)
 SKIPS = []
 
 
-def analyse(rec, case):
-    """(ok, what was found) for the recording"""
+def dropouts(left, a, b, blk):
+    """where a tone's rising crossings jump (a stretch of samples gone),
+    in samples, between blocks a and b: the left channel's, off the
+    median period by a quarter"""
+    xs = [i for i in range(a * blk + 1, (b + 1) * blk) if left[i - 1] < -500 <= left[i]]
+    iv = sorted(xs[k + 1] - xs[k] for k in range(len(xs) - 1))
+    if len(iv) < 10:
+        return []
+    med = iv[len(iv) // 2]
+    return [xs[k] for k in range(len(xs) - 1) if abs(xs[k + 1] - xs[k] - med) > med / 4]
+
+
+def analyse(rec, case, standin=False):
+    """(ok, what was found) for the recording. standin: the XBIOS's sound
+    (the FireBee's stand-in, SNDXBIOS=1), which Hatari drops a few samples
+    of (below)"""
     with wave.open(rec) as w:
         rate, ch, n = w.getframerate(), w.getnchannels(), w.getnframes()
         raw = w.readframes(n)
@@ -490,6 +504,25 @@ def analyse(rec, case):
             c = m
             break
     mid = c * blk
+    drop_note = ""
+    if standin:
+        # Hatari drops a third of a millisecond here and there on the XBIOS's
+        # sound path while the CPU writes to ST RAM (16 Nov 2026: a program
+        # that rewrote its ring with the same values every 100 ms got nine,
+        # in 1.41 too; docs/DESIGN.md): the window moved off them, their
+        # number said. On a Falcon (EPlay's own crossbar path) none come,
+        # and one there fails the case through the tone's purity
+        drops = dropouts(left, a, b, blk)
+        if drops:
+            for d in range(0, 2 * (b - a)):
+                m = mid + (d // 2 + 1 if d % 2 else -(d // 2)) * blk // 4
+                if (a + 2) * blk + 2400 <= m <= (b - 2) * blk - 2400 and \
+                        not any(m - 2400 - 100 <= x <= m + 2400 + 100 for x in drops):
+                    mid = m
+                    break
+            n = sum(1 for k, x in enumerate(drops) if not k or x - drops[k - 1] > blk // 4)   # (5 ms apart: one)
+            drop_note = "; %d drop-out%s (Hatari's, on the XBIOS's sound), the tone's window off them" % (
+                n, "" if n == 1 else "s")
     seg = slice(mid - 2400, mid + 2400)
     level = math.sqrt(sum(v * v for v in left[seg]) / len(left[seg]))
     LEVEL[case] = level
@@ -544,8 +577,9 @@ def analyse(rec, case):
     # (silence after: past the block the end falls in; the YM2149's output
     # in Hatari dies away over a few ms more)
     return ok, ("%.2f s of sound, %d gaps; left %d Hz (%.0f %% of its power), right %d Hz (%.0f %%); "
-                "wanted %.2f s, %.0f and %.0f Hz%s%s; level %.0f" % (secs, len(gaps), fl, 100 * ql, fr, 100 * qr,
-                                                             length, want[0], want[1], note, vol_note, level))
+                "wanted %.2f s, %.0f and %.0f Hz%s%s; level %.0f%s" % (secs, len(gaps), fl, 100 * ql, fr, 100 * qr,
+                                                               length, want[0], want[1], note, vol_note, level,
+                                                               drop_note))
 
 
 HATARI = subprocess.run(["hatari", "--version"], capture_output=True, text=True).stdout.split()[1].lstrip("v")
@@ -959,7 +993,8 @@ def run(work, case, spec):
                 " / ".join(o[4:o.index(";")] for o in outs))
         if not os.path.exists(rec):
             return False, m.describe(), "no recording"
-        ok, what = analyse(rec, case)
+        ok, what = analyse(rec, case, spec.split(":")[0] == "FireBee" or
+                           "SNDXBIOS=1" in os.environ.get("EPLAY_RIG_INF", ""))
         if case in ("gapless", "gaplessmp3"):
             followed = [l for l in open(log, errors="replace") if "(followed on)" in l]
             what += "; %s" % ("the second followed on" if followed else "the second didn't follow on")

@@ -477,7 +477,9 @@ static int raw8;		/* the STE's way: snd_put8_raw (set at the play's start) */
 TICK_CODE("12tick_pcm")
 static void tick_pcm(void)
 {
-	long room = snd_room(), cap = 1024;	/* (a tick short: GEM goes on between; 4 times what plays) */
+	/* (a tick short: GEM goes on between; 4 times what plays. The XBIOS's
+	   sound alone: the tick is GEM's turn itself, its room all filled) */
+	long room = snd_room(), cap = SND_XB ? room : 1024;
 	while (room > 0 && cap > 0) {
 		long hb = q_w - q_r, tail = q_size - q_roff, k, kb;
 		short *p;
@@ -542,6 +544,10 @@ static unsigned long fine_now(void)
 {
 	unsigned long h, h2;
 	unsigned c, c2, p;
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+	if (SND_XB)
+		return HZ200 * 192;	/* (no MFP read: the 200 Hz clock alone) */
+#endif
 	/* Timer C reloaded and its interrupt still pending (the tick runs
 	   at level 5, the MFP's 200 Hz at 6, but it may be waiting): HZ200
 	   a step behind its count, which once made a time 5 ms early */
@@ -2340,8 +2346,12 @@ int play_step(int ms)
 	if (state != PS_PLAYING)
 		return 0;
 #if defined(EPLAY_FB) || defined(SND_XB_ON)
-	if (SND_XB)
-		snd_poll();	/* (Buffptr here, never in the tick) */
+	if (SND_XB) {
+		/* (Buffptr here, never in the tick; then the tick itself: no
+		   interrupt with the XBIOS's sound alone, feedfb.c) */
+		snd_poll();
+		feed_poll();
+	}
 #endif
 	if (vgm) {
 		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once

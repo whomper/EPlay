@@ -9,13 +9,17 @@
  * of the Falcon's sound is there (they read $FF00 and $FFFF), so nothing is
  * read or written but through the calls.
  *
- * A ring of 16-bit stereo frames in ST RAM (Mxalloc mode 0), half a second
- * long, played looping (Buffoper's repeat). Where it plays: the tick (an
- * interrupt) may call no XBIOS (TOS isn't re-entrant: in 1.31 to 1.34 its
- * Buffptr there rebooted the FireBee at a GEM action under FireTOS, and at
- * once under MiNT, the tester, 13 Nov 2026), so the tick counts the frames
- * by the 200 Hz clock (_hz_200) at the rate, and GEM's turn (snd_poll) asks
- * Buffptr and puts right what that has drifted. Always at 49,170 Hz: play.c
+ * A ring of 16-bit stereo frames in ST RAM (Mxalloc mode 0), two seconds
+ * long, played looping (Buffoper's repeat), as mxPlay's on the FireBee.
+ * The tick has no interrupt here (feedfb.c): GEM's turns run it, and fill
+ * the ring's room each time (all but the quarter behind where it plays,
+ * snd_room), so that a second and a half passes before a turn held up (a
+ * menu held down, the system's file selector) is heard. Where
+ * it plays: the tick (in supervisor mode, by Supexec) calls no XBIOS (in
+ * 1.31 to 1.34 its Buffptr from Timer A's interrupt rebooted the FireBee
+ * at a GEM action, the tester, 13 Nov 2026), so it counts the frames by
+ * the 200 Hz clock (_hz_200) at the rate, and the turn before it
+ * (snd_poll) asks Buffptr and puts right what that has drifted. Always at 49,170 Hz: play.c
  * resamples a file to it on
  * the CPU. The volume through Soundcmd's attenuation, as the Falcon's.
  * What the Falcon's snd.c measures and sets beyond that (the external
@@ -63,7 +67,7 @@
 
 #define OUT_RATE 49170L
 #define PRESCALE 1		/* (Devconnect's: 49,170 Hz at the 25 MHz clock) */
-#define RING_MAX (49170L / 2)
+#define RING_MAX (49170L * 2)
 
 #ifndef SND_XB_IN
 int snd_adder_adc;
@@ -89,10 +93,9 @@ static volatile long ring_n, wpos, written, played;
 static volatile int playing;
 static int locked;
 /* (the tick's count: the 200 Hz clock when it last ran, its remainder;
-   GEM's correction, frames, for the tick to take) */
+   where Buffptr said it plays, a frame of the ring, -1 for no word) */
 static volatile unsigned long hz_last;
-static volatile long hz_acc, corr;
-static volatile int corr_new;
+static volatile long hz_acc, hw_p = -1;
 #define HZ200 (*(volatile unsigned long *)0x4baL)
 
 #pragma GCC diagnostic push
@@ -264,7 +267,7 @@ int snd_open(long rate, int ext)
 			return 0;
 		ring = p;
 	}
-	ring_n = rate / 2;
+	ring_n = rate * 2;
 	if (ring_n > RING_MAX)
 		ring_n = RING_MAX;
 	memset(ring, 0, (size_t)ring_n * 4);
@@ -276,7 +279,7 @@ int snd_open(long rate, int ext)
 	snd_fw = 2;			/* (EPLAY.PRG's variable too: 16-bit stereo, no tracks) */
 	wpos = written = played = 0;
 	playing = 0;
-	corr_new = 0;
+	hw_p = -1;
 	snd_underruns = 0;
 	snd_first_under = snd_least_lead = -1;
 	return 1;
@@ -322,12 +325,14 @@ static long hw_pos(void)
 	return a >= ring_n ? a - ring_n : a;
 }
 
-/* the frames played: the tick's (an interrupt: no XBIOS), by the 200 Hz
-   clock at the rate, with GEM's correction (snd_poll) */
+/* the frames played: the tick's (supervisor mode, by Supexec: no XBIOS),
+   from where Buffptr said the sound plays (snd_poll, just before, in the
+   same GEM turn), the 200 Hz clock counting the rings it went round in a
+   turn held up past a ring; with no word from Buffptr, the clock alone */
 void snd_update(void)
 {
 	unsigned long h;
-	long d;
+	long d, est;
 	if (!playing)
 		return;
 #pragma GCC diagnostic push
@@ -336,16 +341,21 @@ void snd_update(void)
 #pragma GCC diagnostic pop
 	hz_acc += (long)(h - hz_last) * OUT_RATE;
 	hz_last = h;
-	d = hz_acc / 200;
-	hz_acc -= d * 200;
-	if (corr_new) {
-		d += corr;
-		corr_new = 0;
-	}
-	if (d <= 0) {
-		played += d;		/* (a correction back: the count was ahead) */
+	est = hz_acc / 200;
+	hz_acc -= est * 200;
+	if (hw_p >= 0) {
+		d = hw_p - played % ring_n;
+		if (d < 0)
+			d += ring_n;
+		if (d > ring_n - 512 && est < ring_n / 2)
+			d = 0;		/* (a little behind: still the same place) */
+		while (est - d > ring_n / 2)
+			d += ring_n;	/* (a whole ring went by meanwhile) */
+		hw_p = -1;
+	} else
+		d = est;
+	if (d <= 0)
 		return;
-	}
 	if (played + d > written) {
 		if (!snd_underruns++)
 			snd_first_under = played;
@@ -353,34 +363,17 @@ void snd_update(void)
 		wpos = (played + d) % ring_n;	/* (where the DMA is now) */
 	}
 	played += d;
-	if (played > ring_n / 2) {
+	if (played > ring_n / 4) {
 		long lead = written - played;
 		if (snd_least_lead < 0 || lead < snd_least_lead)
 			snd_least_lead = lead;
 	}
 }
 
-/* (GEM's turn, not the tick's) where the DMA is, from Buffptr: the tick's
-   count put right when it is more than 512 frames off (the clock's 5 ms is
-   245 of them) */
+/* (GEM's turn, before the tick: feed_poll) where the DMA is, from Buffptr */
 void snd_poll(void)
 {
-	long p, at, diff;
-	if (!playing || corr_new)
-		return;
-	p = hw_pos();
-	if (p < 0)
-		return;
-	at = played % ring_n;
-	diff = p - at;
-	if (diff > ring_n / 2)
-		diff -= ring_n;
-	else if (diff < -ring_n / 2)
-		diff += ring_n;
-	if (diff > 512 || diff < -512) {
-		corr = diff;
-		corr_new = 1;
-	}
+	hw_p = playing ? hw_pos() : -1;
 }
 
 long snd_played(void)
@@ -395,7 +388,11 @@ long snd_written(void)
 
 long snd_room(void)
 {
-	long r = ring_n - (written - played) - 1024;
+	/* (a quarter of the ring kept behind where Buffptr says it plays: how
+	   far ahead of that a FireBee's or a Milan's driver has already read
+	   isn't known, and mxPlay keeps a whole second; the ring still holds
+	   a second and a half ahead) */
+	long r = ring_n - (written - played) - ring_n / 4;
 	return r > 0 ? r : 0;
 }
 
@@ -434,7 +431,7 @@ void snd_play(void)
 	if (!playing) {
 		hz_last = (unsigned long)Supexec(hz_read);
 		hz_acc = 0;
-		corr_new = 0;
+		hw_p = -1;
 		x_buffoper(3);		/* play, looping */
 		playing = 1;
 	}

@@ -295,7 +295,9 @@ static void cpu_open(const VGMHEAD *h, long want, const char *why)
    not a Milan's 4, nor a FireBee) */
 int vp_has_ym(void)
 {
-	return (get_cookie(0x5F4D4348L) >> 16) <= 3 && !get_cookie(0x5F43465FL);
+	/* (the XBIOS's sound alone: none taken but through it, mxPlay's way,
+	   so a file's AY is made on the CPU even where a YM2149 is there) */
+	return (get_cookie(0x5F4D4348L) >> 16) <= 3 && !get_cookie(0x5F43465FL) && !SND_XB;
 }
 
 int vp_cpu_can(void)

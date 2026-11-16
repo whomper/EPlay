@@ -72,12 +72,12 @@ OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu ay
 endif
 ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
-# for them), the sound through the XBIOS (sndfb.c), the tick through
-# Xbtimer (feedfb.S), the 64-bit helpers common's (ll64.c)
+# for them), the sound through the XBIOS (sndfb.c), the tick from GEM's
+# turns with no interrupt (feedfb.c), the 64-bit helpers common's (ll64.c)
 OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
 CATARI  += ll64
 CUI     := $(filter-out cpucheck,$(CUI))
-OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feedfb_s.o $(OBJDIR)/inflate_fast_s.o \
+OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/inflate_fast_s.o \
            $(OBJDIR)/cpucheck_cf.o \
            $(OBJDIR)/sting_s.o $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 else
@@ -216,8 +216,6 @@ $(OBJDIR)/nf.o: common/atari/nf.S | $(OBJDIR)
 $(OBJDIR)/feed_s.o: atari/feed.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/cpucheck_cf.o: common/atari/cpucheck_cf.S | $(OBJDIR)
-	$(CC) $(MCPU) -c -o $@ $<
-$(OBJDIR)/feedfb_s.o: atari/feedfb.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<

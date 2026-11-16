@@ -2181,7 +2181,8 @@ What EPlay needs beyond common's layer:
     Falcon's DSP", the YM2149's is absent. `atari/sndfb.c` gives `snd.h`'s calls over the XBIOS
     (a 16-bit stereo ring in ST RAM through `Setbuffer`, `Buffoper` looping, `Buffptr` for where
     it plays; `Soundcmd`'s attenuation for the volume; the Falcon's rates, 49,170 to 12,292 Hz).
-    The tick on Timer A through `Xbtimer`, its handler ColdFire code (`feedfb.S`). WAV and AIFF
+    The tick on Timer A through `Xbtimer`, its handler ColdFire code (`feedfb.S`; since 1.42 no
+    interrupt: GEM's turns, below). WAV and AIFF
     resampled on the CPU to 49,170 Hz (the linear resampler the CPU's MP3 uses). The 68030's
     PCM loops in `pcm.c` give way to their C (bit for bit, `tests/pcm`). Released for the tester:
     the window, the list, WAV and AIFF.
@@ -2193,7 +2194,7 @@ What EPlay needs beyond common's layer:
     the tester's `EPLAY.LOG` back through Erez.
   - **Done (13 Nov 2026), F1 and F2 together:** `make fb` builds `EPLAYFB.PRG` (in `all` and
     the release). `fbstub.c` answers for the DSP's modules, the YM2149 and the host port;
-    `sndfb.c` and `feedfb.c`/`feedfb.S` as above; `term.c`'s handler in ColdFire forms;
+    `sndfb.c` and `feedfb.c` (and, until 1.42, `feedfb.S`) as above; `term.c`'s handler in ColdFire forms;
     `pcm.c`'s 68030 loops left for their C. A WAV or AIFF goes through `play.c`'s CPU path
     (`cmp_wav`: `pcm_convert` in place of a frame's decoding, then `cmp_put`'s resampler to
     49,170 Hz); an MP3 through `cmp3fb.c`, minimp3 built in for the V4e's FPU (the stack 64 KB
@@ -2359,7 +2360,7 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    "put the FireBee fix in 1.40") takes the same way: its _SND $27 has no matrix, and EPLAY.PRG took it
    for a TT's 8-bit DMA, which isn't there (the tester's log). With _CF_ set it plays through the
    XBIOS's calls, its tick through Xbtimer (`atari/feedfb.c` built again as `feedxb.o`: no write to
-   the MFP's vector or registers, as EPLAYFB.PRG's); WAV, AIFF and a file's AY play, MP3 and the DSP's
+   the MFP's vector or registers, as EPLAYFB.PRG's; since 1.42 no interrupt at all, below); WAV, AIFF and a file's AY play, MP3 and the DSP's
    chips are EPLAYFB.PRG's or refused. Common's machines.py from AERA-Atari b4d9cf7 (alone) gives the
    rigs a FireBee stand-in (a 68060 Falcon with FireTOS's cookies): play_test on FireBee:16 wav,
    aiff, vgm, quit play; mp3, vgmsn refused, list passes the MP3 over. **The FireBee's crash at a
@@ -2369,6 +2370,29 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    always pending, taken at once through a vector FireTOS needn't have filled. Now Jdisint first,
    then Setexc, as mxPlay (Mikro's, GPL 2) stops: Buffoper(0), Jdisint. The stand-in can't show it
    (EmuTOS's vector is a handler); the tester's run will.
+   **The XBIOS's sound alone, mxPlay's way (after 1.40; Erez, 15 Nov 2026: "agreed, do it after
+   1.40").** mxPlay (Mikro's, GPL 2) plays on the FireBee with no interrupt at all: its MP3 plugin's
+   Makefile has `TIMER_A = no`, Timer A only in its ARAnyM build (whose DMA pointer "sooner or later
+   runs away"), and its notes call the Atari and ColdFire builds "100% system friendly, not a single
+   HW access", warning of players that take the OS's vectors or timers. Its main loop polls Buffptr and
+   refills whichever second of a two-second ring isn't playing. EPlay's XBIOS path (EPLAYFB.PRG, and
+   EPLAY.PRG's `snd_xb`) now does the same: `feedfb.c` takes no timer, vector or MFP register (no
+   `feedfb.S`, no Xbtimer, no Jdisint); `feed_on` keeps the tick, and each GEM turn (`play_step`: the
+   window's, a dialog's, the file dialog's) asks Buffptr (`snd_poll`) and then runs the tick once by
+   Supexec (`feed_poll`), which fills all the ring's room (no 1,024-frame cap) and counts the time by
+   the 200 Hz clock alone (`fine_now`: no Timer C read). The ring is two seconds (`sndfb.c`), a quarter
+   of it kept behind where Buffptr says it plays (how far a FireBee's or a Milan's driver has read
+   ahead of that isn't known), so that a turn held up a second and a half (a menu held down, the
+   system's file selector) isn't heard; past that, the ring plays again, as mxPlay's does.
+   **Hatari drops samples on this path (16 Nov 2026):** on the FireBee stand-in a few stretches of a
+   third of a millisecond go missing while the CPU writes to ST RAM, in 1.41 too (Timer A). A test
+   program that filled a two-second ring with a 1,000 Hz square once and then rewrote it with the
+   same values every 100 ms got nine; written once and left alone, one. Its sound can't change, so the
+   drops are the emulator's, not EPlay's (EPlay's own crossbar path, on the 68030 and the 68060
+   Falcons, has none). The rig moves its measuring window off them on the stand-in and says how many
+   there were; on a Falcon one still fails the case. A VGM's AY is made on the CPU even where a YM2149 is there
+   (`vp_has_ym`), so nothing writes the chip. The Falcon, the TT and the STE keep Timer A: there GEM
+   can't feed the ring through a menu or the file selector, and their tick is the hardware's own.
 
 **1.38's speed against 1.37, accepted by Erez (15 Nov 2026):** the rows slower beyond a tick in both
 runs, with phase 11's step 3, the log at once, Timer A's limits and NATFEATS. On Falcon-4:16: a Mega

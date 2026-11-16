@@ -17,6 +17,9 @@ void feed_on(void (*tick)(void), int hz);
 
 void feed_off(void);			/* given back as they were */
 void feed_term(void);			/* (the same, from supervisor mode: term.c) */
+/* (GEM's turn) the tick run once from here where there is no interrupt:
+   the XBIOS's sound alone (feedfb.c); else nothing */
+void feed_poll(void);
 /* since feed_on: the ticks that came, and those left out because the one
    before still ran (the tick too slow for its rate) */
 extern volatile long feed_ticks, feed_missed;

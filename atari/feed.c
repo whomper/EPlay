@@ -132,6 +132,13 @@ void feed_on(void (*tick)(void), int hz)
 	on = 1;
 }
 
+/* (GEM's turn) the tick, where it runs from there: the XBIOS's sound
+   alone (feedfb.c); with Timer A, nothing */
+void feed_poll(void)
+{
+	FXV(fx_poll());
+}
+
 void feed_off(void)
 {
 	FXV(fx_off());
