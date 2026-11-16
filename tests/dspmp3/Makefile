@@ -24,6 +24,9 @@ run: $(B)/sim $(B)/stream
 	@echo "STREAM (stream.c): as the file's rate, and resampled to the Falcon's clock:"
 	for f in mix320 mono lsf22 mix48 mixvbr; do ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 120 && \
 		SIMRS=1 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 120 || exit 1; done
+	@echo "STREAM, the SSI's misses counted (SIMTUE: an underrun's interrupt every Nth slot, the sound the same):"
+	SIMTUE=5000 SIMRS=1 ./$(B)/stream $(TOP)/build/mp3files/mix320.mp3 120
+	SIMTUE=3 ./$(B)/stream $(TOP)/build/mp3files/mix320.mp3 120
 	@echo "STREAM, gapless (SIMDROP: PK_DROP, the join's padding and delay left out), as the model, bit for bit:"
 	for f in tones mono lsf22 mixvbr; do for d in 30:745:1512 30:216:1512 30:29:1500 30:0:1105 30:1151:600; do \
 		SIMDROP=$$d ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 80 && \

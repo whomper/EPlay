@@ -18,6 +18,11 @@
  * (ReplayGain: louder or quieter). SIMDROP=F:AT:N puts a drop (gapless, PK_DROP) on frame F's
  * packet: after AT of its samples, N left out, the model the same.
  * SIMCORRUPT=SEED:N makes one byte in N of the file a random one.
+ * SIMTUE=N raises the SSI's transmit with exception (an underrun's, which
+ * Hatari's core never raises) for every Nth slot in place of its plain
+ * one: tue's word the same, the frames it came in counted in the status
+ * words ("with a slot missed"; Erez, 16 Nov 2026: clicks on the Falcon's
+ * clock that no late granule showed).
  *
  *     stream FILE.MP3 [FRAMES]
  */
@@ -35,6 +40,7 @@
 /* 32 MHz cycles a time slot (two a frame): the output's rate's */
 static unsigned long long slot_cycles = 325, next_slot;
 static int slot0 = 1;
+static long tue_every, slot_n;	/* SIMTUE=N */
 #define CAP_MAX (1L << 22)
 static unsigned short cap[CAP_MAX];	/* what the SSI sent, a word each slot */
 static long ncap;
@@ -45,6 +51,10 @@ static void clock_ssi(void)
 	while (cycles >= next_slot) {
 		dsp_core_ssi_Receive_SC2(slot0);
 		dsp_core_ssi_Receive_SCK();
+		if (tue_every && ++slot_n % tue_every == 0) {
+			dsp_set_interrupt(DSP_INTER_SSI_TRX_DATA, 0);
+			dsp_set_interrupt(DSP_INTER_SSI_TRX_DATA_E, 1);
+		}
 		if (ncap < CAP_MAX)
 			cap[ncap++] = (unsigned short)dsp_core.ssi.transmit_value;
 		slot0 = !slot0;
@@ -86,9 +96,9 @@ int main(int argc, char **argv)
 	static unsigned char buf[16 << 20];
 	static unsigned long pk[PK_MAX];
 	static MP3PARSE ps;
-	long n, off = 0, want = argc > 2 ? atol(argv[2]) : 200, sent = 0, frames = 0, late = 0, rsy = 0;
+	long n, off = 0, want = argc > 2 ? atol(argv[2]) : 200, sent = 0, frames = 0, late = 0, rsy = 0, miss = 0;
 	long pkn = 0, pki = -1;		/* the packet going: its words, the next (-1: its count) */
-	int have = 0, i, rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0, f4 = 0, l6 = 0, r4 = 0;
+	int have = 0, i, rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0, f4 = 0, l6 = 0, r4 = 0, m2 = 0;
 	static MP3DSP md;		/* the model, the same packets */
 	static MP3RS mrs;
 	static dw pcm[2][1152], mo[2][MP3RS_MAX];
@@ -154,6 +164,7 @@ int main(int argc, char **argv)
 		   Hatari's would be (a real Falcon's: external memory, the bus) */
 		slot_cycles = 32000000ULL * 100 / (2ULL * (unsigned long long)rout *
 						     (unsigned long long)(getenv("SIMLOAD") ? atoi(getenv("SIMLOAD")) : 100));
+		tue_every = getenv("SIMTUE") ? atol(getenv("SIMTUE")) : 0;
 		mp3rs_set(&mrs, rin, rout);
 		mp3rs_set(&mrs0, rin, rout);
 		if (rsmode) {
@@ -182,7 +193,10 @@ int main(int argc, char **argv)
 			w |= dsp_core_read_host(CPU_HOST_RXL);
 			if (!(w & 0x800000)) {
 				int nf4 = (int)(w >> 19) & 15, nl6 = (int)(w >> 9) & 63, nr4 = (int)(w >> 15) & 15;
+				int nm2 = (int)(w >> 7) & 3;
 				frames += (nf4 - f4) & 15;
+				miss += (nm2 - m2) & 3;
+				m2 = nm2;
 				late += (nl6 - l6) & 63;
 				rsy += (nr4 - r4) & 15;
 				f4 = nf4;
@@ -321,9 +335,14 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld packets sent; "
-	       "the system stack %u deep at most (P:%04x)%s\n",
-	       strrchr(argv[1], '/') ? strrchr(argv[1], '/') + 1 : argv[1], frames, late, rsy, sent,
+	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld with a slot missed, %ld packets "
+	       "sent; the system stack %u deep at most (P:%04x)%s\n",
+	       strrchr(argv[1], '/') ? strrchr(argv[1], '/') + 1 : argv[1], frames, late, rsy, miss, sent,
 	       sp_most, sp_most_at, dead ? "; the DSP stopped" : "");
+	/* (SIMTUE: each frame's misses counted, at most one a frame) */
+	if (tue_every && (miss == 0 || miss > frames))
+		return 1;
+	if (!tue_every && miss)
+		return 1;
 	return dead || frames < want || rsy;
 }

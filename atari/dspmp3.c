@@ -317,6 +317,8 @@ int dspmp3_failed(void)
 static const unsigned long *s_buf;	/* the packet going (the player's, kept until sent) */
 static int s_n, s_i, s_have;		/* its words, the next (-1: its count) */
 static long s_frames, s_late, s_wmin, s_wsum, s_rsy;
+static long s_miss;		/* frames in which the SSI missed a slot (tue) */
+static int s_m2;
 static int s_f4, s_l6, s_r4;
 static unsigned long s_last;		/* HZ200 at the last status word */
 static int s_slots = -1;		/* the DSP port's frame, time slots (-1: not told) */
@@ -347,7 +349,8 @@ static void load_taps(long rin, long rout)
 void dspmp3_tick_stream(long rin, long rout, int pcm, int sblim)
 {
 	s_have = 0;
-	s_frames = s_late = s_wsum = s_rsy = 0;
+	s_frames = s_late = s_wsum = s_rsy = s_miss = 0;
+	s_m2 = 0;
 	s_wmin = -1;
 	s_f4 = s_l6 = s_r4 = 0;
 	s_late_at = s_rsy_at = -1;
@@ -418,8 +421,9 @@ void dspmp3_tick_status(void)
 {
 	while (HISR & 1) {
 		unsigned long w = HTX32 & 0xffffff;
-		long waits = (long)(w & 511) * 32;
+		long waits = (long)(w & 127) * 32;
 		int f4 = (int)(w >> 19) & 15, r4 = (int)(w >> 15) & 15, l6 = (int)(w >> 9) & 63, df;
+		int m2 = (int)(w >> 7) & 3;	/* (the SSI's misses: a slot it had no word for) */
 		if (w & 0x800000) {
 			if (w & 0x10000)	/* the DSP port's frame: its time slots */
 				s_slots = (int)(w & 0xff);
@@ -437,6 +441,8 @@ void dspmp3_tick_status(void)
 		s_l6 = l6;
 		s_rsy += (r4 - s_r4) & 15;
 		s_r4 = r4;
+		s_miss += (m2 - s_m2) & 3;
+		s_m2 = m2;
 		if (s_frames >= 4 && (s_wmin < 0 || waits < s_wmin))
 			s_wmin = waits;		/* (past the start, the ring's first fill) */
 		s_wsum += waits * df;
@@ -503,6 +509,14 @@ void dspmp3_stall_note(char *b, int n)
 long dspmp3_stream_resyncs(void)
 {
 	return s_rsy;
+}
+
+/* the frames in which the SSI had no word for a slot (an underrun: the
+   sound played the last one again), counted on the DSP (Erez, 16 Nov
+   2026: clicks on the Falcon's clock that no late granule showed) */
+long dspmp3_stream_misses(void)
+{
+	return s_miss;
 }
 
 void dspmp3_stream_firsts(long *late_at, long *rsy_at)

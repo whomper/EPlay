@@ -38,6 +38,7 @@ long dspmp3_stream_polls(void) { return -1; }
 long dspmp3_stream_fps1000(void) { return 0; }
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg) { *frames = *late = *wmin = *wavg = 0; }
 long dspmp3_stream_resyncs(void) { return 0; }
+long dspmp3_stream_misses(void) { return 0; }
 int dspmp3_stream_stalled(unsigned long hz) { (void)hz; return 0; }
 void dspmp3_stall_test(void) { }
 void dspmp3_stall_note(char *b, int n) { if (n > 0) b[0] = 0; }

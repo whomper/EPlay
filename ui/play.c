@@ -187,7 +187,12 @@ static void apply_volume(void)
 		vp_volume(a, !vol);	/* (vgmplay.c: the chips' ways) */
 		return;
 	}
-	if ((s_ext || (snd_dma8 && snd_dma8_interp)) && play_is_open()) {
+	/* (the Falcon's own clock too: the matrix sends the sound to the FDI
+	   as well as the DAC, and the codec's attenuation is the DAC's alone:
+	   Erez, 16 Nov 2026, Output DSP's volume heard only at 0. Volume on
+	   the samples there, the codec at 0 dB) */
+	int matrix = !snd_dma8 && !SND_XB;
+	if ((s_ext || matrix || (snd_dma8 && snd_dma8_interp)) && play_is_open()) {
 		snd_dac_volume(0, 0);
 		gain_at(a - rg_now, &g, &sub);
 		gain_at(a - rg_next, &gn, &subn);
@@ -2318,10 +2323,10 @@ const char *play_keep_up(void)
 	if (dsp) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
-		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late, %ld packets broken; the DSP's waits a "
-			 "frame: least %ld, mean %ld; the tick %ld%% of the 68030 (frames made %ld%%, sent %ld%%)", fr,
-			 late, dspmp3_stream_resyncs(), wmin, wavg, play_tick_share(), play_parse_share(),
-			 play_push_share());
+		snprintf(b, sizeof(b), "%ld frames decoded, %ld granules late, %ld packets broken, %ld with a slot "
+			 "missed; the DSP's waits a frame: least %ld, mean %ld; the tick %ld%% of the 68030 (frames made "
+			 "%ld%%, sent %ld%%)", fr, late, dspmp3_stream_resyncs(), dspmp3_stream_misses(), wmin, wavg,
+			 play_tick_share(), play_parse_share(), play_push_share());
 		return b;
 	}
 	if (snd_underruns)
@@ -2510,12 +2515,16 @@ int play_step(int ms)
 		/* High, and the DSP behind: Normal from here (a moment's break) */
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
-		if (late >= settings_qlate() && fr >= 8) {	/* (past the start: its first frames) */
+		/* (and the frames in which the SSI missed a slot: the DSP behind
+		   by a sample, a click, though no granule was late: Erez, 16 Nov
+		   2026, Output DSP) */
+		long miss = dspmp3_stream_misses();
+		if ((late >= settings_qlate() || miss >= settings_qlate()) && fr >= 8) {	/* (past the start: its first frames) */
 			char err[160];
 			long at = play_ms();
 			q_normal = 1;
-			elog("the DSP behind at 49,170 Hz (%ld granules late by its frame %ld): Normal from %ld ms, "
-			     "32,780 Hz, up to about 15 kHz", late, fr, at);
+			elog("the DSP behind at 49,170 Hz (%ld granules late, %ld frames with a slot missed, by its frame "
+			     "%ld): Normal from %ld ms, 32,780 Hz, up to about 15 kHz", late, miss, fr, at);
 			if (!play_seek(at, err, sizeof(err)))
 				elog("%s", err);
 			play_note_new = 1;

@@ -74,7 +74,9 @@ V_CNT	equ	$84
 V_T2	equ	$56
 V_T3	equ	$92
 V_T4	equ	$4f
-V_SF	equ	$3f		; streaming's flags: STRM 0, HALF 1, PKF 2, STOP 3
+V_SF	equ	$3f		; streaming's flags: STRM 0, HALF 1, PKF 2, STOP 3,
+				; XSTREAM 4; 5 the SSI missed a slot since the last
+				; frame (tue), 6-7 the frames it did, running on
 V_DATA	equ	$ad		; the main data (Y)
 V_R1	equ	$40
 V_R2	equ	$41
@@ -849,6 +851,7 @@ wr	jclr	#1,x:HSR,wr
 
 tue	movep	x:SSISR,x:V_JUNK	; (an underrun: the status read, then the word)
 	movep	y:(r7)+,x:TX
+	bset	#5,x:V_SF		; (counted after the frame: the status word's)
 	rti
 
 ; ---- the transform of all 32 subbands: r0 the lines (X), r5 the
@@ -996,13 +999,19 @@ stl	jsr	salign			; left and right in step, each frame
 	jsr	getsrc			; the whole packet
 	jset	#3,x:V_SF,stx
 	jsr	decode
-	move	x:V_FRM,b		; the frames decoded
+	jclr	#5,x:V_SF,sun9		; the SSI missed a slot since the last frame
+	bclr	#5,x:V_SF		; (tue): the frame counted, bits 6-7 running on
+	bchg	#6,x:V_SF		; (Erez, 16 Nov 2026: clicks on the Falcon's
+	jset	#6,x:V_SF,sun9		; clock, none counted late; Hatari's DSP has
+	bchg	#7,x:V_SF		; no underrun to show it)
+sun9	move	x:V_FRM,b		; the frames decoded
 	move	#>1,x0
 	add	x0,b
 	move	b1,x:V_FRM
 	jclr	#1,x:HSR,sm2		; (the 68030 hasn't read the last: none)
 	move	#>15,x0			; the frames (19-22), packets broken (15-18), granules
-	and	x0,b			; late (9-14), waits / 32 (0-8): each a count that
+	and	x0,b			; late (9-14), the SSI's misses (7-8), waits / 32
+					; (0-6, at most 127): each a count that
 	rep	#4			; runs on, so a word read twice or not at all
 	lsl	b			; takes nothing away (bit 23: the wake word's)
 	move	x:V_RSY,a
@@ -1021,11 +1030,17 @@ stl	jsr	salign			; left and right in step, each frame
 	move	x:V_IDLE,a
 	rep	#5
 	asr	a
-	move	#>511,x0
+	move	#>127,x0
 	cmp	x0,a
 	jle	sm1
 	move	x0,a
 sm1	move	a1,x1
+	or	x1,b
+	move	x:V_SF,a		; the SSI's misses: V_SF's 6-7 to 7-8
+	move	#>$c0,x0
+	and	x0,a
+	lsl	a
+	move	a1,x1
 	or	x1,b
 	movep	b1,x:HRX
 sm2	clr	a
