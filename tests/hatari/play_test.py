@@ -449,13 +449,13 @@ SKIPS = []
 def dropouts(left, a, b, blk):
     """where a tone's rising crossings jump (a stretch of samples gone),
     in samples, between blocks a and b: the left channel's, off the
-    median period by a quarter"""
+    median period by more than the recording's own jitter (a sample)"""
     xs = [i for i in range(a * blk + 1, (b + 1) * blk) if left[i - 1] < -500 <= left[i]]
     iv = sorted(xs[k + 1] - xs[k] for k in range(len(xs) - 1))
     if len(iv) < 10:
         return []
     med = iv[len(iv) // 2]
-    return [xs[k] for k in range(len(xs) - 1) if abs(xs[k + 1] - xs[k] - med) > med / 4]
+    return [xs[k] for k in range(len(xs) - 1) if abs(xs[k + 1] - xs[k] - med) > max(3, med / 16)]
 
 
 def analyse(rec, case, standin=False):
