@@ -2379,8 +2379,11 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    EPLAY.PRG's `snd_xb`) now does the same: `feedfb.c` takes no timer, vector or MFP register (no
    `feedfb.S`, no Xbtimer, no Jdisint); `feed_on` keeps the tick, and each GEM turn (`play_step`: the
    window's, a dialog's, the file dialog's) asks Buffptr (`snd_poll`) and then runs the tick once by
-   Supexec (`feed_poll`), which fills all the ring's room (no 1,024-frame cap) and counts the time by
-   the 200 Hz clock alone (`fine_now`: no Timer C read). The ring is two seconds (`sndfb.c`), a quarter
+   Supexec (`feed_poll`), calling the tick until the ring's room is filled (`play.c`'s tick puts 1,024
+   frames a call, as on the Falcon: its code, pinned in the 68030's cache, left as 1.41 had it, a NVDI
+   start 740 -> 750 ms the price of a branch in it) and counting the time by the 200 Hz clock alone
+   (EPLAYFB.PRG's `fine_now`: no Timer C read; EPLAY.PRG on the XBIOS path reads Timer C's count
+   for the log's timings, as 1.40 did, a read of a register a Milan and a FireBee have). The ring is two seconds (`sndfb.c`), a quarter
    of it kept behind where Buffptr says it plays (how far a FireBee's or a Milan's driver has read
    ahead of that isn't known), so that a turn held up a second and a half (a menu held down, the
    system's file selector) isn't heard; past that, the ring plays again, as mxPlay's does.

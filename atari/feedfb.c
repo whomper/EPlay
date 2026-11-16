@@ -16,6 +16,7 @@
  */
 #include "tos.h"
 #include "feed.h"
+#include "snd.h"
 #ifdef FEED_XB_IN
 /* (EPLAY.PRG's: this file built again as feedxb.o, feed.c giving its calls
    to these where the sound is the XBIOS's alone: snd_xb) */
@@ -48,8 +49,18 @@ static long mark(void)
    whoever counts them (feed_ticks), and the tick */
 static long run(void)
 {
+	int k;
 	feed_ticks = (long)((HZ200 - h0) * (unsigned long)rate / 200);
-	fn();
+	/* (play.c's tick puts 1,024 frames at most, the Falcon's Timer A's
+	   way; here a turn fills all the ring's room, so the tick again
+	   until it puts nothing: the Falcon's tick code left as it was, where
+	   its place in the 68030's cache counts) */
+	for (k = 0; k < 256; k++) {
+		long w = snd_written();
+		fn();
+		if (snd_written() == w)
+			break;
+	}
 	return 0;
 }
 
