@@ -39,7 +39,7 @@ static int on, busy;
 static long rate;
 static unsigned long h0, t0;
 
-static long mark(void)
+static long fb_mark(void)
 {
 	h0 = HZ200;
 	return 0;
@@ -47,7 +47,7 @@ static long mark(void)
 
 /* (supervisor mode) the ticks the rate would have had since feed_on, for
    whoever counts them (feed_ticks), and the tick */
-static long run(void)
+static long fb_run(void)
 {
 	int k;
 	feed_ticks = (long)((HZ200 - h0) * (unsigned long)rate / 200);
@@ -68,7 +68,7 @@ void feed_poll(void)
 {
 	if (on && !busy) {
 		busy = 1;
-		Supexec(run);
+		Supexec(fb_run);
 		busy = 0;
 	}
 }
@@ -94,7 +94,7 @@ void feed_on(void (*tick)(void), int hz)
 	fn = tick;
 	rate = hz;
 	feed_ticks = feed_missed = 0;
-	Supexec(mark);
+	Supexec(fb_mark);
 	on = 1;
 }
 
