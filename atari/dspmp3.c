@@ -421,7 +421,7 @@ void dspmp3_tick_status(void)
 {
 	while (HISR & 1) {
 		unsigned long w = HTX32 & 0xffffff;
-		long waits = (long)(w & 127) * 32;
+		long waits = (long)(w & 127) * 64;	/* (in 64s, to 8,128) */
 		int f4 = (int)(w >> 19) & 15, r4 = (int)(w >> 15) & 15, l6 = (int)(w >> 9) & 63, df;
 		int m2 = (int)(w >> 7) & 3;	/* (the SSI's misses: a slot it had no word for) */
 		if (w & 0x800000) {

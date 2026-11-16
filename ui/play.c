@@ -2343,6 +2343,32 @@ long play_len_ms(void)
 	return len_ms;
 }
 
+/* CRASHAT=-ms (the rigs'): a routine of EPlay's on the VBL queue, off it
+   again, then an illegal instruction at interrupt time (common's crash.c
+   since 16 Nov 2026 lands none there: TOS's bombs, no file written) */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"	/* (system variables' fixed addresses) */
+static void (**crash_slot)(void);
+static void crash_vbl(void)
+{
+	*crash_slot = 0;
+	__asm__ volatile("illegal");
+}
+
+static long crash_vbl_on(void)
+{
+	short n = *(volatile short *)0x454L, i;		/* nvbls */
+	void (**q)(void) = *(void (***)(void))0x456L;	/* _vblqueue */
+	for (i = 0; i < n; i++)
+		if (!q[i]) {
+			crash_slot = &q[i];
+			q[i] = crash_vbl;
+			break;
+		}
+	return 0;
+}
+#pragma GCC diagnostic pop
+
 int play_step(int ms)
 {
 	unsigned long t0 = ms_now();
@@ -2409,6 +2435,15 @@ int play_step(int ms)
 		t_failed = 1;
 	if (settings_crashat() > 0 && play_ms() >= settings_crashat())
 		__asm__ volatile("illegal");	/* (the rigs': a crash while playing, the locks given back by term.c) */
+	if (settings_crashat() < 0 && play_ms() >= -settings_crashat()) {
+		/* (the rigs': a crash at interrupt time, from a VBL routine in
+		   EPlay's code: TOS's bombs, nothing written, term.c on Pterm) */
+		static int done;
+		if (!done) {
+			done = 1;
+			Supexec(crash_vbl_on);
+		}
+	}
 	if (t_failed) {
 		int what, hisr;
 		long at, of;

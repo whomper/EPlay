@@ -74,6 +74,7 @@ void term_c(void)
 	   dspjpeg.c's own note; weak, absent where no picture code is linked) */
 	if (pic_dsp_give_back)
 		pic_dsp_give_back();
+	nf_debug("EPLAY term: the sound and the DSP given back\n");	/* (the rigs': a crash's end too) */
 }
 
 __asm__(

@@ -1010,8 +1010,8 @@ sun9	move	x:V_FRM,b		; the frames decoded
 	move	b1,x:V_FRM
 	jclr	#1,x:HSR,sm2		; (the 68030 hasn't read the last: none)
 	move	#>15,x0			; the frames (19-22), packets broken (15-18), granules
-	and	x0,b			; late (9-14), the SSI's misses (7-8), waits / 32
-					; (0-6, at most 127): each a count that
+	and	x0,b			; late (9-14), the SSI's misses (7-8), waits / 64
+					; (0-6, at most 127: 8,128): each a count that
 	rep	#4			; runs on, so a word read twice or not at all
 	lsl	b			; takes nothing away (bit 23: the wake word's)
 	move	x:V_RSY,a
@@ -1028,7 +1028,7 @@ sun9	move	x:V_FRM,b		; the frames decoded
 	rep	#9
 	lsl	b
 	move	x:V_IDLE,a
-	rep	#5
+	rep	#6
 	asr	a
 	move	#>127,x0
 	cmp	x0,a
