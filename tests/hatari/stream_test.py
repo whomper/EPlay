@@ -24,8 +24,8 @@ Cases:
             and stops"): its address answers with a 302, the station's head
             comes 1.5 s late, then Icecast's 2 s burst, the data in
             uneven pieces (pauses of up to 0.6 s, made up after), and a
-            1.5 s stall 8 s in: 16 s of the tone with no gap, one
-            connection
+            1.5 s stall 8 s in: 16 s of the tone with no gap (the tone 40 s
+            long, so no loop of the rig's MP3 falls inside)
   chunked   the station answers HTTP/1.1 with Transfer-Encoding: chunked (as
             Swiss Radio's CDN does): the chunks taken out, the tone and its
             titles, no gap
@@ -415,7 +415,10 @@ def run(work, case, spec):
             shutil.copy(os.path.join(bin_dir, ovl), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     wav, mp3 = os.path.join(w, "tone.wav"), os.path.join(w, "tone.mp3")
-    subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", wav, "synth", "8", "sine", "1000",
+    # (40 s: the MP3 is sent again and again, and LAME's delay and padding
+    # are some 50 ms of near silence at each loop: a gap of the station's
+    # own, inside the rough case's 16 s when the tone was 8 s long)
+    subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", wav, "synth", "40", "sine", "1000",
                     "sine", "1500", "remix", "1", "2", "gain", "-6"], check=True)
     subprocess.run(["lame", "--quiet", "--noreplaygain", "-b", str(KBPS), "--cbr", wav, mp3], check=True)
     if case == "gateway":
