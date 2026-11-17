@@ -11,6 +11,11 @@
 #include "dlgbuild.h"
 #include "dialog.h"
 
+/* field.c's, in an app that has it: weak, as in dialog.c, so an app
+   without field.c links dlg_do without it (db_pass's reference made it
+   strong, and the link failed: EContact's sync, 17 Nov 2026) */
+LFIELD *lf_of(OBJECT *tree, short obj) __attribute__((weak));
+
 /* a field's template and valid characters: every field's are the same
    characters, so one string of each serves all, from its end (3 KB less
    than a pair a field, EMail 2.12) */
@@ -193,6 +198,18 @@ short db_long(DLGB *b, short x, short y, char *text, short len, short cap, char 
 	f = &b->lf[b->nlf++];
 	obj = db_edit(b, x, y, f->view, len, 'X');
 	lf_init(f, b->tree, obj, text, cap, mask);
+	return obj;
+}
+
+short db_pass(DLGB *b, short x, short y, char *text, short len, short cap)
+{
+	short obj = db_long(b, x, y, text, len, cap, '*'), e;
+	LFIELD *f = lf_of(b->tree, obj);
+	void *img;
+	if (!f || !(img = lf_eye_image(f)))
+		return obj;		/* no long field or no eye to spare: the stars alone */
+	e = db_add(b, G_IMAGE, TOUCHEXIT, 0, (long)img, x + len + 1, y, 2, 1);
+	lf_eye_set(f, e);
 	return obj;
 }
 
