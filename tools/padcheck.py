@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""padcheck.py SHIPPED.map PROF.map [SHIPPED.elf PROF.elf [OBJ ...]]: fails
+"""(EPlay doesn't use common's tools/profpad.py, and that's on purpose: it
+pads after an object in the link's order, and EPlay links with
+--sort-section=name, which places sections by name, not by object. With
+-ffunction-sections and -fdata-sections each symbol here is a section of
+its own, so atari/padprof.S's section pads put every symbol in place, and
+this checks it by profpad.py's rules. The hub, 17 Nov 2026.)
+
+padcheck.py SHIPPED.map PROF.map [SHIPPED.elf PROF.elf [OBJ ...]]: fails
 where a section both maps hold sits at another place mod 256 (the 68030's
 caches) in PROF.map; with the ELFs, also where a symbol both hold does
 (unique names, the pads' own labels and the strings' .L labels left out,
