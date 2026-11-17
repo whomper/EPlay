@@ -91,10 +91,16 @@ endif
 # 256-byte caches; the map beside the
 # program to recheck them with, PADS=no to link without them for that. Not
 # the STE's 68000, which has no cache, nor the FireBee's ColdFire)
+# The profiling build (make prof, the speed rig's) has pads of its own,
+# atari/padprof.S, putting each of its sections at build/atari's place mod
+# 256, so that the rig times the layout that ships (the hub, 17 Nov 2026);
+# make padprof makes them, and make prof fails where they don't hold
+# (tools/padcheck.py)
 comma   := ,
+PADSRC  := $(if $(PROF),atari/padprof.S,atari/pad.S)
 ifeq ($(filter 68000 5475,$(CPU))$(PADS),)
 OBJS    += $(OBJDIR)/pad_s.o
-PADLD   := $(addprefix -Wl$(comma)-u$(comma),$(shell sed -n 's/^\(ep_pad_[0-9]*\):.*/\1/p' atari/pad.S))
+PADLD   := $(addprefix -Wl$(comma)-u$(comma),$(shell sed -n 's/^\(ep_pad_[0-9]*\):.*/\1/p' $(PADSRC)))
 endif
 ifeq ($(filter 68000 5475,$(CPU)),)
 PADLD   += -Wl,-Map,$(OBJDIR)/eplay.map
@@ -232,7 +238,7 @@ $(OBJDIR)/cpucheck_cf.o: common/atari/cpucheck_cf.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
-$(OBJDIR)/pad_s.o: atari/pad.S | $(OBJDIR)
+$(OBJDIR)/pad_s.o: $(PADSRC) | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 # (MP3 on the CPU: a 68080 told from a 68040, cmp3.c)
 $(OBJDIR)/cpu080_s.o: atari/cpu080.S | $(OBJDIR)
@@ -255,8 +261,16 @@ binary:
 ifdef PROF
 CFLAGS += -DAES_PROFILE=$(PROF)
 endif
-prof: $(B)/mp3tab.h $(B)/mp3_prog.h
+prof: $(B)/mp3tab.h $(B)/mp3_prog.h build/atari/eplay.elf
 	$(MAKE) OBJDIR=build/prof PROF=20 build/prof/eplay.prg
+	python3 tools/padcheck.py build/atari/eplay.map build/prof/eplay.map
+# atari/padprof.S made again from build/atari's map (after atari/pad.S changes)
+padprof: $(B)/mp3tab.h $(B)/mp3_prog.h build/atari/eplay.elf
+	rm -rf build/npprof
+	$(MAKE) OBJDIR=build/npprof PROF=20 PADS=no build/npprof/eplay.elf
+	python3 tools/mkpad.py build/atari/eplay.map build/npprof/eplay.map \
+	    "this commit's build/atari/eplay.map (the profiling build at the shipped layout)" > atari/padprof.S
+.PHONY: padprof
 # the STE's, for the speed rig on an STE (speed.py takes it there)
 profst: $(B)/mp3tab.h $(B)/mp3_prog.h
 	$(MAKE) --no-print-directory CPU=68000 OBJDIR=build/profst PROF=20 build/profst/eplay.elf
