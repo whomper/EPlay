@@ -747,9 +747,14 @@ int vp_step(int ms)
 	unsigned long t0;
 	if (!ld)
 		return 0;
-	/* (close to where it plays: a turn's longest a job's, 45 ms) */
-	if (avail - run.pos < 256L * 1024 && ms < 45)
-		ms = 45;
+	/* (close to where it plays: a turn's longest a job's, 45 ms; else a
+	   busy turn's none, the family's rule: no slice in the turn a message
+	   came in, the hub's 17 Nov 2026) */
+	if (avail - run.pos < 256L * 1024) {
+		if (ms < 45)
+			ms = 45;
+	} else if (ms < 0)
+		return 1;
 	t0 = tos_ms();
 	do
 		avail = vgm_load_more(ld, 8192);

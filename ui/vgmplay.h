@@ -20,7 +20,9 @@
 int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, int no, long *len_ms, char *err,
 	    int n, const char *name, const char *path);
 /* a big VGZ's unpacking as it plays, for up to ms: 0 none going, 1 going,
-   2 done now (vp_tags: its GD3), 3 damaged */
+   2 done now (vp_tags: its GD3), 3 damaged. ms < 0: a busy turn's (a
+   message, a key or a click in it): nothing unless the music is close to
+   what is unpacked */
 int vp_step(int ms);
 int vp_tags(TAGS *t);		/* its GD3 once unpacked: 1 */
 void vp_start(void);		/* the tick on, the chip sounding */

@@ -62,6 +62,7 @@ TAGS play_tags;
 long play_kbps, play_hz;
 const char *play_via = "";
 int play_tags_late;		/* a VGZ's GD3 come once it unpacked as it played */
+int play_busy_turn;
 
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP decodes it: an MP3 */
@@ -2473,7 +2474,7 @@ int play_step(int ms)
 	if (vgm) {
 		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once
 		   it is all there */
-		int st = vp_step(ms > 20 ? ms : 10);	/* (a turn's 10 ms at least: some 30 KB on a 32 MHz Falcon) */
+		int st = vp_step(play_busy_turn ? -1 : ms > 20 ? ms : 10);	/* (a turn's 10 ms at least: some 30 KB on a 32 MHz Falcon) */
 		if (st == 2) {
 			vp_tags(&play_tags);
 			play_tags_late = 1;	/* (main.c: the list's row again) */

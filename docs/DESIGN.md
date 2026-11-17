@@ -2083,6 +2083,12 @@ stock Falcon with the file:
     (`VGMRUN.avail`, `starved`) and a seek unpacking further as it goes (`more`). The list reads
     only such a file's header (its length); its GD3, at the end, once it has unpacked (the row
     read again). Hatari's 32 MHz Falcon, a 10.5 MB test file: 53 s before it played, now 0.7 s.
+    Since 1.46 (the hub, 17 Nov 2026: the family's rule, EContact's "no slice runs in the turn a
+    message came in") a turn with a message, a key or a click, or one that has already taken
+    30 ms (`play_busy_turn`), unpacks nothing unless the music is within 256 KB of what is
+    unpacked; a dialog held open unpacks in its idle (`feed_only`) as before. With 1.46's faster
+    `z_take`, the slice landed in the turn of an About box closed or Settings opened and those
+    came out 20 to 30 ms slower.
   - A seek runs the YM2149's, the YM2612's and the SN76489's writes and the waits inline
     (`seek_run`): every place checked the same as before.
   - The title and the artist scroll a character every 250 ms when wider than their place, 2 s at

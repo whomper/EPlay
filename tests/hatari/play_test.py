@@ -141,7 +141,9 @@ CASES["wavlow"] = ("LOW.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 5006
 # a real file, never in the repo (a game's music: EPLAY_RIG_VGM names it, a
 # VGM or VGZ kept outside), played for EPLAY_RIG_SECS (20) and quit: does
 # its place keep up with the clock, and the DSP's ring (EPlay 1.18 on Erez's
-# Falcon: 6.4 s of music in 15, the ring dry)
+# Falcon: 6.4 s of music in 15, the ring dry). EPLAY_RIG_DLG=s: Settings
+# held open s seconds 3 s in, then 20 keys (a big VGZ's unpacking kept
+# ahead with a dialog open and in busy turns: 1.46)
 CASES["vgmreal"] = ("REAL.VGZ", None, None, 0, (0, 0), 0)
 SQUARE = {"vgm", "vgz", "vgmsn", "vgmmd"}
 # the VGM cases of the DSP's chips (refused on a machine without one)
@@ -743,6 +745,22 @@ def run(work, case, spec):
                 cmd(fifo, "hatari-shortcut", "screenshot")
                 time.sleep(1)
                 secs -= 1
+            dlg = float(os.environ.get("EPLAY_RIG_DLG", "0"))
+            if dlg > 0:
+                # (Settings held open dlg s while a big VGZ unpacks as it
+                # plays, then keys, a turn each: the unpacking runs in the
+                # dialog's idle and in quiet turns alone, never in one with
+                # a message or a key (the hub, 17 Nov 2026), and keeps ahead)
+                time.sleep(3)
+                cmd(fifo, "hatari-event", "keydown", "0x1d")
+                cmd(fifo, "hatari-event", "keypress", "0x33")    # Control+comma: Settings
+                cmd(fifo, "hatari-event", "keyup", "0x1d")
+                time.sleep(dlg)
+                cmd(fifo, "hatari-event", "keypress", "0x61")    # Undo: Cancel
+                for _ in range(20):
+                    cmd(fifo, "hatari-event", "keypress", "0x50")    # Down: the list's next row
+                    time.sleep(0.25)
+                secs -= 3 + dlg + 5
             time.sleep(max(secs, 0))
             cmd(fifo, "hatari-event", "keydown", "0x1d")
             cmd(fifo, "hatari-event", "keypress", "0x10")

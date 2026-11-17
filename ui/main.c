@@ -2271,7 +2271,9 @@ static void turn(int nested)
 	   queue is filled the turn after; nor one after which another file
 	   opens: the next turn stops this one, so its frames would be wasted,
 	   and Next's rows would wait for them) */
+	play_busy_turn = (which & (MU_MESAG | MU_KEYBD | MU_BUTTON)) != 0 || tos_ms() - turn_t0 >= 30;
 	step(playing && !piece && !open_due && !next_due);
+	play_busy_turn = 0;
 	menu_update();			/* (greyed as things are now: MENUS 1.3) */
 	play_idle_give();		/* (the sound system for others while nothing plays) */
 }
