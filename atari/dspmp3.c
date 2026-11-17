@@ -483,6 +483,17 @@ void dspmp3_stall_test(void)
 	s_last -= 401;		/* (the rigs' STALLAT=: as if no frame for 2 s) */
 }
 
+/* the rigs' STALLAT=-1: the DSP taken as not answering as its stream
+   starts, no frame yet (Erez's DFB1X, 17 Nov 2026: "loading word 0 of 0
+   (host status $00)") */
+void dspmp3_start_fail_test(void)
+{
+	failed = 1;
+	f_what = 3;
+	f_at = f_of = 0;
+	f_hisr = 0;
+}
+
 int dspmp3_stream_stalled(unsigned long hz)
 {
 	if (!failed && hz - s_last > 400) {

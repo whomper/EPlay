@@ -165,8 +165,8 @@ void settings_load(void)
 		mp3cpu = v[0] == '1';
 	if (inf_get(inf, inf_n, "LOG", v, sizeof(v)))
 		log_on = v[0] == '1';
-	if (inf_get(inf, inf_n, "STALLAT", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
-		stallat = atol(v);
+	if (inf_get(inf, inf_n, "STALLAT", v, sizeof(v)) && ((v[0] >= '0' && v[0] <= '9') || v[0] == '-'))
+		stallat = atol(v);	/* (less than 0: the DSP failing as its stream starts, once) */
 	if (inf_get(inf, inf_n, "CRASHAT", v, sizeof(v)) && ((v[0] >= '0' && v[0] <= '9') || v[0] == '-'))
 		crashat = atol(v);	/* (less than 0: at interrupt time, play.c's crash_vbl) */
 	if (inf_get(inf, inf_n, "VGMCPU", v, sizeof(v)))

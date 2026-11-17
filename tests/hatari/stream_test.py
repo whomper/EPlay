@@ -17,6 +17,11 @@ Cases:
             again and the music goes on
   stall     (Erez, 14 Nov 2026) the DSP taken as stalled at 4 s (eplay.inf's
             STALLAT=, the rigs'): EPlay connects again and the music goes on
+  startfail (Erez, 17 Nov 2026: his DFB1X under load, through the Gateway:
+            "the DSP stopped answering loading word 0 of 0") the DSP taken
+            as not answering as the stream starts (eplay.inf's STALLAT=-1,
+            the rigs'): EPlay starts it again, connects again, and the
+            music plays
   pls       a .PLS station list behind a redirect (302): its first station
             plays
   rough     a station as real ones are on a bad day (Erez, 17 Nov 2026:
@@ -84,7 +89,7 @@ import machines  # noqa: E402
 from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "stall", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
+CASES = ["live", "drop", "stall", "startfail", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
          "find", "m3u"]
 METAINT = 8192
 KBPS = 128
@@ -486,9 +491,9 @@ def run(work, case, spec):
     # (the window at 1.15's first place: the picture cases look for the
     # art there, and 1.16 opens a first start at the desk's height)
     inf = os.path.join(hd, "eplay.inf")
-    if case == "stall":
+    if case in ("stall", "startfail"):
         with open(inf, "w", newline="") as fh:
-            fh.write("STALLAT=4000\r\n")
+            fh.write("STALLAT=%s\r\n" % ("4000" if case == "stall" else "-1"))
     old_inf = open(inf, newline="").read() if os.path.exists(inf) else ""
     # (EPLAY_RIG_INF: lines added, as play_test.py's: MP3CPU=1, a station
     # decoded on the CPU, task 83)
@@ -605,7 +610,7 @@ def run(work, case, spec):
         played = wait_line(log, said, 90)
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
-        time.sleep(14 if case in ("drop", "stall") else 18 if case == "rough" else 10)
+        time.sleep(14 if case in ("drop", "stall", "startfail") else 18 if case == "rough" else 10)
         if case == "logo":
             wait_line(log, lambda l: "album art:" in l or ("logo" in l and "after" in l), 120)
             time.sleep(1)
@@ -623,6 +628,10 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and len(titles) >= 2
         elif case == "drop":
             ok = ok and st.conns >= 2 and gaps <= 25   # (a reconnect may cost up to 0.5 s)
+        elif case == "startfail":
+            again = [l[4:] for l in text.split("\n") if l.startswith("LOG the DSP stalled: started again")]
+            note += "; " + (again[0] if again else "never started again")
+            ok = ok and bool(again) and st.conns >= 2 and "DSP stopped answering." not in text
         elif case == "stall":
             again = [l[4:] for l in text.split("\n") if l.startswith("LOG the DSP stalled: started again")]
             note += "; " + (again[0] if again else "never started again")

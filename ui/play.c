@@ -2520,6 +2520,14 @@ int play_step(int ms)
 			s_spf = 576;	/* (the DSP's packets, for play_ms) */
 		Supexec(start_stream);	/* loaded: the stream, fed by the tick */
 		s_started = 1;
+		if (settings_stallat() < 0) {
+			static int done;	/* (the rigs' STALLAT=-1: once) */
+			if (!done) {
+				done = 1;
+				dspmp3_start_fail_test();
+				t_failed = 1;
+			}
+		}
 	}
 	if (xs && s_started && !snd_playing() && (snd_written() >= out_rate / 8 || s_end))
 		snd_play();		/* (the DSP listening: its first frames not lost) */
@@ -2556,12 +2564,18 @@ int play_step(int ms)
 			     hisr, t_frames, play_ms(), snd_underruns);
 		elog("the sound: %s", play_keep_up());
 		elog("the stream: %s", play_stream_note());
-		if (what == 4) {
+		/* (and a DSP that stopped answering as its stream started, no
+		   frame yet: Erez's DFB1X under load, 17 Nov 2026, "loading word
+		   0 of 0 (host status $00)" through the Gateway: started again
+		   the same way, its program loaded afresh) */
+		if (what == 4 || (what == 3 && t_frames == 0)) {
 			char note[160];
 			static unsigned long last_again;
 			unsigned long now = tos_hz200();
-			dspmp3_stall_note(note, sizeof(note));
-			elog("the stream then: %s", note);
+			if (what == 4) {
+				dspmp3_stall_note(note, sizeof(note));
+				elog("the stream then: %s", note);
+			}
 			/* (Erez, 14 Nov 2026: a station through the FDI stalled twice
 			   in 5 minutes, the DSP waiting, its packets all taken) once in
 			   20 s, from where it was: a file at its place, a station
