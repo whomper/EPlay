@@ -320,6 +320,18 @@ def make_certs(w):
     return ca, ctx
 
 
+# (a check given up, with why: counted and printed as play_test.py's)
+SKIPS = []
+
+
+def hatari():
+    return subprocess.run(["hatari", "--version"], capture_output=True, text=True).stdout.split()[1].lstrip("v")
+
+
+def hatari_keeps_parity():
+    return tuple(int(x) for x in hatari().split(".")[:2]) <= (2, 4)
+
+
 def analyse(rec, skip_s, secs):
     """the tone, and the 20 ms blocks without sound once it began"""
     with wave.open(rec) as w:
@@ -331,6 +343,18 @@ def analyse(rec, skip_s, secs):
     rms = [math.sqrt(sum(v * v for v in left[i:i + blk]) / blk) for i in range(0, len(left) - blk, blk)]
     loud = [i for i, r in enumerate(rms) if r > 1000]
     if not loud:
+        # (MP3 on the CPU, EPLAY_RIG_INF's MP3CPU=1: its samples through
+        # the DMA's four tracks, the music in the first. Hatari 2.4 keeps
+        # the DMA's word count from its last stop (EPlay's clock
+        # measurement), so its DAC may hear another track: the left
+        # silent, the tone on the right. play_test.py excuses it the same
+        # way; skipped, counted, never "passed")
+        rr = [math.sqrt(sum(v * v for v in right[i:i + blk]) / blk) for i in range(0, len(right) - blk, blk)]
+        if ("MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "") and hatari_keeps_parity() and
+                any(r > 1000 for r in rr)):
+            SKIPS.append("the sound itself (Hatari %s's DMA started mid-frame, its DAC on another track)" % hatari())
+            return True, "SKIPPED: the sound itself (Hatari %s's DMA started mid-frame: the left silent, " \
+                "the right a tone)" % hatari(), 0
         return False, "no sound recorded", 0
     # (the music's start: 0.2 s of sound running, not a key's click)
     a = next((i for i in loud if all(r > 1000 for r in rms[i:i + 10])), loud[0])
@@ -658,7 +682,9 @@ def main():
             print("%-4s %s on %s: %s" % ("ok" if ok else "FAIL", case, desc, note))
             sys.stdout.flush()
             failed += not ok
-    print("all passed" if not failed else "%d failed" % failed)
+    for k in SKIPS:
+        print("SKIPPED:", k)
+    print(("all passed" if not SKIPS else "passed, %d skipped" % len(SKIPS)) if not failed else "%d failed" % failed)
     return 1 if failed else 0
 
 

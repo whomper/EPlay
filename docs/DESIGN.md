@@ -2637,6 +2637,17 @@ it in 1.44".
   and resampled once the output's rate is known (its step: before that the resampler can't move).
   The FireBee's edition takes stations too. stream_test.py's live and drop pass on the 68060 with
   its FPU and without one (`EPLAY_RIG_INF=MP3CPU=1`).
+- **What the rigs can't show on Hatari's 68060.** Gapless MP3 without an FPU (play060.py's
+  gaplessmp3 on Falcon-060lc): libmad takes 91 % of Hatari's 68060 at 32 MHz (its fastest) on a
+  44.1 kHz file, the queue's lead stays near 20 ms, and the next file can't be joined on in time:
+  it follows after a gap. With the FPU (70 %) the case passes. A real 68060 runs at 66 MHz and up.
+  And a station decoded on the CPU often records as the left silent and the left's tone on the
+  right: Hatari 2.4 starts the DMA where its last stop left it (EPlay's clock measurement), one word
+  on; a Falcon starts at the first. stream_test.py now counts it SKIPPED, as play_test.py does,
+  where MP3CPU=1 and the tone is on the right.
+- **The start's log line on MP3 on the CPU** cost a stock Falcon's start 30 ms (Falcon-4:16, a
+  CD-quality WAV, 635 with it, 605 without, pads remade each time): written only where `_CPU` says
+  40 or more.
 - **The data pad (hub, AERA-Atari e472722).** `tools/mkpad.py` pads the constants, the data and the
   BSS as it pads the code, each section at its base's place mod 256, the 68030's data cache's; the
   base now 1.42's map (its code at 1.41's places, so the code's pads are as they were). 1.43's
