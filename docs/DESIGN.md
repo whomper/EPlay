@@ -2676,3 +2676,37 @@ it in 1.44".
   start +100 ms; 332 kept NVDI within a tick of 1.43 and the WAV start at 1.43's 635. The hub:
   Erez's configuration decides; 1.44 ships 332 (Erez, 17 Nov 2026: "go ahead with 332"). The 610
   waits for a layout that suits both.
+
+## 1.46: the volume, the log kept open, a DSP that fails at a station's start (17 Nov 2026)
+
+- **The volume, logarithmic, 24 steps** (Erez, 17 Nov 2026: "it should be logarithmic and not
+  linear. The lower volume is not low enough just before full off"; his choice "24 steps, fine at
+  top"). `VOL_MAX` is 24. `play.c`'s `vol_att[]` gives each step's attenuation in 1.5 dB units:
+  1.5 dB a step to 18 dB, 3 dB to 39, 6 dB to 60, so step 1 is 60 dB down (it was 22.5 dB with 16
+  linear steps). `src/attq15.h`'s `att_q15()` turns it into a Q15 gain: the old 16 values, then a
+  halving each 4 steps. The Falcon's codec takes 22.5 dB at most; the rest goes on the samples where
+  EPlay touches them (`over`). The STE's LMC1992 takes the whole range. The chips' music (VGM) takes
+  it through `att_q15()` on the DSP and the CPU, and the Falcon's YM2149 past 15 through its own
+  attenuation. EPLAY.INF writes `VOLUME=n/24`; an old `VOLUME=n` (0 to 16) is taken to the step with
+  the nearest level. + and - move one step.
+- **The log kept open** (common b51644b, the hub's merge of EPlay's patch; Erez: "if other AERA apps
+  behave the same … they need to change accordingly as well"). Opening and closing EPLAY.LOG for each
+  line took some 143 ms on a DFB1's IDE disk; kept open, 1.4 ms. Common's conn.c now keeps the file
+  open and closes it after 1 s without a line (`conn_log_idle()`, from gem.c's event calls, never in
+  a TLS handshake), at once before a connection, at a " !! " line, at a flush, at the quit, and when
+  the log is switched off or renamed. A crash or a freeze loses at most the last second.
+- **A DSP that fails as a station starts** (Erez's log through the Gateway: "the DSP stopped
+  answering loading word 0 of 0"). A failure with `what == 3` and no frame sent yet takes the same
+  once-in-20-s restart as a stall mid-play (`what == 4`): the DSP's program loaded again, the station
+  connected again. Rig: `STALLAT=-1` (`dspmp3_start_fail_test()`), `stream_test.py startfail`.
+- **A station's refill before drawing** (the hub, 17 Nov 2026). `play_net_low()` is true while a
+  station's DSP MP3 queue holds less than 2 s; main.c's turn then reads even where it drew, with
+  20 ms at least. Erez's slow DFB1X session starved at 14.3 KB/s. `stream_test.py rough` (a 302, the
+  head 1.5 s late, jitter, a 1.5 s stall at 8 s, a 40 s tone) passes on 1.41, 1.45 and 1.46: the
+  stutter he heard came from that session, not from a change between those releases.
+- **Busy turns** (the hub's rule): a turn with a message, a key or a click, or one that has used
+  30 ms, sets `play_busy_turn`, and a big VGZ then unpacks only within 64 KB of the playhead. The
+  least margin is logged.
+- **Thing on the FireBee**: `av_init("EPLAY|EPLAYST|EPLAYFB")`, so Thing's `appl_find` finds
+  EPLAYFB at the first drop. Common's av.c takes the program's own name too (a13e4d8).
+- **Common synced to b51644b.**
