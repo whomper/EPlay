@@ -1,0 +1,244 @@
+From 3f8b9a4fd92e2864ade9fccf68bca14ccc57a03b Mon Sep 17 00:00:00 2001
+From: AERA | Erez Yaary <yaary@me.com>
+Date: Tue, 17 Nov 2026 13:36:06 +0000
+Subject: [PATCH] av.c: register under the name the AES knows, or announce no
+ windows
+
+av_init took the first of the names it was given when none was the one
+the AES knows us by (a renamed PRG, or an edition missing from the list),
+and announced windows under it. Thing, at a drop on an announced window,
+appl_find's the name AV_PROTOKOLL gave (its avserver.c, avp_check) and
+takes a name it can't find for a program gone without AV_EXIT: "The
+application EPLAY was closed and did not notify Thing of this with
+AV_EXIT!" (EPlay's FireBee edition, EPLAYFB.PRG, registered as EPLAY: a
+tester, 17 Nov 2026). Now, renamed, the name the AES lists for our id
+(appl_search, where appl_getinfo(4) says the AES has it, as twin.c);
+where it can't say, av_window announces nothing (drops then come by the
+AES's drag and drop).
+
+tests/av: an AES that lists its programs and one that can't, and a
+stand-in Thing that appl_find's the registered name at a drop; 65
+checks (the old av.c fails 5 of them).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SZeNoDozTmbWt4s2sFN9eL
+---
+ common/tests/av/stub/gem.h |  3 ++
+ common/tests/av/test_av.c  | 70 +++++++++++++++++++++++++++++++++++++-
+ common/ui/av.c             | 43 +++++++++++++++++++++--
+ common/ui/av.h             |  4 ++-
+ 4 files changed, 115 insertions(+), 5 deletions(-)
+
+diff --git a/common/tests/av/stub/gem.h b/common/tests/av/stub/gem.h
+index abbf662..ca6c426 100644
+--- a/common/tests/av/stub/gem.h
++++ b/common/tests/av/stub/gem.h
+@@ -2,3 +2,6 @@
+ short appl_id(void);
+ short appl_find(const char *name);
+ short appl_write(short id, short len, const void *buf);
++short aes_version(void);
++short appl_getinfo(short type, short *o1, short *o2, short *o3, short *o4);
++short appl_search(short mode, char *name, short *type, short *id);
+diff --git a/common/tests/av/test_av.c b/common/tests/av/test_av.c
+index 1398621..d96a310 100644
+--- a/common/tests/av/test_av.c
++++ b/common/tests/av/test_av.c
+@@ -17,6 +17,7 @@ static char environment[200];
+ static short sent[8], sent_to = -1, writes;
+ static const char *running[] = { 0, "EMAIL   ", "THING   ", 0 };	/* by id */
+ static int failed, checks;
++static const char *ptr(short hi, short lo);
+ 
+ long get_cookie(long id) { (void)id; return 0; }		/* plain TOS */
+ static unsigned long now_ms = 1000;
+@@ -33,8 +34,51 @@ short appl_find(const char *name)
+ 	return -1;
+ }
+ 
++/* an AES 4.0 that lists its programs (appl_search), or one that can't */
++static int aes4;
++short aes_version(void) { return aes4 ? 0x0410 : 0x0140; }
++short appl_getinfo(short type, short *o1, short *o2, short *o3, short *o4)
++{
++	if (!aes4)
++		return 0;
++	*o1 = *o2 = *o4 = 0;
++	*o3 = type == 4;
++	return 1;
++}
++short appl_search(short mode, char *name, short *type, short *id)
++{
++	static short at;
++	if (mode == 0)
++		at = 0;
++	for (; at < 4; at++)
++		if (running[at]) {
++			strcpy(name, running[at]);
++			*type = 2;
++			*id = at++;
++			return 1;
++		}
++	return 0;
++}
++
++/* a stand-in Thing: at a drop on an announced window it appl_find's the
++   name the AV_PROTOKOLL gave (its avserver.c, avp_check), and takes a
++   name it can't find for a program gone without AV_EXIT */
++static char thing_name[9];
++static short thing_windows;
++static int thing_drop_ok(void)
++{
++	return thing_windows == 0 || appl_find(thing_name) == appl_id();
++}
++
+ short appl_write(short id, short len, const void *buf)
+ {
++	const short *m = buf;
++	if (m[0] == 0x4700)
++		memcpy(thing_name, ptr(m[6], m[7]), 9);
++	if (m[0] == 0x4724)
++		thing_windows++;
++	if (m[0] == 0x4736)
++		thing_windows = 0;
+ 	memcpy(sent, buf, len);
+ 	sent_to = id;
+ 	writes++;
+@@ -162,11 +206,35 @@ int main(void)
+ 	av_init("ECAL|ECALST");
+ 	check(!strcmp(ptr(sent[6], sent[7]), "ECAL    "), "short names padded");
+ 	av_exit();
++	/* renamed: the name the AES lists for our id; where it can't list
++	   them, the first, and no window announced (Thing's alert at a drop:
++	   EPlay's FireBee edition, 17 Nov 2026) */
+ 	running[1] = "RENAMED ";
++	aes4 = 1;
++	av_init("EFTP|EFTPST");
++	check(!strcmp(ptr(sent[6], sent[7]), "RENAMED "), "renamed, an AES that lists: the name it lists for our id");
++	writes = 0;
++	av_window(5, 1);
++	check(writes == 1 && sent[0] == 0x4724 && sent[3] == 5, "  its window announced (AV_ACCWINDOPEN)");
++	check(thing_drop_ok(), "  a stand-in Thing finds it by that name at a drop");
++	av_exit();
++	aes4 = 0;
+ 	av_init("EFTP|EFTPST");
+-	check(!strcmp(ptr(sent[6], sent[7]), "EFTP    "), "renamed to something else: the first name");
++	check(!strcmp(ptr(sent[6], sent[7]), "EFTP    "), "renamed, an AES that can't list: the first name");
++	writes = 0;
++	av_window(5, 1);
++	check(writes == 0, "  and no window announced");
++	check(thing_drop_ok(), "  so the stand-in Thing never looks it up");
++	av_window(5, 0);
++	check(writes == 0, "  nor its closing");
+ 	av_exit();
+ 	running[1] = "EMAIL   ";
++	av_init("EMAIL|EMAILST");
++	writes = 0;
++	av_window(5, 1);
++	check(writes == 1 && thing_drop_ok(), "a name it was given: the window announced, Thing finds it");
++	av_window(5, 0);
++	av_exit();
+ 
+ 	/* started before the server: told at the first VA_START */
+ 	running[2] = 0;
+diff --git a/common/ui/av.c b/common/ui/av.c
+index 71c68b1..809db31 100644
+--- a/common/ui/av.c
++++ b/common/ui/av.c
+@@ -29,6 +29,7 @@ void (*av_twin_here)(short id);
+ static char got[2048];			/* the last VA_START's string, ours */
+ static short server = -1;		/* the AV server's id, once told */
+ static int registered;
++static int named;			/* name_buf is the name the AES knows us by */
+ 
+ /* Memory another program reads, kept while we run. An accessory under
+    plain TOS has no memory of its own after the start: what Malloc or
+@@ -142,6 +143,32 @@ static void tell(void)
+ 	registered = 1;
+ }
+ 
++/* our own name as the AES lists it (appl_search: AES 4.0, MagiC, XaAES;
++   asked only where appl_getinfo says so, as twin.c: EmuTOS's hangs),
++   blank-padded into n; 0 where the AES can't say */
++static int own_name(char *n)
++{
++	short o1 = 0, o2 = 0, o3 = 0, o4 = 0, type, id, mode = 0, me = appl_id(), i;
++	char got[10];
++	if (!((aes_version() >= 0x0400 || get_cookie(0x3F414749L) || get_cookie(0x4D616758L)) &&	/* ?AGI, MagX */
++	      appl_getinfo(4, &o1, &o2, &o3, &o4) && o3 == 1))
++		return 0;
++	memset(got, 0, sizeof(got));
++	while (appl_search(mode, got, &type, &id)) {
++		mode = 1;
++		if (id == me) {
++			for (i = 0; i < 8 && got[i]; i++)
++				n[i] = got[i] >= 'a' && got[i] <= 'z' ? got[i] - 32 : got[i];
++			while (i < 8)
++				n[i++] = ' ';
++			n[8] = 0;
++			return appl_find(n) == me;
++		}
++		memset(got, 0, sizeof(got));
++	}
++	return 0;
++}
++
+ void av_init(const char *names)
+ {
+ 	const char *p = names;
+@@ -149,16 +176,26 @@ void av_init(const char *names)
+ 	alloc();
+ 	if (registered)
+ 		return;
+-	/* the one the AES knows us by (the file may have been either);
+-	   else the first */
++	/* the one the AES knows us by (the file may have been either); else,
++	   renamed, the name the AES lists for our id; else the first, and no
++	   window is announced: a desktop finds us by this name (Thing, at a
++	   drop on an announced window, appl_find's it, and takes a name it
++	   can't find for a program gone without AV_EXIT: an alert. EPlay's
++	   FireBee edition, 17 Nov 2026) */
+ 	next_name(names, name_buf);
++	named = 0;
+ 	while (*p) {
+ 		p = next_name(p, n);
+ 		if (appl_find(n) == appl_id()) {
+ 			memcpy(name_buf, n, 9);
++			named = 1;
+ 			break;
+ 		}
+ 	}
++	if (!named && own_name(n)) {
++		memcpy(name_buf, n, 9);
++		named = 1;
++	}
+ 	tell();
+ }
+ 
+@@ -172,7 +209,7 @@ void av_exit(void)
+ 
+ void av_window(short h, int open)
+ {
+-	if (registered && h > 0)
++	if (registered && named && h > 0)
+ 		av_post(server, open ? AV_ACCWINDOPEN : AV_ACCWINDCLOSED, h, 0);
+ }
+ 
+diff --git a/common/ui/av.h b/common/ui/av.h
+index 27ab411..f55541d 100644
+--- a/common/ui/av.h
++++ b/common/ui/av.h
+@@ -30,7 +30,9 @@
+ enum { AV_NONE, AV_START, AV_DONE, AV_PEOPLE };
+ 
+ /* our names as the AES may know us, by the file we were started as:
+-   "EWEB|EWEBST" (the one appl_find gives our id is used) */
++   "EWEB|EWEBST" (the one appl_find gives our id is used; renamed, the
++   name the AES lists for our id, where it lists them; else the first,
++   and av_window announces nothing) */
+ void av_init(const char *names);
+ void av_exit(void);
+ void av_window(short h, int open);
+-- 
+2.43.0
+
