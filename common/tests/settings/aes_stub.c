@@ -517,6 +517,16 @@ short evnt_multi_(short flags, short clicks, short mask, short state, unsigned l
 	memset(ev, 0, sizeof(*ev));
 	if (refs_hook)
 		refs_hook();
+	if ((flags & MU_TIMER) && (flags & MU_BUTTON) && timer == 0) {
+		timers++;			/* a look between turns of a drawing (settings.c's turn) */
+		if (script->kind == S_TURNTAB) {
+			ev->which = MU_BUTTON;
+			ev->breturn = 1;
+			click_at(stub_tree, ref_tab[script->a], &ev->mx, &ev->my);
+			script++;
+			return ev->which;
+		}
+	}
 	if (flags & MU_TIMER) {
 		if (pre_key) {
 			ev->which = MU_KEYBD;

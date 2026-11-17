@@ -65,6 +65,14 @@ struct SETTINGS {
 };
 
 void (*settings_drawn)(OBJECT *tree, short band);
+void (*settings_changed)(SETTINGS *s, short obj);
+
+/* the app told what changed, while the dialog runs (a rig's events, EHypView's page lines) */
+static void note(SETTINGS *s, short obj)
+{
+	if (settings_changed && s->live)
+		settings_changed(s, obj);
+}
 void (*settings_uncover)(short x, short y, short w, short h);
 
 /* ---------------- what a page's builder calls ---------------- */
@@ -329,6 +337,24 @@ short set_page_now(const SETTINGS *s)
 
 /* page p (from 1): its objects shown, the others hidden (and not editable, so Tab skips them), the
    chosen name in a black bar, white words (never SELECTED: the 3D look draws that pressed in, 5.6) */
+/* between two turns of a page's drawing: an event call, and a look at the mouse. A press there (a quick second click
+   on a name, a control) is kept for the next dlg_do, and the rest of the page is drawn at once: TOS 1.04 drops a
+   press made while we draw (EHypView's gui-test on ST-1: the page switch is 300-400 ms there). Returns 1 once a
+   press is kept: no more turns */
+static int turn(void)
+{
+	short m[8];
+	AEVENT e;
+	if (dlg_press_waiting())
+		return 1;
+	evnt_multi_(MU_BUTTON | MU_TIMER, 1, 1, 1, 0, m, &e);
+	if (e.which & MU_BUTTON) {
+		dlg_press_later(e.mx, e.my, e.kstate);
+		return 1;
+	}
+	return 0;
+}
+
 static void show_page(SETTINGS *s, short p, int draw)
 {
 	OBJECT *tree = s->b.tree;
@@ -354,21 +380,23 @@ static void show_page(SETTINGS *s, short p, int draw)
 		/* the two names that changed (the bar's old place and new) and the page's area, each object by itself
 		   (dlg_draw_one, dlg_draw_range): the AES's walk through a hundred objects cost an 8 MHz ST 35 ms a name
 		   and most of the page's. The other names are as they were */
+		int hurry = 0;			/* a press came: the rest at once, no more turns */
 		if (old >= 1 && old <= s->npages && old != p) {
 			dlg_draw_one(tree, s->tab[old]);
-			evnt_timer_(0);
+			hurry = turn();
 		}
 		dlg_draw_one(tree, s->tab[p]);
-		evnt_timer_(0);
+		hurry = hurry || turn();
 		/* the page in turns of 20 ms, an event call between, so no stretch is long */
 		for (n = s->pfirst[p], ground = 1; n < s->pfirst[p + 1]; ground = 0) {
-			n = dlg_draw_range(tree, s->pages_obj, n, s->pfirst[p + 1], ground, SET_TURN_MS);
+			n = dlg_draw_range(tree, s->pages_obj, n, s->pfirst[p + 1], ground, hurry ? 0 : SET_TURN_MS);
 			if (n < s->pfirst[p + 1])
-				evnt_timer_(0);
+				hurry = hurry || turn();
 		}
 		/* the area's 3 pixels below reach the frames of Cancel and OK (the ground filled over them): drawn again,
 		   what shows of them in that piece, a turn of their own */
-		evnt_timer_(0);
+		if (!hurry)
+			turn();
 		dlg_draw_range(tree, s->pages_obj, s->cancel, (short)(s->ok + 1), 0, 0);
 	}
 }
@@ -606,14 +634,17 @@ static void focus_act(SETTINGS *s)
 		evnt_timer_(0);
 		choices_refresh(s);
 		ring_draw(s);
+		note(s, s->focus);
 	} else if (w && w->kind == W_POPUP) {
 		pop_run(s, w);
 		choices_refresh(s);
 		ring_draw(s);
+		note(s, w->obj);
 	} else if (w && (w->kind == W_ACT || w->kind == W_VALUE)) {
 		act_run(s, w);
 		choices_refresh(s);
 		ring_draw(s);
+		note(s, w->obj);
 	}
 }
 
@@ -648,6 +679,7 @@ static void page_key(SETTINGS *s, short d)
 	show_page(s, np, 1);
 	s->focus = -1;
 	ring_draw(s);
+	note(s, s->tab[np]);
 }
 
 /* a radio button chosen (by a click or an arrow key): the variable, the buttons, the ring */
@@ -668,6 +700,7 @@ static void radio_hit(SETTINGS *s, SET_W *p, short c, int by_key)
 		evnt_timer_(0);
 		dlg_draw_range(s->b.tree, ob, ob, (short)(ob + 1), 1, 0);	/* the old one, and the ring round it gone */
 		ring_draw(s);
+		note(s, (short)(p->obj + c));
 	}
 }
 
@@ -931,6 +964,12 @@ int settings_dialog(const SET_DEF *d)
 				s->want = 0;
 				r = dlg_do(s->b.tree, start, s->cancel) & 0x7fff;
 			}
+#ifdef DLG_CLICK
+			/* a tab's or a control's press comes back while the button is down: its release first, then
+			   the drawing, or an ST reads a quick second press as this one's release (dialog.h, dlg_touch_up;
+			   EHypView's let_go_over, gui-test's 70/150 ms clicks) */
+			dlg_touch_up();
+#endif
 			k = db_tick_hit(&s->b, r);
 			if (k >= 0) {
 				mouse_focus(s, 0);
@@ -938,6 +977,7 @@ int settings_dialog(const SET_DEF *d)
 					db_tick_flip(&s->b, k);
 					evnt_timer_(120);
 					choices_refresh(s);
+					note(s, r);
 				}
 				focus_default(s);
 				continue;
@@ -947,8 +987,10 @@ int settings_dialog(const SET_DEF *d)
 					break;
 			if (k <= s->npages) {
 				mouse_focus(s, 1);
-				if (k != s->cur)
+				if (k != s->cur) {
 					show_page(s, k, 1);
+					note(s, r);
+				}
 				focus_default(s);
 				continue;
 			}
@@ -963,6 +1005,7 @@ int settings_dialog(const SET_DEF *d)
 					act_run(s, p);
 				choices_refresh(s);
 				focus_default(s);
+				note(s, r);
 				continue;
 			}
 			if (r == s->ok) {
