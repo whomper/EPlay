@@ -374,6 +374,7 @@ static void chip_name(char *s, int n, const char *what, unsigned long clock)
 /* a big VGZ played as it unpacks: its unpacking (vgmfile.c's), on a handle
    of its own (play.c's closes at Pause); the bytes there so far */
 static VGMLOAD *ld;
+static long margin_least = -1;	/* (bytes unpacked ahead of the music, the least this play: the log's) */
 static FH ld_f = { -1 };
 static long avail;
 #define VGM_STREAM (256L * 1024)	/* a VGZ (packed) past this: played as it unpacks */
@@ -435,6 +436,7 @@ int vp_open(int fh, long size, long ms, TAGS *t, char *info, int ni, char *out, 
 				why = "can't be read";
 				ld_f.fh = (int)Fopen(path, 0);
 				ld = ld_f.fh >= 0 ? vgm_load_open(rd, &ld_f, size, &mem, &mem_n, take, give, &why) : 0;
+				margin_least = -1;
 				if (!ld) {
 					if (ld_f.fh >= 0)
 						Fclose((short)ld_f.fh);
@@ -696,8 +698,9 @@ void vp_halt(void)
 		pause_run = run;	/* (Play after Pause goes on from here: vp_open) */
 		pause_ok = !ended;
 		if (ld || run.waits)
-			elog("VGM: %ld KB unpacked of %ld so far; the music waited for it %ld times", ld ? avail / 1024 :
-			     mem_n / 1024, mem_n / 1024, run.waits);
+			elog("VGM: %ld KB unpacked of %ld so far; the music waited for it %ld times, %ld KB behind it at "
+			     "the least", ld ? avail / 1024 : mem_n / 1024, mem_n / 1024, run.waits,
+			     margin_least < 0 ? 0 : margin_least / 1024);
 		elog("VGM: the tick %ld times, %ld of them left out (the one before still ran), %ld of those not made up "
 		     "(the music slowed); %ld past its period (%ld us); %ld us on average, the longest %ld us",
 		     feed_ticks, feed_missed, t_lost, t_over, period_us, t_n ? t_all / t_n : 0, t_max);
@@ -747,14 +750,19 @@ int vp_step(int ms)
 	unsigned long t0;
 	if (!ld)
 		return 0;
-	/* (close to where it plays: a turn's longest a job's, 45 ms; else a
-	   busy turn's none, the family's rule: no slice in the turn a message
-	   came in, the hub's 17 Nov 2026) */
-	if (avail - run.pos < 256L * 1024) {
-		if (ms < 45)
+	/* (close to where it plays: a turn's longest a job's, 45 ms. A busy
+	   turn's none, the family's rule: no slice in the turn a message came
+	   in (the hub's, 17 Nov 2026), unless the music is within 64 KB of
+	   it, seconds of a Mega Drive file's) */
+	{
+		long m = avail - run.pos;
+		if (margin_least < 0 || m < margin_least)
+			margin_least = m;
+		if (ms < 0 && m >= 64L * 1024)
+			return 1;
+		if (m < 256L * 1024 && ms < 45)
 			ms = 45;
-	} else if (ms < 0)
-		return 1;
+	}
 	t0 = tos_ms();
 	do
 		avail = vgm_load_more(ld, 8192);
@@ -764,7 +772,8 @@ int vp_step(int ms)
 		ld_end();
 		run.avail = 0;
 		run.more = 0;
-		elog("VGM: unpacked%s (%ld KB)", st > 0 ? "" : ", damaged at its end", avail / 1024);
+		elog("VGM: unpacked%s (%ld KB); the music %ld KB behind it at the least", st > 0 ? "" : ", damaged at its end",
+		     avail / 1024, margin_least / 1024);
 		return st > 0 ? 2 : 3;
 	}
 	run.avail = avail;

@@ -2085,10 +2085,10 @@ stock Falcon with the file:
     read again). Hatari's 32 MHz Falcon, a 10.5 MB test file: 53 s before it played, now 0.7 s.
     Since 1.46 (the hub, 17 Nov 2026: the family's rule, EContact's "no slice runs in the turn a
     message came in") a turn with a message, a key or a click, or one that has already taken
-    30 ms (`play_busy_turn`), unpacks nothing unless the music is within 256 KB of what is
-    unpacked; a dialog held open unpacks in its idle (`feed_only`) as before. With 1.46's faster
-    `z_take`, the slice landed in the turn of an About box closed or Settings opened and those
-    came out 20 to 30 ms slower.
+    30 ms (`play_busy_turn`), unpacks nothing unless the music is within 64 KB of what is
+    unpacked (a quiet turn's slice grows to 45 ms within 256 KB, as before); a dialog held open
+    unpacks in its idle (`feed_only`) as before. The log gives the least the music was behind
+    the unpacked end ("KB behind it at the least").
   - A seek runs the YM2149's, the YM2612's and the SN76489's writes and the waits inline
     (`seek_run`): every place checked the same as before.
   - The title and the artist scroll a character every 250 ms when wider than their place, 2 s at
