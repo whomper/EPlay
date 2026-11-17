@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""mkpad.py BASE.map NEW.map [BASE-NAME] > atari/pad.S
+"""mkpad.py [--rodata MAP] [--data MAP] [--bss MAP] BASE.map NEW.map [BASE-NAME] > atari/pad.S
 
 The 68030's build keeps each function, table and variable at the place a
 release had it, modulo the 68030's 256-byte caches: a pad after each
@@ -28,6 +28,9 @@ no pad goes between them (the pad goes after the last of them, which this
 takes into account): name them apart. A plain ".data" or ".bss" (an
 assembler file's) takes ".data.!": common/atari/link.ld's patterns are
 ".data" and ".data.*".
+
+--rodata, --data, --bss: that kind's sections at another map's places (the
+constants, in the text, are .rodata's), the rest at BASE.map's.
 
 Recheck at every change: link NEW.map without pads (make PADS=no), then
 make this file again against the same BASE.map, and see each section at
@@ -67,13 +70,25 @@ def load(path):
     return [o for o in out if o[2] > 0 and o[3] != "pad_s.o"]
 
 
-def pads(base, new):
-    """(the section a pad follows, its bytes), in the link's order"""
-    old = {(s, o): ad for s, ad, sz, o in base}
+def kind(s):
+    for k in (".rodata", ".data", ".bss"):
+        if s == k or s.startswith(k + "."):
+            return k[1:]
+    return "text"
+
+
+def pads(base, new, other=None):
+    """(the section a pad follows, its bytes), in the link's order; other:
+    {kind: that kind's base map's sections}"""
+    olds = {"text": {(s, o): ad for s, ad, sz, o in base}}
+    for k in ("rodata", "data", "bss"):
+        src = (other or {}).get(k, base)
+        olds[k] = {(s, o): ad for s, ad, sz, o in src}
     out, moved, prev = [], 0, None
     for s, ad, sz, o in new:
         if ad == 0:
             continue
+        old = olds[kind(s)]
         # (no pad between sections of one name: it would sort after all)
         if (s, o) in old and prev and s != prev:
             d = (ad + moved - old[(s, o)]) % 256
@@ -96,11 +111,15 @@ def pad_section(after):
 
 
 def main():
-    if len(sys.argv) < 3:
+    args, other = sys.argv[1:], {}
+    while args and args[0] in ("--rodata", "--data", "--bss") and len(args) > 1:
+        other[args[0][2:]] = load(args[1])
+        args = args[2:]
+    if len(args) < 2:
         sys.exit(__doc__)
-    base, new = load(sys.argv[1]), load(sys.argv[2])
-    name = sys.argv[3] if len(sys.argv) > 3 else sys.argv[1]
-    p = pads(base, new)
+    base, new = load(args[0]), load(args[1])
+    name = args[2] if len(args) > 2 else args[0]
+    p = pads(base, new, other)
     print("| SPDX-License-Identifier: GPL-2.0-or-later")
     print("| Copyright (C) 2026 AERA | Erez Yaary")
     print("| pad.S - written by tools/mkpad.py against %s: do not edit." % name)
