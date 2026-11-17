@@ -13,7 +13,10 @@
 #include "ui.h"
 
 /* what a press is on */
-enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_POS, BH_VOL, BH_LIST };
+/* (BH_BACK10, BH_FWD10: 10 s back and forward, either side of Play/Pause;
+   Erez, 17 Nov 2026) */
+enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_BACK10, BH_FWD10, BH_POS, BH_VOL, BH_LIST };
+#define BAR_BTNS 7		/* BH_SHUFFLE .. BH_FWD10 */
 
 /* what is drawn again: the parts, or-ed */
 #define BP_TIME  1		/* the times and the position bar */

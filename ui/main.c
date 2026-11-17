@@ -1178,11 +1178,26 @@ static int list_keys(short kr)
    the key was one of them */
 #define SEEK_STEP 10000L
 static long seek_to = -1;		/* the position bar let go: where, for the next turn */
+/* 10 s back or forward: Left and Right, and the bar's 10 s buttons
+   (Erez, 17 Nov 2026) */
+static void skip_by(long ms)
+{
+	long len = play_len_ms(), at;
+	if (!play_is_open() || len <= 0 || play_is_net())
+		return;
+	at = (seek_to >= 0 ? seek_to : play_ms()) + ms;
+	if (at < 0)
+		at = 0;
+	if (at > len - 1)
+		at = len - 1;
+	seek_to = at;		/* (gone there the next turn, as the position bar's) */
+	redraw(0, BP_TIME);
+}
+
 static int music_keys(short kr, short ks)
 {
 	short scan = (kr >> 8) & 0xff;
 	int shift = key_shift(ks, kr);	/* (common's: a Shift held while EPlay was busy, from the key itself) */
-	long len, at;
 	switch (scan) {
 	case 0x62:			/* Help */
 		command(C_GUIDE);
@@ -1196,16 +1211,7 @@ static int music_keys(short kr, short ks)
 			command(scan == 0x4b ? C_PREV : C_NEXT);
 			return 1;
 		}
-		len = play_len_ms();
-		if (!play_is_open() || len <= 0)
-			return 1;
-		at = (seek_to >= 0 ? seek_to : play_ms()) + (scan == 0x4b ? -SEEK_STEP : SEEK_STEP);
-		if (at < 0)
-			at = 0;
-		if (at > len - 1)
-			at = len - 1;
-		seek_to = at;		/* (gone there the next turn, as the position bar's) */
-		redraw(0, BP_TIME);
+		skip_by(scan == 0x4b ? -SEEK_STEP : SEEK_STEP);
 		return 1;
 	}
 	return 0;
@@ -2139,6 +2145,12 @@ static int bar_tip(short x, short y, char *out, int size)
 	case BH_NEXT:
 		t = "Next file (Shift+Right)";
 		break;
+	case BH_BACK10:
+		t = "10 seconds back (Left)";
+		break;
+	case BH_FWD10:
+		t = "10 seconds forward (Right)";
+		break;
 	case BH_SHUFFLE:
 		t = "Shuffle";
 		break;
@@ -2265,6 +2277,9 @@ static void turn(int nested)
 			command(C_PREV);
 		else if (hit == BH_NEXT && order_has_next(&list_order, list_cur) && track(BH_NEXT, BP_NAV))
 			command(C_NEXT);
+		else if ((hit == BH_BACK10 || hit == BH_FWD10) && play_is_open() && play_len_ms() > 0 &&
+			 !play_is_net() && track(hit, BP_NAV))
+			skip_by(hit == BH_BACK10 ? -SEEK_STEP : SEEK_STEP);
 		else if (hit == BH_LIST)
 			list_press(ev.mx, ev.my, ev.kstate, 0);
 	}

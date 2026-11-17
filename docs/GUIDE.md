@@ -89,8 +89,9 @@ EPlay has one window. **The bar** across its top shows what plays: the album art
 DSP, then kept in `cache\`), the title and artist from its tags, its bit rate and rate, and where
 it plays: **FDI**, **DSP** or **DMA**.
 
-- **Play/Pause**, the symbol in the middle (in the accent colour), plays and pauses; the arrows
-  beside it go to the previous and next file.
+- **Play/Pause**, the symbol in the middle (in the accent colour), plays and pauses. The rings
+  with "10" either side of it go 10 seconds back and forward in the file (as Left and Right do),
+  and the arrows beyond them go to the previous and next file.
 - **The position bar:** click or drag on it to go to that place in the file.
 - **The volume** at the right: click or drag on it, or press + and -.
 - **Tips:** rest the pointer on a control for a moment and a tip says what it does and its key

@@ -105,7 +105,7 @@ void bar_colours_back(void)
 #define LIST_ROWS 6
 
 static GRECT w_all, w_bar, w_art, w_txt, w_ctl, w_pos, w_out, w_list;
-static GRECT b_btn[6];		/* by BH_SHUFFLE .. BH_REPEAT */
+static GRECT b_btn[BAR_BTNS];	/* by BH_SHUFFLE .. BH_FWD10 */
 static GRECT w_track, w_vol;
 static short bar_h, row_h, rad;
 
@@ -131,7 +131,7 @@ static void rect(GRECT *r, short x, short y, short w, short h)
 
 void bar_layout(const GRECT *work)
 {
-	short x, y, art, mid, bw, gap;
+	short x, y, art, mid, bw, gap, sw;
 	w_all = *work;
 	bar_h = 4 * ch + 4;
 	row_h = ch + 4;
@@ -144,8 +144,12 @@ void bar_layout(const GRECT *work)
 	/* the right: the output over the speaker and the volume */
 	rect(&w_out, work->x + work->w - 6 - 7 * cw, work->y, 7 * cw, bar_h);
 	rect(&w_vol, w_out.x + 18, work->y + bar_h - 6 - ch / 2 - 5, w_out.w - 18, 10);
-	/* the middle: Previous, Play/Pause, Next, the position under them
-	   (Shuffle and Repeat: the Play menu's) */
+	/* the middle: Previous, 10 s back, Play/Pause, 10 s forward, Next,
+	   the position under them (Shuffle and Repeat: the Play menu's). The
+	   10 s buttons either side of Play/Pause, Previous and Next a button
+	   further out (Erez, 17 Nov 2026: "a small circle with an arrow to the
+	   back and to the front with the number 10 inside it ... surrounding
+	   the play/pause button") */
 	x = w_txt.x + w_txt.w + 6;
 	rect(&w_ctl, x, work->y, w_out.x - 8 - x, bar_h);
 	rad = (ch * 13 + 8) / 16;		/* the round button's radius: 13 on VGA */
@@ -154,8 +158,11 @@ void bar_layout(const GRECT *work)
 	mid = w_ctl.x + w_ctl.w / 2;
 	y = work->y + 6;
 	rect(&b_btn[BH_PLAY - 1], mid - rad, y, 2 * rad, 2 * rad);
-	rect(&b_btn[BH_PREV - 1], mid - rad - gap - bw, y + rad - bw / 2, bw, bw);
-	rect(&b_btn[BH_NEXT - 1], mid + rad + gap, y + rad - bw / 2, bw, bw);
+	sw = ch >= 16 ? bw : bw + 4;	/* (the 10 s buttons: room for the "10" in a low resolution's flat pixels) */
+	rect(&b_btn[BH_BACK10 - 1], mid - rad - gap - sw, y + rad - bw / 2, sw, bw);
+	rect(&b_btn[BH_FWD10 - 1], mid + rad + gap, y + rad - bw / 2, sw, bw);
+	rect(&b_btn[BH_PREV - 1], mid - rad - 2 * gap - sw - bw, y + rad - bw / 2, bw, bw);
+	rect(&b_btn[BH_NEXT - 1], mid + rad + 2 * gap + sw, y + rad - bw / 2, bw, bw);
 	rect(&b_btn[BH_SHUFFLE - 1], 0, 0, 0, 0);
 	rect(&b_btn[BH_REPEAT - 1], 0, 0, 0, 0);
 	/* the times, 5 characters and a gap each side of the track */
@@ -213,7 +220,7 @@ int bar_hit(short x, short y)
 {
 	int i;
 	GRECT pos;
-	for (i = 0; i < 5; i++)
+	for (i = 0; i < BAR_BTNS; i++)
 		if (in(&b_btn[i], x, y))
 			return BH_SHUFFLE + i;
 	pos = w_track;
@@ -384,6 +391,63 @@ static void mask_tri(MASK *m, short w, short h, int dir)
 	}
 }
 
+/* the 10 s buttons' sign (Erez, 17 Nov 2026): a ring, open at the top,
+   its arrowhead there pointing back (dir -1) or forward (1), and "10"
+   inside it, w by h */
+static void mask_dot(MASK *m, short x, short y)
+{
+	if (x >= 0 && y >= 0 && x < m->w && y < m->h)
+		m->bits[y * m->wpl + (x >> 4)] |= 0x8000 >> (x & 15);
+}
+
+static void mask_skip(MASK *m, short w, short h, int dir)
+{
+	/* the figures: 1 and 0, 3 by 5, or 3 and 4 by 7 from 20 pixels high */
+	static const unsigned char f5[2][5] = { { 2, 6, 2, 2, 7 }, { 7, 5, 5, 5, 7 } };
+	static const unsigned char f7[2][7] = { { 2, 6, 2, 2, 2, 2, 7 }, { 6, 9, 9, 9, 9, 9, 6 } };
+	int big = h >= 20;
+	short th = big ? 2 : 1, ah = big ? 3 : 2, top = big ? ah - th / 2 : 1, rh, wi, hi;
+	short x, y, k, fx, fy, fw, fh = big ? 7 : 5, x0, y0;
+	long w2, rh2, wi2, hi2;
+	if (!mask_new(m, w, h))
+		return;
+	rh = h - top;			/* (the ring a little lower: the arrowhead's room above it) */
+	wi = w - 2 * th;
+	hi = rh - 2 * th;
+	w2 = (long)w * w;
+	rh2 = (long)rh * rh;
+	wi2 = (long)wi * wi;
+	hi2 = (long)hi * hi;
+	for (y = top; y < h; y++)
+		for (x = 0; x < w; x++) {
+			long dx = 2 * x - w + 1, dy = 2 * (y - top) - rh + 1;
+			if (dx * dx * rh2 + dy * dy * w2 > w2 * rh2 || dx * dx * hi2 + dy * dy * wi2 < wi2 * hi2)
+				continue;
+			/* the opening: from the top, some 50 degrees round away
+			   from the arrow's point */
+			if (dy < 0 && -dir * dx > 0 && -dir * dx * 5 < -dy * 6)
+				continue;
+			mask_dot(m, x, y);
+		}
+	/* the arrowhead at the top, its point back or forward */
+	x0 = (short)(w / 2 - (dir < 0 ? 1 : 0));
+	y0 = (short)(top + th / 2);
+	for (k = 0; k <= ah; k++)
+		for (y = (short)(y0 - (ah - k)); y <= y0 + (ah - k); y++)
+			mask_dot(m, (short)(x0 + dir * k), y);
+	/* "10" in the middle of the ring */
+	x0 = (short)((w - (big ? 8 : 7) + 1) / 2);
+	y0 = (short)(top + (rh - fh + 1) / 2);
+	for (k = 0; k < 2; k++) {
+		fw = big && k ? 4 : 3;
+		for (fy = 0; fy < fh; fy++)
+			for (fx = 0; fx < fw; fx++)
+				if ((big ? f7[k][fy] : f5[k][fy]) & (1 << (fw - 1 - fx)))
+					mask_dot(m, (short)(x0 + fx), (short)(y0 + fy));
+		x0 += fw + 1;
+	}
+}
+
 static void mask_draw(const MASK *m, short x, short y, short pen)
 {
 	GRECT r;
@@ -441,7 +505,7 @@ static short badge(int slot, short x, short y, short rh, const char *s, short pe
 }
 
 /* the shapes, made for the layout's sizes */
-static MASK k_art, k_hole, k_spot, k_ptri, k_prev, k_next, k_spk;
+static MASK k_art, k_hole, k_spot, k_ptri, k_prev, k_next, k_spk, k_back, k_fwd;
 
 static void make_masks(void)
 {
@@ -454,6 +518,8 @@ static void make_masks(void)
 	mask_tri(&k_prev, h * 3 / 4 + 1, h, -1);
 	mask_tri(&k_next, h * 3 / 4 + 1, h, 1);
 	mask_tri(&k_spk, 5, 13, -1);
+	mask_skip(&k_back, b_btn[BH_BACK10 - 1].w, b_btn[BH_BACK10 - 1].h, -1);
+	mask_skip(&k_fwd, b_btn[BH_FWD10 - 1].w, b_btn[BH_FWD10 - 1].h, 1);
 }
 
 static void fmt_time(char *out, int n, long ms)
@@ -647,7 +713,8 @@ static void draw_buttons(int parts)
 		/* Previous, Next: the list's, dim where there is none */
 		int i;
 		short pen;
-		for (i = 0; i < 5; i++) {
+		int can = play_is_open() && play_len_ms() > 0 && !play_is_net();
+		for (i = 0; i < BAR_BTNS; i++) {
 			GRECT *c = &b_btn[i];
 			short x = c->x + c->w / 2, y = c->y + c->h / 2, h = c->h / 2, ww = h * 3 / 4;
 			if (i == BH_PLAY - 1 || !c->w)
@@ -663,6 +730,13 @@ static void draw_buttons(int parts)
 				pen = bar_held == BH_NEXT ? p_acc : order_has_next(&list_order, list_cur) ? p_txt : p_dim;
 				mask_draw(&k_next, x - ww / 2, y - h / 2, pen);
 				box(x + ww / 2 + 1, y - h / 2, 2, h, pen, 0);
+				break;
+			case BH_BACK10:
+			case BH_FWD10:
+				/* 10 s back, forward: dim where the file can't go there
+				   (none, a station, no length) */
+				pen = bar_held == i + 1 ? p_acc : can ? p_txt : p_dim;
+				mask_draw(i + 1 == BH_BACK10 ? &k_back : &k_fwd, c->x, c->y, pen);
 				break;
 			case BH_SHUFFLE:
 				line(x - 6, y - 3, x - 3, y - 3, p_dim);

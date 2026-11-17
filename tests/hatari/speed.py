@@ -41,7 +41,11 @@ ABOUT = (60, 27)
 PLAY = PAUSE = (389, 150)
 POS_MID = (389, 185)		# the position bar's middle
 VOL_Q = (498, 185)		# a quarter of the volume bar: 6 of 24
-NEXT = (421, 150)
+# the 10 s buttons either side of Play/Pause, Previous and Next a button
+# further out (Erez, 17 Nov 2026)
+BACK10 = (359, 150)
+FWD10 = (419, 150)
+NEXT = (447, 150)
 ROW = [(300, 229 + 20 * i) for i in range(6)]	# the list's rows
 SECS = 120	# (long enough not to end before the last action, when the emulator runs fast)
 
@@ -298,6 +302,12 @@ def session(work, spec, kind):
         r.act("Position bar: pressed at its middle", speed.KEY, lambda: r.press(*POS_MID))
         r.act("Position bar: let go (goes there)", speed.KEY, r.let_go)
         r.act("%s playing from there, 3 s" % what, speed.KEY, lambda: time.sleep(3))
+        # the 10 s buttons: forward, then back (the music goes there the
+        # next turn, as from the position bar)
+        r.act("10 s forward (clicked)", speed.KEY, lambda: r.click(*FWD10))
+        r.act("%s playing, 2 s" % what, speed.KEY, lambda: time.sleep(2))
+        r.act("10 s back (clicked)", speed.KEY, lambda: r.click(*BACK10))
+        r.act("%s playing, 2 s more" % what, speed.KEY, lambda: time.sleep(2))
         # the volume: pressed at a quarter, then + (a step up)
         r.act("Volume: pressed at a quarter", speed.KEY, lambda: r.press(*VOL_Q))
         r.act("Volume: let go", speed.KEY, r.let_go)
@@ -315,8 +325,19 @@ def session(work, spec, kind):
             print("ok    the volume: %d at a quarter of the bar, %d after +" % (vols[0], vols[1]))
         if not getattr(r, "held_ok", True):
             rc = 1
-        went = [l for l in r.console().split("\n") if l.startswith("EPLAY went to ")]
-        ms = int(went[-1].split()[3]) if went else -1
+        went = [int(l.split()[3]) for l in r.console().split("\n") if l.startswith("EPLAY went to ")]
+        ms = went[0] if went else -1
+        if kind != "vgm":
+            # (each 10 s from where the music then was: forward 10 s plus
+            # what played since the position bar's, back 10 s less what
+            # played since; the rig's actions take a few seconds each)
+            d1 = went[1] - went[0] if len(went) >= 3 else 0
+            d2 = went[2] - went[1] if len(went) >= 3 else 0
+            if len(went) < 3 or not 10000 < d1 <= 20000 or not -10000 < d2 < 0:
+                print("FAIL  the 10 s buttons: went to %s ms (wanted the middle, then 10 s on, then 10 s back)" % went)
+                rc = 1
+            else:
+                print("ok    the 10 s buttons: %+d ms forward, %+d ms back (each with the seconds played between)" % (d1, d2))
         if kind == "vgm":
             print("ok    the position bar's middle went to %d ms (a VGM's own length)" % ms)
         elif abs(ms - SECS * 500) > SECS * 50:
