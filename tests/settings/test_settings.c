@@ -446,19 +446,48 @@ static void sw_banded(void)
 	sw_check();
 }
 
+static int nchanged;
+static short changed_obj, changed_page;
+static void on_changed(SETTINGS *st, short obj)
+{
+	nchanged++;
+	changed_obj = obj;
+	changed_page = set_page_now(st);
+}
+
+static void sw_pressed(void)
+{
+	checkf(set_page_now(cur) == 2 && !dlg_press_waiting(),
+	       "a press on a name between turns of a page's drawing is kept and taken by the next dlg_do: page 3 shown (page %d)",
+	       set_page_now(cur) + 1);
+}
+
 static void test_page_switch(void)
 {
 	SET_DEF d = def3(pages3, 3);
 	reset();
+	nchanged = 0;
+	settings_changed = on_changed;
 	{
 		static const STEP s[] = { CALL(sw_mark), TAB(2), CALL(sw_check), CANCELB, END };
 		run(&d, s);
 	}
+	settings_changed = 0;
+	checkf(nchanged == 1 && changed_obj == ref_tab[2] && changed_page == 1,
+	       "settings_changed: once for the page switch, with its tab, page 2 shown (%d calls)", nchanged);
 	/* every object takes 15 ms: the page is drawn in turns, an event call between, each object once */
 	reset();
 	draw_cost = 15;
 	{
 		static const STEP s[] = { CALL(sw_mark), TAB(2), CALL(sw_banded), CANCELB, END };
+		run(&d, s);
+	}
+	draw_cost = 0;
+	/* a press on page 3's name while page 2 is drawn in turns: kept, the rest of page 2 at once, then page 3 */
+	reset();
+	draw_cost = 15;
+	{
+		static const STEP s[] = { TAB(2), TURNTAB(3), CALL(sw_pressed), CANCELB, END };
 		run(&d, s);
 	}
 	draw_cost = 0;
