@@ -461,7 +461,7 @@ def dropouts(left, a, b, blk):
     return [xs[k] for k in range(len(xs) - 1) if abs(xs[k + 1] - xs[k] - med) > max(3, med / 16)]
 
 
-def analyse(rec, case, standin=False):
+def analyse(rec, case, standin=False, no_boost=False):
     """(ok, what was found) for the recording. standin: the XBIOS's sound
     (the FireBee's stand-in, SNDXBIOS=1), which Hatari drops a few samples
     of (below)"""
@@ -539,6 +539,12 @@ def analyse(rec, case, standin=False):
         vol_note = "; the level %.1f dB from full volume (12 dB down wanted)" % db
     if case in RG_WANT:
         ref, want_db = RG_WANT[case]
+        if no_boost and want_db > 0:
+            # (the STE: the 68000's way, no gain on the samples, and its
+            # LMC1992 at full volume already 0 dB: a boost isn't there to
+            # give, the file plays at the level it would without one; the
+            # hub, 17 Nov 2026)
+            want_db = 0.0
         full = LEVEL.get(ref, WAV_LEVEL if ref == "wav" else 0)
         if full > 0:
             db = 20 * math.log10(level / full) if level > 0 else -99
@@ -738,7 +744,10 @@ def run(work, case, spec):
             wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
             v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]
             left, right = v[0], 640 - (v[0] + v[2])
-            if not (v[1] < 80 and v[1] + v[3] > 420 and abs(left - right) <= 24):
+            # (the screen's height: 400 lines on an ST's high resolution,
+            # the STE's mono; 480 on the TT's and the Falcon's VGA)
+            high = 400 if spec.split(":")[0] in ("STE", "STE-1", "ST", "ST-1") else 480
+            if not (v[1] < 80 and v[1] + v[3] > high - 60 and abs(left - right) <= 24):
                 return False, m.describe(), "a first start: the work area at %s (wanted the desk's height, centred)" % wl
         if case == "vgmreal":
             secs = float(os.environ.get("EPLAY_RIG_SECS", "20"))
@@ -1015,7 +1024,8 @@ def run(work, case, spec):
         if not os.path.exists(rec):
             return False, m.describe(), "no recording"
         ok, what = analyse(rec, case, spec.split(":")[0] == "FireBee" or
-                           "SNDXBIOS=1" in os.environ.get("EPLAY_RIG_INF", ""))
+                           "SNDXBIOS=1" in os.environ.get("EPLAY_RIG_INF", ""),
+                           spec.split(":")[0] in ("STE", "STE-1"))
         if case in ("gapless", "gaplessmp3"):
             followed = [l for l in open(log, errors="replace") if "(followed on)" in l]
             what += "; %s" % ("the second followed on" if followed else "the second didn't follow on")
