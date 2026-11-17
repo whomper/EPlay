@@ -19,6 +19,13 @@ Cases:
             STALLAT=, the rigs'): EPlay connects again and the music goes on
   pls       a .PLS station list behind a redirect (302): its first station
             plays
+  rough     a station as real ones are on a bad day (Erez, 17 Nov 2026:
+            "when playing a station both in FDI and DSP, the audio stutters
+            and stops"): its address answers with a 302, the station's head
+            comes 1.5 s late, then Icecast's 2 s burst, the data in
+            uneven pieces (pauses of up to 0.6 s, made up after), and a
+            1.5 s stall 8 s in: 16 s of the tone with no gap, one
+            connection
   chunked   the station answers HTTP/1.1 with Transfer-Encoding: chunked (as
             Swiss Radio's CDN does): the chunks taken out, the tone and its
             titles, no gap
@@ -77,7 +84,7 @@ import machines  # noqa: E402
 from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
-CASES = ["live", "drop", "stall", "pls", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
+CASES = ["live", "drop", "stall", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
          "find", "m3u"]
 METAINT = 8192
 KBPS = 128
@@ -167,6 +174,11 @@ class Station(threading.Thread):
                 c.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n"
                           % len(self.cover) + self.cover)
                 return
+            if self.case == "rough" and path == "/live":
+                c.sendall(b"HTTP/1.1 302 Found\r\nLocation: /onair\r\nContent-Length: 0\r\n\r\n")
+                return
+            if self.case == "rough":
+                time.sleep(1.5)         # (the station's head, late)
             if path == "/go":
                 c.sendall(b"HTTP/1.1 302 Found\r\nLocation: /list.pls\r\nContent-Length: 0\r\n\r\n")
                 return
@@ -205,9 +217,20 @@ class Station(threading.Thread):
         sent, t0, upto, title_at = 0, time.time(), METAINT, 0
         burst = 15 if self.piece > 1024 else 2      # (laut.fm's: 15 s at once)
         pos = 0
+        rnd, hold_until = 12345, 0.0
         while True:
             if self.case == "drop" and n == 1 and time.time() - t0 > 6:
                 return                  # (the first connection ends)
+            if self.case == "rough":
+                # (uneven: now and then nothing for up to 0.6 s, made up
+                # after; 8 s in, 1.5 s of nothing)
+                now = time.time() - t0
+                if now < hold_until or 8 <= now < 9.5:
+                    time.sleep(0.02)
+                    continue
+                rnd = (rnd * 1103515245 + 12345) & 0x7fffffff
+                if rnd % 40 == 0:
+                    hold_until = now + 0.2 + (rnd >> 8) % 400 / 1000.0
             due = rate * burst + int((time.time() - t0) * rate)
             if sent >= due:
                 time.sleep(0.02)
@@ -382,11 +405,14 @@ def run(work, case, spec):
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(TOP, "binary", "eplay.prg"), os.path.join(hd, "eplay.prg"))
+    # (EPLAY_RIG_BIN: another build's binary/, a release's, to bisect a
+    # station's fault across releases with this rig's cases)
+    bin_dir = os.environ.get("EPLAY_RIG_BIN") or os.path.join(TOP, "binary")
+    shutil.copy(os.path.join(bin_dir, "eplay.prg"), os.path.join(hd, "eplay.prg"))
     # (MP3 on the CPU, a 68060's: the overlays beside it, as a release has them)
     for ovl in ("mp3fpu.ovl", "mp3int.ovl"):
-        if os.path.exists(os.path.join(TOP, "binary", ovl)):
-            shutil.copy(os.path.join(TOP, "binary", ovl), hd)
+        if os.path.exists(os.path.join(bin_dir, ovl)):
+            shutil.copy(os.path.join(bin_dir, ovl), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     wav, mp3 = os.path.join(w, "tone.wav"), os.path.join(w, "tone.mp3")
     subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", wav, "synth", "8", "sine", "1000",
@@ -576,7 +602,7 @@ def run(work, case, spec):
         played = wait_line(log, said, 90)
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
-        time.sleep(14 if case in ("drop", "stall") else 10)
+        time.sleep(14 if case in ("drop", "stall") else 18 if case == "rough" else 10)
         if case == "logo":
             wait_line(log, lambda l: "album art:" in l or ("logo" in l and "after" in l), 120)
             time.sleep(1)
@@ -588,7 +614,7 @@ def run(work, case, spec):
         time.sleep(1)
         text = open(log, errors="replace").read()
         titles = sorted(set(l[len("EPLAY title: "):] for l in text.split("\n") if l.startswith("EPLAY title: ")))
-        ok, what, gaps = analyse(rec, 0, 8)
+        ok, what, gaps = analyse(rec, 0, 16 if case == "rough" else 8)
         note = "%s; titles %s; %d connections" % (what, titles, st.conns)
         if case == "live":
             ok = ok and gaps == 0 and len(titles) >= 2
@@ -634,6 +660,11 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and greens > 1500 and "logo fetched" in st.log and not spoke
         elif case == "chunked":
             ok = ok and gaps == 0 and len(titles) >= 2
+        elif case == "rough":
+            late = [l[4:] for l in text.split("\n") if l.startswith("LOG ") and
+                    ("late" in l or "lead" in l or "connect" in l or "Normal" in l or "miss" in l)]
+            note += "; " + " | ".join(late[-6:])
+            ok = ok and gaps == 0 and st.conns <= 2
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
         elif case == "m3u":
