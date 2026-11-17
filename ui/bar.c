@@ -421,14 +421,17 @@ static const unsigned long skip_small[2][11] = {	/* 17 by 11: back, forward */
 
 static void mask_skip(MASK *m, int big, int fwd)
 {
-	short w = big ? 22 : 17, h = big ? 22 : 11, x, y;
+	short w = big ? 22 : 17, h = big ? 22 : 11, y;
 	const unsigned long *rows = big ? skip_big[fwd] : skip_small[fwd];
 	if (!mask_new(m, w, h))
 		return;
-	for (y = 0; y < h; y++)
-		for (x = 0; x < w; x++)
-			if (rows[y] & (1UL << (w - 1 - x)))
-				m->bits[y * m->wpl + (x >> 4)] |= 0x8000 >> (x & 15);
+	/* (a row in one step: its bits to the top of a long, two words; not
+	   a pixel at a time, a shift each, 5 ms on an 8 MHz 68000) */
+	for (y = 0; y < h; y++) {
+		unsigned long v = rows[y] << (32 - w);
+		m->bits[y * m->wpl] = (unsigned short)(v >> 16);
+		m->bits[y * m->wpl + 1] = (unsigned short)v;
+	}
 }
 
 static void mask_draw(const MASK *m, short x, short y, short pen)
@@ -675,6 +678,25 @@ static void draw_out(void)
 	draw_vol();
 }
 
+/* the 10 s buttons: bright where the file can move (open, with a length,
+   not a station); as last drawn (-1: not yet) */
+static int skip_drawn = -1;
+
+static int skip_can_now(void)
+{
+	return play_is_open() && play_len_ms() > 0 && !play_is_net();
+}
+
+int bar_skip_stale(void)
+{
+	return skip_drawn != skip_can_now();
+}
+
+void bar_btn_area(int hit, GRECT *r)
+{
+	*r = b_btn[hit - 1];
+}
+
 static void draw_buttons(int parts)
 {
 	int pressed = bar_held == BH_PLAY;
@@ -696,12 +718,12 @@ static void draw_buttons(int parts)
 		/* Previous, Next: the list's, dim where there is none */
 		int i;
 		short pen;
-		int can = play_is_open() && play_len_ms() > 0 && !play_is_net();
+		int can = skip_can_now();
 		for (i = 0; i < BAR_BTNS; i++) {
-			GRECT *c = &b_btn[i];
+			GRECT *c = &b_btn[i], in = *c;
 			short x = c->x + c->w / 2, y = c->y + c->h / 2, h = c->h / 2, ww = h * 3 / 4;
-			if (i == BH_PLAY - 1 || !c->w)
-				continue;
+			if (i == BH_PLAY - 1 || !c->w || !rc_intersect(&clip_r, &in))
+				continue;	/* (only those in the redraw's rectangle) */
 			gbox(c, p_bar);
 			switch (i + 1) {
 			case BH_PREV:
@@ -719,6 +741,7 @@ static void draw_buttons(int parts)
 				/* 10 s back, forward: dim where the file can't go there
 				   (none, a station, no length) */
 				pen = bar_held == i + 1 ? p_acc : can ? p_txt : p_dim;
+				skip_drawn = can;
 				{
 					const MASK *k = i + 1 == BH_BACK10 ? &k_back : &k_fwd;
 					mask_draw(k, c->x + (c->w - k->w) / 2, c->y + (c->h - k->h) / 2, pen);

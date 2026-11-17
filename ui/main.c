@@ -297,10 +297,46 @@ static unsigned long scroll_wait(unsigned long ms)
 	return w >= 0 && (unsigned long)w < ms ? (unsigned long)w : ms;
 }
 
+static void redraw_in(GRECT *area, int na, int parts, int small);
+
 static void redraw(GRECT *area, int parts)
 {
+	redraw_in(area, 1, parts, area == 0 && !(parts & (BP_TEXT | BP_LIST)));
+}
+
+/* one of the bar's buttons (BH_...) alone, off the screen and shown in
+   one step */
+static void redraw_btn(int hit)
+{
+	GRECT r;
+	bar_btn_area(hit, &r);
+	redraw_in(&r, 1, BP_NAV, 1);
+}
+
+/* Previous and Next, each alone (the list's place changed); the 10 s
+   buttons only where they go bright or dim; in one pass of the window's
+   rectangles. (Not the stretch from Previous to Next off the screen, the
+   10 s buttons and Play in it: an STE's Next 150 -> 205 ms with them; nor
+   a pass for each button, the pass's own cost twice: 55 ms more of an
+   STE's start with 8 files, 1.47's first tries) */
+static void redraw_nav(void)
+{
+	GRECT r[4];
+	int n = 2;
+	bar_btn_area(BH_PREV, &r[0]);
+	bar_btn_area(BH_NEXT, &r[1]);
+	if (bar_skip_stale()) {
+		bar_btn_area(BH_BACK10, &r[n++]);
+		bar_btn_area(BH_FWD10, &r[n++]);
+	}
+	redraw_in(r, n, BP_NAV, 1);
+}
+
+/* the window's rectangles over each of na areas (area 0: the parts' own) */
+static void redraw_in(GRECT *area, int na, int parts, int small)
+{
 	GRECT r, a;
-	int small = area == 0 && !(parts & (BP_TEXT | BP_LIST)), took;
+	int took, i;
 	if (wh <= 0)
 		return;
 	if (iconified) {
@@ -314,6 +350,7 @@ static void redraw(GRECT *area, int parts)
 	if (!area) {
 		bar_area(parts, &a);
 		area = &a;
+		na = 1;
 	}
 	draw_forget();			/* (the About box draws with this handle too) */
 	/* (while a button is held, TOS's AES holds BEG_UPDATE back until it
@@ -322,17 +359,20 @@ static void redraw(GRECT *area, int parts)
 	graf_mouse(M_OFF, 0);
 	wind_get(wh, WF_FIRSTXYWH, &r.x, &r.y, &r.w, &r.h);
 	while (r.w && r.h) {
-		if (rc_intersect(area, &r)) {
-			/* (a tip up: what it covers left out, D18's tip_area; the
-			   clock and the position bar draw by themselves each second) */
-			GRECT piece[4];
-			int k, n = around_tip(&r, piece);
-			for (k = 0; k < n; k++) {
-				if (small && off_begin(vdi_h, piece[k].x, piece[k].y, piece[k].w, piece[k].h)) {
-					bar_draw(&piece[k], parts);
-					off_end();
-				} else
-					bar_draw(&piece[k], parts);
+		for (i = 0; i < na; i++) {
+			GRECT c = r;
+			if (rc_intersect(&area[i], &c)) {
+				/* (a tip up: what it covers left out, D18's tip_area; the
+				   clock and the position bar draw by themselves each second) */
+				GRECT piece[4];
+				int k, n = around_tip(&c, piece);
+				for (k = 0; k < n; k++) {
+					if (small && off_begin(vdi_h, piece[k].x, piece[k].y, piece[k].w, piece[k].h)) {
+						bar_draw(&piece[k], parts);
+						off_end();
+					} else
+						bar_draw(&piece[k], parts);
+				}
 			}
 		}
 		wind_get(wh, WF_NEXTXYWH, &r.x, &r.y, &r.w, &r.h);
@@ -732,7 +772,7 @@ static void play_index(int i)
 	row_redraw(old);
 	row_redraw(i);
 	open_due = 1;			/* (opened next turn: the press's answer is the rows) */
-	redraw(0, BP_NAV);
+	redraw_nav();
 }
 
 /* MP3, WAV and AIFF by their names' ends (a folder's files: what to add) */
@@ -1111,7 +1151,7 @@ static void list_remove_sel(void)
 		playing_status(st, sizeof(st));
 		status(st);
 	}
-	redraw(0, BP_NAV);
+	redraw_nav();
 }
 
 static void command(int c);
@@ -1346,7 +1386,7 @@ static void drag_row(int from, short mx, short my)
 		playing_status(st, sizeof(st));
 		status(st);
 	}
-	redraw(0, BP_NAV);
+	redraw_nav();
 	{
 		char line[48];
 		snprintf(line, sizeof(line), "EPLAY moved %d to %d\n", from + 1, to + 1);
@@ -1617,13 +1657,13 @@ static void command(int c)
 		order_clear(&list_order);
 		order_played(&list_order, list_cur);
 		play_menu_shown();
-		redraw(0, BP_NAV);
+		redraw_nav();
 		break;
 	case C_REPEAT:
 		list_order.repeat = (list_order.repeat + 1) % 3;	/* off, all, one */
 		settings_set_repeat(list_order.repeat);
 		play_menu_shown();
-		redraw(0, BP_NAV);
+		redraw_nav();
 		break;
 	case C_PLAY:
 		if (play_state() == PS_PLAYING) {
@@ -1793,7 +1833,10 @@ static int track(int hit, int part)
 	bar_area(part == BP_NAV ? BP_TEXT : part, &b);
 	bar_held = hit;
 	press_draw = 1;
-	redraw(0, part);
+	if (part == BP_NAV)
+		redraw_btn(hit);	/* (the button pressed alone) */
+	else
+		redraw(0, part);
 	press_draw = 0;
 	while (!quit) {
 		short which;
@@ -1811,15 +1854,22 @@ static int track(int hit, int part)
 			in = !in;
 			bar_held = in ? hit : BH_NONE;
 			press_draw = 1;
-			redraw(0, part);
+			if (part == BP_NAV)
+				redraw_btn(hit);
+			else
+				redraw(0, part);
 			press_draw = 0;
 		}
 		step(playing);
 	}
 	bar_held = BH_NONE;
 	/* (Play and Stop draw the button again as they act) */
-	if (!in || quit)
-		redraw(0, part);
+	if (!in || quit) {
+		if (part == BP_NAV)
+			redraw_btn(hit);
+		else
+			redraw(0, part);
+	}
 	return in && !quit;
 }
 
@@ -2278,8 +2328,10 @@ static void turn(int nested)
 		else if (hit == BH_NEXT && order_has_next(&list_order, list_cur) && track(BH_NEXT, BP_NAV))
 			command(C_NEXT);
 		else if ((hit == BH_BACK10 || hit == BH_FWD10) && play_is_open() && play_len_ms() > 0 &&
-			 !play_is_net() && track(hit, BP_NAV))
+			 !play_is_net() && track(hit, BP_NAV)) {
 			skip_by(hit == BH_BACK10 ? -SEEK_STEP : SEEK_STEP);
+			redraw_btn(hit);	/* (let go: no longer drawn pressed) */
+		}
 		else if (hit == BH_LIST)
 			list_press(ev.mx, ev.my, ev.kstate, 0);
 	}

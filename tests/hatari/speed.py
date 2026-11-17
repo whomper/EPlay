@@ -303,8 +303,11 @@ def session(work, spec, kind):
         r.act("Position bar: let go (goes there)", speed.KEY, r.let_go)
         r.act("%s playing from there, 3 s" % what, speed.KEY, lambda: time.sleep(3))
         # the 10 s buttons: forward, then back (the music goes there the
-        # next turn, as from the position bar)
-        r.act("10 s forward (clicked)", speed.KEY, lambda: r.click(*FWD10))
+        # next turn, as from the position bar). The VGM, 49 s, back twice:
+        # forward from its middle, the rig's seconds between took it past
+        # its end, and it began again
+        first = ("10 s back (clicked)", BACK10) if kind == "vgm" else ("10 s forward (clicked)", FWD10)
+        r.act(first[0], speed.KEY, lambda: r.click(*first[1]))
         r.act("%s playing, 2 s" % what, speed.KEY, lambda: time.sleep(2))
         r.act("10 s back (clicked)", speed.KEY, lambda: r.click(*BACK10))
         r.act("%s playing, 2 s more" % what, speed.KEY, lambda: time.sleep(2))
@@ -330,10 +333,13 @@ def session(work, spec, kind):
         if kind != "vgm":
             # (each 10 s from where the music then was: forward 10 s plus
             # what played since the position bar's, back 10 s less what
-            # played since; the rig's actions take a few seconds each)
+            # played since. The rig's actions take a few seconds each, an
+            # STE's some 10 between the two: forward more than 10 s, and
+            # back 20 s less than forward, give or take 5 s of the seconds
+            # played)
             d1 = went[1] - went[0] if len(went) >= 3 else 0
             d2 = went[2] - went[1] if len(went) >= 3 else 0
-            if len(went) < 3 or not 10000 < d1 <= 20000 or not -10000 < d2 < 0:
+            if len(went) < 3 or not 10000 < d1 or not 15000 < d1 - d2 < 25000:
                 print("FAIL  the 10 s buttons: went to %s ms (wanted the middle, then 10 s on, then 10 s back)" % went)
                 rc = 1
             else:

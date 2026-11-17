@@ -38,6 +38,8 @@ extern int bar_mini;		/* the mini player: the bar alone, no list (bar_size's) */
 void bar_layout(const GRECT *work);
 /* the parts' area (to draw again just those) */
 void bar_area(int parts, GRECT *r);
+void bar_btn_area(int hit, GRECT *r);	/* a button's (BH_...) */
+int bar_skip_stale(void);		/* the 10 s buttons drawn bright or dim as they are no longer */
 /* the parts that meet clip */
 /* the title's and artist's scroll when they are wider than their place
    (Erez, 11 Nov 2026): a step when its time has come (1: BP_TITLE again);
