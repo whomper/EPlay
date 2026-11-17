@@ -158,7 +158,7 @@ void bar_layout(const GRECT *work)
 	mid = w_ctl.x + w_ctl.w / 2;
 	y = work->y + 6;
 	rect(&b_btn[BH_PLAY - 1], mid - rad, y, 2 * rad, 2 * rad);
-	sw = ch >= 16 ? bw : bw + 4;	/* (the 10 s buttons: room for the "10" in a low resolution's flat pixels) */
+	sw = ch >= 16 ? bw : bw + 6;	/* (the 10 s buttons: room for the "10" in a low resolution's flat pixels) */
 	rect(&b_btn[BH_BACK10 - 1], mid - rad - gap - sw, y + rad - bw / 2, sw, bw);
 	rect(&b_btn[BH_FWD10 - 1], mid + rad + gap, y + rad - bw / 2, sw, bw);
 	rect(&b_btn[BH_PREV - 1], mid - rad - 2 * gap - sw - bw, y + rad - bw / 2, bw, bw);
@@ -391,61 +391,44 @@ static void mask_tri(MASK *m, short w, short h, int dir)
 	}
 }
 
-/* the 10 s buttons' sign (Erez, 17 Nov 2026): a ring, open at the top,
-   its arrowhead there pointing back (dir -1) or forward (1), and "10"
-   inside it, w by h */
-static void mask_dot(MASK *m, short x, short y)
-{
-	if (x >= 0 && y >= 0 && x < m->w && y < m->h)
-		m->bits[y * m->wpl + (x >> 4)] |= 0x8000 >> (x & 15);
-}
+/* the 10 s buttons' sign (Erez, 17 Nov 2026, a picture of it: "make sure
+   the arrows are clearly visible ... and the circle line is thinner"): a
+   ring a pixel wide, open on the arrow's side, its end turned into an
+   arrowhead pointing down, and "10" in bold inside; drawn by hand, a
+   pixel at a time, for the VGA's square pixels (22 by 22) and for a low
+   resolution's flat ones (17 by 11). Bit 0 of each row its right-hand
+   pixel */
+static const unsigned long skip_big[2][22] = {	/* 22 by 22: back, forward */
+	{ 0x000000UL, 0x000000UL, 0x001F00UL, 0x0060C0UL, 0x018030UL, 0x020008UL,
+	  0x124008UL, 0x1AC004UL, 0x0F8004UL, 0x070002UL, 0x026382UL, 0x00E6C2UL,
+	  0x0066C2UL, 0x0066C2UL, 0x0066C4UL, 0x0066C4UL, 0x026388UL, 0x020008UL,
+	  0x018030UL, 0x0060C0UL, 0x001F00UL, 0x000000UL
+	},
+	{ 0x000000UL, 0x000000UL, 0x003E00UL, 0x00C180UL, 0x030060UL, 0x040010UL,
+	  0x040092UL, 0x0800D6UL, 0x08007CUL, 0x100038UL, 0x106390UL, 0x10E6C0UL,
+	  0x1066C0UL, 0x1066C0UL, 0x0866C0UL, 0x0866C0UL, 0x046390UL, 0x040010UL,
+	  0x030060UL, 0x00C180UL, 0x003E00UL, 0x000000UL
+	}
+};
+static const unsigned long skip_small[2][11] = {	/* 17 by 11: back, forward */
+	{ 0x000FE0UL, 0x003838UL, 0x00600CUL, 0x015276UL, 0x00A652UL, 0x004252UL,
+	  0x000252UL, 0x000776UL, 0x00600CUL, 0x003838UL, 0x000FE0UL
+	},
+	{ 0x000FE0UL, 0x003838UL, 0x00600CUL, 0x00C9D5UL, 0x00994AUL, 0x008944UL,
+	  0x008940UL, 0x00DDC0UL, 0x00600CUL, 0x003838UL, 0x000FE0UL
+	}
+};
 
-static void mask_skip(MASK *m, short w, short h, int dir)
+static void mask_skip(MASK *m, int big, int fwd)
 {
-	/* the figures: 1 and 0, 3 by 5, or 3 and 4 by 7 from 20 pixels high */
-	static const unsigned char f5[2][5] = { { 2, 6, 2, 2, 7 }, { 7, 5, 5, 5, 7 } };
-	static const unsigned char f7[2][7] = { { 2, 6, 2, 2, 2, 2, 7 }, { 6, 9, 9, 9, 9, 9, 6 } };
-	int big = h >= 20;
-	short th = big ? 2 : 1, ah = big ? 3 : 2, top = big ? ah - th / 2 : 1, rh, wi, hi;
-	short x, y, k, fx, fy, fw, fh = big ? 7 : 5, x0, y0;
-	long w2, rh2, wi2, hi2;
+	short w = big ? 22 : 17, h = big ? 22 : 11, x, y;
+	const unsigned long *rows = big ? skip_big[fwd] : skip_small[fwd];
 	if (!mask_new(m, w, h))
 		return;
-	rh = h - top;			/* (the ring a little lower: the arrowhead's room above it) */
-	wi = w - 2 * th;
-	hi = rh - 2 * th;
-	w2 = (long)w * w;
-	rh2 = (long)rh * rh;
-	wi2 = (long)wi * wi;
-	hi2 = (long)hi * hi;
-	for (y = top; y < h; y++)
-		for (x = 0; x < w; x++) {
-			long dx = 2 * x - w + 1, dy = 2 * (y - top) - rh + 1;
-			if (dx * dx * rh2 + dy * dy * w2 > w2 * rh2 || dx * dx * hi2 + dy * dy * wi2 < wi2 * hi2)
-				continue;
-			/* the opening: from the top, some 50 degrees round away
-			   from the arrow's point */
-			if (dy < 0 && -dir * dx > 0 && -dir * dx * 5 < -dy * 6)
-				continue;
-			mask_dot(m, x, y);
-		}
-	/* the arrowhead at the top, its point back or forward */
-	x0 = (short)(w / 2 - (dir < 0 ? 1 : 0));
-	y0 = (short)(top + th / 2);
-	for (k = 0; k <= ah; k++)
-		for (y = (short)(y0 - (ah - k)); y <= y0 + (ah - k); y++)
-			mask_dot(m, (short)(x0 + dir * k), y);
-	/* "10" in the middle of the ring */
-	x0 = (short)((w - (big ? 8 : 7) + 1) / 2);
-	y0 = (short)(top + (rh - fh + 1) / 2);
-	for (k = 0; k < 2; k++) {
-		fw = big && k ? 4 : 3;
-		for (fy = 0; fy < fh; fy++)
-			for (fx = 0; fx < fw; fx++)
-				if ((big ? f7[k][fy] : f5[k][fy]) & (1 << (fw - 1 - fx)))
-					mask_dot(m, (short)(x0 + fx), (short)(y0 + fy));
-		x0 += fw + 1;
-	}
+	for (y = 0; y < h; y++)
+		for (x = 0; x < w; x++)
+			if (rows[y] & (1UL << (w - 1 - x)))
+				m->bits[y * m->wpl + (x >> 4)] |= 0x8000 >> (x & 15);
 }
 
 static void mask_draw(const MASK *m, short x, short y, short pen)
@@ -518,8 +501,8 @@ static void make_masks(void)
 	mask_tri(&k_prev, h * 3 / 4 + 1, h, -1);
 	mask_tri(&k_next, h * 3 / 4 + 1, h, 1);
 	mask_tri(&k_spk, 5, 13, -1);
-	mask_skip(&k_back, b_btn[BH_BACK10 - 1].w, b_btn[BH_BACK10 - 1].h, -1);
-	mask_skip(&k_fwd, b_btn[BH_FWD10 - 1].w, b_btn[BH_FWD10 - 1].h, 1);
+	mask_skip(&k_back, ch >= 16, 0);
+	mask_skip(&k_fwd, ch >= 16, 1);
 }
 
 static void fmt_time(char *out, int n, long ms)
@@ -736,7 +719,10 @@ static void draw_buttons(int parts)
 				/* 10 s back, forward: dim where the file can't go there
 				   (none, a station, no length) */
 				pen = bar_held == i + 1 ? p_acc : can ? p_txt : p_dim;
-				mask_draw(i + 1 == BH_BACK10 ? &k_back : &k_fwd, c->x, c->y, pen);
+				{
+					const MASK *k = i + 1 == BH_BACK10 ? &k_back : &k_fwd;
+					mask_draw(k, c->x + (c->w - k->w) / 2, c->y + (c->h - k->h) / 2, pen);
+				}
 				break;
 			case BH_SHUFFLE:
 				line(x - 6, y - 3, x - 3, y - 3, p_dim);
