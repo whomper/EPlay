@@ -90,6 +90,7 @@ int snd_xb_want;
 
 static short *ring;
 static volatile long ring_n, wpos, written, played;
+static int was_reset;		/* (Sndstatus's reset done, at the first open) */
 static volatile int playing;
 static int locked;
 /* (the tick's count: the 200 Hz clock when it last ran, its remainder;
@@ -272,7 +273,14 @@ int snd_open(long rate, int ext)
 		ring_n = RING_MAX;
 	memset(ring, 0, (size_t)ring_n * 4);
 	x_buffoper(0);
-	x_sndstatus(1);			/* (reset: as FBPROBE 2 began each) */
+	/* (reset: as FBPROBE 2 began each; the first open's alone: a FireBee
+	   tester heard "a little unnecessary beep at automatic transition"
+	   from one file to the next, 17 Nov 2026, and an AC'97 codec's reset
+	   is heard) */
+	if (!was_reset) {
+		x_sndstatus(1);
+		was_reset = 1;
+	}
 	x_setmode(1);			/* 16-bit stereo */
 	x_devconnect(0, 8, 0, PRESCALE, 1);	/* DMA play to the DAC, 25 MHz clock, no handshake */
 	x_setbuffer(0, ring, ring + 2 * ring_n);
