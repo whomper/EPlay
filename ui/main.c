@@ -2381,7 +2381,9 @@ int app_main(void)
 	     get_cookie(0x5F4D4348L), get_cookie(0x5F435055L), get_cookie(0x5F534E44L),
 	     snd_fdi ? "answers ($4711)" : "doesn't answer");
 	/* (MP3 on the CPU: a 68060's or a 68080's, the FPU or none, cmp3.c;
-	   the V4SA tester's log, 16 Nov 2026) */
+	   the V4SA tester's log, 16 Nov 2026. A 68040 or faster alone: on a
+	   stock Falcon the line cost its start 30 ms, Falcon-4:16) */
+	if (get_cookie(0x5F435055L) >= 40)
 	elog("MP3 on the CPU, where the DSP isn't free: %s; _FPU $%08lX",
 	     cmp3_kind() == CMP3_NONE ? "no (a 68060 or a 68080 decodes it)" :
 	     cmp3_kind() == CMP3_FPU ? (cmp3_is080() ? "the 68080's FPU (MP3FPU.OVL)" : "the 68060's FPU (MP3FPU.OVL)") :

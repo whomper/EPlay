@@ -10,7 +10,7 @@
 | vector, taken at the VBR while this runs, interrupts off) puts the stack
 | back and answers 0. For MP3 on the CPU (DESIGN.md, MP3 on the CPU: Erez,
 | 16 Nov 2026, "a 68060 or 68080 ... should decode on the CPU").
-	.text
+	.section .text.cpu_is080,"ax"	| (a name of its own: no plain .text, tools/mkpad.py)
 	.globl	cpu_is080
 cpu_is080:
 	move.w	%sr,%d0
@@ -42,7 +42,7 @@ back:
 	movea.l	(%sp)+,%a2
 	rts
 
-	.bss
+	.section .bss.cpu_is080,"aw",@nobits
 	.even
 saved_sp:	.space	4
 old_ill:	.space	4
