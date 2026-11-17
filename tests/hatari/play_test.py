@@ -472,7 +472,7 @@ def analyse(rec, case, standin=False):
     loud = [i for i, r in enumerate(rms) if r > 1000]
     if not loud:
         # (MP3CPU=1, play060.py's: an MP3 decoded on the CPU goes through the DMA too)
-        cpu_mp3 = "MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "")
+        cpu_mp3 = "MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "") or os.environ.get("EPLAY_RIG_CPUMP3") == "1"
         # (phase 11: a VGM's chips made on the CPU play from the DMA too)
         cpu_mp3 = cpu_mp3 or ("VGMCPU=1" in os.environ.get("EPLAY_RIG_INF", "") and case in DSP_VGM)
         if hatari_keeps_parity() and (cpu_mp3 or (not CASES[case][2] and case not in RESAMPLED)):

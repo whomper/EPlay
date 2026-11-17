@@ -2652,7 +2652,21 @@ it in 1.44".
 - **No line at the start on MP3 on the CPU.** One cost a stock Falcon's start 30 ms (Falcon-4:16, a
   CD-quality WAV, 635 with it, 605 without, pads remade each time), and only where `_CPU` said 40 or
   more still 630: it is gone. The line when an MP3 plays on the CPU says which CPU and decoder.
+- **1.44 checked against the testers' reports (Erez, 17 Nov 2026: "test 1.44 in light of the
+  latest bug reports").** The V4SA's: play060.py's `Falcon-v4`, a stand-in (Hatari's 68060 Falcon,
+  no DSP, C:\AUTO\V4STAND.PRG writing `_CPU 80` and `_SND` without the DSP, from common's FBSTAND
+  with three bytes changed): MP3 and gapless MP3 play on the "68080", and stream_test.py's live,
+  drop and find (a station from Find station, the tester's case) play on it with no setting asked.
+  The FireBee's beep: Hatari's XBIOS trace on the FireBee stand-in's list case, `Sndstatus(1)`
+  twice with 1.43 (once a file), once with 1.44. The CT60's crash: `CRASHAT=1500` writes CRASH.LOG
+  and gives the sound and the DSP back; `CRASHAT=-1500` (interrupt time) writes none and gives
+  them back (TOS 4.04, Falcon-4:16, an MP3 playing).
 - **The data pad (hub, AERA-Atari e472722).** `tools/mkpad.py` pads the constants, the data and the
   BSS as it pads the code, each section at its base's place mod 256, the 68030's data cache's; the
-  base now 1.42's map (its code at 1.41's places, so the code's pads are as they were). 1.43's
-  Falcon-4:16 start with a WAV, 635 in both pairs, back to 610.
+  code at 1.42's map's places (1.41's). With the data at 1.42's places too, 1.43's Falcon-4:16
+  start with a WAV, 635, went back to 610, but with 1.44's code no layout of the constants, data
+  and BSS (each at 1.42's or 1.43's, `--rodata`, `--data`, `--bss`) suited both Falcon-4:16 and
+  Erez's Falcon-4:256 with NVDI: 323 kept Falcon-4:16 clean (610) and cost NVDI's Mega Drive VGM
+  start +100 ms; 332 kept NVDI within a tick of 1.43 and the WAV start at 1.43's 635. The hub:
+  Erez's configuration decides; 1.44 ships 332 (Erez, 17 Nov 2026: "go ahead with 332"). The 610
+  waits for a layout that suits both.

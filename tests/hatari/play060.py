@@ -43,6 +43,36 @@ machines.MACHINES["Falcon-040"] = (
     [a if a != "6" else "4" for a in machines.MACHINES["Falcon-060"][1]],
     machines.MACHINES["Falcon-060"][2], machines.MACHINES["Falcon-060"][3])
 
+# a stand-in for a Vampire V4SA (its tester's EPLAY.LOG, 1.40: _MCH a
+# Falcon's, _CPU 80, _SND $17, the Falcon's DMA sound, no DSP): Hatari's
+# 68060 Falcon, its FPU, no DSP, and C:\AUTO\V4STAND.PRG writing those
+# cookies: common's FBSTAND.PRG (machines.py) with _CPU 80 for its 60 and
+# no _CF_ added (three bytes); _SND's bit 3 cleared as there
+machines.MACHINES["Falcon-v4"] = (
+    "a stand-in for a Vampire V4SA: a 68060 Falcon at 32 MHz, its FPU, no DSP, C:\\AUTO\\V4STAND.PRG setting "
+    "_CPU 80 and _SND without the DSP; EmuTOS",
+    machines.MACHINES["Falcon-060nodsp"][1],
+    machines.MACHINES["Falcon-060"][2], machines.MACHINES["Falcon-060"][3])
+V4STAND = bytearray(machines.FBSTAND)
+for old_, new_ in ((b"\x72\x3c", b"\x72\x50"), (b"\x70\x3c", b"\x70\x50"), (b"\x7c\x03", b"\x7c\x01")):
+    assert V4STAND.count(old_) == 1, old_
+    V4STAND[V4STAND.index(old_):V4STAND.index(old_) + 2] = new_
+_args = machines.Machine.args
+
+
+def _args_v4(self):
+    a = _args(self)
+    if self.name == "Falcon-v4":
+        machines.write_prg(os.path.join(self.hd, "AUTO", "V4STAND.PRG"), bytes(V4STAND), machines.FBSTAND_BSS)
+    return a
+
+
+machines.Machine.args = _args_v4
+# (its MP3 decoded on the CPU with no setting asked: the rigs' excuse for
+# Hatari 2.4's DMA started a word on, as MP3CPU=1's)
+if os.environ.get("PLAY060_MACHINE") == "Falcon-v4" or any(a.startswith("Falcon-v4") for a in sys.argv):
+    os.environ["EPLAY_RIG_CPUMP3"] = "1"
+
 import play_test  # noqa: E402
 
 if __name__ == "__main__":

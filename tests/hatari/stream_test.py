@@ -350,7 +350,8 @@ def analyse(rec, skip_s, secs):
         # silent, the tone on the right. play_test.py excuses it the same
         # way; skipped, counted, never "passed")
         rr = [math.sqrt(sum(v * v for v in right[i:i + blk]) / blk) for i in range(0, len(right) - blk, blk)]
-        if ("MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "") and hatari_keeps_parity() and
+        if (("MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "") or os.environ.get("EPLAY_RIG_CPUMP3") == "1") and
+                hatari_keeps_parity() and
                 any(r > 1000 for r in rr)):
             SKIPS.append("the sound itself (Hatari %s's DMA started mid-frame, its DAC on another track)" % hatari())
             return True, "SKIPPED: the sound itself (Hatari %s's DMA started mid-frame: the left silent, " \
@@ -670,7 +671,7 @@ def main():
     # with NVDI; EmuTOS without NVDI where the container has neither, a
     # stand-in, as describe() says)
     specs = [a for a in sys.argv[2:] if a not in CASES] or [machines.ERZ_MACHINE]
-    if any(sp.startswith("Falcon-0") for sp in specs):
+    if any(sp.startswith(("Falcon-0", "Falcon-v4")) for sp in specs):
         import play060  # noqa: F401  (its 68060 and 68040 Falcons)
     nvdi_src = os.environ.get("AERA_NVDI", os.path.join(os.path.expanduser("~"), ".aera", "nvdi", "x"))
     if specs == [machines.ERZ_MACHINE] and os.path.exists(os.path.join(nvdi_src, "auto", "nvdi.prg")):
