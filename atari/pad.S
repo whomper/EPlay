@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
-| pad.S - written by tools/mkpad.py against 1.42's link map (v1.42, build/atari/eplay.map), its constants and BSS at 1.43's (v1.43): do not edit.
-| 46 pads, 7516 bytes, each section at its place there, mod the 68030's
+| pad.S - written by tools/mkpad.py against 1.42's link map (v1.42, build/atari/eplay.map), its constants and data at 1.43's (v1.43): do not edit.
+| 50 pads, 8080 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.0hot.40dspmp3_tick_status!","ax"
 	.globl ep_pad_0
@@ -143,26 +143,26 @@ ep_pad_33:
 	.globl ep_pad_34
 ep_pad_34:
 	.space 1
-	.section ".rodata.xb_rates!","a"
+	.section ".data.kind!","aw"
 	.globl ep_pad_35
 ep_pad_35:
-	.space 72
-	.section ".data.ipl_user!","aw"
-	.globl ep_pad_36
-ep_pad_36:
-	.space 254
-	.section ".data.kind!","aw"
-	.globl ep_pad_37
-ep_pad_37:
-	.space 252
-	.section ".data.savptr_one!","aw"
-	.globl ep_pad_38
-ep_pad_38:
 	.space 252
 	.section ".data.xs_end_at!","aw"
+	.globl ep_pad_36
+ep_pad_36:
+	.space 68
+	.section ".bss.avail!","aw",@nobits
+	.globl ep_pad_37
+ep_pad_37:
+	.space 4
+	.section ".bss.b.5!","aw",@nobits
+	.globl ep_pad_38
+ep_pad_38:
+	.space 216
+	.section ".bss.b.7!","aw",@nobits
 	.globl ep_pad_39
 ep_pad_39:
-	.space 190
+	.space 36
 	.section ".bss.cmp_hz!","aw",@nobits
 	.globl ep_pad_40
 ep_pad_40:
@@ -175,15 +175,31 @@ ep_pad_41:
 	.globl ep_pad_42
 ep_pad_42:
 	.space 242
-	.section ".bss.ctab!","aw",@nobits
+	.section ".bss.crash_slot!","aw",@nobits
 	.globl ep_pad_43
 ep_pad_43:
-	.space 254
-	.section ".bss.is080!","aw",@nobits
+	.space 252
+	.section ".bss.ctab!","aw",@nobits
 	.globl ep_pad_44
 ep_pad_44:
-	.space 252
-	.section ".bss.was_reset!","aw",@nobits
+	.space 254
+	.section ".bss.done.4!","aw",@nobits
 	.globl ep_pad_45
 ep_pad_45:
+	.space 252
+	.section ".bss.is080!","aw",@nobits
+	.globl ep_pad_46
+ep_pad_46:
+	.space 252
+	.section ".bss.s_m2!","aw",@nobits
+	.globl ep_pad_47
+ep_pad_47:
+	.space 252
+	.section ".bss.s_miss!","aw",@nobits
+	.globl ep_pad_48
+ep_pad_48:
+	.space 252
+	.section ".bss.was_reset!","aw",@nobits
+	.globl ep_pad_49
+ep_pad_49:
 	.space 252
