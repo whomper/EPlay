@@ -1740,7 +1740,8 @@ static void step(int playing)
 	}
 	if (bar_scroll_step())
 		redraw(0, BP_TITLE);	/* (a step of the title's scroll: its two lines) */
-	if (playing && play_step(used >= 20 ? 0 : (int)(20 - used))) {
+	/* (a station's queue under 2 s: its 20 ms whatever the turn took) */
+	if (playing && play_step(used < 20 ? (int)(20 - used) : play_net_low() ? 20 : 0)) {
 		if (play_tags_late) {
 			/* (a big VGZ's GD3, at its end: its row read again, now from
 			   memory) */
@@ -2266,13 +2267,14 @@ static void turn(int nested)
 		else if (hit == BH_LIST)
 			list_press(ev.mx, ev.my, ev.kstate, 0);
 	}
-	/* (a turn that drew a piece of the window reads no more of the file:
+	/* (a turn that drew a piece of the window reads no more of the file,
+	   unless a station's queue is under 2 s (play_net_low):
 	   a 32 KB read after it went past the 50 ms between event calls; the
 	   queue is filled the turn after; nor one after which another file
 	   opens: the next turn stops this one, so its frames would be wasted,
 	   and Next's rows would wait for them) */
 	play_busy_turn = (which & (MU_MESAG | MU_KEYBD | MU_BUTTON)) != 0 || tos_ms() - turn_t0 >= 30;
-	step(playing && !piece && !open_due && !next_due);
+	step(playing && (!piece || play_net_low()) && !open_due && !next_due);
 	play_busy_turn = 0;
 	menu_update();			/* (greyed as things are now: MENUS 1.3) */
 	play_idle_give();		/* (the sound system for others while nothing plays) */

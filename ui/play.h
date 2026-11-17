@@ -37,6 +37,7 @@ const char *play_path(void);	/* the file playing (its path) */
 int play_wait_ms(void);		/* the GEM loop's timer until the next step */
 int play_state(void);
 int play_is_open(void);
+int play_net_low(void);		/* a station's queue under 2 s: read it whatever the turn drew */
 int play_is_net(void);		/* a station or stream plays or is paused (phase 7) */
 const char *play_net_title(void);	/* its song now, "" before the first */
 const char *play_net_picture(int *changed);	/* its picture's address (StreamUrl), "" none */

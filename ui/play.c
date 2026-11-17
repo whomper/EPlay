@@ -2218,6 +2218,17 @@ int play_is_open(void)
 }
 
 /* a station is what plays or is paused (its address, not a file) */
+/* a station's queue under 2 s of its sound (DSP's MP3: the bytes ahead at
+   its bit rate): main.c's turn reads it even where it drew (the hub, 17
+   Nov 2026: refill before drawing on a lead that low; Erez's slow DFB1X
+   session starved at 14.3 KB/s) */
+int play_net_low(void)
+{
+	if (!net || cmp || state != PS_PLAYING || bitrate <= 0)
+		return 0;
+	return (q_w - q_r) / bitrate * 8 < 2000;
+}
+
 int play_is_net(void)
 {
 	return net || (cur_path[0] && surl_is(cur_path));
