@@ -1,8 +1,8 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
-| pad.S - written by tools/mkpad.py against 1.41's link map (v1.41, build/atari/eplay.map): do not edit.
-| 23 pads, 3894 bytes, each section at its place there, mod the 68030's
-| 256-byte cache (the 68030's build alone; the Makefile keeps each one)
+| pad.S - written by tools/mkpad.py against 1.42's link map (v1.42, build/atari/eplay.map): do not edit.
+| 35 pads, 5996 bytes, each section at its place there, mod the 68030's
+| 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.0hot.40dspmp3_tick_status!","ax"
 	.globl ep_pad_0
 ep_pad_0:
@@ -95,3 +95,51 @@ ep_pad_21:
 	.globl ep_pad_22
 ep_pad_22:
 	.space 248
+	.section ".rodata.dsp_mp3_prog_ext!","a"
+	.globl ep_pad_23
+ep_pad_23:
+	.space 176
+	.section ".rodata.m3u_add.str1.1!","a"
+	.globl ep_pad_24
+ep_pad_24:
+	.space 154
+	.section ".data.ipl_user!","aw"
+	.globl ep_pad_25
+ep_pad_25:
+	.space 254
+	.section ".data.savptr_one!","aw"
+	.globl ep_pad_26
+ep_pad_26:
+	.space 252
+	.section ".data.xs_end_at!","aw"
+	.globl ep_pad_27
+ep_pad_27:
+	.space 2
+	.section ".bss.avail!","aw",@nobits
+	.globl ep_pad_28
+ep_pad_28:
+	.space 4
+	.section ".bss.b.5!","aw",@nobits
+	.globl ep_pad_29
+ep_pad_29:
+	.space 216
+	.section ".bss.b.7!","aw",@nobits
+	.globl ep_pad_30
+ep_pad_30:
+	.space 36
+	.section ".bss.crash_slot!","aw",@nobits
+	.globl ep_pad_31
+ep_pad_31:
+	.space 252
+	.section ".bss.done.4!","aw",@nobits
+	.globl ep_pad_32
+ep_pad_32:
+	.space 252
+	.section ".bss.s_m2!","aw",@nobits
+	.globl ep_pad_33
+ep_pad_33:
+	.space 252
+	.section ".bss.s_miss!","aw",@nobits
+	.globl ep_pad_34
+ep_pad_34:
+	.space 252
