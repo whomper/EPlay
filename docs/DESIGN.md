@@ -2710,3 +2710,23 @@ it in 1.44".
 - **Thing on the FireBee**: `av_init("EPLAY|EPLAYST|EPLAYFB")`, so Thing's `appl_find` finds
   EPLAYFB at the first drop. Common's av.c takes the program's own name too (a13e4d8).
 - **Common synced to b51644b.**
+
+## 1.47: 10 seconds back and forward, gapless on the XBIOS, Settings' quick click (17 Nov 2026)
+
+- **10 seconds back and forward on the bar** (Erez, 17 Nov 2026: "a small circle with an arrow to
+  the back and to the front with the number 10 inside it … placed surrounding the play/pause
+  button"; the icons redrawn after his picture: a thin ring, open on the arrow's side, a clear
+  arrowhead at its end, a bold "10"). `bar.h`'s `BH_BACK10` and `BH_FWD10` sit either side of Play,
+  Previous and Next a button further out. The icons are hand-drawn tables in `bar.c` (`skip_big`,
+  22x22, for `ch >= 16`; `skip_small`, 17x11, at low resolution), drawn through `mask_skip()`. A
+  click and Left/Right both go through `main.c`'s `skip_by()`, which moves from a seek not yet done
+  if there is one, so quick clicks add up. The buttons are dim where the file can't move: no file,
+  no length, a station. The speed rig clicks both (`speed.py`'s "10 s forward/back (clicked)").
+- **Gapless WAV and AIFF through the XBIOS's sound calls** (the FireBee, and a Milan or a V4SA with
+  `SNDXBIOS=1`). There a WAV goes through the CPU path (`cmp_wav`), and the queue's `fmt` is always
+  16-bit stereo, so `play_chain()` took every next file for another format. It now compares the
+  next file with `wfmt`, the file's own (`CMP_WAV`). Gate row FireBee:16 gapless: 0 gaps.
+- **Settings keeps a quick second click on an 8 MHz ST** (common's settings.c, dbfc8e2: the dialog
+  waits for the button's release before it draws). Common synced to 86e37d2.
+- **Rig fixes**: `play_test.py`'s firstrun checks the window against the machine's own height (400
+  on an ST or STE), and the STE's `wavrgup` wants no rate raised, as the STE has none to raise to.
