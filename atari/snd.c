@@ -1221,6 +1221,8 @@ void snd_dac_volume(int att, int mute)
 		if (!adder_found)
 			adder_found = 2;		/* (the matrix) */
 	}
+	if (att > 15)
+		att = 15;	/* (the codec's most, 22.5 dB: play.c puts the rest on the samples) */
 	Soundcmd(LTATTEN, (att & 15) << 4);
 	Soundcmd(RTATTEN, (att & 15) << 4);
 	Soundcmd(ADDERIN, mute ? 0 : adder_found | snd_adder_adc);

@@ -2241,9 +2241,10 @@ static void turn(int nested)
 		else if (!key_ctrl(ev.kstate, ev.kreturn) && list_keys(ev.kreturn))
 			;
 		else if (a == '+' || a == '-') {
-			/* the volume a step of 3 dB (two of the bar's) */
+			/* the volume a step of the bar's (1.5 dB at the top, more
+			   lower down: play.c's vol_att) */
 			char line[40];
-			volume_to(play_volume() + (a == '+' ? 2 : -2));
+			volume_to(play_volume() + (a == '+' ? 1 : -1));
 			snprintf(line, sizeof(line), "EPLAY volume %d\n", play_volume());
 			nf_debug(line);		/* (the speed rig's) */
 		}

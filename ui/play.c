@@ -134,13 +134,27 @@ static short xsbuf[XS_BUF * 2];
 static int s_ext;		/* on the FDI's clock (the volume digital) */
 
 /* the volume (Erez, 3 Nov 2026: a bar like the position's, and + and -):
-   0 silent, VOL_MAX full (0 dB), steps of 1.5 dB. The Falcon's own
+   0 silent, VOL_MAX full (0 dB); since 1.46 logarithmic, 24 steps (Erez,
+   17 Nov 2026: "it should be logarithmic and not linear. The lower volume
+   is not low enough just before full off"): vol_att's 1.5 dB steps down,
+   fine at the top, 60 dB down at 1. The codec takes 22.5 dB at most: past
+   it the rest goes on the samples. The Falcon's own
    output by the codec's attenuation (its steps, 0 to 22.5 dB; silent: the
    DAC's adder off). The FDI's digital, in the same steps: an MP3's
    global_gain lowered (each is 2^(1/4), 1.505 dB: no DSP time, and the
    DSP's arithmetic as it is), WAV and AIFF scaled as the tick writes
    them. At 0 dB nothing is touched: the samples bit for bit */
 static int vol = VOL_MAX;
+/* the bar's step as 1.5 dB steps down: 1.5 dB to 18 dB, 3 dB to 39, 6 dB to
+   60 (its index the bar's VOL_MAX - v) */
+static const unsigned char vol_att[VOL_MAX] = {
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 30, 34, 38, 40
+};
+
+int play_vol_att(int v)
+{
+	return v >= VOL_MAX ? 0 : v <= 0 ? vol_att[VOL_MAX - 1] : vol_att[VOL_MAX - v];
+}
 static volatile long t_gain = 32768;	/* WAV, AIFF on the FDI: Q15; 32768 as they are */
 static volatile int t_gsub;		/* MP3 on the FDI: off each global_gain */
 static const unsigned short gain_tab[VOL_MAX] = {
@@ -181,7 +195,7 @@ static void gain_at(int d, long *g, int *sub)
 
 static void apply_volume(void)
 {
-	int a = VOL_MAX - vol;		/* 0..15 steps down, while vol is 1 or more */
+	int a = play_vol_att(vol);	/* 0..40 steps of 1.5 dB down, while vol is 1 or more */
 	int sub, subn, digital = !(snd_dma8 && !snd_dma8_interp);	/* (not the STE's 68000) */
 	long g, gn;
 	if (vgm) {
@@ -199,9 +213,12 @@ static void apply_volume(void)
 		gain_at(a - rg_next, &gn, &subn);
 	} else {
 		int cut = !digital && rg_now < 0 ? -rg_now : 0;
-		snd_dac_volume(vol ? a + cut : VOL_MAX - 1, !vol);
-		gain_at(digital ? -rg_now : 0, &g, &sub);
-		gain_at(digital ? -rg_next : 0, &gn, &subn);
+		/* (past the codec's 22.5 dB, the rest on the samples where they
+		   are touched; the STE's LMC1992 takes the whole of it) */
+		int over = digital && a > 15 ? a - 15 : 0;
+		snd_dac_volume(vol ? a + cut : 15, !vol);
+		gain_at(digital ? over - rg_now : 0, &g, &sub);
+		gain_at(digital ? over - rg_next : 0, &gn, &subn);
 	}
 	if (!vol) {
 		g = gn = 0;

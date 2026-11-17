@@ -67,9 +67,11 @@ const char *play_stream_note(void);	/* the tick's longest gap, the stream's firs
 const char *play_disk_note(void);	/* how fast the file was read, the queue's least lead, for the log */
 void play_log_stop(void);	/* "stopped at" and how it kept up, into the log, if it plays */
 long play_len_ms(void);
-/* the volume: 0 silent to VOL_MAX (0 dB), steps of 1.5 dB, on what plays
-   now and what plays next */
-#define VOL_MAX 16
+/* the volume: 0 silent to VOL_MAX (0 dB), on what plays now and what plays
+   next. Logarithmic (Erez, 17 Nov 2026: 24 steps, fine at the top): 1.5 dB
+   steps to 18 dB down, 3 dB to 39, 6 dB to 60 dB down at 1, then off */
+#define VOL_MAX 24
+int play_vol_att(int v);	/* the bar's v as 1.5 dB steps down (0 to 40) */
 void play_set_volume(int v);
 /* ReplayGain's mode (Settings) or Shuffle changed: the gain again, gliding */
 void play_rgain_changed(void);

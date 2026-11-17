@@ -43,7 +43,8 @@ REC_RATE = 48000
 # is heard at its own pitch
 CASES = {
     "wav": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
-    # the volume at 8 of 16 (eplay.inf's VOLUME): the Falcon's own output 12 dB
+    # the volume at 8 of 16 (eplay.inf's VOLUME, 1.45's scale: 1.46 takes it as 16 of
+    # its 24 logarithmic steps, the same 12 dB): the Falcon's own output 12 dB
     # down (the codec's attenuation, 8 steps of 1.5 dB)
     "wavvol": ("TONE.WAV", ["-r", "24585", "-c", "2", "-b", "16"], None, 24585, (1000, 1500), 3),
     "aiff": ("TONE.AIF", ["-r", "32780", "-c", "1", "-b", "16"], None, 32780, (1000, 1000), 3),

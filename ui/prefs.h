@@ -44,7 +44,7 @@ int settings_rgain(void);
 
 /* the volume (0 silent to VOL_FULL, steps of 1.5 dB), VOLUME= in the INF,
    saved by settings_flush at the end when it changed */
-#define VOL_FULL 16
+#define VOL_FULL 24	/* (play.h's VOL_MAX) */
 int settings_volume(void);
 void settings_set_volume(int v);
 void settings_flush(void);

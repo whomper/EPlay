@@ -5,13 +5,12 @@
  */
 #include "sncmd.h"
 #include "tickcode.h"
+#include "attq15.h"
 
 /* the amplitudes, 2 dB a step (0.2 of full scale at 0: four channels
    at most 0.8), and the volume's 1.5 dB steps, Q15 */
 static const long amp_of[16] = { 1677722, 1332662, 1058571, 840853, 667913, 530542, 421425, 334749,
 				 265901,  211213,  167772,  133266, 105857, 84085,  66791,  0 };
-static const long att_q15[16] = { 32768, 27571, 23198, 19519, 16423, 13818, 11627, 9783,
-				  8231,  6925,  5827,  4903,  4125,  3471,  2920,  2457 };
 
 TICK_CODE("6Gsncmd_cmd")
 static void cmd(SNCMD *s, int c, long v)
@@ -37,7 +36,7 @@ static long amp(const SNCMD *s, int ch)
 {
 	if (s->mute)
 		return 0;
-	return ((amp_of[s->vol[ch] & 15] >> 8) * att_q15[s->att & 15] >> 7) >> s->shift;	/* (in 32 bits) */
+	return ((amp_of[s->vol[ch] & 15] >> 8) * att_q15(s->att) >> 7) >> s->shift;	/* (in 32 bits) */
 }
 
 TICK_CODE("6Hsncmd_tone")

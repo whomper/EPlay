@@ -11,6 +11,7 @@
 #include "tos.h"
 #include "dsplock.h"
 #include "tickcode.h"
+#include "attq15.h"
 #include "snd.h"
 #include "opnd.h"
 #include "dspopn.h"
@@ -32,9 +33,6 @@
 #define Ongibit(b) trap14_ww(30, (b))
 #define Offgibit(b) trap14_ww(29, (b))
 
-/* the volume's 1.5 dB steps, Q15 (dspsn.c's) */
-static const long att_q15[16] = { 32768, 27571, 23198, 19519, 16423, 13818, 11627, 9783,
-				  8231,  6925,  5827,  4903,  4125,  3471,  2920,  2457 };
 
 static OPND chip;
 static SNCMD psg;		/* the Mega Drive's SN76489, in opn.a56 */
@@ -324,9 +322,9 @@ void dspopn_hush(void)
 
 void dspopn_volume(int att, int mute)
 {
-	gain_due = mute ? 0 : (int)((long long)OPN_OUTG * att_q15[att & 15] >> 15);
+	gain_due = mute ? 0 : (int)((long long)OPN_OUTG * att_q15(att) >> 15);
 	psg_mute = mute;
-	psg_att = att & 15;
+	psg_att = att;
 }
 
 /* the ring's least lead since PLAY (STATUS: words; -1 no answer) */

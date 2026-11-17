@@ -304,6 +304,8 @@ void snd_dac_volume(int att, int mute)
 {
 	if (!locked)
 		return;
+	if (att > 15)
+		att = 15;	/* (the codec's most, 22.5 dB: play.c puts the rest on the samples) */
 	x_soundcmd(0, (short)(((mute ? 15 : att) & 15) << 4));	/* LTATTEN */
 	x_soundcmd(1, (short)(((mute ? 15 : att) & 15) << 4));	/* RTATTEN */
 }

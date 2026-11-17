@@ -828,10 +828,15 @@ void vp_volume(int att, int mute)
 	}
 	if (use_ay) {
 		/* the Falcon's codec, the STE's LMC1992: the DSP's sound
-		   through the codec with it */
+		   through the codec with it. Past the codec's 22.5 dB (since
+		   1.46 the volume goes to 60 dB down) the rest by the chip's own
+		   volumes, about 3 dB each, and the DSP's SN's gain; the STE's
+		   LMC1992 takes the whole of it */
+		int over = att > 15 && !snd_dma8 ? att - 15 : 0;
 		snd_dac_volume(mute ? 15 : att, mute);
+		att_due = mute ? 15 : (over + 1) / 2;
 		if (use_sn)
-			dspsn_volume(0, mute);
+			dspsn_volume(over, mute);
 		return;
 	}
 	snd_dac_volume(0, 0);		/* (the DSP's chip alone: its own level, the FDI's way too) */

@@ -22,12 +22,13 @@
 #include "inf.h"
 #include "snd.h"
 #include "elog.h"
+#include "play.h"
 #include "prefs.h"
 #include "rgain.h"
 #include "alert.h"
 
 static int output = OUT_AUTO;
-static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to 16), saved at the end */
+static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to VOL_FULL), saved at the end */
 static char add_dir[FP_PATH], recent[FP_RECENT][FP_PATH];	/* the Add files dialog's */
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
@@ -128,6 +129,15 @@ void settings_load(void)
 				output = i;
 	if (inf_get(inf, inf_n, "VOLUME", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9') {
 		volume = atoi(v);
+		if (!strchr(v, '/')) {
+			/* (1.45 and before: 0 to 16, 1.5 dB a step: the nearest of
+			   1.46's 24 logarithmic steps) */
+			int a = 16 - (volume > 16 ? 16 : volume), best = VOL_FULL, k;
+			for (k = VOL_FULL; k >= 1; k--)
+				if (abs(play_vol_att(k) - a) < abs(play_vol_att(best) - a))
+					best = k;
+			volume = volume <= 0 ? 0 : best;
+		}
 		if (volume > VOL_FULL)
 			volume = VOL_FULL;
 		volume_saved = volume;
@@ -261,7 +271,7 @@ static void save_in(void)
 	long n = inf_set(inf, inf_n, "OUTPUT", names[output], note, inf2, INF_MAX), h;
 	if (n < 0)
 		return;
-	snprintf(vs, sizeof(vs), "%d", volume);
+	snprintf(vs, sizeof(vs), "%d/%d", volume, VOL_FULL);	/* (the scale: 1.46's 24 steps) */
 	n = inf_set(inf2, n, "VOLUME", vs, vnote, inf3, INF_MAX);
 	if (n < 0)
 		return;
