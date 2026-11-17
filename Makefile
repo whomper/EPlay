@@ -322,6 +322,8 @@ fuzz: tests/fuzz/fuzz_stream.c src/stream.c src/stream.h | $(B)
 # MP3INT.OVL's decoder on the host (its arithmetic plain C: the 68060's);
 # libmad's own files as they are, so without warnings asked of them
 HMADF   := -O2 -Imp3ovl/libmad -Ithird_party/libmad -Isrc -Ithird_party/minimp3 -DHAVE_CONFIG_H -DNDEBUG -DFPM_68060 -DOPT_SPEED
+# (libmad's files, MP3INT.OVL's and its host test's: set before either uses it)
+MADC    := bit fixed frame huffman layer12 layer3 stream synth timer
 HMADO   := $(addprefix $(B)/hmad_,$(addsuffix .o,$(MADC)))
 $(B)/hmad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h third_party/libmad/*.dat) mp3ovl/libmad/config.h
 	@mkdir -p $(dir $@)
@@ -391,7 +393,6 @@ $(B)/mp3ovl/stack.o: mp3ovl/stack.S
 # later) in integers, for a 68060 or a 68080 without its FPU: fixed.h's
 # FPM_68060 (products from 16-bit pieces) with libmad's OPT_SPEED; built
 # with no FPU instruction (-msoft-float, and libmad has no floating point)
-MADC    := bit fixed frame huffman layer12 layer3 stream synth timer
 OVLIF   := -m68060 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc \
            -isystem $(GCCINC) -Icommon/atari/include -Isrc -Imp3ovl/libmad -Ithird_party/libmad \
