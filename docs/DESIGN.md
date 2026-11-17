@@ -2601,8 +2601,8 @@ it in 1.44".
   is a 68080: EmuTOS says 40 for one (its `bios/processor.S`) and tells it from a 68040 as
   `atari/cpu080.S` does, through Supexec: a PCR (`movec pcr,d1`, which a 68040 refuses) and
   `addiw.l` (a 68080's alone), the illegal instruction and line F vectors taken at the VBR while it
-  runs. `_FPU`'s high word then picks `MP3FPU.OVL` (minimp3) or `MP3INT.OVL`. The start's log says
-  which. The list takes an MP3 wherever one of them can decode it: the XBIOS's sound alone, a TT's
+  runs. `_FPU`'s high word then picks `MP3FPU.OVL` (minimp3) or `MP3INT.OVL`. The log says which
+  when an MP3 plays on the CPU. The list takes an MP3 wherever one of them can decode it: the XBIOS's sound alone, a TT's
   or an STE's DMA sound with a 68060 or 68080 (a Vampire's), a Falcon whose DSP is taken. Checked on
   Hatari's 68040 Falcon: the probe says no, the MP3 stays on the DSP (play060.py's `Falcon-040`).
   No emulator has a 68080: the V4SA tester's log is its check.
@@ -2645,9 +2645,9 @@ it in 1.44".
   right: Hatari 2.4 starts the DMA where its last stop left it (EPlay's clock measurement), one word
   on; a Falcon starts at the first. stream_test.py now counts it SKIPPED, as play_test.py does,
   where MP3CPU=1 and the tone is on the right.
-- **The start's log line on MP3 on the CPU** cost a stock Falcon's start 30 ms (Falcon-4:16, a
-  CD-quality WAV, 635 with it, 605 without, pads remade each time): written only where `_CPU` says
-  40 or more.
+- **No line at the start on MP3 on the CPU.** One cost a stock Falcon's start 30 ms (Falcon-4:16, a
+  CD-quality WAV, 635 with it, 605 without, pads remade each time), and only where `_CPU` said 40 or
+  more still 630: it is gone. The line when an MP3 plays on the CPU says which CPU and decoder.
 - **The data pad (hub, AERA-Atari e472722).** `tools/mkpad.py` pads the constants, the data and the
   BSS as it pads the code, each section at its base's place mod 256, the 68030's data cache's; the
   base now 1.42's map (its code at 1.41's places, so the code's pads are as they were). 1.43's

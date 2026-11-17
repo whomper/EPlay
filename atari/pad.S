@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.42's link map (v1.42, build/atari/eplay.map): do not edit.
-| 53 pads, 8520 bytes, each section at its place there, mod the 68030's
+| 53 pads, 8384 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.0hot.40dspmp3_tick_status!","ax"
 	.globl ep_pad_0
@@ -14,7 +14,7 @@ ep_pad_1:
 	.section ".text.app_main!","ax"
 	.globl ep_pad_2
 ep_pad_2:
-	.space 106
+	.space 74
 	.section ".text.apply_volume!","ax"
 	.globl ep_pad_3
 ep_pad_3:
@@ -138,7 +138,7 @@ ep_pad_32:
 	.section ".rodata.m3u_add.str1.1!","a"
 	.globl ep_pad_33
 ep_pad_33:
-	.space 168
+	.space 64
 	.section ".rodata.pages.13!","a"
 	.globl ep_pad_34
 ep_pad_34:
