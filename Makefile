@@ -263,7 +263,8 @@ CFLAGS += -DAES_PROFILE=$(PROF)
 endif
 prof: $(B)/mp3tab.h $(B)/mp3_prog.h build/atari/eplay.elf
 	$(MAKE) OBJDIR=build/prof PROF=20 build/prof/eplay.prg
-	python3 tools/padcheck.py build/atari/eplay.map build/prof/eplay.map
+	python3 tools/padcheck.py build/atari/eplay.map build/prof/eplay.map build/atari/eplay.elf build/prof/eplay.elf \
+	    $(foreach o,main gem version,build/atari/$(o).o build/prof/$(o).o)
 # atari/padprof.S made again from build/atari's map (after atari/pad.S changes)
 padprof: $(B)/mp3tab.h $(B)/mp3_prog.h build/atari/eplay.elf
 	rm -rf build/npprof
