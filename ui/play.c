@@ -98,6 +98,7 @@ static long cmp_skip, cmp_keep;
 static int cmp_wav;
 static PCMFMT wfmt;		/* the file's own format */
 
+#define CMP_WAV cmp_wav
 static int wav_frame(const unsigned char *in, int n, short *pcm, MP3OVL_INFO *fi)
 {
 	int k = n / wfmt.bytes;
@@ -109,6 +110,8 @@ static int wav_frame(const unsigned char *in, int n, short *pcm, MP3OVL_INFO *fi
 		pcm_convert(&wfmt, in, pcm, k);
 	return k;
 }
+#else
+#define CMP_WAV 0
 #endif
 static long open_fs;			/* the file's samples by its Xing frame (0: none) */
 static void cmp_trim(int has_lt, const MP3LAME *lt, long fs, int from_start)
@@ -1894,7 +1897,11 @@ int play_chain(const char *path)
 		   that turn on a stock Falcon) */
 		unsigned char hd[4];
 		int pcm2 = Fread((short)h2, 4, hd) == 4 && (!memcmp(hd, "RIFF", 4) || !memcmp(hd, "FORM", 4));
-		if (pcm2 != !(dsp || cmp)) {
+		/* (a WAV or AIFF through the CPU's path, the XBIOS's sound:
+		   still a WAV's kind. 1.46 took it for an MP3's, so the next
+		   opened at its end, a gap between: the FireBee's, Erez 17
+		   Nov 2026) */
+		if (pcm2 != !(dsp || (cmp && !CMP_WAV))) {
 			Fclose((short)h2);
 			elog("gapless: %s is not this file's kind: it opens at this one's end", base_name(path));
 			return 0;
@@ -1916,7 +1923,7 @@ int play_chain(const char *path)
 		refill_cap = 8192;	/* (a header, the Xing frame, a frame or two: the
 					   speed rig's Return held 345 ms with 32 KB here) */
 		refill();
-		if (dsp || cmp) {
+		if (dsp || (cmp && !CMP_WAV)) {
 			MP3HDR h;
 			int vbr = 0;
 			long nf;
@@ -1982,8 +1989,15 @@ int play_chain(const char *path)
 		} else {
 			PCMFMT f2;
 			const char *why;
-			if (!pcm_probe(fbuf, fend, &f2, &why) || f2.kind != fmt.kind || f2.rate != fmt.rate ||
-			    f2.channels != fmt.channels || f2.bits != fmt.bits || f2.big != fmt.big || f2.sign8 != fmt.sign8) {
+			/* (the file's own format: the queue's is 16-bit stereo on
+			   the CPU's path, the XBIOS's sound) */
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+			const PCMFMT *ff = CMP_WAV ? &wfmt : &fmt;
+#else
+			const PCMFMT *ff = &fmt;
+#endif
+			if (!pcm_probe(fbuf, fend, &f2, &why) || f2.kind != ff->kind || f2.rate != ff->rate ||
+			    f2.channels != ff->channels || f2.bits != ff->bits || f2.big != ff->big || f2.sign8 != ff->sign8) {
 				fh = was;
 				fpos = wpos;
 				fend = wend;
