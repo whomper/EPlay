@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.42's link map (v1.42, build/atari/eplay.map), its constants and BSS at 1.43's (v1.43): do not edit.
-| 46 pads, 7540 bytes, each section at its place there, mod the 68030's
+| 46 pads, 7516 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.0hot.40dspmp3_tick_status!","ax"
 	.globl ep_pad_0
@@ -26,7 +26,7 @@ ep_pad_4:
 	.section ".text.cmp3_kind!","ax"
 	.globl ep_pad_5
 ep_pad_5:
-	.space 90
+	.space 66
 	.section ".text.cmp3_load!","ax"
 	.globl ep_pad_6
 ep_pad_6:

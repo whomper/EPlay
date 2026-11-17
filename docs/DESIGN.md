@@ -2605,7 +2605,11 @@ it in 1.44".
   when an MP3 plays on the CPU. The list takes an MP3 wherever one of them can decode it: the XBIOS's sound alone, a TT's
   or an STE's DMA sound with a 68060 or 68080 (a Vampire's), a Falcon whose DSP is taken. Checked on
   Hatari's 68040 Falcon: the probe says no, the MP3 stays on the DSP (play060.py's `Falcon-040`).
-  No emulator has a 68080: the V4SA tester's log is its check.
+  No emulator has a 68080: the V4SA tester's log is its check. **That log (1.40, 17 Nov 2026):**
+  `_MCH` a Falcon's, `_CPU 80` (its TOS's, not EmuTOS's 40), `_SND $17` (the Falcon's DMA sound,
+  no DSP): its MP3 file played on the CPU already ("MP3 on the CPU (minimp3 on the 68060's FPU):
+  the DSP not there"); what said "MP3 needs a Falcon's DSP" was a station found by Find station,
+  which 1.40 played on the DSP alone. 1.44 plays it on the CPU, and takes `_CPU 80` as a 68080.
 - **MP3INT.OVL** (`mp3ovl/madhead.c`): libmad 0.15.1b (GPL-2.0 or later, `third_party/libmad`,
   NOTICES.TXT), its fixed point with `fixed.h`'s FPM_68060, added here: the 68060 has no 32 x 32 ->
   64 multiply (libgcc's own stops it), so `x*y >> s` from 16-bit pieces, each product in 32 bits.
