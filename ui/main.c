@@ -2336,7 +2336,11 @@ int app_main(void)
 	sart_init(fetch_message);
 	crash_cleanup = crash_quit;
 	dlg_redraw_hook = redraw_under;
-	av_init("EPLAY|EPLAYST");	/* (the name the AES knows: EPLAYST.PRG on an STE) */
+	/* (the name the AES knows: EPLAYST.PRG on an STE, EPLAYFB.PRG on the
+	   FireBee; a name the AES doesn't know and Thing, at a drop on the
+	   window, says EPlay quit without AV_EXIT: a FireBee tester, 17 Nov
+	   2026) */
+	av_init("EPLAY|EPLAYST|EPLAYFB");
 	/* the VDI's ST RAM block taken now, not at the first draw that wants
 	   it: Erez's 0.12, DFB1X off, took it while the first file played,
 	   just past that file's queue, and the free ST RAM stayed split in two
