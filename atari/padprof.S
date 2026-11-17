@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against this commit's build/atari/eplay.map (the profiling build at the shipped layout): do not edit.
-| 69 pads, 11328 bytes, each section at its place there, mod the 68030's
+| 70 pads, 11576 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.0hot.40dspmp3_tick_status!","ax"
 	.globl ep_pad_0
@@ -187,95 +187,99 @@ ep_pad_44:
 	.globl ep_pad_45
 ep_pad_45:
 	.space 226
-	.section ".rodata.pages.13!","a"
+	.section ".rodata.m3u_add.str1.1!","a"
 	.globl ep_pad_46
 ep_pad_46:
-	.space 11
-	.section ".rodata.pls_read.str1.1!","a"
+	.space 248
+	.section ".rodata.pages.13!","a"
 	.globl ep_pad_47
 ep_pad_47:
-	.space 1
-	.section ".rodata.xb_rates!","a"
+	.space 11
+	.section ".rodata.pls_read.str1.1!","a"
 	.globl ep_pad_48
 ep_pad_48:
-	.space 2
-	.section ".data.hz_at.4!","aw"
+	.space 1
+	.section ".rodata.xb_rates!","a"
 	.globl ep_pad_49
 ep_pad_49:
-	.space 252
-	.section ".data.kind!","aw"
+	.space 2
+	.section ".data.hz_at.4!","aw"
 	.globl ep_pad_50
 ep_pad_50:
 	.space 252
-	.section ".data.xs_end_at!","aw"
+	.section ".data.kind!","aw"
 	.globl ep_pad_51
 ep_pad_51:
-	.space 68
-	.section ".bss.avail!","aw",@nobits
+	.space 252
+	.section ".data.xs_end_at!","aw"
 	.globl ep_pad_52
 ep_pad_52:
-	.space 4
-	.section ".bss.b.5!","aw",@nobits
+	.space 68
+	.section ".bss.avail!","aw",@nobits
 	.globl ep_pad_53
 ep_pad_53:
-	.space 216
-	.section ".bss.b.7!","aw",@nobits
+	.space 4
+	.section ".bss.b.5!","aw",@nobits
 	.globl ep_pad_54
 ep_pad_54:
-	.space 36
-	.section ".bss.cmp_hz!","aw",@nobits
+	.space 216
+	.section ".bss.b.7!","aw",@nobits
 	.globl ep_pad_55
 ep_pad_55:
-	.space 248
-	.section ".bss.cmp_snd!","aw",@nobits
+	.space 36
+	.section ".bss.cmp_hz!","aw",@nobits
 	.globl ep_pad_56
 ep_pad_56:
-	.space 252
-	.section ".bss.cpu_is080!","aw",@nobits
+	.space 248
+	.section ".bss.cmp_snd!","aw",@nobits
 	.globl ep_pad_57
 ep_pad_57:
-	.space 242
-	.section ".bss.crash_slot!","aw",@nobits
+	.space 252
+	.section ".bss.cpu_is080!","aw",@nobits
 	.globl ep_pad_58
 ep_pad_58:
-	.space 252
-	.section ".bss.ctab!","aw",@nobits
+	.space 242
+	.section ".bss.crash_slot!","aw",@nobits
 	.globl ep_pad_59
 ep_pad_59:
-	.space 254
-	.section ".bss.done.4!","aw",@nobits
+	.space 252
+	.section ".bss.ctab!","aw",@nobits
 	.globl ep_pad_60
 ep_pad_60:
-	.space 252
-	.section ".bss.is080!","aw",@nobits
+	.space 254
+	.section ".bss.done.4!","aw",@nobits
 	.globl ep_pad_61
 ep_pad_61:
 	.space 252
-	.section ".bss.name.10!","aw",@nobits
+	.section ".bss.is080!","aw",@nobits
 	.globl ep_pad_62
 ep_pad_62:
-	.space 192
-	.section ".bss.name.11!","aw",@nobits
+	.space 252
+	.section ".bss.name.10!","aw",@nobits
 	.globl ep_pad_63
 ep_pad_63:
-	.space 64
-	.section ".bss.part_us_now!","aw",@nobits
+	.space 192
+	.section ".bss.name.11!","aw",@nobits
 	.globl ep_pad_64
 ep_pad_64:
-	.space 248
-	.section ".bss.play_busy_turn!","aw",@nobits
+	.space 64
+	.section ".bss.part_us_now!","aw",@nobits
 	.globl ep_pad_65
 ep_pad_65:
-	.space 252
-	.section ".bss.s_m2!","aw",@nobits
+	.space 248
+	.section ".bss.play_busy_turn!","aw",@nobits
 	.globl ep_pad_66
 ep_pad_66:
 	.space 252
-	.section ".bss.s_miss!","aw",@nobits
+	.section ".bss.s_m2!","aw",@nobits
 	.globl ep_pad_67
 ep_pad_67:
 	.space 252
-	.section ".bss.was_reset!","aw",@nobits
+	.section ".bss.s_miss!","aw",@nobits
 	.globl ep_pad_68
 ep_pad_68:
+	.space 252
+	.section ".bss.was_reset!","aw",@nobits
+	.globl ep_pad_69
+ep_pad_69:
 	.space 252
