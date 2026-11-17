@@ -2442,6 +2442,45 @@ position bar let go 180 (50); the 5 s while it plays 55 to 60 (50); a row select
 the whole picture 365, 370 (165); Next 405, 410 (185); Down 250, 235 (50); Return 355 (145); Delete 315
 (300). Recorded, not worked on: the STE's speed as a phase of its own is Erez's to decide.
 
+## 1.43: a crash at interrupt time, Output DSP's volume, the SSI's misses (16 Nov 2026)
+
+- **A crash at interrupt time writes nothing.** A tester's Falcon with a CT60 under plain TOS 4.04
+  (via Erez) crashed while loading an MP3, and each time the partition the MP3 came from was damaged.
+  Common's crash catcher used to land a supervisor fault in the program's code wherever it came from,
+  including an interrupt routine of EPlay's (the sound tick, the DSP's host port), and wrote CRASH.LOG
+  and EPLAY.LOG through GEMDOS. With the main program inside an Fread at that moment, GEMDOS was
+  entered again mid-call and wrote out its half-done FAT and directory buffers. Common's crash.c, from
+  AERA-Atari cd4bc7a (the hub's fix, taken alone), now lands such a fault only at user mode's
+  interrupt level and from a Supexec of the program's own. At interrupt time the fault goes on to TOS:
+  its bombs, no file written. term.c's handler still gives back the sound and the DSP, and says so
+  on the emulator's console. The check (TOS 4.04, Falcon-4:16, an MP3 playing): `CRASHAT=1500` (the
+  main code) is caught as before, with its alert and both logs. `CRASHAT=-1500` (new: an illegal
+  instruction from a VBL routine of EPlay's) writes no CRASH.LOG, TOS ends the process, and
+  LOCKCHK.PRG then gets the sound and the DSP ("sound 1 dsp 0"). The CT60's own crash is still to
+  find, from the tester's CRASH.LOG and EPLAY.LOG.
+- **Output DSP's volume reaches the FDI.** With Output DSP the matrix sends the sound to the DAC and
+  to the DSP port (DAC | EXTOUT), and the codec's attenuation reaches only the DAC. Through the FDI,
+  Erez heard the volume only at 0, where EPlay mutes. On the Falcon's 16-bit matrix (not the 8-bit
+  DMA, not the XBIOS path) the volume is now applied to the samples, with the codec at 0 dB. The STE
+  and the XBIOS path work as before.
+- **The SSI's misses counted.** Erez hears quiet crackles with Output DSP (an MP3 or a station,
+  resampled on the DSP to 49,170 Hz on the Falcon's clock). They are in 1.12 too, with the DFB1X's TT
+  RAM off too, and never through the FDI or with a WAV or an AIFF resampled the same way. His logs show
+  no granule late, but the DSP's least wait is 0 (an AIFF's is 2,112). The simulator plays such files
+  bit for bit with a DSP up to 13 % slower. Hatari's DSP core, though, never raises the SSI's transmit
+  underrun, the one fault that would click without a late granule. So `dsp/mp3.a56`'s `tue` (the
+  SSI's transmit with exception) sets `V_SF` bit 5. After each frame it is counted in bits 6 and 7
+  (running on), and the status word carries that count in its bits 7 and 8, beside the waits in 64s
+  in bits 0 to 6 (at most 8,128). `dspmp3.c` counts them, and EPLAY.LOG's line at a stop says
+  "N with a slot missed". Three misses, like three granules late, put the rest of the file on Normal
+  (32,780 Hz). `tests/dspmp3/stream.c`'s `SIMTUE=N` raises the exception on every Nth slot (in
+  `make dsptest`): the sound stays bit for bit the model's, and the frames are counted. What Erez's
+  log shows with 1.43 decides the next step: misses mean the DSP's slot loop needs more lead, and none
+  means the crackles come from somewhere else on Output DSP's path.
+- **1.43's speed against 1.42:** one row slower beyond a tick in both runs, accepted by Erez
+  ("accept the row, release 1.43"): Falcon-4:16's start with a WAV, 610 to 635 ms, probably the data's
+  placement (the pads hold the code at 1.41's places). Its cause is to find for the next release.
+
 ## A DSP that stalls while it plays (Erez, 14 Nov 2026)
 
 An https station through the Gateway on the FDI's 44.1 kHz stopped twice in 5 minutes, "The DSP
