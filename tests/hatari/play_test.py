@@ -609,9 +609,11 @@ def run(work, case, spec):
     prg = "eplayst.prg" if spec.startswith("STE") else "eplay.prg"
     # (EPLAY_RIG_PRG: another build of it, a release's, to try a report on)
     shutil.copy(os.environ.get("EPLAY_RIG_PRG") or os.path.join(TOP, "binary", prg), os.path.join(hd, prg))
-    # (MP3FPU.OVL beside it, as a release has it: a 68060 with no DSP decodes MP3 with it)
-    if os.path.exists(os.path.join(TOP, "binary", "mp3fpu.ovl")):
-        shutil.copy(os.path.join(TOP, "binary", "mp3fpu.ovl"), hd)
+    # (MP3FPU.OVL and MP3INT.OVL beside it, as a release has them: a 68060
+    # with no DSP decodes MP3 with the one its FPU, or none, takes)
+    for ovl in ("mp3fpu.ovl", "mp3int.ovl"):
+        if os.path.exists(os.path.join(TOP, "binary", ovl)):
+            shutil.copy(os.path.join(TOP, "binary", ovl), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     f = make_file(hd, case)
     tail = "C:\\%s" % f

@@ -41,6 +41,7 @@
 #include "elog.h"
 #include "snd.h"
 #include "vgmplay.h"
+#include "cmp3.h"
 #include "bar.h"
 #include "art.h"
 #include "sart.h"
@@ -921,7 +922,7 @@ static void full_note(void)
 static void none_playable(int before)
 {
 	if (list_count() > before && play_state() != PS_PLAYING && !play_paused() &&
-	    (!(get_cookie(0x5F534E44L) & 8) || SND_XB) && !vp_cpu_can()) {
+	    (!(get_cookie(0x5F534E44L) & 8) || SND_XB) && !cmp3_can()) {
 		nf_debug("EPLAY refused: MP3 needs a Falcon's DSP.\n");
 		status("MP3 needs a Falcon's DSP.");
 	}
@@ -2379,6 +2380,13 @@ int app_main(void)
 	elog("EPlay %s; _MCH $%08lX, _CPU %ld, _SND $%02lX; the FDI's driver %s", app_version,
 	     get_cookie(0x5F4D4348L), get_cookie(0x5F435055L), get_cookie(0x5F534E44L),
 	     snd_fdi ? "answers ($4711)" : "doesn't answer");
+	/* (MP3 on the CPU: a 68060's or a 68080's, the FPU or none, cmp3.c;
+	   the V4SA tester's log, 16 Nov 2026) */
+	elog("MP3 on the CPU, where the DSP isn't free: %s; _FPU $%08lX",
+	     cmp3_kind() == CMP3_NONE ? "no (a 68060 or a 68080 decodes it)" :
+	     cmp3_kind() == CMP3_FPU ? (cmp3_is080() ? "the 68080's FPU (MP3FPU.OVL)" : "the 68060's FPU (MP3FPU.OVL)") :
+	     (cmp3_is080() ? "the 68080 without an FPU (MP3INT.OVL)" : "the 68060 without an FPU (MP3INT.OVL)"),
+	     get_cookie(0x5F465055L));
 	/* (TT RAM is the DFB1's: Erez's logs of 0.11 had a queue of 1.9 MB,
 	   8 MB with it, and nothing else to say whether it was on) */
 	{
@@ -2398,16 +2406,21 @@ int app_main(void)
 	if (snd_xb) {
 		/* (phase 11, step 4) no Atari sound hardware: the XBIOS's calls
 		   alone (a Milan's GSXB), 49,170 Hz, files resampled by the CPU */
-		elog("the sound: the XBIOS's calls alone%s, the Falcon's rates (a file resampled to 49170 Hz by the CPU); MP3 %s",
-		     snd_xb_want ? " (SNDXBIOS=1)" : "", vp_cpu_can() ? "decoded by it (MP3FPU.OVL)" : "not played");
-		status(vp_cpu_can() ? "The XBIOS's sound: MP3, WAV and AIFF." : "The XBIOS's sound: WAV and AIFF.");
+		elog("the sound: the XBIOS's calls alone%s, the Falcon's rates (a file resampled to 49170 Hz by the CPU); MP3 %s%s",
+		     snd_xb_want ? " (SNDXBIOS=1)" : "", cmp3_can() ? "decoded by the " : "not played",
+		     !cmp3_can() ? "" : cmp3_kind() == CMP3_FPU ? (cmp3_is080() ? "68080 (MP3FPU.OVL)" : "68060 (MP3FPU.OVL)") :
+		     (cmp3_is080() ? "68080 without an FPU (MP3INT.OVL)" : "68060 without an FPU (MP3INT.OVL)"));
+		status(cmp3_can() ? "The XBIOS's sound: MP3, WAV and AIFF." : "The XBIOS's sound: WAV and AIFF.");
 	} else
 #endif
 	if (snd_dma8) {
 		/* a TT or an STE (phase 6): its 8-bit DMA, WAV and AIFF */
-		elog("the sound: 8-bit DMA (a TT's or an STE's), the music %s",
-		     snd_dma8_interp ? "interpolated and dithered by the 68030" : "at the nearest sample");
-		status("8-bit DMA sound: WAV and AIFF. MP3 needs a Falcon's DSP.");
+		elog("the sound: 8-bit DMA (a TT's or an STE's), the music %s; MP3 %s%s",
+		     snd_dma8_interp ? "interpolated and dithered by the 68030" : "at the nearest sample",
+		     cmp3_can() ? "decoded by the " : "not played",
+		     !cmp3_can() ? "" : cmp3_kind() == CMP3_FPU ? (cmp3_is080() ? "68080 (MP3FPU.OVL)" : "68060 (MP3FPU.OVL)") :
+		     (cmp3_is080() ? "68080 without an FPU (MP3INT.OVL)" : "68060 without an FPU (MP3INT.OVL)"));
+		status(cmp3_can() ? "8-bit DMA sound: MP3, WAV and AIFF." : "8-bit DMA sound: WAV and AIFF. MP3 needs a Falcon's DSP.");
 	} else {
 	elog("the DSP port's clock: %ld Hz at prescale 1 (a clock of %ld Hz, timed by %s); taken as %ld Hz",
 	     snd_ext_raw, snd_ext_clock, snd_ta_stuck ? "the 200 Hz clock: Timer A didn't count" :

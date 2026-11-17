@@ -2589,3 +2589,55 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
   from `_SND` alone.
 - **With the FireBee's release:** the same decoder in the ColdFire edition, its synthesis filter
   and IMDCT on the EMAC later.
+
+### 1.44: a 68060 or a 68080, with an FPU or none; stations too (Erez, 16 and 17 Nov 2026)
+
+Erez: "if there is a 68060 or 68080 without an FPU, EPlay should decode on the CPU, not ask for a
+DSP"; "a 68060 and 68080 without an FPU must play mp3 with room to spare ... It can not take the
+machine down"; "let's see the real numbers and then decide"; then, shown the figures below, "A, ship
+it in 1.44".
+
+- **Which machines (cmp3.c's `cmp3_kind`).** No ColdFire (`_CF_`); `_CPU` 60, or 40 where the CPU
+  is a 68080: EmuTOS says 40 for one (its `bios/processor.S`) and tells it from a 68040 as
+  `atari/cpu080.S` does, through Supexec: a PCR (`movec pcr,d1`, which a 68040 refuses) and
+  `addiw.l` (a 68080's alone), the illegal instruction and line F vectors taken at the VBR while it
+  runs. `_FPU`'s high word then picks `MP3FPU.OVL` (minimp3) or `MP3INT.OVL`. The start's log says
+  which. The list takes an MP3 wherever one of them can decode it: the XBIOS's sound alone, a TT's
+  or an STE's DMA sound with a 68060 or 68080 (a Vampire's), a Falcon whose DSP is taken. Checked on
+  Hatari's 68040 Falcon: the probe says no, the MP3 stays on the DSP (play060.py's `Falcon-040`).
+  No emulator has a 68080: the V4SA tester's log is its check.
+- **MP3INT.OVL** (`mp3ovl/madhead.c`): libmad 0.15.1b (GPL-2.0 or later, `third_party/libmad`,
+  NOTICES.TXT), its fixed point with `fixed.h`'s FPM_68060, added here: the 68060 has no 32 x 32 ->
+  64 multiply (libgcc's own stops it), so `x*y >> s` from 16-bit pieces, each product in 32 bits.
+  Built `-msoft-float`, the Makefile failing it on any FPU instruction. Its memory is the state the
+  program gives (libmad's two mallocs answered by buffers there), its 6 KB of stack its own (as
+  MP3FPU.OVL's), each frame copied with libmad's 8 bytes of guard so the file's last decodes.
+  `tests/mp3/test_mp3int.c` (`make test`) feeds it as `fill_cmp` does and holds it to minimp3.
+- **Measured on Hatari's 68060 at 32 MHz** (17 Nov 2026; not cycle-exact: a guide, scaled by the
+  clock), a 128 kbit/s 44.1 kHz stereo file:
+
+  | decoder | Hatari's 68060 at 32 MHz | ~66 MHz | ~100 MHz | accuracy against minimp3 |
+  |---|---|---|---|---|
+  | minimp3, the FPU (MP3FPU.OVL) | 92 % | 45 % | 30 % | full |
+  | libmad, no FPU, full accuracy (the low products in) | 298 % | 145 % | 95 % | 0.03 of full's limit |
+  | libmad, no FPU, OPT_SPEED (MP3INT.OVL) | 123 % | 60 % | 40 % | 1.3 to 1.7 of full's limit (5 on a full-scale square), 0.1 of limited's |
+  | libmad, FPM_DEFAULT | 88 % | | | some 20 of full's limit |
+
+  OPT_SPEED's split: the frames decoded 70 %, the synthesis 53 %. -O3, unrolling and scheduling
+  gained nothing; half-rate synthesis 11 points. Its error is the size of 16-bit rounding. EPlay's
+  own path (an LC060, a 32 kHz file) logged 71 %. The 68060's builds' samples are the host's, sum
+  for sum (MP3MAD.PRG): FPM_68060 is plain C.
+- **The real numbers:** EPLAY.LOG's line at a stop, for an MP3 on the CPU: "the 68060 decoding and
+  resampling N% of the time (ms for ms of sound, the decoder)", each turn's time with its reads
+  left out. The CPU is busy only in EPlay's GEM turns (`fill_cmp`'s time limit), so a CPU too slow
+  is heard as gaps, not as a machine that stops. What the testers' figures say decides what comes
+  next (68060 code for the hot loops, or not).
+- **Stations on the CPU (task 83):** `fill_cmp` takes a station's bytes (the probe's first, then
+  `ns_read`; nothing yet is a later turn's, never the end) and its 3 s before it plays are decoded
+  and resampled once the output's rate is known (its step: before that the resampler can't move).
+  The FireBee's edition takes stations too. stream_test.py's live and drop pass on the 68060 with
+  its FPU and without one (`EPLAY_RIG_INF=MP3CPU=1`).
+- **The data pad (hub, AERA-Atari e472722).** `tools/mkpad.py` pads the constants, the data and the
+  BSS as it pads the code, each section at its base's place mod 256, the 68030's data cache's; the
+  base now 1.42's map (its code at 1.41's places, so the code's pads are as they were). 1.43's
+  Falcon-4:16 start with a WAV, 635 in both pairs, back to 610.

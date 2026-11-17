@@ -20,10 +20,12 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
 - **Playlists:** files, folders and `.M3U`; reorder by dragging; Shuffle and Repeat.
 - **Mini player:** the bar alone, in a small window.
 - **Falcon, TT and STE:** WAV and AIFF on the TT's and STE's DMA sound too.
-- **68060:** a Falcon with a 68060 plays as any Falcon; where its DSP isn't free, the 68060 and its
-  FPU decode MP3 themselves (`mp3fpu.ovl`; so far tested in Hatari, not yet on a real CT60).
-- **FireBee (first test edition):** `eplayfb.prg`, built for its ColdFire: MP3 decoded by the
-  ColdFire and its FPU, WAV and AIFF, through FireTOS's sound. VGM, web radio and the YM2149 not
+- **68060 and 68080:** a Falcon with a 68060 plays as any Falcon; where there's no DSP free (a
+  Milan, a Vampire, a CT60 whose DSP another program holds), a 68060 or a 68080 decodes MP3 and web
+  radio itself: with its FPU (`mp3fpu.ovl`), or without one (`mp3int.ovl`). So far tested in Hatari,
+  not yet on a real 68060 or 68080.
+- **FireBee (first test edition):** `eplayfb.prg`, built for its ColdFire: MP3 and web radio
+  decoded by the ColdFire and its FPU, WAV and AIFF, through FireTOS's sound. VGM and the YM2149 not
   yet there.
 
 ![EPlay's Settings on a Falcon in 256 colours (Hatari): its pages Playing, Stations and Files at the left; Playing shows the Output (Auto, FDI, DSP) and ReplayGain (Off, Track, Album, Auto) as buttons](docs/settings.png)
@@ -39,7 +41,8 @@ Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** a
 | `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it |
 | `tls.ovl`, `cacert.pem` | secure (https) stations: keep them beside the program |
 | `tlsfb.ovl` | the same on a FireBee: EPlay loads it there instead of `tls.ovl` |
-| `mp3fpu.ovl` | MP3 decoded by a 68060 with its FPU where there is no DSP free: keep it beside the program |
+| `mp3fpu.ovl` | MP3 decoded by a 68060 or a 68080 with its FPU where there is no DSP free: keep it beside the program |
+| `mp3int.ovl` | the same for a 68060 or a 68080 without an FPU |
 | `eplayfb.prg` | the program for a FireBee (a first test edition: MP3, WAV and AIFF) |
 | `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` |
 
@@ -47,7 +50,7 @@ Start `eplay.prg`, or drop music files, a folder or a playlist on it. **File > O
 **File > Open URL...** plays a station, **Help > Keys...** lists the keys. The guide
 ([docs/GUIDE.md](docs/GUIDE.md)) has the rest.
 
-**Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP, or a 68060 with its FPU), a TT,
+**Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP, or a 68060 or 68080), a TT,
 or an STE or Mega STE with `eplayst.prg` (WAV and AIFF), or a FireBee with `eplayfb.prg`; a screen
 640 pixels wide. The original ST
 has no DMA sound and isn't supported. Web radio needs a network card and
@@ -71,8 +74,8 @@ More in [docs/DEVELOPING.md](docs/DEVELOPING.md).
 ## Source
 
 `src/` the formats and the decoder's C model, `dsp/` the MP3 decoder and the chips' programs for the
-DSP56001, `atari/` the sound hardware, `ui/` GEM, `mp3ovl/` the 68060's MP3 overlay (minimp3, in
-`third_party/`), `radio/` the Gateway's radio service, `common/` the AERA library. The
+DSP56001, `atari/` the sound hardware, `ui/` GEM, `mp3ovl/` the MP3 overlays for a 68060 or a 68080
+(minimp3 and libmad, in `third_party/`), `radio/` the Gateway's radio service, `common/` the AERA library. The
 full list is in [docs/DEVELOPING.md](docs/DEVELOPING.md).
 
 ## Tests

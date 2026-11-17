@@ -82,12 +82,13 @@ OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/inflate
            $(OBJDIR)/sting_s.o $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 else
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/feed_s.o $(OBJDIR)/hostirq_s.o \
-	   $(OBJDIR)/inflate_fast_s.o \
+	   $(OBJDIR)/inflate_fast_s.o $(OBJDIR)/cpu080_s.o \
            $(OBJDIR)/sting_s.o \
            $(addprefix $(OBJDIR)/,$(addsuffix .o,$(OWN) $(CSRC) $(CTP) $(CATARI) $(CUI)))
 endif
-# (the 68030's build alone: tools/mkpad.py's pads, each function at the
-# place 1.41 had it modulo the 68030's 256-byte cache; the map beside the
+# (the 68030's build alone: tools/mkpad.py's pads, each function, table and
+# variable at the place 1.42 had it (its code at 1.41's) modulo the 68030's
+# 256-byte caches; the map beside the
 # program to recheck them with, PADS=no to link without them for that. Not
 # the STE's 68000, which has no cache, nor the FireBee's ColdFire)
 comma   := ,
@@ -109,7 +110,7 @@ HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
-all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl
+all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl binary/mp3int.ovl
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
@@ -233,6 +234,9 @@ $(OBJDIR)/hostirq_s.o: atari/hostirq.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/pad_s.o: atari/pad.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
+# (MP3 on the CPU: a 68080 told from a 68040, cmp3.c)
+$(OBJDIR)/cpu080_s.o: atari/cpu080.S | $(OBJDIR)
+	$(CC) $(MCPU) -c -o $@ $<
 # common's inflate_piece with its hot loop in 68000 assembly (a VGZ:
 # inflate_read unpacked 200 KB/s on a 32 MHz Falcon, Erez's 33 MB VGZ took
 # two minutes)
@@ -315,7 +319,16 @@ fuzz: tests/fuzz/fuzz_stream.c src/stream.c src/stream.h | $(B)
 	clang -O1 -g -fsanitize=fuzzer,address,undefined -Isrc -o $(B)/fuzz_stream tests/fuzz/fuzz_stream.c src/stream.c
 	mkdir -p $(B)/fuzzcorpus
 	./$(B)/fuzz_stream -max_total_time=$(FUZZ_S) -artifact_prefix=tests/fuzz/found/ $(B)/fuzzcorpus tests/fuzz/seeds
-test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
+# MP3INT.OVL's decoder on the host (its arithmetic plain C: the 68060's);
+# libmad's own files as they are, so without warnings asked of them
+HMADF   := -O2 -Imp3ovl/libmad -Ithird_party/libmad -Isrc -Ithird_party/minimp3 -DHAVE_CONFIG_H -DNDEBUG -DFPM_68060 -DOPT_SPEED
+HMADO   := $(addprefix $(B)/hmad_,$(addsuffix .o,$(MADC)))
+$(B)/hmad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h third_party/libmad/*.dat) mp3ovl/libmad/config.h
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HMADF) -w -c -o $@ $<
+$(B)/test_mp3int: tests/mp3/test_mp3int.c mp3ovl/madhead.c $(HMADO)
+	$(HOSTCC) $(HMADF) -Wall -Wextra -Wno-unused-function -o $@ tests/mp3/test_mp3int.c $(HMADO) -lm
+test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
 		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay
 	./$(B)/test_inf
 	mkdir -p $(B)/vgmfiles && ./$(B)/test_vgm $(B)/vgmfiles
@@ -328,6 +341,7 @@ test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_pcm $(B)/test_info $(B)/test_i
 	./$(B)/test_tags
 	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh
 	./$(B)/test_mp3 $(B)/mp3files/*.mp3
+	./$(B)/test_mp3int $(B)/mp3files/*.mp3 $(B)/tagfiles/*.mp3
 	./$(B)/test_info $(B)/mp3files/*.mp3
 	TEST=$(B)/test_pcm sh tests/pcm/run.sh
 	TEST=$(B)/test_probe D=$(B)/probefiles sh tests/probe/run.sh
@@ -373,11 +387,35 @@ $(B)/mp3ovl/stack.o: mp3ovl/stack.S
 	@mkdir -p $(dir $@)
 	$(CC) -m68060 -c -o $@ $<
 
+# MP3INT.OVL (mp3ovl/madhead.c): libmad (third_party/libmad, GPL-2.0 or
+# later) in integers, for a 68060 or a 68080 without its FPU: fixed.h's
+# FPM_68060 (products from 16-bit pieces) with libmad's OPT_SPEED; built
+# with no FPU instruction (-msoft-float, and libmad has no floating point)
+MADC    := bit fixed frame huffman layer12 layer3 stream synth timer
+OVLIF   := -m68060 -msoft-float -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+           -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -nostdinc \
+           -isystem $(GCCINC) -Icommon/atari/include -Isrc -Imp3ovl/libmad -Ithird_party/libmad \
+           -DHAVE_CONFIG_H -DNDEBUG -DFPM_68060 -DOPT_SPEED -DMP3OVL_VERSION=\"$(VERSION_STR)\"
+MADO    := $(B)/mp3ovl/madhead.o $(B)/mp3ovl/stack.o $(addprefix $(B)/mp3ovl/mad_,$(addsuffix .o,$(MADC)))
+binary/mp3int.ovl: $(B)/mp3ovl/mp3int.elf common/tools/elf2tos.py | binary
+	python3 common/tools/elf2tos.py $< $@
+$(B)/mp3ovl/mp3int.elf: $(MADO) mp3ovl/ovl.ld
+	$(CC) -m68060 -msoft-float -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,mp3ovl/ovl.ld -Wl,--build-id=none \
+	    -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $(MADO) -lgcc
+	@! m68k-linux-gnu-objdump -d $@ | grep -qP ':\t[0-9a-f ]+\tf(move|add|sub|mul|div|cmp|tst|int|abs|neg|sqrt|b[a-z]+|s[a-z]+|save|restore)(\.[bwlsxdp])?\s' || \
+	    { echo "mp3int.elf: an FPU instruction"; rm -f $@; exit 1; }
+$(B)/mp3ovl/madhead.o: mp3ovl/madhead.c src/mp3ovl.h $(wildcard third_party/libmad/*.h) mp3ovl/libmad/config.h VERSION
+	@mkdir -p $(dir $@)
+	$(CC) $(OVLIF) -Wall -c -o $@ $<
+$(B)/mp3ovl/mad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h third_party/libmad/*.dat) mp3ovl/libmad/config.h
+	@mkdir -p $(dir $@)
+	$(CC) $(OVLIF) -w -c -o $@ $<
+
 # a release's files: each one in dist/, and all of them in
 # dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
 # guidelines 6.6), for the release workflow
 DIST    := binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl common/tlsovl/tlsfb.ovl binary/mp3fpu.ovl
+           common/tlsovl/tls.ovl common/tlsovl/tlsfb.ovl binary/mp3fpu.ovl binary/mp3int.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
 	rm -rf dist

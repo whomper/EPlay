@@ -1085,8 +1085,23 @@ static void cmp_put(int from, int ns, int ch)
 	q_w += put;			/* (last: the tick sees the samples there) */
 }
 
-/* (cmp) the queue filled for ms by decoding the file's frames on the CPU */
+/* (cmp) an MP3 on the CPU, for the log: the time its turns took, reads
+   left out, and the sound decoded in them (Erez, 16 Nov 2026: "let's see
+   the real numbers and then decide": a 68060's, a 68080's) */
+static unsigned long cmp_busy_ms, cmp_snd;
+static long cmp_hz;
+static void fill_cmp_(unsigned long t0, int ms, int low);
+
 static void fill_cmp(unsigned long t0, int ms, int low)
+{
+	unsigned long a = ms_now();
+	long r0 = rd_ms;
+	fill_cmp_(t0, ms, low);
+	cmp_busy_ms += ms_now() - a - (unsigned long)(rd_ms - r0);
+}
+
+/* (cmp) the queue filled for ms by decoding the file's frames on the CPU */
+static void fill_cmp_(unsigned long t0, int ms, int low)
 {
 	int must = low;
 	while (!src_done && (must || ms_now() - t0 < (unsigned long)ms)) {
@@ -1117,18 +1132,41 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 			}
 			if (want > data_left)
 				want = data_left;
-			{
+			if (net) {
+				/* (a station, task 83: what the probe read first, then
+				   what has come; nothing yet, a later turn's) */
+				if (net_pend_n > 0) {
+					r = want < net_pend_n ? want : net_pend_n;
+					memcpy(cmp_in + cmp_n, fbuf + net_pend_at, (size_t)r);
+					net_pend_at += r;
+					net_pend_n -= r;
+				} else {
+					r = ns_read(cmp_in + cmp_n, want, 0);
+					if (r < 0) {
+						play_net_lost = 1;	/* (play_step connects again) */
+						r = 0;
+					}
+				}
+				if (r > 0) {
+					cmp_n += r;
+					rd_bytes += r;
+				}
+			} else {
 				unsigned long a = ms_now();
 				r = Fread(fh, want, cmp_in + cmp_n);
 				rd_ms += (long)(ms_now() - a);
+				if (r > 0) {
+					cmp_n += r;
+					data_left -= r;
+					rd_bytes += r;
+				} else
+					data_left = 0;
 			}
-			if (r > 0) {
-				cmp_n += r;
-				data_left -= r;
-				rd_bytes += r;
-			} else
-				data_left = 0;
 		}
+		/* (a station: a frame's bytes not come yet, or the connection
+		   lost: the next turn's, not the end) */
+		if (net && (play_net_lost || cmp_n < 2048))
+			break;
 		if (cmp_n < 4) {
 			src_done = 1;
 			break;
@@ -1140,7 +1178,15 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 		ns = cmp3_frame(cmp_in + cmp_at, (int)cmp_n, cmp_pcm, &fi);
 #endif
 		if (fi.frame_bytes <= 0) {
-			/* no frame in what is here: more of the file, or the end */
+			/* no frame in what is here: more of the file, or the end (a
+			   station's: what isn't a frame passed, more next turn) */
+			if (net) {
+				if (cmp_n >= CMP_IN / 2) {
+					cmp_at += cmp_n - 1024;
+					cmp_n = 1024;
+				}
+				break;
+			}
 			if (data_left > 0 && cmp_n < CMP_IN / 2)
 				continue;
 			src_done = 1;
@@ -1153,6 +1199,8 @@ static void fill_cmp(unsigned long t0, int ms, int low)
 		if (ns > 0) {
 			/* the delay left out, then no more than there is to play */
 			int from = 0;
+			cmp_snd += (unsigned long)ns;
+			cmp_hz = fi.hz;
 			if (cmp_skip > 0) {
 				from = cmp_skip < ns ? (int)cmp_skip : ns;
 				cmp_skip -= from;
@@ -1523,17 +1571,18 @@ int play_open(const char *path, char *err, int n)
 		} else
 			Fseek(at, fh, 0);	/* the frames read from here into the queue */
 		{
-			/* the DSP where it is there and free; else, on a 68060 with
-			   its FPU, MP3FPU.OVL on the CPU (Erez, 12 Nov 2026) */
+			/* the DSP where it is there and free; else, on a 68060 or a
+			   68080, the CPU: MP3FPU.OVL on its FPU (Erez, 12 Nov 2026),
+			   MP3INT.OVL without one (16 Nov 2026), a station's too */
 			int dr = settings_mp3cpu() && cmp3_can() ? DSPMP3_BUSY : dspmp3_open();
-			if (dr != DSPMP3_OK && (dr == DSPMP3_NONE || dr == DSPMP3_BUSY) && !net && cmp3_can()) {
+			if (dr != DSPMP3_OK && (dr == DSPMP3_NONE || dr == DSPMP3_BUSY) && cmp3_can()) {
 				if (!cmp3_load(err, n)) {
 					close_file();
 					return 0;
 				}
 				cmp = 1;
 				dsp = 0;
-				elog("MP3 on the CPU (%s): the DSP %s", cmp3_what(), dr == DSPMP3_BUSY ? "in use" : "not there");
+				elog("MP3 on the %s (%s): the DSP %s", cmp3_cpu(), cmp3_what(), dr == DSPMP3_BUSY ? "in use" : "not there");
 			}
 			if (!take_queue(cmp ? 4 : 1)) {
 				snprintf(err, n, "There isn't the memory to play.");
@@ -1554,6 +1603,7 @@ int play_open(const char *path, char *err, int n)
 				fmt.rate = rate;
 				cmp_rin = rate;
 				cmp_at = cmp_n = 0;
+				cmp_busy_ms = cmp_snd = 0;
 				cmp_pos = 65536UL;
 				cmp_prev[0] = cmp_prev[1] = 0;
 				cmp3_reset();
@@ -1577,10 +1627,11 @@ int play_open(const char *path, char *err, int n)
 		}
 		}
 		mp3_reset(&parse);
-		if (net) {
+		if (net && !cmp) {
 			/* a station: about 3 s in the queue before it plays, so the
 			   network's pauses don't reach the music (the bee shows;
-			   Esc or Undo stops it, as connecting) */
+			   Esc or Undo stops it, as connecting); decoded on the CPU,
+			   below, once the output's rate is known */
 			long want = (bitrate > 0 ? bitrate : 128) * 125 * 3;
 			unsigned long t0 = ms_now();
 			if (want > q_size / 2)
@@ -1668,6 +1719,30 @@ made_ahead:
 			rate = fmt.rate = out_rate;
 			if (cmp_rin != out_rate)
 				elog("%ld Hz to the DMA's %ld Hz by the CPU, as it decodes", cmp_rin, out_rate);
+			if (net) {
+				/* a station decoded on the CPU (task 83): its 3 s in
+				   the queue as the DSP's are, decoded and resampled to
+				   the output's rate (its step known only now) */
+				long want = out_rate * 4L * 3;
+				unsigned long t0 = ms_now();
+				if (want > q_size / 2)
+					want = q_size / 2;
+				while (q_w < want && !conn_stop && ms_now() - t0 < 20000) {
+					fill(ms_now(), 50, 0);
+					if (play_net_lost)
+						break;
+					if (q_w < want && pf_idle)
+						pf_idle();
+				}
+				if (q_w < want && (conn_stop || play_net_lost)) {
+					snprintf(err, n, conn_stop ? "Connecting to the station was stopped." :
+						 "The station closed the connection.");
+					play_stop();
+					return 0;
+				}
+				elog("the station: %ld ms of sound in the queue before it plays, decoded in %ld ms",
+				     q_w / 4 * 1000 / out_rate, (long)(ms_now() - t0));
+			}
 		}
 		snd_in_rate = rate;	/* (the 8-bit DMA resamples from it) */
 		raw8 = snd_dma8 && !snd_dma8_interp;
@@ -2327,6 +2402,18 @@ const char *play_keep_up(void)
 			 "missed; the DSP's waits a frame: least %ld, mean %ld; the tick %ld%% of the 68030 (frames made "
 			 "%ld%%, sent %ld%%)", fr, late, dspmp3_stream_resyncs(), dspmp3_stream_misses(), wmin, wavg,
 			 play_tick_share(), play_parse_share(), play_push_share());
+		return b;
+	}
+#if defined(EPLAY_FB) || defined(SND_XB_ON)
+	if (cmp && !cmp_vgm && !cmp_wav && cmp_hz > 0) {
+#else
+	if (cmp && !cmp_vgm && cmp_hz > 0) {
+#endif
+		long snd_ms = (long)(cmp_snd * 1000UL / (unsigned long)cmp_hz);
+		snprintf(b, sizeof(b), "%s; the %s decoding and resampling %ld%% of the time (%lu ms for %ld ms of "
+			 "sound, %s)", snd_underruns ? "underruns" : "no underrun", cmp3_cpu(),
+			 snd_ms > 0 ? (long)(cmp_busy_ms * 100UL / (unsigned long)snd_ms) : 0L, cmp_busy_ms, snd_ms,
+			 cmp3_what());
 		return b;
 	}
 	if (snd_underruns)

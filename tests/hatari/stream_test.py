@@ -358,6 +358,10 @@ def run(work, case, spec):
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
     shutil.copy(os.path.join(TOP, "binary", "eplay.prg"), os.path.join(hd, "eplay.prg"))
+    # (MP3 on the CPU, a 68060's: the overlays beside it, as a release has them)
+    for ovl in ("mp3fpu.ovl", "mp3int.ovl"):
+        if os.path.exists(os.path.join(TOP, "binary", ovl)):
+            shutil.copy(os.path.join(TOP, "binary", ovl), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
     wav, mp3 = os.path.join(w, "tone.wav"), os.path.join(w, "tone.mp3")
     subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", wav, "synth", "8", "sine", "1000",
@@ -432,6 +436,11 @@ def run(work, case, spec):
         with open(inf, "w", newline="") as fh:
             fh.write("STALLAT=4000\r\n")
     old_inf = open(inf, newline="").read() if os.path.exists(inf) else ""
+    # (EPLAY_RIG_INF: lines added, as play_test.py's: MP3CPU=1, a station
+    # decoded on the CPU, task 83)
+    for extra in os.environ.get("EPLAY_RIG_INF", "").split(";"):
+        if extra.strip():
+            old_inf += extra.strip() + "\r\n"
     if "WINDOW=" not in old_inf:
         with open(inf, "w", newline="") as fh:
             fh.write(old_inf + "WINDOW=87,89,472,251\r\n\r\n")
@@ -637,6 +646,8 @@ def main():
     # with NVDI; EmuTOS without NVDI where the container has neither, a
     # stand-in, as describe() says)
     specs = [a for a in sys.argv[2:] if a not in CASES] or [machines.ERZ_MACHINE]
+    if any(sp.startswith("Falcon-0") for sp in specs):
+        import play060  # noqa: F401  (its 68060 and 68040 Falcons)
     nvdi_src = os.environ.get("AERA_NVDI", os.path.join(os.path.expanduser("~"), ".aera", "nvdi", "x"))
     if specs == [machines.ERZ_MACHINE] and os.path.exists(os.path.join(nvdi_src, "auto", "nvdi.prg")):
         os.environ.update(machines.erz_env())	# (no NVDI here: the same machine without it, a stand-in)

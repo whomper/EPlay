@@ -13,6 +13,7 @@
 #include "probe.h"
 #include "vgmfile.h"
 #include "vgmplay.h"
+#include "cmp3.h"
 #include "xalloc.h"
 
 ORDER list_order;		/* which plays next: kept in step with the list here */
@@ -128,18 +129,16 @@ int list_add(const char *path)
 		/* (a station, phase 7: its MP3 the DSP's too) */
 		if (surl_is(p) || (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4])) {
 #ifdef EPLAY_FB
-			/* (the FireBee: its ColdFire decodes a file's, cmp3fb.c; a
-			   station's MP3 isn't played on it yet) */
+			/* (the FireBee: its ColdFire decodes it, cmp3fb.c, a
+			   station's too: task 83) */
 			(void)dsp;
-			if (surl_is(p))
-				e->bad = 1;
 #else
-			/* (1 the DSP; 2 none, but a 68060 decodes a file's with
-			   MP3FPU.OVL, phase 11 step 4: a Milan's, with the XBIOS's
-			   sound; a station's isn't played on it yet) */
+			/* (1 the DSP; 2 none, but a 68060 or a 68080 decodes it,
+			   cmp3.c: a Milan's with the XBIOS's sound, phase 11 step 4,
+			   a Vampire's, a TT's or an STE's with a 68060 board) */
 			if (dsp < 0)
-				dsp = (get_cookie(0x5F534E44L) & 8) && !SND_XB ? 1 : SND_XB && vp_cpu_can() ? 2 : 0;
-			if (!dsp || (dsp == 2 && surl_is(p)))
+				dsp = (get_cookie(0x5F534E44L) & 8) && !SND_XB ? 1 : cmp3_can() ? 2 : 0;
+			if (!dsp)
 				e->bad = 1;
 #endif
 		}

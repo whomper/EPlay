@@ -17,9 +17,24 @@
 
 static mp3dec_t dec;
 
+int cmp3_kind(void)
+{
+	return CMP3_FPU;
+}
+
 int cmp3_can(void)
 {
 	return 1;
+}
+
+int cmp3_is080(void)
+{
+	return 0;
+}
+
+const char *cmp3_cpu(void)
+{
+	return "ColdFire";
 }
 
 int cmp3_load(char *err, int n)

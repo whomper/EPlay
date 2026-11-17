@@ -29,11 +29,26 @@ machines.MACHINES["Falcon-060nodsp"] = (
     [a if a != "emu" else "none" for a in machines.MACHINES["Falcon-060"][1]],
     machines.MACHINES["Falcon-060"][2], machines.MACHINES["Falcon-060"][3])
 
+# and with no FPU (a 68LC060, Erez 16 Nov 2026): MP3 by MP3INT.OVL
+machines.MACHINES["Falcon-060lc"] = (
+    machines.MACHINES["Falcon-060nodsp"][0].replace("its FPU", "no FPU (a 68LC060)"),
+    [a if a != "internal" else "none" for a in machines.MACHINES["Falcon-060nodsp"][1]],
+    machines.MACHINES["Falcon-060"][2], machines.MACHINES["Falcon-060"][3])
+
+# a 68040 (an Afterburner040's), the DSP there: _CPU 40, so cmp3.c asks
+# whether it is a 68080 (atari/cpu080.S), which a 68040 refuses; with
+# MP3CPU=1 its MP3 stays on the DSP all the same
+machines.MACHINES["Falcon-040"] = (
+    machines.MACHINES["Falcon-060"][0].replace("68060", "68040"),
+    [a if a != "6" else "4" for a in machines.MACHINES["Falcon-060"][1]],
+    machines.MACHINES["Falcon-060"][2], machines.MACHINES["Falcon-060"][3])
+
 import play_test  # noqa: E402
 
 if __name__ == "__main__":
     work = sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-060"
-    # (PLAY060_MACHINE=Falcon-060nodsp: MP3 on the CPU)
+    # (PLAY060_MACHINE=Falcon-060nodsp: MP3 on the CPU; Falcon-060lc: no
+    # FPU either, MP3INT.OVL)
     spec = os.environ.get("PLAY060_MACHINE", "Falcon-060") + ":256"
     sys.argv = [sys.argv[0], work] + (sys.argv[2:] or ["vgm", "vgz", "vgmsn", "vgmopn", "vgmmd", "vgmopl"]) + [spec]
     play_test.main()
