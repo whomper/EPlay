@@ -158,7 +158,7 @@ void bar_layout(const GRECT *work)
 	mid = w_ctl.x + w_ctl.w / 2;
 	y = work->y + 6;
 	rect(&b_btn[BH_PLAY - 1], mid - rad, y, 2 * rad, 2 * rad);
-	sw = ch >= 16 ? bw : bw + 6;	/* (the 10 s buttons: room for the "10" in a low resolution's flat pixels) */
+	sw = ch >= 16 ? bw : bw + 7;	/* (the 10 s buttons: room for the "10" in a low resolution's flat pixels) */
 	rect(&b_btn[BH_BACK10 - 1], mid - rad - gap - sw, y + rad - bw / 2, sw, bw);
 	rect(&b_btn[BH_FWD10 - 1], mid + rad + gap, y + rad - bw / 2, sw, bw);
 	rect(&b_btn[BH_PREV - 1], mid - rad - 2 * gap - sw - bw, y + rad - bw / 2, bw, bw);
@@ -392,36 +392,36 @@ static void mask_tri(MASK *m, short w, short h, int dir)
 }
 
 /* the 10 s buttons' sign (Erez, 17 Nov 2026, a picture of it: "make sure
-   the arrows are clearly visible ... and the circle line is thinner"): a
-   ring a pixel wide, open on the arrow's side, its end turned into an
-   arrowhead pointing down, and "10" in bold inside; drawn by hand, a
-   pixel at a time, for the VGA's square pixels (22 by 22) and for a low
-   resolution's flat ones (17 by 11). Bit 0 of each row its right-hand
-   pixel */
-static const unsigned long skip_big[2][22] = {	/* 22 by 22: back, forward */
-	{ 0x000000UL, 0x000000UL, 0x001F00UL, 0x0060C0UL, 0x018030UL, 0x020008UL,
-	  0x124008UL, 0x1AC004UL, 0x0F8004UL, 0x070002UL, 0x026382UL, 0x00E6C2UL,
-	  0x0066C2UL, 0x0066C2UL, 0x0066C4UL, 0x0066C4UL, 0x026388UL, 0x020008UL,
-	  0x018030UL, 0x0060C0UL, 0x001F00UL, 0x000000UL
+   the arrows are clearly visible ... and the circle line is thinner"; 18
+   Nov: "too big ... bigger than the other buttons and also the 10 is not
+   centered. You can reduce the font size of the number 10"): a ring a
+   pixel wide, its end turned into an arrowhead pointing down and a gap
+   after it, a pixel clear of a small "10" (3 by 5) centred in it; drawn
+   by hand, a pixel at a time, for the VGA's square pixels (18
+   by 13, Previous and Next 11 high) and for a low resolution's flat ones
+   (18 by 9). Bit 0 of each row its right-hand pixel */
+static const unsigned long skip_big[2][13] = {	/* 18 by 13: back, forward */
+	{ 0x00FC0UL, 0x03870UL, 0x06018UL, 0x04008UL, 0x0C5CCUL, 0x3ED44UL,
+	  0x1C544UL, 0x08544UL, 0x005CCUL, 0x04008UL, 0x06018UL, 0x03870UL,
+	  0x00FC0UL
 	},
-	{ 0x000000UL, 0x000000UL, 0x003E00UL, 0x00C180UL, 0x030060UL, 0x040010UL,
-	  0x040092UL, 0x0800D6UL, 0x08007CUL, 0x100038UL, 0x106390UL, 0x10E6C0UL,
-	  0x1066C0UL, 0x1066C0UL, 0x0866C0UL, 0x0866C0UL, 0x046390UL, 0x040010UL,
-	  0x030060UL, 0x00C180UL, 0x003E00UL, 0x000000UL
+	{ 0x00FC0UL, 0x03870UL, 0x06018UL, 0x04008UL, 0x0C5CCUL, 0x08D5FUL,
+	  0x0854EUL, 0x08544UL, 0x0C5C0UL, 0x04008UL, 0x06018UL, 0x03870UL,
+	  0x00FC0UL
 	}
 };
-static const unsigned long skip_small[2][11] = {	/* 17 by 11: back, forward */
-	{ 0x000FE0UL, 0x003838UL, 0x00600CUL, 0x015276UL, 0x00A652UL, 0x004252UL,
-	  0x000252UL, 0x000776UL, 0x00600CUL, 0x003838UL, 0x000FE0UL
+static const unsigned long skip_small[2][9] = {	/* 18 by 9: back, forward */
+	{ 0x01FE0UL, 0x07038UL, 0x0C5CCUL, 0x3ED44UL, 0x1C544UL, 0x00544UL,
+	  0x045CCUL, 0x07038UL, 0x01FE0UL
 	},
-	{ 0x000FE0UL, 0x003838UL, 0x00600CUL, 0x00C9D5UL, 0x00994AUL, 0x008944UL,
-	  0x008940UL, 0x00DDC0UL, 0x00600CUL, 0x003838UL, 0x000FE0UL
+	{ 0x01FE0UL, 0x07038UL, 0x0C5CCUL, 0x08D5FUL, 0x0854EUL, 0x08540UL,
+	  0x0C5C8UL, 0x07038UL, 0x01FE0UL
 	}
 };
 
 static void mask_skip(MASK *m, int big, int fwd)
 {
-	short w = big ? 22 : 17, h = big ? 22 : 11, y;
+	short w = 18, h = big ? 13 : 9, y;
 	const unsigned long *rows = big ? skip_big[fwd] : skip_small[fwd];
 	if (!mask_new(m, w, h))
 		return;
