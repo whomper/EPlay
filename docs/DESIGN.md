@@ -2730,3 +2730,20 @@ it in 1.44".
   waits for the button's release before it draws). Common synced to 86e37d2.
 - **Rig fixes**: `play_test.py`'s firstrun checks the window against the machine's own height (400
   on an ST or STE), and the STE's `wavrgup` wants no rate raised, as the STE has none to raise to.
+
+## 1.48: Settings in half the time, the 10 s signs smaller (18 Nov 2026)
+
+- **Common synced to 2fa3aa7**: Settings opens in turns, the frame and its list first, then the
+  page (Falcon-4:16 125 -> 60 ms, under NVDI 185 -> 90, an STE 345 -> 170); `dlg_find` asks the
+  AES only for a press just outside a 3D button; a turn between a dialog's screen save and its
+  drawing; describe() names NVDI on the TT too.
+- **The 10 s buttons' sign smaller** (Erez, 18 Nov 2026: "too big ... and also the 10 is not
+  centered"): 18x13 on the VGA (was 22x22), 18x9 at low resolution, a 3x5 "10" centred, a gap after
+  the arrowhead. The low resolution's 10 s buttons a pixel wider.
+- **pad.S against 1.47's link map** (every section at 1.47's places mod 256): with the pads against
+  1.42's the synced build's WAV start under NVDI was 700 -> 725 ms; against 1.47's, 700.
+- Rows slower than 1.47 by 10 to 50 ms (start rows, the STE's list clicks) accepted by Erez,
+  18 Nov 2026. A Mega Drive VGM's start, timed alone, is 1.47's to the tick in all 20 runs:
+  the rows move with where code and buffers land, not with changed code.
+- The FireBee:16 gapless case: the join is whole; 55 ms of quiet after the 6 s tone, before a blip
+  at the stop, fails its count, on 1.47 too. To look at with the stop on the XBIOS.
