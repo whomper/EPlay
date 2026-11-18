@@ -20,6 +20,9 @@
 
 int snd_xb_want;		/* the rigs' SNDXBIOS=1 (prefs.c, before snd_init) */
 #ifdef SND_XB_ON
+int cmp3_is080(void);		/* (ui/cmp3.c: a Vampire's 68080) */
+#endif
+#ifdef SND_XB_ON
 int snd_xb;			/* (phase 11, step 4) the XBIOS's calls alone: sndxb.o */
 #define XB(call) do { if (snd_xb) return call; } while (0)
 #define XBV(call) do { if (snd_xb) { call; return; } } while (0)
@@ -923,10 +926,14 @@ int snd_init(const char **why)
 {
 	long snd = get_cookie(0x5F534E44L);	/* _SND: bit 2 the codec, 4 the matrix */
 #ifdef SND_XB_ON
-	if (snd_xb_want || get_cookie(0x5F43465FL) || ((get_cookie(0x5F4D4348L) >> 16) > 3 && (snd & 0x20))) {
+	if (snd_xb_want || get_cookie(0x5F43465FL) || ((get_cookie(0x5F4D4348L) >> 16) > 3 && (snd & 0x20)) ||
+	    cmp3_is080()) {
 		/* (no Atari sound hardware of its own: a Milan's GSXB; or a
 		   FireBee running EPLAY.PRG, its _SND $27 taken for a TT's 8-bit
-		   DMA before, which isn't there, the tester's log, 14 Nov 2026) */
+		   DMA before, which isn't there, the tester's log, 14 Nov 2026;
+		   or a Vampire's 68080: a V4SA says Falcon, _SND $17, but its
+		   sound doesn't answer at the registers, and plays through the
+		   XBIOS's calls, its tester, 18 Nov 2026) */
 		snd_xb = 1;
 		return sx_init(why);
 	}

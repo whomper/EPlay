@@ -2747,3 +2747,12 @@ it in 1.44".
   the rows move with where code and buffers land, not with changed code.
 - The FireBee:16 gapless case: the join is whole; 55 ms of quiet after the 6 s tone, before a blip
   at the stop, fails its count, on 1.47 too. To look at with the stop on the XBIOS.
+
+## Next: a 68080 plays through the XBIOS by itself
+
+- **A Vampire's 68080 takes the XBIOS's sound with no setting** (`snd.c`'s `snd_init`, through
+  `cmp3_is080()`: `_CPU` 80, or EmuTOS's 40 with the 68080's probe). A V4SA says Falcon (`_MCH`
+  $00030000, `_SND` $17) but its sound doesn't answer at the registers (the tester's log, 1.45); with
+  `SNDXBIOS=1` it plays MP3 and WAV (the tester, 18 Nov 2026, some crackle, the alpha core to be
+  told from EPlay's feed by EPLAY.LOG). play060.py's Falcon-v4 (mp3, wav, gapless, quit) passes
+  with no setting; Falcon-060 keeps the Falcon's DMA.
