@@ -394,9 +394,12 @@ short objc_draw(OBJECT *t, short start, short depth, short x, short y, short w, 
 }
 
 /* the object under the pointer: the last child drawn there, none that is hidden; 0 the box, -1 outside */
+int objc_finds;			/* how many times objc_find was asked (dlg_find asks it only near a 3D border) */
+
 short objc_find(OBJECT *t, short start, short depth, short x, short y)
 {
 	short i, hit = 0;
+	objc_finds++;
 	(void)start, (void)depth;
 	if (x < t[0].ob_x || y < t[0].ob_y || x >= t[0].ob_x + t[0].ob_width || y >= t[0].ob_y + t[0].ob_height)
 		return -1;

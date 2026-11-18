@@ -319,6 +319,29 @@ static void find_check(void)
 	t[o_num].ob_flags |= HIDETREE;
 	checkf(dlg_find(t, x0 + t[o_num].ob_x + 4, y0 + t[o_num].ob_y + 4) != o_num, "dlg_find: HIDETREE objects are skipped");
 	t[o_num].ob_flags &= ~HIDETREE;
+	/* in 3D (the root FL3DBAK, OK raised: FL3DACT) a click on OK or on the bare box is ours, not the AES's walk (20-30 ms
+	   a press on a Falcon); one just outside OK, where the AES's border is part of it, is the AES's */
+	{
+		extern int objc_finds;
+		unsigned short f0 = t[0].ob_flags, fo = t[ref_ok].ob_flags;
+		int n;
+		t[0].ob_flags |= 0x0400;
+		t[ref_ok].ob_flags |= 0x0600;
+		n = objc_finds;
+		checkf(dlg_find(t, x0 + t[ref_ok].ob_x + 3, y0 + t[ref_ok].ob_y + 3) == ref_ok && objc_finds == n,
+		       "dlg_find in 3D: a click on OK is ours, the AES not asked");
+		checkf(dlg_find(t, x0 + 2, y0 + t[0].ob_height - 3) == 0 && objc_finds == n,
+		       "dlg_find in 3D: the bare box is ours too");
+		checkf(dlg_find(t, x0 + t[ref_ok].ob_x - 2, y0 + t[ref_ok].ob_y + 3) == objc_find(t, 0, 8, x0 + t[ref_ok].ob_x - 2, y0 + t[ref_ok].ob_y + 3) &&
+		       objc_finds == n + 2, "dlg_find in 3D: 2 pixels left of OK, on its border, the AES's answer");
+		t[0].ob_flags &= ~0x0600;
+		t[ref_ok].ob_flags &= ~0x0600;
+		n = objc_finds;
+		checkf(dlg_find(t, x0 + t[ref_ok].ob_x - 2, y0 + t[ref_ok].ob_y + 3) >= 0 && objc_finds == n,
+		       "dlg_find flat: there too ours");
+		t[0].ob_flags = f0;
+		t[ref_ok].ob_flags = fo;
+	}
 }
 
 static void pg_after_tab2(void)
