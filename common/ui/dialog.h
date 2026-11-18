@@ -154,8 +154,9 @@ void dlg_draw(OBJECT *tree, short obj);
 void dlg_draw_one(OBJECT *tree, short obj);
 short dlg_draw_range(OBJECT *tree, short area, short first, short end, int ground, unsigned long budget_ms);
 /* objc_find(tree, 0, 8, x, y) without the AES's walk (45 to 50 ms a click on a Settings dialog on an 8 MHz ST): the
-   last object that shows and holds the point, -1 outside the box. The AES's own where it draws 3D (its borders are
-   part of the object); dlg_find_own 0 (the tests) asks it always. dlg_do takes its clicks through it */
+   last object that shows and holds the point, -1 outside the box. Where the AES draws 3D, the AES's own only for a
+   point just outside a raised button or indicator (its border is part of the object in AES 4's objc_find); every
+   other click is ours there too. dlg_find_own 0 (the tests) asks it always. dlg_do takes its clicks through it */
 short dlg_find(OBJECT *tree, short x, short y);
 extern int dlg_find_own;
 /* where the open dialog is now */
