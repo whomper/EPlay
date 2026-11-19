@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against this commit's build/atari/eplay.map (the profiling build at the shipped layout): do not edit.
-| 197 pads, 31968 bytes, each section at its place there, mod the 68030's
+| 208 pads, 33776 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -123,671 +123,715 @@ ep_pad_28:
 	.globl ep_pad_29
 ep_pad_29:
 	.space 252
-	.section ".text.box!","ax"
+	.section ".text.bin_next!","ax"
 	.globl ep_pad_30
 ep_pad_30:
-	.space 186
-	.section ".text.box_run!","ax"
+	.space 130
+	.section ".text.box!","ax"
 	.globl ep_pad_31
 ep_pad_31:
-	.space 190
-	.section ".text.button.constprop.0!","ax"
+	.space 186
+	.section ".text.box_run!","ax"
 	.globl ep_pad_32
 ep_pad_32:
-	.space 152
-	.section ".text.cf_cookie!","ax"
+	.space 190
+	.section ".text.button.constprop.0!","ax"
 	.globl ep_pad_33
 ep_pad_33:
-	.space 42
-	.section ".text.cmp3_cpu!","ax"
+	.space 152
+	.section ".text.cf_cookie!","ax"
 	.globl ep_pad_34
 ep_pad_34:
-	.space 18
-	.section ".text.cmp3_kind!","ax"
+	.space 42
+	.section ".text.cmp3_cpu!","ax"
 	.globl ep_pad_35
 ep_pad_35:
-	.space 66
-	.section ".text.cmp3_load!","ax"
+	.space 18
+	.section ".text.cmp3_kind!","ax"
 	.globl ep_pad_36
 ep_pad_36:
-	.space 134
-	.section ".text.command.part.0!","ax"
+	.space 66
+	.section ".text.cmp3_load!","ax"
 	.globl ep_pad_37
 ep_pad_37:
-	.space 176
-	.section ".text.conn_log!","ax"
+	.space 134
+	.section ".text.command.part.0!","ax"
 	.globl ep_pad_38
 ep_pad_38:
-	.space 186
-	.section ".text.conn_log_append!","ax"
+	.space 176
+	.section ".text.conn_log!","ax"
 	.globl ep_pad_39
 ep_pad_39:
-	.space 230
-	.section ".text.conn_log_flush!","ax"
+	.space 186
+	.section ".text.conn_log_append!","ax"
 	.globl ep_pad_40
 ep_pad_40:
-	.space 198
-	.section ".text.conn_log_idle!","ax"
+	.space 230
+	.section ".text.conn_log_flush!","ax"
 	.globl ep_pad_41
 ep_pad_41:
-	.space 84
-	.section ".text.conn_open!","ax"
+	.space 198
+	.section ".text.conn_log_idle!","ax"
 	.globl ep_pad_42
 ep_pad_42:
-	.space 156
-	.section ".text.cpu_is080!","ax"
+	.space 84
+	.section ".text.conn_open!","ax"
 	.globl ep_pad_43
 ep_pad_43:
-	.space 148
-	.section ".text.crash_vbl_on!","ax"
+	.space 156
+	.section ".text.cpu_is080!","ax"
 	.globl ep_pad_44
 ep_pad_44:
-	.space 150
-	.section ".text.cs_to_atari!","ax"
+	.space 148
+	.section ".text.crash_vbl_on!","ax"
 	.globl ep_pad_45
 ep_pad_45:
-	.space 172
-	.section ".text.dlg_area!","ax"
+	.space 150
+	.section ".text.cs_to_atari!","ax"
 	.globl ep_pad_46
 ep_pad_46:
-	.space 4
-	.section ".text.dlg_close!","ax"
+	.space 172
+	.section ".text.dither_init!","ax"
 	.globl ep_pad_47
 ep_pad_47:
-	.space 214
-	.section ".text.dlg_cut!","ax"
+	.space 186
+	.section ".text.dlg_area!","ax"
 	.globl ep_pad_48
 ep_pad_48:
 	.space 4
-	.section ".text.dlg_do!","ax"
+	.section ".text.dlg_close!","ax"
 	.globl ep_pad_49
 ep_pad_49:
-	.space 38
-	.section ".text.dlg_draw!","ax"
+	.space 214
+	.section ".text.dlg_cut!","ax"
 	.globl ep_pad_50
 ep_pad_50:
-	.space 2
-	.section ".text.dlg_draw_range!","ax"
+	.space 4
+	.section ".text.dlg_do!","ax"
 	.globl ep_pad_51
 ep_pad_51:
-	.space 248
-	.section ".text.dlg_evnt_!","ax"
+	.space 38
+	.section ".text.dlg_draw!","ax"
 	.globl ep_pad_52
 ep_pad_52:
-	.space 162
-	.section ".text.dlg_find!","ax"
+	.space 2
+	.section ".text.dlg_draw_range!","ax"
 	.globl ep_pad_53
 ep_pad_53:
-	.space 236
-	.section ".text.dlg_in_window!","ax"
+	.space 248
+	.section ".text.dlg_evnt_!","ax"
 	.globl ep_pad_54
 ep_pad_54:
-	.space 248
-	.section ".text.dlg_more!","ax"
+	.space 162
+	.section ".text.dlg_find!","ax"
 	.globl ep_pad_55
 ep_pad_55:
-	.space 248
-	.section ".text.dlg_press_waiting!","ax"
+	.space 236
+	.section ".text.dlg_in_window!","ax"
 	.globl ep_pad_56
 ep_pad_56:
-	.space 210
-	.section ".text.dns_query!","ax"
+	.space 248
+	.section ".text.dlg_more!","ax"
 	.globl ep_pad_57
 ep_pad_57:
-	.space 226
-	.section ".text.draw_some!","ax"
+	.space 248
+	.section ".text.dlg_press_waiting!","ax"
 	.globl ep_pad_58
 ep_pad_58:
-	.space 2
-	.section ".text.draw_vol!","ax"
+	.space 210
+	.section ".text.dns_query!","ax"
 	.globl ep_pad_59
 ep_pad_59:
-	.space 72
-	.section ".text.dspmp3_start_fail_test!","ax"
+	.space 226
+	.section ".text.draw_some!","ax"
 	.globl ep_pad_60
 ep_pad_60:
-	.space 220
-	.section ".text.dspmp3_stream_misses!","ax"
+	.space 2
+	.section ".text.draw_vol!","ax"
 	.globl ep_pad_61
 ep_pad_61:
-	.space 248
-	.section ".text.edge_rows!","ax"
+	.space 72
+	.section ".text.dspmp3_start_fail_test!","ax"
 	.globl ep_pad_62
 ep_pad_62:
-	.space 64
-	.section ".text.fb_run!","ax"
+	.space 220
+	.section ".text.dspmp3_stream_misses!","ax"
 	.globl ep_pad_63
 ep_pad_63:
-	.space 164
-	.section ".text.feed_poll!","ax"
+	.space 248
+	.section ".text.edge_rows!","ax"
 	.globl ep_pad_64
 ep_pad_64:
-	.space 240
-	.section ".text.fill!","ax"
+	.space 64
+	.section ".text.fb_run!","ax"
 	.globl ep_pad_65
 ep_pad_65:
-	.space 90
-	.section ".text.find_in!","ax"
+	.space 164
+	.section ".text.feed_poll!","ax"
 	.globl ep_pad_66
 ep_pad_66:
-	.space 178
-	.section ".text.fx_off!","ax"
+	.space 240
+	.section ".text.few_miss!","ax"
 	.globl ep_pad_67
 ep_pad_67:
-	.space 54
-	.section ".text.fx_poll!","ax"
+	.space 162
+	.section ".text.fill!","ax"
 	.globl ep_pad_68
 ep_pad_68:
-	.space 216
-	.section ".text.fx_t0!","ax"
+	.space 90
+	.section ".text.find_in!","ax"
 	.globl ep_pad_69
 ep_pad_69:
-	.space 12
-	.section ".text.fx_term!","ax"
+	.space 178
+	.section ".text.free!","ax"
 	.globl ep_pad_70
 ep_pad_70:
-	.space 54
-	.section ".text.fx_us!","ax"
+	.space 236
+	.section ".text.fx_off!","ax"
 	.globl ep_pad_71
 ep_pad_71:
-	.space 114
-	.section ".text.handshake!","ax"
+	.space 54
+	.section ".text.fx_poll!","ax"
 	.globl ep_pad_72
 ep_pad_72:
-	.space 168
-	.section ".text.header!","ax"
+	.space 216
+	.section ".text.fx_t0!","ax"
 	.globl ep_pad_73
 ep_pad_73:
-	.space 98
-	.section ".text.held_msg!","ax"
+	.space 12
+	.section ".text.fx_term!","ax"
 	.globl ep_pad_74
 ep_pad_74:
-	.space 244
-	.section ".text.hosts_save!","ax"
+	.space 54
+	.section ".text.fx_us!","ax"
 	.globl ep_pad_75
 ep_pad_75:
-	.space 62
-	.section ".text.icon256_pens.constprop.0!","ax"
+	.space 114
+	.section ".text.handshake!","ax"
 	.globl ep_pad_76
 ep_pad_76:
-	.space 74
-	.section ".text.icon_pens!","ax"
+	.space 168
+	.section ".text.header!","ax"
 	.globl ep_pad_77
 ep_pad_77:
-	.space 226
-	.section ".text.jpeg_on_dsp!","ax"
+	.space 98
+	.section ".text.held_msg!","ax"
 	.globl ep_pad_78
 ep_pad_78:
-	.space 160
-	.section ".text.lf_forget!","ax"
+	.space 244
+	.section ".text.hosts_save!","ax"
 	.globl ep_pad_79
 ep_pad_79:
-	.space 236
-	.section ".text.lf_init!","ax"
+	.space 62
+	.section ".text.icon256_pens.constprop.0!","ax"
 	.globl ep_pad_80
 ep_pad_80:
-	.space 234
-	.section ".text.list_press!","ax"
+	.space 74
+	.section ".text.icon_pens!","ax"
 	.globl ep_pad_81
 ep_pad_81:
-	.space 14
-	.section ".text.load!","ax"
+	.space 226
+	.section ".text.jpeg_on_dsp!","ax"
 	.globl ep_pad_82
 ep_pad_82:
-	.space 188
-	.section ".text.log_add!","ax"
+	.space 160
+	.section ".text.lf_forget!","ax"
 	.globl ep_pad_83
 ep_pad_83:
-	.space 24
-	.section ".text.log_write!","ax"
+	.space 236
+	.section ".text.lf_init!","ax"
 	.globl ep_pad_84
 ep_pad_84:
-	.space 192
-	.section ".text.map_see!","ax"
+	.space 234
+	.section ".text.list_press!","ax"
 	.globl ep_pad_85
 ep_pad_85:
-	.space 94
-	.section ".text.mask_skip!","ax"
+	.space 14
+	.section ".text.load!","ax"
 	.globl ep_pad_86
 ep_pad_86:
-	.space 10
-	.section ".text.memchr!","ax"
+	.space 188
+	.section ".text.log_add!","ax"
 	.globl ep_pad_87
 ep_pad_87:
-	.space 178
-	.section ".text.message!","ax"
+	.space 24
+	.section ".text.log_write!","ax"
 	.globl ep_pad_88
 ep_pad_88:
-	.space 226
-	.section ".text.net_open!","ax"
+	.space 192
+	.section ".text.malloc_more!","ax"
 	.globl ep_pad_89
 ep_pad_89:
-	.space 132
-	.section ".text.next_name!","ax"
+	.space 198
+	.section ".text.map_see!","ax"
 	.globl ep_pad_90
 ep_pad_90:
-	.space 52
-	.section ".text.note!","ax"
+	.space 94
+	.section ".text.mask_skip!","ax"
 	.globl ep_pad_91
 ep_pad_91:
-	.space 212
-	.section ".text.open_any!","ax"
+	.space 10
+	.section ".text.memchr!","ax"
 	.globl ep_pad_92
 ep_pad_92:
-	.space 104
-	.section ".text.ovl_load!","ax"
+	.space 178
+	.section ".text.message!","ax"
 	.globl ep_pad_93
 ep_pad_93:
-	.space 56
-	.section ".text.part_read!","ax"
+	.space 226
+	.section ".text.near_miss!","ax"
 	.globl ep_pad_94
 ep_pad_94:
-	.space 176
-	.section ".text.play_chain!","ax"
+	.space 250
+	.section ".text.net_open!","ax"
 	.globl ep_pad_95
 ep_pad_95:
-	.space 222
-	.section ".text.play_index!","ax"
+	.space 132
+	.section ".text.next_name!","ax"
 	.globl ep_pad_96
 ep_pad_96:
-	.space 4
-	.section ".text.play_keep_up!","ax"
+	.space 52
+	.section ".text.note!","ax"
 	.globl ep_pad_97
 ep_pad_97:
-	.space 44
-	.section ".text.play_net_low!","ax"
+	.space 212
+	.section ".text.open_any!","ax"
 	.globl ep_pad_98
 ep_pad_98:
-	.space 184
-	.section ".text.play_now!","ax"
+	.space 104
+	.section ".text.ovl_load!","ax"
 	.globl ep_pad_99
 ep_pad_99:
-	.space 204
-	.section ".text.play_open!","ax"
+	.space 56
+	.section ".text.part_read!","ax"
 	.globl ep_pad_100
 ep_pad_100:
-	.space 234
-	.section ".text.play_step!","ax"
+	.space 176
+	.section ".text.play_chain!","ax"
 	.globl ep_pad_101
 ep_pad_101:
-	.space 60
-	.section ".text.play_vol_att!","ax"
+	.space 222
+	.section ".text.play_index!","ax"
 	.globl ep_pad_102
 ep_pad_102:
-	.space 218
-	.section ".text.playing_drawn!","ax"
+	.space 4
+	.section ".text.play_keep_up!","ax"
 	.globl ep_pad_103
 ep_pad_103:
-	.space 234
-	.section ".text.probe!","ax"
+	.space 44
+	.section ".text.play_net_low!","ax"
 	.globl ep_pad_104
 ep_pad_104:
-	.space 38
-	.section ".text.redraw_nav!","ax"
+	.space 184
+	.section ".text.play_now!","ax"
 	.globl ep_pad_105
 ep_pad_105:
-	.space 44
-	.section ".text.redraw_under!","ax"
+	.space 204
+	.section ".text.play_open!","ax"
 	.globl ep_pad_106
 ep_pad_106:
-	.space 248
-	.section ".text.rows_redraw!","ax"
+	.space 234
+	.section ".text.play_step!","ax"
 	.globl ep_pad_107
 ep_pad_107:
-	.space 250
-	.section ".text.save_in!","ax"
+	.space 60
+	.section ".text.play_vol_att!","ax"
 	.globl ep_pad_108
 ep_pad_108:
-	.space 252
-	.section ".text.scroll_to!","ax"
+	.space 218
+	.section ".text.playing_drawn!","ax"
 	.globl ep_pad_109
 ep_pad_109:
-	.space 248
-	.section ".text.set_radio!","ax"
+	.space 234
+	.section ".text.probe!","ax"
 	.globl ep_pad_110
 ep_pad_110:
-	.space 28
-	.section ".text.settings_dialog!","ax"
+	.space 38
+	.section ".text.realloc!","ax"
 	.globl ep_pad_111
 ep_pad_111:
-	.space 198
-	.section ".text.settings_key!","ax"
+	.space 194
+	.section ".text.redraw_nav!","ax"
 	.globl ep_pad_112
 ep_pad_112:
-	.space 116
-	.section ".text.settings_load!","ax"
+	.space 44
+	.section ".text.redraw_under!","ax"
 	.globl ep_pad_113
 ep_pad_113:
-	.space 112
-	.section ".text.show_page!","ax"
+	.space 248
+	.section ".text.row_few!","ax"
 	.globl ep_pad_114
 ep_pad_114:
-	.space 178
-	.section ".text.skip_by!","ax"
+	.space 116
+	.section ".text.row_many!","ax"
 	.globl ep_pad_115
 ep_pad_115:
-	.space 144
-	.section ".text.sncmd_reamp!","ax"
+	.space 94
+	.section ".text.row_near!","ax"
 	.globl ep_pad_116
 ep_pad_116:
-	.space 180
-	.section ".text.snd_dac_volume!","ax"
+	.space 178
+	.section ".text.rows_redraw!","ax"
 	.globl ep_pad_117
 ep_pad_117:
-	.space 32
-	.section ".text.snd_init!","ax"
+	.space 250
+	.section ".text.save_in!","ax"
 	.globl ep_pad_118
 ep_pad_118:
-	.space 12
-	.section ".text.startup.main!","ax"
+	.space 252
+	.section ".text.scroll_to!","ax"
 	.globl ep_pad_119
 ep_pad_119:
-	.space 230
-	.section ".text.step!","ax"
+	.space 248
+	.section ".text.set_radio!","ax"
 	.globl ep_pad_120
 ep_pad_120:
-	.space 194
-	.section ".text.sup_install!","ax"
+	.space 28
+	.section ".text.settings_dialog!","ax"
 	.globl ep_pad_121
 ep_pad_121:
-	.space 220
-	.section ".text.sup_nested!","ax"
+	.space 198
+	.section ".text.settings_key!","ax"
 	.globl ep_pad_122
 ep_pad_122:
-	.space 14
-	.section ".text.sx_dac_volume!","ax"
+	.space 116
+	.section ".text.settings_load!","ax"
 	.globl ep_pad_123
 ep_pad_123:
-	.space 240
-	.section ".text.sx_open!","ax"
+	.space 112
+	.section ".text.show_page!","ax"
 	.globl ep_pad_124
 ep_pad_124:
-	.space 248
-	.section ".text.sx_play!","ax"
+	.space 178
+	.section ".text.skip_by!","ax"
 	.globl ep_pad_125
 ep_pad_125:
-	.space 254
-	.section ".text.sx_poll!","ax"
+	.space 144
+	.section ".text.sncmd_reamp!","ax"
 	.globl ep_pad_126
 ep_pad_126:
-	.space 102
-	.section ".text.sx_room!","ax"
+	.space 180
+	.section ".text.snd_dac_volume!","ax"
 	.globl ep_pad_127
 ep_pad_127:
-	.space 238
-	.section ".text.sx_update!","ax"
+	.space 32
+	.section ".text.snd_init!","ax"
 	.globl ep_pad_128
 ep_pad_128:
-	.space 54
-	.section ".text.term_c!","ax"
+	.space 12
+	.section ".text.startup.main!","ax"
 	.globl ep_pad_129
 ep_pad_129:
-	.space 246
-	.section ".text.text_plain!","ax"
+	.space 230
+	.section ".text.step!","ax"
 	.globl ep_pad_130
 ep_pad_130:
 	.space 194
-	.section ".text.track!","ax"
+	.section ".text.sup_install!","ax"
 	.globl ep_pad_131
 ep_pad_131:
-	.space 228
-	.section ".text.turn!","ax"
+	.space 220
+	.section ".text.sup_nested!","ax"
 	.globl ep_pad_132
 ep_pad_132:
-	.space 76
-	.section ".text.vp_cpu!","ax"
+	.space 14
+	.section ".text.sx_dac_volume!","ax"
 	.globl ep_pad_133
 ep_pad_133:
-	.space 52
-	.section ".text.vp_halt.part.0!","ax"
+	.space 240
+	.section ".text.sx_open!","ax"
 	.globl ep_pad_134
 ep_pad_134:
-	.space 180
-	.section ".text.vp_open!","ax"
+	.space 248
+	.section ".text.sx_play!","ax"
 	.globl ep_pad_135
 ep_pad_135:
-	.space 230
-	.section ".text.vp_step!","ax"
+	.space 254
+	.section ".text.sx_poll!","ax"
 	.globl ep_pad_136
 ep_pad_136:
-	.space 186
-	.section ".text.vp_volume!","ax"
+	.space 102
+	.section ".text.sx_room!","ax"
 	.globl ep_pad_137
 ep_pad_137:
-	.space 232
-	.section ".rodata.CSWTCH.1318!","a"
+	.space 238
+	.section ".text.sx_update!","ax"
 	.globl ep_pad_138
 ep_pad_138:
-	.space 32
-	.section ".rodata.CSWTCH.433!","a"
+	.space 54
+	.section ".text.term_c!","ax"
 	.globl ep_pad_139
 ep_pad_139:
-	.space 224
-	.section ".rodata.gaps.9!","a"
+	.space 246
+	.section ".text.text_plain!","ax"
 	.globl ep_pad_140
 ep_pad_140:
-	.space 240
-	.section ".rodata.m3u_add.str1.1!","a"
+	.space 194
+	.section ".text.track!","ax"
 	.globl ep_pad_141
 ep_pad_141:
-	.space 77
-	.section ".rodata.m3u_rel.str1.1!","a"
+	.space 228
+	.section ".text.turn!","ax"
 	.globl ep_pad_142
 ep_pad_142:
-	.space 255
-	.section ".rodata.pages.13!","a"
+	.space 76
+	.section ".text.vp_cpu!","ax"
 	.globl ep_pad_143
 ep_pad_143:
-	.space 11
-	.section ".rodata.pcm_probe.str1.1!","a"
+	.space 52
+	.section ".text.vp_halt.part.0!","ax"
 	.globl ep_pad_144
 ep_pad_144:
-	.space 1
-	.section ".rodata.pen.0!","a"
+	.space 180
+	.section ".text.vp_open!","ax"
 	.globl ep_pad_145
 ep_pad_145:
-	.space 248
-	.section ".rodata.pls_read.str1.1!","a"
+	.space 230
+	.section ".text.vp_step!","ax"
 	.globl ep_pad_146
 ep_pad_146:
-	.space 2
-	.section ".rodata.skip_big!","a"
+	.space 186
+	.section ".text.vp_volume!","ax"
 	.globl ep_pad_147
 ep_pad_147:
-	.space 72
-	.section ".rodata.skip_small!","a"
+	.space 232
+	.section ".rodata.CSWTCH.1318!","a"
 	.globl ep_pad_148
 ep_pad_148:
-	.space 8
-	.section ".rodata.v16.2!","a"
+	.space 56
+	.section ".rodata.CSWTCH.523!","a"
 	.globl ep_pad_149
 ep_pad_149:
-	.space 240
-	.section ".rodata.vol_att!","a"
+	.space 200
+	.section ".rodata.c6_of!","a"
 	.globl ep_pad_150
 ep_pad_150:
-	.space 232
-	.section ".rodata.xb_rates!","a"
+	.space 64
+	.section ".rodata.gaps.9!","a"
 	.globl ep_pad_151
 ep_pad_151:
-	.space 254
-	.section ".data.!","aw"
+	.space 240
+	.section ".rodata.m3u_add.str1.1!","a"
 	.globl ep_pad_152
 ep_pad_152:
-	.space 252
-	.section ".data.cpu_kind!","aw"
+	.space 77
+	.section ".rodata.m3u_rel.str1.1!","a"
 	.globl ep_pad_153
 ep_pad_153:
-	.space 252
-	.section ".data.hz_at.4!","aw"
+	.space 255
+	.section ".rodata.pages.13!","a"
 	.globl ep_pad_154
 ep_pad_154:
-	.space 252
-	.section ".data.kind!","aw"
+	.space 11
+	.section ".rodata.pcm_probe.str1.1!","a"
 	.globl ep_pad_155
 ep_pad_155:
-	.space 252
-	.section ".data.log_h!","aw"
+	.space 1
+	.section ".rodata.pen.0!","a"
 	.globl ep_pad_156
 ep_pad_156:
-	.space 252
-	.section ".data.margin_least!","aw"
+	.space 248
+	.section ".rodata.pls_read.str1.1!","a"
 	.globl ep_pad_157
 ep_pad_157:
-	.space 252
-	.section ".data.net_sendbuf!","aw"
+	.space 2
+	.section ".rodata.skip_big!","a"
 	.globl ep_pad_158
 ep_pad_158:
-	.space 4
-	.section ".data.skip_drawn!","aw"
+	.space 72
+	.section ".rodata.skip_small!","a"
 	.globl ep_pad_159
 ep_pad_159:
-	.space 252
-	.section ".data.xs_end_at!","aw"
+	.space 8
+	.section ".rodata.v16.2!","a"
 	.globl ep_pad_160
 ep_pad_160:
-	.space 68
-	.section ".bss.aes_hosts!","aw",@nobits
+	.space 240
+	.section ".rodata.vol_att!","a"
 	.globl ep_pad_161
 ep_pad_161:
-	.space 252
-	.section ".bss.avail!","aw",@nobits
+	.space 232
+	.section ".rodata.xb_rates!","a"
 	.globl ep_pad_162
 ep_pad_162:
-	.space 224
-	.section ".bss.b.8!","aw",@nobits
+	.space 254
+	.section ".data.!","aw"
 	.globl ep_pad_163
 ep_pad_163:
-	.space 32
-	.section ".bss.b_btn!","aw",@nobits
+	.space 252
+	.section ".data.cpu_kind!","aw"
 	.globl ep_pad_164
 ep_pad_164:
-	.space 248
-	.section ".bss.cmp_hz!","aw",@nobits
+	.space 252
+	.section ".data.hz_at.4!","aw"
 	.globl ep_pad_165
 ep_pad_165:
-	.space 248
-	.section ".bss.cmp_snd!","aw",@nobits
+	.space 252
+	.section ".data.kind!","aw"
 	.globl ep_pad_166
 ep_pad_166:
 	.space 252
-	.section ".bss.conn_hosts_path!","aw",@nobits
+	.section ".data.log_h!","aw"
 	.globl ep_pad_167
 ep_pad_167:
-	.space 56
-	.section ".bss.cpu_is080!","aw",@nobits
+	.space 252
+	.section ".data.margin_least!","aw"
 	.globl ep_pad_168
 ep_pad_168:
-	.space 242
-	.section ".bss.crash_slot!","aw",@nobits
+	.space 252
+	.section ".data.net_sendbuf!","aw"
 	.globl ep_pad_169
 ep_pad_169:
-	.space 252
-	.section ".bss.ctab!","aw",@nobits
+	.space 4
+	.section ".data.skip_drawn!","aw"
 	.globl ep_pad_170
 ep_pad_170:
-	.space 254
-	.section ".bss.dlg_badge!","aw",@nobits
+	.space 252
+	.section ".data.xs_end_at!","aw"
 	.globl ep_pad_171
 ep_pad_171:
-	.space 252
-	.section ".bss.done.5!","aw",@nobits
+	.space 68
+	.section ".bss.aes_hosts!","aw",@nobits
 	.globl ep_pad_172
 ep_pad_172:
-	.space 248
-	.section ".bss.dw!","aw",@nobits
+	.space 252
+	.section ".bss.avail!","aw",@nobits
 	.globl ep_pad_173
 ep_pad_173:
-	.space 250
-	.section ".bss.ecdsa_hosts!","aw",@nobits
+	.space 224
+	.section ".bss.b.8!","aw",@nobits
 	.globl ep_pad_174
 ep_pad_174:
-	.space 252
-	.section ".bss.find_near!","aw",@nobits
+	.space 32
+	.section ".bss.b_btn!","aw",@nobits
 	.globl ep_pad_175
 ep_pad_175:
-	.space 254
-	.section ".bss.hosts_read!","aw",@nobits
+	.space 248
+	.section ".bss.cmp_hz!","aw",@nobits
 	.globl ep_pad_176
 ep_pad_176:
-	.space 252
-	.section ".bss.is080!","aw",@nobits
+	.space 248
+	.section ".bss.cmp_snd!","aw",@nobits
 	.globl ep_pad_177
 ep_pad_177:
 	.space 252
-	.section ".bss.k_fwd!","aw",@nobits
+	.section ".bss.conn_hosts_path!","aw",@nobits
 	.globl ep_pad_178
 ep_pad_178:
-	.space 236
-	.section ".bss.lf.0!","aw",@nobits
+	.space 56
+	.section ".bss.cpu_is080!","aw",@nobits
 	.globl ep_pad_179
 ep_pad_179:
-	.space 248
-	.section ".bss.log_h_for!","aw",@nobits
+	.space 242
+	.section ".bss.crash_slot!","aw",@nobits
 	.globl ep_pad_180
 ep_pad_180:
-	.space 244
-	.section ".bss.map_rgb!","aw",@nobits
+	.space 252
+	.section ".bss.ctab!","aw",@nobits
 	.globl ep_pad_181
 ep_pad_181:
-	.space 250
-	.section ".bss.name.10!","aw",@nobits
+	.space 254
+	.section ".bss.dlg_badge!","aw",@nobits
 	.globl ep_pad_182
 ep_pad_182:
-	.space 192
-	.section ".bss.name.11!","aw",@nobits
+	.space 252
+	.section ".bss.done.5!","aw",@nobits
 	.globl ep_pad_183
 ep_pad_183:
-	.space 64
-	.section ".bss.named!","aw",@nobits
+	.space 248
+	.section ".bss.dw!","aw",@nobits
 	.globl ep_pad_184
 ep_pad_184:
-	.space 252
-	.section ".bss.p.3!","aw",@nobits
+	.space 250
+	.section ".bss.ecdsa_hosts!","aw",@nobits
 	.globl ep_pad_185
 ep_pad_185:
-	.space 56
-	.section ".bss.part_us_now!","aw",@nobits
+	.space 252
+	.section ".bss.find_near!","aw",@nobits
 	.globl ep_pad_186
 ep_pad_186:
-	.space 248
-	.section ".bss.pcmbuf!","aw",@nobits
+	.space 254
+	.section ".bss.hosts_read!","aw",@nobits
 	.globl ep_pad_187
 ep_pad_187:
-	.space 2
-	.section ".bss.pend!","aw",@nobits
+	.space 252
+	.section ".bss.is080!","aw",@nobits
 	.globl ep_pad_188
 ep_pad_188:
-	.space 246
-	.section ".bss.play_busy_turn!","aw",@nobits
+	.space 252
+	.section ".bss.k_fwd!","aw",@nobits
 	.globl ep_pad_189
 ep_pad_189:
-	.space 252
-	.section ".bss.pool_used!","aw",@nobits
+	.space 236
+	.section ".bss.lf.0!","aw",@nobits
 	.globl ep_pad_190
 ep_pad_190:
-	.space 2
-	.section ".bss.s_m2!","aw",@nobits
+	.space 248
+	.section ".bss.log_h_for!","aw",@nobits
 	.globl ep_pad_191
 ep_pad_191:
-	.space 252
-	.section ".bss.s_miss!","aw",@nobits
+	.space 244
+	.section ".bss.map_rgb!","aw",@nobits
 	.globl ep_pad_192
 ep_pad_192:
-	.space 252
-	.section ".bss.settings_changed!","aw",@nobits
+	.space 250
+	.section ".bss.name.10!","aw",@nobits
 	.globl ep_pad_193
 ep_pad_193:
-	.space 252
-	.section ".bss.sl_tree!","aw",@nobits
+	.space 192
+	.section ".bss.name.11!","aw",@nobits
 	.globl ep_pad_194
 ep_pad_194:
-	.space 240
-	.section ".bss.std_pens!","aw",@nobits
+	.space 64
+	.section ".bss.named!","aw",@nobits
 	.globl ep_pad_195
 ep_pad_195:
 	.space 252
-	.section ".bss.was_reset!","aw",@nobits
+	.section ".bss.p.3!","aw",@nobits
 	.globl ep_pad_196
 ep_pad_196:
+	.space 56
+	.section ".bss.part_us_now!","aw",@nobits
+	.globl ep_pad_197
+ep_pad_197:
+	.space 248
+	.section ".bss.pcmbuf!","aw",@nobits
+	.globl ep_pad_198
+ep_pad_198:
+	.space 2
+	.section ".bss.pend!","aw",@nobits
+	.globl ep_pad_199
+ep_pad_199:
+	.space 246
+	.section ".bss.play_busy_turn!","aw",@nobits
+	.globl ep_pad_200
+ep_pad_200:
+	.space 252
+	.section ".bss.pool_used!","aw",@nobits
+	.globl ep_pad_201
+ep_pad_201:
+	.space 2
+	.section ".bss.s_m2!","aw",@nobits
+	.globl ep_pad_202
+ep_pad_202:
+	.space 252
+	.section ".bss.s_miss!","aw",@nobits
+	.globl ep_pad_203
+ep_pad_203:
+	.space 252
+	.section ".bss.settings_changed!","aw",@nobits
+	.globl ep_pad_204
+ep_pad_204:
+	.space 252
+	.section ".bss.sl_tree!","aw",@nobits
+	.globl ep_pad_205
+ep_pad_205:
+	.space 240
+	.section ".bss.std_pens!","aw",@nobits
+	.globl ep_pad_206
+ep_pad_206:
+	.space 252
+	.section ".bss.was_reset!","aw",@nobits
+	.globl ep_pad_207
+ep_pad_207:
 	.space 252

@@ -131,6 +131,7 @@ binary/eplayst.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opn
 fb: binary/eplayfb.prg
 binary/eplayfb.prg: FORCE $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h | binary
 	$(MAKE) --no-print-directory CPU=5475 OBJDIR=build/fb build/fb/eplay.elf
+	python3 tools/emaccheck.py build/fb/eplay.elf
 	PRGFLAGS=0x17 python3 common/tools/elf2tos.py build/fb/eplay.elf $@
 .PHONY: fb
 
