@@ -2756,3 +2756,18 @@ it in 1.44".
   `SNDXBIOS=1` it plays MP3 and WAV (the tester, 18 Nov 2026, some crackle, the alpha core to be
   told from EPlay's feed by EPLAY.LOG). play060.py's Falcon-v4 (mp3, wav, gapless, quit) passes
   with no setting; Falcon-060 keeps the Falcon's DMA.
+
+## 1.49: no Line-A on a FireBee; a 68080 on the XBIOS by itself (19 Nov 2026)
+
+- **No Line-A on a ColdFire** (the hub, 19 Nov 2026: EWEBFB.PRG killed by FreeMiNT at its first
+  scroll). On a ColdFire 0xa000 is the EMAC's macw: it swallows the next instruction's first word
+  and leaves a0 garbage. 1.48's EPLAYFB.PRG ran it in badge_draw, box_run, off_begin, sys_form and
+  text_font; EPLAY.PRG and EPLAYST.PRG run it on a FireBee too. Common c0fa029: none under
+  `__mcoldfire__`, and none where the _CF_ cookie is set (read once). `tools/emaccheck.py`, run by
+  the Makefile on build/fb/eplay.elf, fails the build on any EMAC instruction (1.48's fails it).
+- **A 68080 plays through the XBIOS by itself** (the section above).
+- Common c0fa029 also: About opens sooner (no copy of the screen under the box on TOS with NVDI)
+  and closes later; Erez accepted the close (19 Nov 2026), and the other slower rows (Falcon-4:16
+  window 585 -> 595, NVDI Volume pressed 10 -> 20, an STE's start with 8 files 1910 -> 1965) with
+  1.49 ("Accept, release 1.49").
+- Gate row 1's stream `stall` case fails now and then on its tone (78 %), on 1.48 too (1 in 3).
