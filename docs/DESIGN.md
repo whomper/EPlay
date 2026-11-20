@@ -2771,3 +2771,17 @@ it in 1.44".
   window 585 -> 595, NVDI Volume pressed 10 -> 20, an STE's start with 8 files 1910 -> 1965) with
   1.49 ("Accept, release 1.49").
 - Gate row 1's stream `stall` case fails now and then on its tone (78 %), on 1.48 too (1 in 3).
+
+## 1.50: dragging a dialog leaves no copies behind (20 Nov 2026)
+
+- **A dialog in a window lets the screen go while it moves** (common 72e4e66, the hub; a V4SA
+  tester's video, 19 Nov 2026: dragging Add files left copies of its right edge and scroll bar, the
+  desktop under it not given back). dialog.c held wind_update(BEG_UPDATE) through WM_MOVED's
+  wind_set, so an AES that gives the uncovered area back through its own process couldn't;
+  fsel_exinput lets go too while a dialog window holds the screen (`gem_screen_held`), and
+  win_paint_some puts the tree at the window's current place (WF_WORKXYWH) before each piece.
+  Plain TOS unchanged; XaAES gave the area back either way.
+- Gate g50: the https and settings cases failed with the disk full (a recording "not a WAVE
+  file"); 3 of 3 each pass on 1.50 and 1.49 after it was freed. Slower rows accepted by Erez
+  (20 Nov 2026, "Accept, release 1.50"): Falcon-4:16 Volume + 10 -> 25, NVDI Mega Drive VGM start
+  2370 -> 2385, NVDI About opened 345 -> 370.
