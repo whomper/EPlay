@@ -2819,3 +2819,40 @@ it in 1.44".
   vp_render) is the gate's FireBee stand-in rows' (EPLAY.PRG with SNDXBIOS=1 on a 68060).
   What only the tester's FireBee can show: the ColdFire's time for each chip, in EPLAY.LOG's VGM
   lines.
+
+## MP3 on the FireBee's EMAC (Erez, 21 Nov 2026, through the hub)
+
+- **Two decoders in EPLAYFB.PRG, and the FireBee chooses.** minimp3 on the V4e's FPU as before,
+  and EPlay's own decoder in integers (`src/mp3/mp3dsp.c`, the DSP's C model, ISO 11172-4 full
+  accuracy), its synthesis filter's sums of products on the EMAC. At the first MP3, the first 12
+  frames in hand are decoded three ways, timed by the 200 Hz clock: minimp3, the integer decoder
+  in plain C, and with the EMAC. The EMAC's output must be the plain C's bit for bit (the
+  self-test). The fastest that is right plays from then on, and EPLAY.LOG has one line with the
+  three times, the MACSR used and the verdict. No emulator times a V4e (QEMU's EMAC is slow helper
+  calls: it ran the EMAC's version slower than plain C), so the tester's log decides.
+  `MP3FB=0|1|2` in EPLAY.INF (read, never written) names one, for listening to each.
+- **Exact on the EMAC whatever its extension bits do.** Each 24-bit word is split into 12-bit
+  halves (the high signed, the low 0 to 4095), packed as a register's two 16-bit halves; four
+  `mac.w`, one per pairing of the halves, sum into the four accumulators. Every product is 24 bits
+  at most and a sum of 16 of them 28, so each accumulator stays in its low 32 bits, which
+  `movclr.l` reads exactly: no extension bits (QEMU lays out ACCEXT01 unlike the manual), no
+  rounding, no saturation. The plain C path uses the same split with `muls.w` for every `d_mpy` on
+  the ColdFire (GCC's 64-bit multiply there is `ll64.c`'s, four `mulu.w` and a call): under QEMU
+  that alone halved the decoder's time (2.25 s to 1.13 s for mix320).
+- **The EMAC's signed mode, probed.** MACSR's S/U bit: QEMU multiplies signed with it set, and the
+  manual reads it the other way. `em_probe` multiplies -0x800 by 0x7ff each way at the start and
+  keeps the setting that gives -0x3ff800; if neither does, the EMAC isn't used.
+- **Its state across processes.** FreeMiNT on a ColdFire (sys/arch/context_cf.S, 1ec9b33) saves the
+  integer and FPU registers at a switch of process, not MACSR, the accumulators or MASK. So each
+  decoded frame saves them first and puts them back after (`em_begin`, `em_end`), leaving another
+  program's EMAC state as it was between EPlay's frames. A switch in the middle of a frame can
+  still let another EMAC user change the accumulators, and only FreeMiNT saving them would stop
+  that; EPlay's frames hold them for a short time, and the self-test runs once at the start.
+- **The EMAC check:** `tools/emaccheck.py` still fails the FireBee's build on any EMAC instruction
+  (Line-A left in), except in `mp3dsp.c`'s own functions (`synth`, `frame_`, `em_probe`,
+  `mp3dsp_frame`, and GCC's copies of them).
+- **Tests (`make fbtest`, CI):** under `qemu-m68k -cpu cfv4e`, EPlay's integer decoder in plain C,
+  then with the EMAC, bit for bit the host's on make test's seven MP3s (`fbint`); `cmp3fb.c` as
+  EPLAYFB.PRG builds it, each of its three decoders against the host's minimp3 (`fbmpfb`): minimp3
+  within a step, EPlay's within 2 (about 90 dB under the music), the EMAC's the integer's bit for
+  bit.

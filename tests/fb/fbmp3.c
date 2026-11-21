@@ -9,6 +9,7 @@
  * to hold the ColdFire's against the host's.
  *
  *	fbmp3 FILE.MP3 > OUT.RAW
+ *	fbmpfb FILE.MP3 N > OUT.RAW   (EPLAYFB.PRG's cmp3fb.c: decoder N, 0 to 2)
  */
 #ifdef HOST
 #include <stdio.h>
@@ -44,6 +45,13 @@ int main(int argc, char **argv)
 	char err[80];
 	if (argc < 2 || (n = read_file(argv[1], buf, sizeof(buf))) <= 0)
 		return 2;
+#ifdef EPLAY_FB
+	{
+		extern int cmp3fb_force;
+		if (argc > 2)
+			cmp3fb_force = argv[2][0] - '0';
+	}
+#endif
 	cmp3_load(err, sizeof(err));
 	while (at < n) {
 		MP3OVL_INFO fi;

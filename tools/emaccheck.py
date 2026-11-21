@@ -8,7 +8,10 @@ next instruction's first word and leaves a0 garbage, and FreeMiNT killed
 EWEBFB.PRG at its first scroll on a tester's FireBee (the hub, AERA-Atari
 13a4971, 19 Nov 2026). EPlay uses no EMAC, so any mac, msac or movclr, or
 any move to or from an accumulator, in the FireBee's code is a Line-A call
-left in: the build fails and names its function.
+left in: the build fails and names its function. The one exception is
+EPlay's own MP3 decoder, whose synthesis filter is on the EMAC on purpose
+(src/mp3/mp3dsp.c, dspmath.h's em_*: Erez, 21 Nov 2026): its functions alone
+(ALLOWED) may hold them.
 """
 import re
 import subprocess
@@ -16,6 +19,8 @@ import sys
 
 OBJDUMP = "m68k-linux-gnu-objdump"
 EMAC = re.compile(r"^(mac|msac|movclr)|%acc|%macsr|%mask")
+# (src/mp3/mp3dsp.c's, GCC's copies too: synth.constprop.0; where they are inlined, frame_)
+ALLOWED = {"synth", "frame_", "em_probe", "mp3dsp_frame"}
 
 
 def main():
@@ -29,14 +34,14 @@ def main():
             fn = m.group(1)
             continue
         parts = line.split("\t")
-        if len(parts) >= 3 and EMAC.search(parts[2].strip()):
+        if len(parts) >= 3 and EMAC.search(parts[2].strip()) and fn.split(".")[0] not in ALLOWED:
             bad.append("%s: %s (%s)" % (fn, parts[2].strip(), parts[0].strip()))
     if bad:
         print("emaccheck: %s has EMAC instructions (Line-A left in for a ColdFire?):" % elf)
         for b in bad:
             print("  " + b)
         sys.exit(1)
-    print("emaccheck: %s: no EMAC instruction" % elf)
+    print("emaccheck: %s: no EMAC instruction outside EPlay's MP3 decoder" % elf)
 
 
 if __name__ == "__main__":

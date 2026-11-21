@@ -41,7 +41,7 @@ ifeq ($(CPU),68000)
 STFLAGS := -fdisable-tree-bswap -fno-store-merging -DEPLAY_ST
 endif
 ifeq ($(CPU),5475)
-STFLAGS := -DEPLAY_FB
+STFLAGS := -DEPLAY_FB -DEPLAY_EMAC
 endif
 CFLAGS  := $(MCPU) $(STFLAGS) -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables \
@@ -74,7 +74,7 @@ ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
 # for them), the sound through the XBIOS (sndfb.c), the tick from GEM's
 # turns with no interrupt (feedfb.c), the 64-bit helpers common's (ll64.c)
-OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
+OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb mp3dsp
 CATARI  += ll64
 CUI     := $(filter-out cpucheck,$(CUI))
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/inflate_fast_s.o \
@@ -228,7 +228,7 @@ $(OBJDIR)/%.o: common/ui/%.c $(HDRS) | $(OBJDIR)
 # (the FireBee's 64 KB: minimp3's scratch on it, cmp3fb.c)
 $(OBJDIR)/crt0.o: common/atari/crt0.S Makefile | $(OBJDIR)
 	$(CC) $(MCPU) -DSTACK_SIZE=$(if $(filter 5475,$(CPU)),65536,16384) -c -o $@ $<
-$(OBJDIR)/cmp3fb.o: CFLAGS += -Ithird_party/minimp3 -ffast-math
+$(OBJDIR)/cmp3fb.o: CFLAGS += -Ithird_party/minimp3 -Isrc/mp3 -ffast-math
 $(OBJDIR)/crash_s.o: common/atari/crash.S | $(OBJDIR)
 	$(CC) $(MCPU) -c -o $@ $<
 $(OBJDIR)/nf.o: common/atari/nf.S | $(OBJDIR)

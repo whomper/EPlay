@@ -512,12 +512,52 @@ static void imdct(GC *c, dw *ov, dw out[32][18], int lim)
  * second on e (e2, o2), then a 16 x 16 matrix (odd n, from o) and two 8 x 8
  * ones (n = 4m from e2, 4m + 2 from o2). Then each sample is the window's 16 taps over the
  * last 16 slots, as the standard has them */
+#ifdef EPLAY_EMAC
+long em_macsr = -1;
+
+/* which MACSR multiplies signed on this EMAC (dspmath.h): -0x800 by 0x7ff,
+   each way; 0 or $40, or -1 where neither gives -0x3ff800 */
+long em_probe(void)
+{
+	static const long modes[2] = { 0, 0x40 };
+	int i;
+	for (i = 0; i < 2; i++) {
+		EMSAVE s;
+		long p;
+		em_macsr = modes[i];
+		em_begin(&s);
+		__asm__ volatile("mac.w %1u,%2u,%%acc0\n\tmovclr.l %%acc0,%0" : "=d"(p) : "d"(0xf8000000UL), "d"(0x07ff0000UL));
+		em_end(&s);
+		if (p == -0x3ff800L)
+			return em_macsr;
+	}
+	return em_macsr = -1;
+}
+
+/* the synthesis filter's two tables packed for the EMAC (em_pack), once */
+static unsigned long p_synth[384], p_dwin[512];
+static int p_made;
+
+static void em_tables(void)
+{
+	int k;
+	for (k = 0; k < 384; k++)
+		p_synth[k] = em_pack(sx(t_synth[k]));
+	for (k = 0; k < 512; k++)
+		p_dwin[k] = em_pack(sx(t_dwin[k]));
+	p_made = 1;
+}
+#endif
+
 static void synth(MP3DSP *d, int ch, dw sub[32][18], dw *pcm)
 {
 	int t, n, k, j, i;
+#ifdef EPLAY_EMAC
+	const unsigned long *pc;
+#endif
 	for (t = 0; t < 18; t++) {
 		dw e[16], o[16], e2[8], o2[8], *v;
-		const unsigned long *c;
+		const unsigned long *c = 0;
 		for (k = 0; k < 16; k++) {
 			da a = d_w2a(sub[k][t]), b = d_w2a(sub[31 - k][t]);
 			e[k] = d_a2w(a + b);
@@ -530,6 +570,40 @@ static void synth(MP3DSP *d, int ch, dw sub[32][18], dw *pcm)
 			e2[k] = d_a2w(a + b);
 			o2[k] = d_a2w(a - b);
 		}
+#ifdef EPLAY_EMAC
+		if (em_macsr >= 0) {
+			unsigned long pe2[8], po2[8], po[16];
+			for (k = 0; k < 8; k++) {
+				pe2[k] = em_pack(e2[k]);
+				po2[k] = em_pack(o2[k]);
+			}
+			for (k = 0; k < 16; k++)
+				po[k] = em_pack(o[k]);
+			pc = p_synth;
+			for (n = 0; n < 32; n++) {
+				const unsigned long *in = (n & 1) ? po : (n & 2) ? po2 : pe2;
+				int len = (n & 1) ? 16 : 8;
+				da r;
+				for (k = 0; k < len; k++)
+					em_mac(in[k], pc[k]);
+				pc += len;
+				r = d_rnd(em_sum());
+				if (n < 16) {
+					v[48 + n] = v[48 - n] = d_a2w(-r);
+				} else {
+					v[n - 16] = d_a2w(r);
+					v[48 - n] = d_a2w(-r);
+				}
+			}
+			v[16] = 0;
+			for (j = 0; j < 32; j++) {
+				for (i = 0; i < 16; i++)
+					em_mac(em_pack(d->v[ch][(d->vpos[ch] - i) & 15][j + 32 * (i & 1)]), p_dwin[j + 32 * i]);
+				pcm[32 * t + j] = d_a2w_out(d_rnd(d_asl(em_sum(), MP3_XS + 1)));
+			}
+			continue;
+		}
+#endif
 		c = t_synth;
 		for (n = 0; n < 32; n++) {
 			const dw *in = (n & 1) ? o : (n & 2) ? o2 : e2;
@@ -562,7 +636,30 @@ void mp3dsp_reset(MP3DSP *d)
 	memset(d, 0, sizeof(*d));
 }
 
+static int frame_(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
+
+/* (the EMAC's state kept for whoever had it, across the frame: em_begin) */
 int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
+{
+#ifdef EPLAY_EMAC
+	EMSAVE es;
+	int r;
+	if (!p_made) {
+		em_tables();
+		em_probe();
+	}
+	if (em_macsr < 0)
+		return frame_(d, pk, pcm, ns);
+	em_begin(&es);
+	r = frame_(d, pk, pcm, ns);
+	em_end(&es);
+	return r;
+#else
+	return frame_(d, pk, pcm, ns);
+#endif
+}
+
+static int frame_(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 {
 	static GC gc[2];
 	static dw sub[32][18];

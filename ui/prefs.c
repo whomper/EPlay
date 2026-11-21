@@ -116,6 +116,16 @@ void settings_read(void)
 	   11, step 4), before snd_init */
 	if (inf_get(inf, inf_n, "SNDXBIOS", v, sizeof(v)) && v[0] == '1')
 		snd_xb_want = 1;
+#ifdef EPLAY_FB
+	/* MP3FB=0, 1 or 2 (a tester's, never written): the FireBee's MP3
+	   decoder named, minimp3, EPlay's in integers, or with the EMAC, in
+	   place of the fastest (cmp3fb.c) */
+	{
+		extern int cmp3fb_force;
+		if (inf_get(inf, inf_n, "MP3FB", v, sizeof(v)) && v[0] >= '0' && v[0] <= '2')
+			cmp3fb_force = v[0] - '0';
+	}
+#endif
 }
 
 void settings_load(void)

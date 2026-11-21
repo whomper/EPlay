@@ -33,6 +33,11 @@ void mp3dsp_reset(MP3DSP *d);
 /* a packet's samples, Q23, into pcm[channel][0..ns - 1] (1152, or 576 for
  * MPEG-2 and 2.5); gives the channels */
 int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns);
+#ifdef EPLAY_EMAC
+/* (the FireBee's: the EMAC's MACSR that multiplies signed, 0 or $40; -1
+   where neither does, the decoder in plain C then) */
+long em_probe(void);
+#endif
 
 /* ---- resampling, when the output's clock isn't the file's: the DSP's
  * stage between the synthesis filter and the SSI. A position runs through

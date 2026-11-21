@@ -9,13 +9,17 @@ error's power far under the music's.
 
     compare.py CF.RAW HOST.RAW NAME
     compare.py --exact CF.RAW HOST.RAW NAME   (integer models: bit for bit)
+    compare.py --near CF.RAW HOST.RAW NAME    (another decoder: EPlay's own
+        in integers against minimp3, both full accuracy: within 1/512 of
+        full scale, the difference 70 dB under the music)
 """
 import sys
 
 import numpy as np
 
 exact = sys.argv[1] == "--exact"
-args = sys.argv[2:] if exact else sys.argv[1:]
+near = sys.argv[1] == "--near"
+args = sys.argv[2:] if exact or near else sys.argv[1:]
 cf = np.fromfile(args[0], ">i2").astype(float)
 ho = np.fromfile(args[1], ">i2").astype(float)
 name = args[2]
@@ -24,7 +28,12 @@ if len(cf) != len(ho) or not len(cf):
     sys.exit(1)
 d = np.abs(cf - ho)
 snr = 10 * np.log10((ho ** 2).mean() / max((d ** 2).mean(), 1e-12)) if (ho ** 2).mean() > 0 else 999
-ok = d.max() == 0 and (ho ** 2).mean() > 0 if exact else d.max() <= 4 and snr > 80
+if exact:
+    ok = d.max() == 0 and (ho ** 2).mean() > 0
+elif near:
+    ok = d.max() <= 64 and snr > 70
+else:
+    ok = d.max() <= 4 and snr > 80
 print("%s %s: %d samples, the largest difference %d, %.0f dB under the music" %
       ("ok  " if ok else "FAIL", name, len(cf), d.max(), snr))
 sys.exit(0 if ok else 1)
