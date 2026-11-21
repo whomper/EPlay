@@ -74,7 +74,7 @@ ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
 # for them), the sound through the XBIOS (sndfb.c), the tick from GEM's
 # turns with no interrupt (feedfb.c), the 64-bit helpers common's (ll64.c)
-OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
+OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb
 CATARI  += ll64
 CUI     := $(filter-out cpucheck,$(CUI))
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/inflate_fast_s.o \
@@ -374,6 +374,12 @@ dsptest: $(B)/mp3files/.made
 	$(MAKE) -C tests/dspopn
 	$(MAKE) -C tests/dspopl
 
+# the FireBee's edition's decoders on the ColdFire (qemu-m68k -cpu cfv4e,
+# the cross compiler): its MP3 (minimp3) within a step of the host's, its
+# VGM chips (Erez, 21 Nov 2026) bit for bit the host's
+fbtest: $(B)/mp3files/.made $(B)/opntab.h $(B)/opltab.h
+	$(MAKE) -C tests/fb
+
 # eplay.hyp from docs/GUIDE.md with the family's front page (docs/front.json,
 # common/tools/helpfront.py), and eplay.ref, its pages' names for ST-Guide's
 # index (the guidelines, 4.3)
@@ -452,7 +458,7 @@ rig: all prof
 	python3 tests/hatari/play_test.py $(B)/rig/play
 	python3 tests/hatari/speed.py $(B)/rig/speed
 
-.PHONY: all test dsptest prof rig dist clean icons help
+.PHONY: all test dsptest fbtest prof rig dist clean icons help
 
 # the desktop icon and its headers, from common/icons/EPLAY.txt (committed)
 icons:

@@ -33,9 +33,9 @@ edition: WAV and AIFF on its 8-bit DMA sound (a CD's 44.1 kHz at 50 kHz, the nea
 volume on the STE's own volume control; MP3 files show light and are passed over. While a CD-rate
 file plays, the music takes about half of the 68000, so windows and menus answer slowly then
 (EPlay is being made faster there); paused, they answer as usual. On a FireBee, start
-`eplayfb.prg`, the ColdFire's edition (a first one, for testing): MP3, WAV and AIFF through
-FireTOS's sound at 49.2 kHz, the ColdFire decoding and resampling them; VGM files, stations and the
-YM2149 aren't played there yet. A Falcon with TT RAM (a DFB1 and the like) has room for very long
+`eplayfb.prg`, the ColdFire's edition (a first one, for testing): MP3, web radio, WAV, AIFF and VGM
+through FireTOS's sound at 49.2 kHz, the ColdFire decoding and resampling them and making a VGM's
+chips (a YM2149's music too: the FireBee has none). A Falcon with TT RAM (a DFB1 and the like) has room for very long
 lists; a stock Falcon plays as well.
 
 **What it plays:** MP3 (MPEG-1, 2 and 2.5 layer III, every bit rate, constant or variable); WAV

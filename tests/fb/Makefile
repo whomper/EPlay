@@ -15,11 +15,28 @@ CF     := -mcpu=5475 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-p
           -fno-tree-loop-distribute-patterns -nostdinc -isystem $(GCCINC) -I$(RT) -I$(RT)/inc -I$(TOP)/common/src -I$(TOP)/src -I$(TOP)/ui \
           -I$(TOP)/third_party/minimp3 -Wall
 FILES  := tones mix128 mix320 mono lsf22 mix48 mixvbr
+# (the VGM chips on the ColdFire: Erez, 21 Nov 2026) one file each for the
+# AY, the SN76489, the YM2612, the Mega Drive's pair, the YM3812, the YMF262
+VGMS   := ay sn opn md opl opl3
+VGMSRC := $(addprefix $(TOP)/src/,vgm.c vgmcpu.c sncmd.c sncpu.c opnd.c egmath.c opncpu.c opld.c oplcpu.c aycpu.c)
 
-test: $(B)/fbmp3 $(B)/fbmp3_host
+test: $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host
 	for f in $(FILES); do $(QEMU) $(B)/fbmp3 $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.cf.raw && \
 		./$(B)/fbmp3_host $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.host.raw && \
 		python3 compare.py $(B)/$$f.cf.raw $(B)/$$f.host.raw $$f || exit 1; done
+	python3 -I mkvgms.py $(B) $(VGMS)
+	for f in $(VGMS); do $(QEMU) $(B)/fbvgm $(B)/$$f.vgm > $(B)/$$f.vcf.raw && \
+		./$(B)/fbvgm_host $(B)/$$f.vgm > $(B)/$$f.vhost.raw && \
+		python3 compare.py --exact $(B)/$$f.vcf.raw $(B)/$$f.vhost.raw $$f.vgm || exit 1; done
+# (the models as EPlay's Makefile builds them for the FireBee; the tables
+# build/opntab.h's and opltab.h's, as dspstub.c takes them there)
+$(B)/fbvgm: fbvgm.c $(VGMSRC) $(TOP)/common/atari/ll64.c $(RT)/rt.S $(RT)/libc.c Makefile | $(B)
+	$(CC) $(CF) -I$(TOP)/build -ffunction-sections -fdata-sections -o $(B)/fbvgm.elf -nostdlib -static -no-pie \
+		-Wl,-z,noexecstack -Wl,--gc-sections -Wno-implicit-function-declaration \
+		fbvgm.c $(VGMSRC) $(TOP)/common/atari/ll64.c $(RT)/libc.c $(RT)/rt.S
+	cp $(B)/fbvgm.elf $@
+$(B)/fbvgm_host: fbvgm.c $(VGMSRC) | $(B)
+	cc -O2 -Wall -DHOST -I$(TOP)/src -I$(TOP)/build -I$(TOP)/common/src -ffunction-sections -Wl,--gc-sections -o $@ fbvgm.c $(VGMSRC)
 # (cmp3fb.c as EPlay's Makefile builds it: -ffast-math)
 $(B)/fbmp3: fbmp3.c $(TOP)/ui/cmp3fb.c $(TOP)/ui/cmp3.h $(RT)/rt.S $(RT)/libc.c | $(B)
 	$(CC) $(CF) -c -o $(B)/fbmp3.o fbmp3.c

@@ -25,8 +25,8 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
   radio itself: with its FPU (`mp3fpu.ovl`), or without one (`mp3int.ovl`). So far tested in Hatari,
   not yet on a real 68060 or 68080.
 - **FireBee (first test edition):** `eplayfb.prg`, built for its ColdFire: MP3 and web radio
-  decoded by the ColdFire and its FPU, WAV and AIFF, through FireTOS's sound. VGM and the YM2149 not
-  yet there.
+  decoded by the ColdFire and its FPU, WAV and AIFF, and VGM, its chips (the YM2149's music too)
+  made by the ColdFire, through FireTOS's sound.
 
 ![EPlay's Settings on a Falcon in 256 colours (Hatari): its pages Playing, Stations and Files at the left; Playing shows the Output (Auto, FDI, DSP) and ReplayGain (Off, Track, Album, Auto) as buttons](docs/settings.png)
 
@@ -43,7 +43,7 @@ Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** a
 | `tlsfb.ovl` | the same on a FireBee: EPlay loads it there instead of `tls.ovl` |
 | `mp3fpu.ovl` | MP3 decoded by a 68060 or a 68080 with its FPU where there is no DSP free: keep it beside the program |
 | `mp3int.ovl` | the same for a 68060 or a 68080 without an FPU |
-| `eplayfb.prg` | the program for a FireBee (a first test edition: MP3, WAV and AIFF) |
+| `eplayfb.prg` | the program for a FireBee (a first test edition: MP3, web radio, WAV, AIFF and VGM) |
 | `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` |
 
 Start `eplay.prg`, or drop music files, a folder or a playlist on it. **File > Open...** adds more,

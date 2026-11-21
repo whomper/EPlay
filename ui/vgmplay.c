@@ -49,9 +49,9 @@ static int lvl, want18, cur_nch;
    (opncpu.c) and the YM3812 or the YMF262 (oplcpu.c), the DSP's models in
    32 bits */
 static int use_cpu;
-/* (none in the STE's edition, a 68000, nor yet the FireBee's: its code
-   left out of them) */
-#if defined(EPLAY_ST) || defined(EPLAY_FB)
+/* (none in the STE's edition, a 68000: its code left out of it; the
+   FireBee's makes them on its ColdFire: Erez, 21 Nov 2026) */
+#if defined(EPLAY_ST)
 #define CPU_ON 0
 #else
 #define CPU_ON 1
@@ -302,8 +302,14 @@ int vp_has_ym(void)
 
 int vp_cpu_can(void)
 {
-	/* (a 68060, not a ColdFire: FireTOS says _CPU 60 there too, FBPROBE 1) */
+	/* (a 68060, or the FireBee's ColdFire in its own edition: Erez, 21 Nov
+	   2026; EPLAY.PRG on a FireBee not, though FireTOS says _CPU 60 there
+	   too, FBPROBE 1) */
+#ifdef EPLAY_FB
+	return 1;
+#else
 	return !get_cookie(0x5F43465FL) && get_cookie(0x5F435055L) >= 60;
+#endif
 }
 
 int vp_cpu(void)

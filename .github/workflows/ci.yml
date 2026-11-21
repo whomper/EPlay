@@ -49,9 +49,11 @@ jobs:
           # (three apt mirrors and IPv4: AERA-Atari's template, fa930c9)
           printf '%s\n' https://mirrors.edge.kernel.org/ubuntu http://azure.archive.ubuntu.com/ubuntu http://archive.ubuntu.com/ubuntu | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
           sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu a56
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::ForceIPv4=true install -y gcc-m68k-linux-gnu a56 qemu-user sox lame python3-numpy
       - name: Build the programs
         run: make
+      - name: The FireBee's decoders on the ColdFire (qemu-m68k -cpu cfv4e)
+        run: make fbtest
       - name: The build changed no tracked file
         run: |
           git status --porcelain

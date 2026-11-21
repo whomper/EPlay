@@ -68,7 +68,16 @@ int dspopn_open(unsigned long clock, unsigned long sn_clock, int sn_fb, int sn_w
 }
 void dspopn_sn(int byte) { (void)byte; }
 int dspopn_psg(void) { return 0; }
+#ifdef EPLAY_FB
+/* (the FireBee's edition: the YM2612's and the OPL's tables for their
+   models on its ColdFire, vgmcpu.c's: Erez, 21 Nov 2026) */
+#include "opntab.h"
+#include "oplexp.h"
+#include "opltab.h"
+const unsigned long *dspopn_tab(int which) { return which ? opn_gain : opn_sin; }
+#else
 const unsigned long *dspopn_tab(int which) { (void)which; return NULL; }
+#endif
 VGMDAC *dspopn_dac(void) { return NULL; }
 void dspopn_write(int port, int reg, int val) { (void)port; (void)reg; (void)val; }
 int dspopn_tick(int (*run)(void *v, long n), long (*at)(void *v), void *v, long n) { (void)at; return run(v, n); }
@@ -98,7 +107,15 @@ void dspopl_close(void) { }
 int dspopl_ext(void) { return 0; }
 long dspopl_least(void) { return -1; }
 int dspopl_late2(void) { return 0; }
+#ifdef EPLAY_FB
+const OPLC_TABS *dspopl_tabs(void)
+{
+	static const OPLC_TABS t = { opl_gain, opl_am, opl_pmw, opl_sinq, opl_rq, OPL_GAIN_N };
+	return &t;
+}
+#else
 const OPLC_TABS *dspopl_tabs(void) { return NULL; }
+#endif
 long dspopl_rate(void) { return 0; }
 long dspopl_synth(void) { return 0; }
 void dspopl_term(void) { }

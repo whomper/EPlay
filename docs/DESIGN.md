@@ -2802,3 +2802,20 @@ it in 1.44".
   stream's start, not before each frame; gate g51 then played them swapped in about a third of
   the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
   salign was putting a real slip right. Reverted (14069b173): `dsp/mp3.a56` is 1.50's.
+
+## F3: VGM on the FireBee (Erez, 21 Nov 2026, through the hub)
+
+- **EPLAYFB.PRG makes a VGM's chips on its ColdFire**, as a 68060 with no Falcon DSP does
+  (phase 11): the SN76489, the YM2612, the YM3812 and YMF262, and the AY (the FireBee has no
+  YM2149) from their 32-bit C models (`src/vgmcpu.c`), ahead, into play.c's queue and through
+  FireTOS's sound. The FireBee's build now carries `sncpu`, `vgmcpu`, `opncpu`, `oplcpu` and
+  `aycpu`; `dspstub.c` gives the YM2612's and the OPL's tables (build/opntab.h, opltab.h) in
+  that edition; `vp_cpu_can` is 1 there. EPLAY.PRG on a FireBee is unchanged.
+- **Tested on the ColdFire:** `make fbtest` (CI's Atari job too): `tests/fb/fbvgm.c` renders the
+  rig's VGMs (one each for the AY, the SN76489, the YM2612, the Mega Drive's pair, the YM3812, the
+  YMF262) under `qemu-m68k -cpu cfv4e`, bit for bit the host's. Its first link took libgcc's
+  68020 `__muldi3` (mulu.l 32x32->64: an illegal instruction on the V4e); EPLAYFB.PRG links
+  common's `ll64.c` for those, and so does the test now. The shared CPU path (play.c's queue,
+  vp_render) is the gate's FireBee stand-in rows' (EPLAY.PRG with SNDXBIOS=1 on a 68060).
+  What only the tester's FireBee can show: the ColdFire's time for each chip, in EPLAY.LOG's VGM
+  lines.
