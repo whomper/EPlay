@@ -68,6 +68,12 @@ static int int_frame(const unsigned char *p, int n, short *pcm, MP3OVL_INFO *inf
 	if (mp3_packet(&ps, &h, p + off, pk) < 0)
 		return 0;	/* (its main data not all come yet: the bit reservoir) */
 	nch = mp3dsp_frame(&md, pk, pcm24, &ns);
+	if (em_disturbed && which == DEC_EMAC) {
+		/* (another program used the EMAC during a frame: mp3dsp_frame) */
+		which = DEC_INT;
+		elog("MP3 on the ColdFire: the EMAC's state was changed by another program during a frame; "
+		     "EPlay's decoder in plain C from here on");
+	}
 	for (i = 0; i < ns; i++)
 		for (ch = 0; ch < nch; ch++) {
 			long w = ((long)pcm24[ch][i] + 128) >> 8;

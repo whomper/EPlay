@@ -514,6 +514,7 @@ static void imdct(GC *c, dw *ov, dw out[32][18], int lim)
  * last 16 slots, as the standard has them */
 #ifdef EPLAY_EMAC
 long em_macsr = -1;
+long em_disturbed;	/* (frames whose EMAC state another process changed: mp3dsp_frame) */
 
 /* which MACSR multiplies signed on this EMAC (dspmath.h): -0x800 by 0x7ff,
    each way; 0 or $40, or -1 where neither gives -0x3ff800 */
@@ -652,6 +653,21 @@ int mp3dsp_frame(MP3DSP *d, const unsigned long *pk, dw pcm[2][1152], int *ns)
 		return frame_(d, pk, pcm, ns);
 	em_begin(&es);
 	r = frame_(d, pk, pcm, ns);
+	{
+		/* (another process's EMAC use while the frame was decoded:
+		   FreeMiNT keeps no EMAC state. Each sum ends cleared, so the
+		   accumulators are 0 here and MACSR still EPlay's, unless
+		   something else used them; then the frame is counted and the
+		   rest of the run is plain C: em_disturbed, cmp3fb.c's log) */
+		unsigned long m, a0, a1, a2, a3;
+		__asm__ volatile("move.l %%macsr,%0\n\tmove.l %%acc0,%1\n\tmove.l %%acc1,%2\n\t"
+				 "move.l %%acc2,%3\n\tmove.l %%acc3,%4"
+				 : "=d"(m), "=d"(a0), "=d"(a1), "=d"(a2), "=d"(a3));
+		if ((m & 0xf0) != ((unsigned long)em_macsr & 0xf0) || (a0 | a1 | a2 | a3)) {	/* (its mode bits: 0-3 are the sums' flags) */
+			em_disturbed++;
+			em_macsr = -1;
+		}
+	}
 	em_end(&es);
 	return r;
 #else

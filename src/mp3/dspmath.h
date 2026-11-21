@@ -154,6 +154,7 @@ typedef struct {
 } EMSAVE;
 
 extern long em_macsr;		/* mp3dsp.c's: em_probe's choice */
+extern long em_disturbed;	/* (mp3dsp.c's: frames another process's EMAC use disturbed) */
 
 static inline void em_begin(EMSAVE *s)
 {
