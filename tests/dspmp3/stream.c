@@ -41,6 +41,7 @@
 static unsigned long long slot_cycles = 325, next_slot;
 static int slot0 = 1;
 static long tue_every, slot_n;	/* SIMTUE=N */
+static long tde_miss, tde_first = -1;	/* slots whose word wasn't written since the last: a real underrun */
 #define CAP_MAX (1L << 22)
 static unsigned short cap[CAP_MAX];	/* what the SSI sent, a word each slot */
 static long ncap;
@@ -50,6 +51,14 @@ static void clock_ssi(void)
 {
 	while (cycles >= next_slot) {
 		dsp_core_ssi_Receive_SC2(slot0);
+		/* (the word for this slot not written since the last slot began:
+		   on a Falcon the SSI's transmit underrun, a click; Hatari's core
+		   raises none, so it is counted here) */
+		if (dsp_core.ssi.crb_te && (dsp_core.periph[DSP_SPACE_X][DSP_SSI_SR] & (1 << DSP_SSI_SR_TDE))) {
+			if (tde_first < 0)
+				tde_first = ncap;
+			tde_miss++;
+		}
 		dsp_core_ssi_Receive_SCK();
 		if (tue_every && ++slot_n % tue_every == 0) {
 			dsp_set_interrupt(DSP_INTER_SSI_TRX_DATA, 0);
@@ -335,6 +344,8 @@ int main(int argc, char **argv)
 			}
 		}
 	}
+	printf("%s: %ld slots with no word written in time (the SSI's underruns), the first at slot %ld\n",
+	       argv[1], tde_miss, tde_first);
 	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld with a slot missed, %ld packets "
 	       "sent; the system stack %u deep at most (P:%04x)%s\n",
 	       strrchr(argv[1], '/') ? strrchr(argv[1], '/') + 1 : argv[1], frames, late, rsy, miss, sent,

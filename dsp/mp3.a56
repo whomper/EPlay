@@ -995,8 +995,12 @@ smt	jclr	#6,x:SSISR,smt		; out in the next slot; while slot 0 (TFS)
 smt2	jclr	#6,x:SSISR,smt2
 smr	andi	#$fc,mr			; interrupts on: the left first
 	jsr	pkfree
-stl	jsr	salign			; left and right in step, each frame
-	jsr	getsrc			; the whole packet
+	jsr	salign			; left and right in step, once: the SSI's
+					; interrupt (or tue's) takes a word each slot, so they
+					; stay so. Each frame it held the interrupt off for up
+					; to a slot, and Erez's Falcon missed a slot in 498 of
+					; 641 frames on its clock (EPlay 1.50; none on the FDI)
+stl	jsr	getsrc			; the whole packet
 	jset	#3,x:V_SF,stx
 	jsr	decode
 	jclr	#5,x:V_SF,sun9		; the SSI missed a slot since the last frame
