@@ -2785,3 +2785,20 @@ it in 1.44".
   file"); 3 of 3 each pass on 1.50 and 1.49 after it was freed. Slower rows accepted by Erez
   (20 Nov 2026, "Accept, release 1.50"): Falcon-4:16 Volume + 10 -> 25, NVDI Mega Drive VGM start
   2370 -> 2385, NVDI About opened 345 -> 370.
+
+## 1.51: the window's first height, the mini player's own place (21 Nov 2026)
+
+- **A tester, through the hub and Erez (21 Nov 2026):** the list opened over the desk's whole
+  height; he preferred the height the mini player's switch gives, and the place and size kept
+  across runs. Erez decided (21 Nov 2026): the first start (no `WINDOW=` kept) opens at the bar's
+  own height, six rows of the list, centred as the mini player's switch gives it, in place of
+  D39's whole height; and the mini player keeps its own place, `MINIWINDOW=x,y` beside the full
+  window's `WINDOW=x,y,w,h` (D43), each kept on the desk at the start and written at the quit
+  only when it changed (6.1). Switching between them while EPlay runs keeps the corner where it
+  was, as before; each player's place is remembered as it moves. The rigs: `firstrun` (six rows,
+  centred), `miniplace` (a `MINIWINDOW=` past the desk opens at its corner; the quit writes the
+  place, `WINDOW=` left as it was), `place` as before.
+- **The Output DSP crackle stays open.** 8c5bb34c8 put left and right in step once at a
+  stream's start, not before each frame; gate g51 then played them swapped in about a third of
+  the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
+  salign was putting a real slip right. Reverted (14069b173): `dsp/mp3.a56` is 1.50's.

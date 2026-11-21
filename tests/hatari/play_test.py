@@ -21,6 +21,7 @@ screenshot while it plays in WORK/MACHINE-CASE/shots.
 """
 import math
 import os
+import re
 import shutil
 import stat
 import struct
@@ -255,9 +256,15 @@ def add_rg(path, case):
 # taken in whole rows
 CASES["place"] = CASES["wav"]
 INFS["place"] = "WINDOW=24,96,480,330\r\n\r\n"
-# the first start (1.16, D39): no place kept, the window at the desk's
-# whole height, centred across (its width design D's)
+# the first start: no place kept, the window at the bar's own height (six
+# rows of the list, as the mini player's switch gives it), centred across
+# (its width design D's): Erez, 21 Nov 2026, in place of D39's whole height
 CASES["firstrun"] = CASES["wav"]
+# the places kept apart (Erez, 21 Nov 2026): the mini player opens at its
+# own MINIWINDOW=, kept on the desk (one past it comes in to the corner),
+# and the quit writes where it is; the full window's WINDOW= left as it was
+CASES["miniplace"] = CASES["wav"]
+INFS["miniplace"] = "MINI=1\r\nMINIWINDOW=2000,2000\r\nWINDOW=24,96,480,330\r\n\r\n"
 # a quit while it plays (^Q): each step of the way out in EPLAY.LOG, the
 # crash catcher off (the hub, 10 Nov 2026: EFTP's and EMail's quit bombs,
 # the catcher hooked over), no CRASH.LOG
@@ -747,8 +754,30 @@ def run(work, case, spec):
             # (the screen's height: 400 lines on an ST's high resolution,
             # the STE's mono; 480 on the TT's and the Falcon's VGA)
             high = 400 if spec.split(":")[0] in ("STE", "STE-1", "ST", "ST-1") else 480
-            if not (v[1] < 80 and v[1] + v[3] > high - 60 and abs(left - right) <= 24):
-                return False, m.describe(), "a first start: the work area at %s (wanted the desk's height, centred)" % wl
+            if not (150 <= v[3] <= 260 and v[1] + v[3] < high - 60 and abs(left - right) <= 24):
+                return False, m.describe(), "a first start: the work area at %s (wanted six rows, centred)" % wl
+        if case == "miniplace":
+            wl = wait_line(log, lambda l: l.startswith("EPLAY window "), 5) or ""
+            v = [int(x) for x in wl.split()[2:6]] if wl else [0, 0, 0, 0]
+            high = 400 if spec.split(":")[0] in ("STE", "STE-1", "ST", "ST-1") else 480
+            # (the work area inside the window's border: at the desk's
+            # bottom right, a few pixels in)
+            if not (v[3] and v[3] < 120 and 640 - 16 <= v[0] + v[2] <= 640 and high - 16 <= v[1] + v[3] <= high):
+                return False, m.describe(), "MINIWINDOW=2000,2000: the mini player's work area at %s (wanted the desk's corner)" % wl
+            cmd(fifo, "hatari-event", "keydown", "0x1d")
+            cmd(fifo, "hatari-event", "keypress", "0x10")
+            cmd(fifo, "hatari-event", "keyup", "0x1d")
+            wait_line(log, lambda l: l.startswith("LOG quit: out of the AES"), 20)
+            time.sleep(1)
+            inff = machines.ci_path(hd, "EPLAY.INF")
+            text = open(inff, errors="replace").read() if os.path.exists(inff) else ""
+            mw = re.findall(r"^MINIWINDOW=(-?\d+),(-?\d+)", text, re.M)
+            fw = re.findall(r"^WINDOW=(.*?)\r?$", text, re.M)
+            if not mw or int(mw[0][0]) > 640 or int(mw[0][1]) > high or fw != ["24,96,480,330"]:
+                return False, m.describe(), "the quit's EPLAY.INF: MINIWINDOW=%s, WINDOW=%s" % (
+                    ",".join(mw[0]) if mw else "(none)", fw[0] if fw else "(none)")
+            return True, m.describe(), "the mini player at %s; the quit wrote MINIWINDOW=%s, WINDOW= kept" % (
+                " ".join(map(str, v)), ",".join(mw[0]))
         if case == "vgmreal":
             secs = float(os.environ.get("EPLAY_RIG_SECS", "20"))
             for _ in range(int(os.environ.get("EPLAY_RIG_SHOTS", "0"))):   # (the title's scroll, a shot a second)

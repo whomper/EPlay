@@ -60,6 +60,10 @@ int settings_mini(void);
    settings_flush: 1 with it, 0 with none kept */
 int settings_window(short *x, short *y, short *w, short *h);
 void settings_set_window(short x, short y, short w, short h);
+/* the mini player's own place (MINIWINDOW=x,y: Erez, 21 Nov 2026), saved
+   by settings_flush: 1 with it, 0 with none kept */
+int settings_miniwindow(short *x, short *y);
+void settings_set_miniwindow(short x, short y);
 void settings_set_mini(int on);
 
 /* the Add files dialog's folder and its last folders (ADDDIR=, FOLDER1=

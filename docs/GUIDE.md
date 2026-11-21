@@ -106,9 +106,9 @@ one clicked, and **Edit > Select all** (^A) selects them all; Del takes the sele
 A right click, or Insert, opens the row's menu (for all the selected rows, when the row is one of them). Make the window taller for more rows; its
 fuller makes it as tall as the screen, and back. Where the AES can (MagiC, XaAES, N.AES), its
 iconifier shows EPlay as its icon, with Playing or Paused under it, while the music goes on.
-The first time, the window opens as tall as the desk; `EPLAY.INF` keeps its place and height
-for the next start. (The mini player has
-neither: it stays as small as it is.)
+The first time, the window opens with six rows of the list, as the mini player's switch gives
+it; `EPLAY.INF` keeps its place and height for the next start. The mini player keeps its own
+place (it stays as small as it is).
 
 - **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
   Find station... finds one by name, genre, country or language;

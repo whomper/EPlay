@@ -33,6 +33,7 @@ static char add_dir[FP_PATH], recent[FP_RECENT][FP_PATH];	/* the Add files dialo
 static int recent_dirty;
 static int mini, mini_saved;		/* the mini player (View > Mini player), saved at the end */
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
+static short mwin[3], mwin_saved[3];	/* the mini player's own (MINIWINDOW=x,y; Erez, 21 Nov 2026): [2] 1 when kept */
 static int log_on;			/* LOG=: Options > Write a log (guidelines 6.5): off until ticked */
 static long stallat;			/* STALLAT=: the rigs' (read, never written). ms: an MP3 on the DSP taken as stalled there, once */
 static long crashat;			/* CRASHAT=: the rigs' (read, never written). ms: EPlay ends there by an illegal instruction, playing, to try term.c; -ms: at interrupt time (a VBL routine of its), as TOS ends it */
@@ -164,6 +165,19 @@ void settings_load(void)
 		if (k == 4 && a[2] > 0 && a[3] > 0)
 			for (i = 0; i < 4; i++)
 				win[i] = win_saved[i] = (short)a[i];
+	}
+	if (inf_get(inf, inf_n, "MINIWINDOW", v, sizeof(v))) {
+		char *e;
+		long mx = strtol(v, &e, 10), my;
+		if (e != v && *e == ',') {
+			char *f = e + 1;
+			my = strtol(f, &e, 10);
+			if (e != f) {
+				mwin[0] = mwin_saved[0] = (short)mx;
+				mwin[1] = mwin_saved[1] = (short)my;
+				mwin[2] = mwin_saved[2] = 1;
+			}
+		}
 	}
 	if (inf_get(inf, inf_n, "QLATE", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		qlate = atoi(v);
@@ -311,6 +325,15 @@ static void save_in(void)
 			return;
 		memcpy(inf3, inf2, (size_t)n);
 	}
+	if (mwin[2]) {
+		static const char mwnote[] = "; The mini player's place: x,y (its own, apart from the full window's)\r\n";
+		char ws[24];
+		snprintf(ws, sizeof(ws), "%d,%d", mwin[0], mwin[1]);
+		n = inf_set(inf3, n, "MINIWINDOW", ws, mwnote, inf2, INF_MAX);
+		if (n < 0)
+			return;
+		memcpy(inf3, inf2, (size_t)n);
+	}
 	{
 		static const char snote[] = "; Shuffle: 1 for a random order (Play > Shuffle), 0 the list's\r\n";
 		static const char rnote[] = "; Repeat: OFF, ALL (the list again) or ONE (the file again)\r\n";
@@ -396,6 +419,7 @@ static void save_in(void)
 	recent_dirty = 0;
 	mini_saved = mini;
 	memcpy(win_saved, win, sizeof(win));
+	memcpy(mwin_saved, mwin, sizeof(mwin));
 	shuffle_saved = shuffle;
 	repeat_saved = repeat;
 	gateway_saved = gateway;
@@ -558,7 +582,7 @@ void settings_set_volume(int v)
    bar: a write each time) */
 void settings_flush(void)
 {
-	if (volume != volume_saved || mini != mini_saved || memcmp(win, win_saved, sizeof(win)) || recent_dirty ||
+	if (volume != volume_saved || mini != mini_saved || memcmp(win, win_saved, sizeof(win)) || memcmp(mwin, mwin_saved, sizeof(mwin)) || recent_dirty ||
 	    shuffle != shuffle_saved ||
 	    repeat != repeat_saved || gateway != gateway_saved || urls_dirty || gate_dirty)
 		save();
@@ -588,6 +612,22 @@ int settings_window(short *x, short *y, short *w, short *h)
 	*w = win[2];
 	*h = win[3];
 	return 1;
+}
+
+int settings_miniwindow(short *x, short *y)
+{
+	if (!mwin[2])
+		return 0;
+	*x = mwin[0];
+	*y = mwin[1];
+	return 1;
+}
+
+void settings_set_miniwindow(short x, short y)
+{
+	mwin[0] = x;
+	mwin[1] = y;
+	mwin[2] = 1;
 }
 
 void settings_set_window(short x, short y, short w, short h)

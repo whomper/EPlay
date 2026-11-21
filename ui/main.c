@@ -405,12 +405,14 @@ static void open_window(void)
 	if (at_x >= 0) {
 		x = at_x + w > desk_x + desk_w ? desk_x + desk_w - w : at_x;
 		y = at_y + h > desk_y + desk_h ? desk_y + desk_h - h : at_y;
-	} else if (!bar_mini && !settings_window(&sx, &sy, &sw, &sh)) {
-		/* the first start (no place kept): the desk's whole height, its
-		   width design D's, centred across (D39, WINDOWS 1.1) */
-		y = desk_y;
-		saved = desk_h != h ? desk_h : 0;
-	} else if (!bar_mini) {
+	} else if (bar_mini && settings_miniwindow(&sx, &sy)) {
+		/* the mini player's own place, kept on the desk (Erez, 21 Nov 2026) */
+		x = sx + w > desk_x + desk_w ? desk_x + desk_w - w : sx < desk_x ? desk_x : sx;
+		y = sy + h > desk_y + desk_h ? desk_y + desk_h - h : sy < desk_y ? desk_y : sy;
+	} else if (!bar_mini && settings_window(&sx, &sy, &sw, &sh)) {
+		/* (with no place kept, the first start: the bar's own height, six
+		   rows of the list, centred as above, as the mini player's switch
+		   gives it: Erez, 21 Nov 2026, in place of D39's whole height) */
 		/* the place it was left at (WINDOW=: D43), kept on the desk; its
 		   width is the bar's, its height whole rows (sized, below) */
 		if (sh > desk_h)
@@ -1436,15 +1438,18 @@ static void list_press(short mx, short my, short ks, int right)
 	}
 }
 
-/* the full window's place, for EPLAY.INF (WINDOW=: D43): not the mini
-   player's, nor an icon's */
+/* the window's place, for EPLAY.INF: the full window's (WINDOW=: D43)
+   or the mini player's own (MINIWINDOW=: Erez, 21 Nov 2026); not an icon's */
 static void remember_place(void)
 {
 	short x, y, w, h;
-	if (wh <= 0 || bar_mini || iconified)
+	if (wh <= 0 || iconified)
 		return;
 	wind_get(wh, WF_CURRXYWH, &x, &y, &w, &h);
-	settings_set_window(x, y, w, h);
+	if (bar_mini)
+		settings_set_miniwindow(x, y);
+	else
+		settings_set_window(x, y, w, h);
 }
 
 /* View > Mini player: the window again, the bar alone or with the list,
