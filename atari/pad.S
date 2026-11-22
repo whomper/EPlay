@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.47's link map (v1.47, build/atari/eplay.map): do not edit.
-| 220 pads, 36620 bytes, each section at its place there, mod the 68030's
+| 220 pads, 36448 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -550,7 +550,7 @@ ep_pad_135:
 	.section ".text.startup.main!","ax"
 	.globl ep_pad_136
 ep_pad_136:
-	.space 230
+	.space 72
 	.section ".text.step!","ax"
 	.globl ep_pad_137
 ep_pad_137:
@@ -703,138 +703,138 @@ ep_pad_173:
 	.globl ep_pad_174
 ep_pad_174:
 	.space 232
-	.section ".rodata.xb_rates!","a"
+	.section ".data.!","aw"
 	.globl ep_pad_175
 ep_pad_175:
-	.space 254
-	.section ".data.!","aw"
+	.space 252
+	.section ".data.cf.8!","aw"
 	.globl ep_pad_176
 ep_pad_176:
 	.space 252
-	.section ".data.cf.8!","aw"
+	.section ".data.cpu_kind!","aw"
 	.globl ep_pad_177
 ep_pad_177:
 	.space 252
-	.section ".data.cpu_kind!","aw"
+	.section ".data.keep_under!","aw"
 	.globl ep_pad_178
 ep_pad_178:
-	.space 252
-	.section ".data.keep_under!","aw"
-	.globl ep_pad_179
-ep_pad_179:
 	.space 254
 	.section ".data.kind!","aw"
+	.globl ep_pad_179
+ep_pad_179:
+	.space 252
+	.section ".data.log_h!","aw"
 	.globl ep_pad_180
 ep_pad_180:
 	.space 252
-	.section ".data.log_h!","aw"
+	.section ".data.margin_least!","aw"
 	.globl ep_pad_181
 ep_pad_181:
 	.space 252
-	.section ".data.margin_least!","aw"
+	.section ".data.net_sendbuf!","aw"
 	.globl ep_pad_182
 ep_pad_182:
-	.space 252
-	.section ".data.net_sendbuf!","aw"
-	.globl ep_pad_183
-ep_pad_183:
 	.space 4
 	.section ".data.skip_drawn!","aw"
-	.globl ep_pad_184
-ep_pad_184:
+	.globl ep_pad_183
+ep_pad_183:
 	.space 252
 	.section ".data.xs_end_at!","aw"
-	.globl ep_pad_185
-ep_pad_185:
+	.globl ep_pad_184
+ep_pad_184:
 	.space 66
 	.section ".bss.aes_hosts!","aw",@nobits
-	.globl ep_pad_186
-ep_pad_186:
+	.globl ep_pad_185
+ep_pad_185:
 	.space 252
 	.section ".bss.avail!","aw",@nobits
-	.globl ep_pad_187
-ep_pad_187:
+	.globl ep_pad_186
+ep_pad_186:
 	.space 224
 	.section ".bss.b.8!","aw",@nobits
-	.globl ep_pad_188
-ep_pad_188:
+	.globl ep_pad_187
+ep_pad_187:
 	.space 32
 	.section ".bss.b_btn!","aw",@nobits
+	.globl ep_pad_188
+ep_pad_188:
+	.space 248
+	.section ".bss.cmp_hz!","aw",@nobits
 	.globl ep_pad_189
 ep_pad_189:
 	.space 248
-	.section ".bss.cmp_hz!","aw",@nobits
+	.section ".bss.cmp_snd!","aw",@nobits
 	.globl ep_pad_190
 ep_pad_190:
-	.space 248
-	.section ".bss.cmp_snd!","aw",@nobits
-	.globl ep_pad_191
-ep_pad_191:
 	.space 252
 	.section ".bss.conn_hosts_path!","aw",@nobits
-	.globl ep_pad_192
-ep_pad_192:
+	.globl ep_pad_191
+ep_pad_191:
 	.space 56
 	.section ".bss.cpu_is080!","aw",@nobits
-	.globl ep_pad_193
-ep_pad_193:
+	.globl ep_pad_192
+ep_pad_192:
 	.space 242
 	.section ".bss.crash_slot!","aw",@nobits
-	.globl ep_pad_194
-ep_pad_194:
+	.globl ep_pad_193
+ep_pad_193:
 	.space 252
 	.section ".bss.ctab!","aw",@nobits
-	.globl ep_pad_195
-ep_pad_195:
+	.globl ep_pad_194
+ep_pad_194:
 	.space 254
 	.section ".bss.dlg_badge!","aw",@nobits
-	.globl ep_pad_196
-ep_pad_196:
+	.globl ep_pad_195
+ep_pad_195:
 	.space 252
 	.section ".bss.done.5!","aw",@nobits
-	.globl ep_pad_197
-ep_pad_197:
+	.globl ep_pad_196
+ep_pad_196:
 	.space 248
 	.section ".bss.dw!","aw",@nobits
-	.globl ep_pad_198
-ep_pad_198:
+	.globl ep_pad_197
+ep_pad_197:
 	.space 250
 	.section ".bss.ecdsa_hosts!","aw",@nobits
-	.globl ep_pad_199
-ep_pad_199:
+	.globl ep_pad_198
+ep_pad_198:
 	.space 252
 	.section ".bss.find_near!","aw",@nobits
-	.globl ep_pad_200
-ep_pad_200:
+	.globl ep_pad_199
+ep_pad_199:
 	.space 254
 	.section ".bss.gem_screen_held!","aw",@nobits
+	.globl ep_pad_200
+ep_pad_200:
+	.space 252
+	.section ".bss.hosts_read!","aw",@nobits
 	.globl ep_pad_201
 ep_pad_201:
 	.space 252
-	.section ".bss.hosts_read!","aw",@nobits
+	.section ".bss.is080!","aw",@nobits
 	.globl ep_pad_202
 ep_pad_202:
 	.space 252
-	.section ".bss.is080!","aw",@nobits
+	.section ".bss.k_fwd!","aw",@nobits
 	.globl ep_pad_203
 ep_pad_203:
-	.space 252
-	.section ".bss.k_fwd!","aw",@nobits
-	.globl ep_pad_204
-ep_pad_204:
 	.space 236
 	.section ".bss.lf.0!","aw",@nobits
-	.globl ep_pad_205
-ep_pad_205:
+	.globl ep_pad_204
+ep_pad_204:
 	.space 248
 	.section ".bss.log_h_for!","aw",@nobits
-	.globl ep_pad_206
-ep_pad_206:
+	.globl ep_pad_205
+ep_pad_205:
 	.space 244
 	.section ".bss.map_rgb!","aw",@nobits
+	.globl ep_pad_206
+ep_pad_206:
+	.space 250
+	.section ".bss.msg.0!","aw",@nobits
 	.globl ep_pad_207
 ep_pad_207:
-	.space 250
+	.space 240
 	.section ".bss.mwin_saved!","aw",@nobits
 	.globl ep_pad_208
 ep_pad_208:

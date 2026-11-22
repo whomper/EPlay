@@ -379,8 +379,15 @@ dsptest: $(B)/mp3files/.made
 # the FireBee's edition's decoders on the ColdFire (qemu-m68k -cpu cfv4e,
 # the cross compiler): its MP3 (minimp3) within a step of the host's, its
 # VGM chips (Erez, 21 Nov 2026) bit for bit the host's
-fbtest: $(B)/mp3files/.made $(B)/opntab.h $(B)/opltab.h
+fbtest: $(B)/mp3files/.made $(B)/opntab.h $(B)/opltab.h binary/eplayfb.prg binary/eplay.prg
 	$(MAKE) -C tests/fb
+	@# (the FireBee's package has TLS.OVL's ColdFire build as tls.ovl, the
+	@# guidelines 7.4: its EPLAY.PRG asks for tls.ovl as named, with no swap to
+	@# tlsfb.ovl, and the 68030's EPLAY.PRG still swaps on a ColdFire, for the
+	@# installs made before the two packages)
+	@if grep -q tlsfb.ovl build/fb/tls_ovl.o; then echo "FAIL the FireBee's tls_ovl.o still swaps to tlsfb.ovl"; exit 1; fi
+	@grep -q tlsfb.ovl $(B)/atari/tls_ovl.o || { echo "FAIL the 68030's tls_ovl.o has no tlsfb.ovl swap"; exit 1; }
+	@echo "ok   tls.ovl as named in the FireBee's EPLAY.PRG; the 68030's swaps to tlsfb.ovl on a ColdFire"
 
 # eplay.hyp from docs/GUIDE.md with the family's front page (docs/front.json,
 # common/tools/helpfront.py), and eplay.ref, its pages' names for ST-Guide's
