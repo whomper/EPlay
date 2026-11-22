@@ -623,8 +623,9 @@ sdlo	do	#8,dl
 	move	a,x:(r6)+
 	move	a,x:(r3)-
 	clr	a		x:(r2)+,x0	y:(r5)+,y0
-	rep	#15
+	do	#15,rp2		; (do, not rep: the SSI's interrupt may come)
 	mac	x0,y0,a		x:(r2)+,x0	y:(r5)+,y0
+rp2
 	macr	x0,y0,a
 	neg	a
 	move	a,x:(r6)+
@@ -641,8 +642,9 @@ sdhi	do	#8,dh
 	neg	a
 	move	a,x:(r3)-
 	clr	a		x:(r2)+,x0	y:(r5)+,y0
-	rep	#15
+	do	#15,rp4		; (do, not rep: the SSI's interrupt may come)
 	mac	x0,y0,a		x:(r2)+,x0	y:(r5)+,y0
+rp4
 	macr	x0,y0,a
 	move	a,x:(r6)+
 	neg	a
@@ -651,8 +653,9 @@ dh
 	rts
 ; output 0 or 16: r1 its row (n1 = -64), r6 its window (Y): a = it
 sw1	clr	a		x:(r1)+n1,x0	y:(r6)+,y0
-	rep	#15
+	do	#15,sw1l		; (do, not rep: the SSI's interrupt may come)
 	mac	x0,y0,a		x:(r1)+n1,x0	y:(r6)+,y0
+sw1l
 	mac	x0,y0,a
 	asl	a
 	asl	a
@@ -996,7 +999,10 @@ smt	jclr	#6,x:SSISR,smt		; out in the next slot; while slot 0 (TFS)
 	jclr	#2,x:SSISR,smr		; goes, a silent right, so that the ring's
 	movep	#0,x:TX			; left comes next
 smt2	jclr	#6,x:SSISR,smt2
-smr	andi	#$fc,mr			; interrupts on: the left first
+smr	movep	y:(r7)+,x:TX		; the ring's first word (the left's) here, as the
+					; slot begins, not by the interrupt: the host's
+					; could come first and the slot be missed (1.54)
+	andi	#$fc,mr			; interrupts on
 	jsr	pkfree
 stl	jsr	salign			; left and right in step, each frame
 	jsr	getsrc			; the whole packet
@@ -1041,8 +1047,9 @@ sm0	move	#>15,x0			; the frames (19-22), packets broken (15-18), granules
 	and	x0,a
 	move	a1,x1
 	or	x1,b
-	rep	#9
+	do	#9,rp5		; (do, not rep: the SSI's interrupt may come)
 	lsl	b
+rp5
 	move	x:V_IDLE,a
 	rep	#6
 	asr	a
@@ -1090,6 +1097,8 @@ salign	ori	#3,mr
 	movep	x:SSISR,x0
 	move	r7,b
 	movep	x:SSISR,x1
+	andi	#$fc,mr			; (held for the reads alone: the right's word
+					; has one slot, 81 clocks at 49,170 Hz, 1.54)
 	move	x0,a
 	eor	x1,a
 	move	#>$44,x1		; TDE (6) and TFS (2)
@@ -1107,8 +1116,7 @@ sa8	move	(r7)+			; one word on
 	move	#>1,x1
 	add	x1,a
 	move	a1,x:V_ALN
-sa9	andi	#$fc,mr
-	rts
+sa9	rts
 
 ; PKT free: the next packet may come (HF2), its words into it by the host
 ; receive's interrupt (hri), its count at V_PKB - 1 (a, x0 used)
@@ -2362,8 +2370,9 @@ dqbig	move	b1,x0			; n >= 1024: m from a = n / 8 and f = n mod 8
 	move	x0,a
 	move	#>7,y0
 	and	y0,a
-	rep	#20
+	do	#20,rp6		; (do, not rep: the SSI's interrupt may come)
 	asl	a			; f << 20
+rp6
 	move	a1,y0
 	move	y:(r3)+,x0		; b0
 	move	y:(r3)+,b		; b1
@@ -2542,8 +2551,9 @@ db1	sub	a,b			; how many
 	move	y:(r6+n6),y1
 	move	#>-1,a			; the cache: nothing kept
 	move	#>CQ,r6
-	rep	#16
+	do	#16,rp7		; (do, not rep: the SSI's interrupt may come)
 	move	a,y:(r6)+
+rp7
 	move	#>16,y0
 	move	x:V_PTR,r0
 	move	x:V_CNT2,x0

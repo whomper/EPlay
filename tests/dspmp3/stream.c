@@ -51,6 +51,24 @@ static long ncap;
    left and right swapped (by an underrun before the music) still passed,
    and salign's step back, after the sound was found, did not */
 static int left_par = -1;
+/* SIMFRAME8=1: the DSP port's frame as the Falcon's matrix makes it, 128
+   bits, eight 16-bit slots, the SSI's two words (DC 1) in the first two:
+   the right's word wanted one slot (16 bits) after the frame begins, the
+   left's seven later. Until 1.54 the two slots were spread over the whole
+   frame, so a word written late by up to half a frame was in time; the
+   Falcon's right channel crackled (1.53, Output DSP, 77 % of frames with a
+   slot missed). miss_pc: where the DSP was at each slot missed */
+static int frame8, late8;
+#define MISS_PCS 64
+static unsigned miss_pc[MISS_PCS], miss_slot0[MISS_PCS], miss_pc0[MISS_PCS], pc_at_slot;
+static long nmiss_pc;
+/* the transmit interrupt's wait: 32 MHz clocks from a slot's start (TDE)
+   to its word written (TDE clear again), the most, and how many slots
+   waited longer than a slot of the 128-bit frame (the right's window) */
+static unsigned long long tde_t0, tde_max;
+static int tde_wait;
+static long tde_over[4];	/* over 1/4, 1/2, 3/4 of the right's window */
+static unsigned tde_pc0, long_pc[0x10000];	/* (SIMMISSPC: where the long waits began) */
 #define URUN_MAX 256
 static long urun_at[URUN_MAX], nurun;	/* cap's index at each underrun */
 
@@ -68,6 +86,11 @@ static void clock_ssi(void)
 			tde_miss++;
 			if (nurun < URUN_MAX)
 				urun_at[nurun++] = ncap;
+			if (nmiss_pc < MISS_PCS) {
+				miss_pc[nmiss_pc] = dsp_core.pc;
+				miss_pc0[nmiss_pc] = pc_at_slot;
+				miss_slot0[nmiss_pc++] = slot0;
+			}
 		}
 		if (slot0 && left_par < 0)
 			left_par = (int)(ncap & 1);
@@ -78,8 +101,16 @@ static void clock_ssi(void)
 		}
 		if (ncap < CAP_MAX)
 			cap[ncap++] = (unsigned short)dsp_core.ssi.transmit_value;
+		pc_at_slot = dsp_core.pc;	/* (where the DSP was as this slot began) */
+		if (dsp_core.ssi.crb_te && (dsp_core.periph[DSP_SPACE_X][DSP_SSI_SR] & (1 << DSP_SSI_SR_TDE))) {
+			tde_t0 = cycles;
+			tde_pc0 = dsp_core.pc;
+			tde_wait = 1;
+		}
 		slot0 = !slot0;
-		next_slot += slot_cycles;
+		/* (slot0 now the next slot's: with the 128-bit frame, the right
+		   one slot after the left, the left seven after the right) */
+		next_slot += frame8 ? (slot0 ? 7 : 1) * (slot_cycles / 4) : slot_cycles;
 	}
 }
 
@@ -98,6 +129,23 @@ static int sstep(void)
 	}
 	r = step();
 	clock_ssi();
+	if (tde_wait && !(dsp_core.periph[DSP_SPACE_X][DSP_SSI_SR] & (1 << DSP_SSI_SR_TDE))) {
+		unsigned long long w = cycles - tde_t0, win = slot_cycles / 4;
+		tde_wait = 0;
+		if (w > tde_max)
+			tde_max = w;
+		if (w * 4 > win)
+			tde_over[0]++;
+		if (w * 2 > win) {
+			tde_over[1]++;
+			long_pc[tde_pc0 & 0xffff]++;
+		}
+		if (w * 4 > win * 3) {
+			tde_over[2]++;
+			if (getenv("SIMMISSPC"))
+				printf("  a wait of %llu clocks from P:%04x\n", w, tde_pc0);
+		}
+	}
 	return r;
 }
 
@@ -200,6 +248,7 @@ int main(int argc, char **argv)
 		slot_cycles = 32000000ULL * 100 / (2ULL * (unsigned long long)rout *
 						     (unsigned long long)(getenv("SIMLOAD") ? atoi(getenv("SIMLOAD")) : 100));
 		tue_every = getenv("SIMTUE") ? atol(getenv("SIMTUE")) : 0;
+		frame8 = getenv("SIMFRAME8") && atoi(getenv("SIMFRAME8"));
 		mp3rs_set(&mrs, rin, rout);
 		mp3rs_set(&mrs0, rin, rout);
 		if (rsmode) {
@@ -349,16 +398,31 @@ int main(int argc, char **argv)
 			e0++;
 		e0 &= ~1L;
 		/* (in a left's slot, and past any underrun's window: left and
-		   right out of step there until salign puts them back) */
+		   right out of step there until salign puts them back. The
+		   model's first 64 words; where they fall in a window, a later
+		   64. A tone repeats, so each place a 64 is met is tried, and
+		   the one where most words are the model's taken) */
 		{
-			/* (the model's first 64 words; where they fall in an
-			   underrun's window, a later 64, a left's word first) */
-			long j;
-			for (j = e0; j + 64 <= nexp && j < e0 + 32768 && at < 0; j += 2)
-				for (k = 0; k + 64 <= ncap && at < 0; k++)
-					if ((left_par < 0 || (k & 1) == left_par) && !in_urun(k) &&
-					    !in_urun(k + 63) && !memcmp(cap + k, exp_w + j, 64 * sizeof(*cap)))
-						at = k - j;
+			long j, best = 0x7fffffffL, cand;
+			for (j = e0; j + 64 <= nexp && j < e0 + 32768 && best == 0x7fffffffL; j += 2) {
+				for (k = 0; k + 64 <= ncap; k++) {
+					long m, n, wrong = 0;
+					if ((left_par >= 0 && (k & 1) != left_par) || in_urun(k) || in_urun(k + 63) ||
+					    memcmp(cap + k, exp_w + j, 64 * sizeof(*cap)))
+						continue;
+					cand = k - j;
+					n = nexp < ncap - cand ? nexp : ncap - cand;
+					for (m = e0; m < n && wrong < best; m++)
+						if (cand + m >= 0 && cap[cand + m] != exp_w[m] && !in_urun(cand + m))
+							wrong++;
+					if (wrong < best) {
+						best = wrong;
+						at = cand;
+						if (!wrong)
+							break;
+					}
+				}
+			}
 		}
 		if (at < 0) {
 			printf("%s: the model's sound not found in what the SSI sent\n", argv[1]);
@@ -383,6 +447,26 @@ int main(int argc, char **argv)
 	}
 	printf("%s: %ld slots with no word written in time (the SSI's underruns), the first at slot %ld\n",
 	       argv[1], tde_miss, tde_first);
+	if (frame8 || getenv("SIMMISSPC"))
+		printf("  the transmit interrupt's wait: %llu clocks at most (a slot of the 128-bit frame: %llu); "
+		       "past a quarter of it %ld times, half %ld, three quarters %ld\n",
+		       tde_max, slot_cycles / 4, tde_over[0], tde_over[1], tde_over[2]);
+	/* (the 128-bit frame: the right's word written within three quarters
+	   of its slot, a quarter to spare for a DSP slower than Hatari's; 1.53
+	   took up to 78 of the 81 clocks, and the Falcon missed it) */
+	if (frame8 && tde_over[2]) {
+		printf("%s: the right's word later than three quarters of its slot %ld times\n", argv[1], tde_over[2]);
+		late8 = 1;
+	}
+	if (getenv("SIMMISSPC")) {
+		long i;
+		for (i = 0; i < 0x10000; i++)
+			if (long_pc[i] > 20)
+				printf("  waits past half a slot from P:%04lx: %u\n", i, long_pc[i]);
+		for (i = 0; i < nmiss_pc; i++)
+			printf("  missed: slot %s, the DSP at P:%04x, at P:%04x as the slot before began\n",
+			       miss_slot0[i] ? "0 (left)" : "1 (right)", miss_pc[i], miss_pc0[i]);
+	}
 	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld with a slot missed, left and right "
 	       "put back in step %ld times, %ld packets sent; the system stack %u deep at most (P:%04x)%s\n",
 	       strrchr(argv[1], '/') ? strrchr(argv[1], '/') + 1 : argv[1], frames, late, rsy, miss, aln, sent,
@@ -392,5 +476,5 @@ int main(int argc, char **argv)
 		return 1;
 	if (!tue_every && miss)
 		return 1;
-	return dead || frames < want || rsy;
+	return dead || late8 || frames < want || rsy;
 }

@@ -41,6 +41,9 @@ run: $(B)/sim $(B)/stream
 		SIMGAIN=$$g SIMRS=1 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 80 || exit 1; done; done
 	@echo "STREAM, a slow 68030 (SIMLAT=300: a word each 9 us) and a DSP 3 % slower (SIMLOAD=103):"
 	for f in mix320 mixvbr lsf22; do SIMRS=1 SIMLAT=300 SIMLOAD=103 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 120 || exit 1; done
+	@echo "STREAM, the DSP port's 128-bit frame (SIMFRAME8: the right's word one slot after the left's), the right's word in time:"
+	for f in mix320 mixvbr lsf22 mono; do SIMFRAME8=1 SIMRS=1 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 120 && \
+		SIMFRAME8=1 ./$(B)/stream $(TOP)/build/mp3files/$$f.mp3 120 || exit 1; done
 $(B)/mp3tab.h: $(TOP)/tools/mkmp3tab.py | $(B)
 	python3 $(TOP)/tools/mkmp3tab.py $(TOP)/data $@
 $(B)/mp3_prog.h: $(TOP)/dsp/mp3.a56 $(B)/mp3tab.h

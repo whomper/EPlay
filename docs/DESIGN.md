@@ -2821,6 +2821,47 @@ it in 1.44".
   the DSP runs (Falcon-4:16, the reference configuration, true colour with NVDI), so the per-frame
   salign was putting a real slip right. Reverted (14069b173): `dsp/mp3.a56` is 1.50's.
 
+## 1.54: Output DSP's right channel in time (22 Nov 2026)
+
+- **What the reference Falcon showed on 1.53** (Output DSP, the Falcon's clock, 49,170 Hz):
+  "Right side crackles, left side clean"; EPLAY.LOG: a slot missed in 2,026 frames of 2,646
+  (1.50: 498 of 641), salign's steps 0. Through the FDI's clock: none missed.
+- **Why the right alone.** The DSP port's frame is 128 bits, eight 16-bit slots; EPlay's SSI
+  sends two words (DC 1) in slots 0 and 1. The transmit interrupt for the right's word comes as
+  slot 0 begins and must write it before slot 1 begins: one slot, 81 clocks at 32 MHz (2.54 us)
+  at 49,170 Hz. The left's word has seven slots. A word late by a slot is the right's every
+  time, and the SSI sends the word before again (the DSP56001's underrun).
+- **The model.** `tests/dspmp3/stream.c` spread its two slots over the whole frame, so a word
+  up to half a frame late was in time. `SIMFRAME8=1` now gives the 128-bit frame and measures
+  the interrupt's wait, from TDE to the word written:
+  - 1.53: up to 78 of the 81 clocks (mix320 resampled, 40 frames: past three quarters 356
+    times); with a DSP 10 % slower than Hatari's, a slot missed every frame, always the right's.
+  - What held the interrupt: `rep`, which no interrupt breaks: `rep #15` of the synthesis
+    window's `mac` (sw1, dh), `rep #16` (the cache cleared), `rep #20`; and salign, which held
+    the interrupts for its whole decision, some 60 clocks.
+- **The fix:**
+  - each fixed `rep` of 8 or more is a `do` (interruptible; the two `rep #7` stay, internal P
+    being full, and inside the slot);
+  - salign holds the interrupts for its two status reads and r7 alone; its step, `move (r7)+`,
+    is one instruction, which no interrupt splits;
+  - the stream's start writes the ring's first word itself as its slot begins, not by the
+    interrupt, which the host's could come before (a slot missed at the start, now and then).
+  - The wait is 56 clocks at most now (31 % to spare), and no underrun in any dsptest case.
+    The sound is bit for bit as before; the DSP's load +0.3 % (mix320 at 49,170 Hz 92.6 to
+    92.9 %).
+  - `make dsptest` holds it: the 128-bit frame's cases fail where the right's word comes later
+    than three quarters of its slot (1.53 fails them).
+- **dsptest's stream held to left and right** (`stream.c`): the model's left words must land
+  in the frame sync's slots; the words within a frame and a half of an underrun aren't held to
+  the model's (salign puts left and right back at the next frame); where a 64-word block of a
+  tone is met at several places, the place where the most words are the model's is taken.
+  Until 1.54 a stream swapped before the music passed.
+- **The stall case's hook** (the rigs' `STALLAT=`): a flag GEM's check reads, once, not the
+  last status word's time moved back, which the tick could set again first (the case failed 2
+  runs in 6 on 1.53).
+- **The Release workflow** waits up to a minute for the draft it made before checking its
+  zips' order (1.53's run looked a second after and found none).
+
 ## 1.53: salign without the wait; the stall case measured outside the stall (22 Nov 2026)
 
 - **What the reference Falcon showed** (Output DSP, the Falcon's clock, a station resampled to 49,170
