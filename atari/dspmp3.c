@@ -482,9 +482,14 @@ static long stall_snap(void)
 	return 0;
 }
 
+static int s_fake;		/* (the rigs' STALLAT=: as if no frame for 2 s) */
+
 void dspmp3_stall_test(void)
 {
-	s_last -= 401;		/* (the rigs' STALLAT=: as if no frame for 2 s) */
+	/* (a flag, not s_last moved back: the tick's next status word
+	   could set s_last again before the check read it, and the stall
+	   was lost, 1 run in 40) */
+	s_fake = 1;
 }
 
 /* the rigs' STALLAT=-1: the DSP taken as not answering as its stream
@@ -500,7 +505,8 @@ void dspmp3_start_fail_test(void)
 
 int dspmp3_stream_stalled(unsigned long hz)
 {
-	if (!failed && hz - s_last > 400) {
+	if (!failed && (hz - s_last > 400 || s_fake)) {
+		s_fake = 0;	/* (once: the stream started again plays on) */
 		Supexec(stall_snap);
 		failed = 1;
 		f_what = 4;
