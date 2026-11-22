@@ -482,14 +482,15 @@ static long stall_snap(void)
 	return 0;
 }
 
-static int s_fake;		/* (the rigs' STALLAT=: as if no frame for 2 s) */
-
 void dspmp3_stall_test(void)
 {
-	/* (a flag, not s_last moved back: the tick's next status word
-	   could set s_last again before the check read it, and the stall
-	   was lost, 1 run in 40) */
-	s_fake = 1;
+	/* (the rigs' STALLAT=: as if no frame for 2 s. A flag, not s_last
+	   moved back: the tick's next status word could set s_last again
+	   before the check read it, and the stall was lost, 1 run in 40.
+	   The flag is f_what at -1, read only after a failure: a variable
+	   of its own made the data 256 bytes longer, and the Falcon-4:16
+	   VGM start 55 ms slower) */
+	f_what = -1;
 }
 
 /* the rigs' STALLAT=-1: the DSP taken as not answering as its stream
@@ -505,16 +506,21 @@ void dspmp3_start_fail_test(void)
 
 int dspmp3_stream_stalled(unsigned long hz)
 {
-	if (!failed && (hz - s_last > 400 || s_fake)) {
-		s_fake = 0;	/* (once: the stream started again plays on) */
+	/* (f_what: 0 while nothing failed, and set with failed by every
+	   failure, so f_what > 0 is failed; -1 the rigs' stall. f_of isn't
+	   read for a stall. The function as long as 1.53's: the code after
+	   it where it was) */
+	if (f_what > 0)
+		return 1;
+	if (f_what < 0 || hz - s_last > 400) {
 		Supexec(stall_snap);
 		failed = 1;
 		f_what = 4;
 		f_at = s_frames;
-		f_of = 0;
 		f_hisr = st_isr;
+		return 1;
 	}
-	return failed;
+	return 0;
 }
 
 /* the stall's state: the host port's ISR (bit 3 HF2: the DSP asks for a

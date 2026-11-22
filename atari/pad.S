@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.47's link map (v1.47, build/atari/eplay.map): do not edit.
-| 232 pads, 38648 bytes, each section at its place there, mod the 68030's
+| 231 pads, 38156 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 | (one by hand: after .rodata.xb_rates, as the merged strings move the constants
 | out of mkpad.py's reckoning: each section then at 1.53's place mod 256)
@@ -284,7 +284,7 @@ ep_pad_68:
 	.section ".text.dspmp3_stream_stalled!","ax"
 	.globl ep_pad_69
 ep_pad_69:
-	.space 244
+	.space 4
 	.section ".text.dspmp3_tick_stream!","ax"
 	.globl ep_pad_70
 ep_pad_70:
@@ -905,10 +905,6 @@ ep_pad_222:
 	.globl ep_pad_223
 ep_pad_223:
 	.space 2
-	.section ".bss.s_fake!","aw",@nobits
-	.globl ep_pad_224
-ep_pad_224:
-	.space 252
 	.section ".bss.s_m2!","aw",@nobits
 	.globl ep_pad_225
 ep_pad_225:
