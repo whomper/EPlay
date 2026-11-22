@@ -2395,6 +2395,9 @@ const char *play_stream_note(void)
 			n += snprintf(b + n, sizeof(b) - n, "; the first packet broken at %ld ms", fr_ms(ra));
 		if (fps)
 			n += snprintf(b + n, sizeof(b) - n, "; the file's samples came at %ld Hz", fps * s_spf / 1000);
+		if (dspmp3_stream_aligns() >= 0)	/* (Output DSP's clicks: Erez, 16 Nov 2026) */
+			n += snprintf(b + n, sizeof(b) - n, "; left and right put back in step %ld times",
+				      dspmp3_stream_aligns());
 		if (dspmp3_stream_slots() >= 0)
 			n += snprintf(b + n, sizeof(b) - n, "; the DSP port's frame: %d slots (EPlay fills 2), "
 				      "%ld polls in 256", dspmp3_stream_slots(), dspmp3_stream_polls());

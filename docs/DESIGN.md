@@ -2822,6 +2822,52 @@ it in 1.44".
   the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
   salign was putting a real slip right. Reverted (14069b173): `dsp/mp3.a56` is 1.50's.
 
+## 1.53: salign without the wait; the stall case measured outside the stall (22 Nov 2026)
+
+- **What Erez's Falcon showed** (Output DSP, the Falcon's clock, a station resampled to 49,170
+  Hz):
+  - quiet clicks, mostly in the right channel (0.15's log on);
+  - the SSI's misses in 498 frames of 641, none late (1.43's count);
+  - through the FDI none.
+  - Hatari never shows them: its SSI's flags change at once, and its core raises no underrun.
+- **What salign did until 1.52, before each frame:**
+  - held the DSP's interrupts;
+  - waited for a slot to begin (TDE);
+  - read TFS just then;
+  - stepped r7 a word if TFS said left and right were out of step.
+  - The moment a slot begins is the one where a real 56001's flags are least settled. A
+    misread there steps r7 a word, which is a click in one channel, and the next frame's salign
+    steps it back, another click.
+  - The interrupts held through the wait are also the one place in a frame that keeps the SSI's
+    transmit waiting.
+- **salign from 1.53:** with the interrupts held for a few instructions only, it reads SSISR, r7,
+  then SSISR again, wherever in its slot the SSI is.
+  - If TDE or TFS changed between the two reads, a slot began in between, and nothing is done
+    until the next frame.
+  - Else the slot y:(r7) goes to is the next (TDE set) or the one after it, the slot the SSI is
+    in (TDE clear). The left's slot (TFS) wants r7 even, the right's odd.
+  - It still runs before each frame: run once (8c5bb34c8, reverted in 1.51), left and right
+    came out swapped in about a third of gate g51's DSP runs.
+- **Counted:** each step is counted (X:V_ALN). Every 8th frame the DSP sends the count in place
+  of its status word, as `$840000` and 16 bits; the status counts run on, so nothing is lost.
+  - EPLAY.LOG's stream line says "left and right put back in step N times", and
+    `tests/dspmp3/stream.c` prints the same.
+  - In `make dsptest` it is 0 in 68 runs and 1 in 23 (the start's one, in the runs whose first
+    slot was missed). The sound is bit for bit the model's, as before.
+  - On the Falcon, many steps would mean salign still misreads the slot; none, with the clicks
+    still there, would mean they come from elsewhere on Output DSP's path.
+- **The stall case** (`stream_test.py stall`) failed in about one run of three, 1.51 too. It
+  was taken for left and right slipping at the restart. It was the rig:
+  - the stall begins 4 s into the music (STALLAT=4000), and the tone was measured in a 100 ms
+    window 4 s in, so the window caught the stall's first milliseconds or not (1.51's failing
+    run: 78 % pure there; 100 % 2 s in, and 100 % after the restart);
+  - it now measures 2 s in, then the music's return after the restart (`resumed()`, its first
+    0.6 s of sound running; the recording 3 s longer to hold it), both with left and right
+    named;
+  - on the old recordings all six pass, as do this branch's three.
+- **The Release workflow** makes the release a draft, checks its two zips' order in GitHub's
+  own listing, and only then publishes it (EHypView's way; the hub, 22 Nov 2026).
+
 ## 1.52: common ac70637; two packages, the FireBee's of its own (22 Nov 2026)
 
 - **Common at ac70637** (TLS.OVL 1.18, ovl.c's ColdFire cache push, av.c's av_startprog,

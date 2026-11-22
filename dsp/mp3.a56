@@ -172,6 +172,8 @@ RXE	equ	$1802		; the packet's end
 V_SVA	equ	$ab		; gout: a kept over waitsyn
 V_SVP	equ	$ac		; pkpoll: r3 kept
 V_RSY	equ	$ae		; streaming: packets found broken, the stream taken up again
+V_ALN	equ	$54		; streaming: r7 put one word on by salign (left and right
+				; out of step), sent in place of every 8th frame's status
 V_FRM	equ	$af		; streaming: frames decoded (the status word's count)
 
 ; ---- internal Y
@@ -967,6 +969,7 @@ stc
 	move	a,x:V_IDLE
 	move	a,x:V_LATE
 	move	a,x:V_RSY
+	move	a,x:V_ALN
 	move	a,x:V_FRM
 	bset	#0,x:V_SF		; streaming
 	move	x1,b
@@ -1009,7 +1012,20 @@ sun9	move	x:V_FRM,b		; the frames decoded
 	add	x0,b
 	move	b1,x:V_FRM
 	jclr	#1,x:HSR,sm2		; (the 68030 hasn't read the last: none)
-	move	#>15,x0			; the frames (19-22), packets broken (15-18), granules
+	move	b1,a			; every 8th frame (4 of 8) salign's count
+	move	#>7,x0			; instead, $840000 and its 16 bits (the
+	and	x0,a			; status's counts run on: the next frame's
+	move	#>4,x0			; has this one's)
+	cmp	x0,a
+	jne	sm0
+	move	x:V_ALN,a
+	move	#>$ffff,x0
+	and	x0,a
+	move	#>$840000,x0
+	or	x0,a
+	movep	a1,x:HRX
+	jmp	sm2
+sm0	move	#>15,x0			; the frames (19-22), packets broken (15-18), granules
 	and	x0,b			; late (9-14), the SSI's misses (7-8), waits / 64
 					; (0-6, at most 127: 8,128): each a count that
 	rep	#4			; runs on, so a word read twice or not at all
@@ -1055,21 +1071,42 @@ stx	ori	#3,mr			; the end: interrupts and the SSI off
 	bclr	#3,x:HCR
 	jmp	cmd
 
-; left and right in step: the SSI's interrupt held a moment, until a
-; slot begins (TDE; its word written then goes in the slot after it). In
-; slot 0 (TFS) the next is the right's (r7 odd), in slot 1 the left's
-; (r7 even); r7 one word on if not. The start's own alignment met Hatari
-; with left and right swapped now and then
+; left and right in step: the SSI's status and r7 read together, the
+; interrupts held for a few instructions only, wherever in its slot the
+; SSI is. The slot whose word y:(r7) is: with TDE (the word for the next
+; slot not yet written) the next, else the one after it, the slot it is
+; in. The right's slot (slot 1) wants r7 odd, the left's (slot 0, TFS)
+; even; r7 one word on if not, counted (V_ALN). The status read twice:
+; if a slot began between the two reads (TDE or TFS changed), nothing is
+; done until the next frame. Until 1.52 salign waited, the interrupts
+; held, for a slot to begin and read TFS just then: Erez's Falcon (Output
+; DSP, the Falcon's clock) heard clicks and counted the SSI's misses in
+; 498 frames of 641, Hatari never, its flags changing at once. The
+; start's own alignment met Hatari with left and right swapped now and
+; then, so it still runs before each frame
 salign	ori	#3,mr
 	nop
 	nop
-sa1	jclr	#6,x:SSISR,sa1
+	movep	x:SSISR,x0
 	move	r7,b
-	jset	#2,x:SSISR,sa3
-	jclr	#0,b1,sa9		; slot 1: the left's next, r7 even: in step
+	movep	x:SSISR,x1
+	move	x0,a
+	eor	x1,a
+	move	#>$44,x1		; TDE (6) and TFS (2)
+	and	x1,a
+	jne	sa9			; a slot began between the reads: next frame
+	jset	#6,x0,sa2
+	jset	#2,x0,sa4		; TDE clear: the slot it is in; slot 0, the left's
+	jmp	sa5
+sa2	jset	#2,x0,sa5		; TDE: the next slot; in slot 0, the right's next
+sa4	jclr	#0,b1,sa9		; the left's: r7 even, in step
 	jmp	sa8
-sa3	jset	#0,b1,sa9		; slot 0: the right's next, r7 odd: in step
+sa5	jset	#0,b1,sa9		; the right's: r7 odd, in step
 sa8	move	(r7)+			; one word on
+	move	x:V_ALN,a
+	move	#>1,x1
+	add	x1,a
+	move	a1,x:V_ALN
 sa9	andi	#$fc,mr
 	rts
 

@@ -54,6 +54,7 @@ long dspmp3_stream_polls(void);	/* the DSP's polls in 256 of the port's slots (-
 long dspmp3_stream_fps1000(void);	/* frames a second x 1000, as they came (0: too few yet) */
 void dspmp3_stream_info(long *frames, long *late, long *wmin, long *wavg);
 long dspmp3_stream_resyncs(void);	/* packets found broken (a word lost or doubled): the stream taken up again */
+long dspmp3_stream_aligns(void);	/* left and right put back in step by the DSP (-1: not told yet) */
 long dspmp3_stream_misses(void);	/* frames in which the SSI missed a slot (an underrun) */
 int dspmp3_stream_stalled(unsigned long hz);
 void dspmp3_start_fail_test(void);	/* (the rigs': failed as the stream starts) */

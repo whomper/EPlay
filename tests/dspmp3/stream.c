@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 	static unsigned char buf[16 << 20];
 	static unsigned long pk[PK_MAX];
 	static MP3PARSE ps;
-	long n, off = 0, want = argc > 2 ? atol(argv[2]) : 200, sent = 0, frames = 0, late = 0, rsy = 0, miss = 0;
+	long n, off = 0, want = argc > 2 ? atol(argv[2]) : 200, sent = 0, frames = 0, late = 0, rsy = 0, miss = 0, aln = -1;
 	long pkn = 0, pki = -1;		/* the packet going: its words, the next (-1: its count) */
 	int have = 0, i, rsmode = getenv("SIMRS") ? atoi(getenv("SIMRS")) : 0, f4 = 0, l6 = 0, r4 = 0, m2 = 0;
 	static MP3DSP md;		/* the model, the same packets */
@@ -200,6 +200,8 @@ int main(int argc, char **argv)
 			unsigned long w = (unsigned long)dsp_core_read_host(CPU_HOST_RXH) << 16;
 			w |= (unsigned long)dsp_core_read_host(CPU_HOST_RXM) << 8;
 			w |= dsp_core_read_host(CPU_HOST_RXL);
+			if ((w & 0xfc0000) == 0x840000)
+				aln = (long)(w & 0xffff);	/* salign's steps (every 8th frame) */
 			if (!(w & 0x800000)) {
 				int nf4 = (int)(w >> 19) & 15, nl6 = (int)(w >> 9) & 63, nr4 = (int)(w >> 15) & 15;
 				int nm2 = (int)(w >> 7) & 3;
@@ -346,9 +348,9 @@ int main(int argc, char **argv)
 	}
 	printf("%s: %ld slots with no word written in time (the SSI's underruns), the first at slot %ld\n",
 	       argv[1], tde_miss, tde_first);
-	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld with a slot missed, %ld packets "
-	       "sent; the system stack %u deep at most (P:%04x)%s\n",
-	       strrchr(argv[1], '/') ? strrchr(argv[1], '/') + 1 : argv[1], frames, late, rsy, miss, sent,
+	printf("%s: %ld frames decoded, %ld granules late, %ld packets broken, %ld with a slot missed, left and right "
+	       "put back in step %ld times, %ld packets sent; the system stack %u deep at most (P:%04x)%s\n",
+	       strrchr(argv[1], '/') ? strrchr(argv[1], '/') + 1 : argv[1], frames, late, rsy, miss, aln, sent,
 	       sp_most, sp_most_at, dead ? "; the DSP stopped" : "");
 	/* (SIMTUE: each frame's misses counted, at most one a frame) */
 	if (tue_every && (miss == 0 || miss > frames))

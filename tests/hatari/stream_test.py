@@ -356,12 +356,42 @@ def hatari():
     return subprocess.run(["hatari", "--version"], capture_output=True, text=True).stdout.split()[1].lstrip("v")
 
 
+def resumed(rec):
+    """the music's return after it stopped (0.2 s without sound, past its
+    start): the first 0.6 s of sound running, its tone 0.3 s in (None: none
+    recorded)"""
+    with wave.open(rec) as w:
+        rate, ch, n = w.getframerate(), w.getnchannels(), w.getnframes()
+        raw = w.readframes(n)
+    s = struct.unpack("<%dh" % (len(raw) // 2), raw)
+    left, right = s[0::ch], s[1::ch] if ch > 1 else s[0::ch]
+    blk = rate // 50
+    rms = [math.sqrt(sum(v * v for v in left[i:i + blk]) / blk) for i in range(0, len(left) - blk, blk)]
+    loud = [r > 1000 for r in rms]
+    i = next((k for k in range(len(rms)) if all(loud[k:k + 10])), None)
+    if i is None:
+        return None
+    stop = next((k for k in range(i, len(rms)) if not any(loud[k:k + 10])), None)
+    if stop is None:
+        return None
+    back = next((k for k in range(stop, len(rms) - 30) if all(loud[k:k + 30])), None)
+    if back is None:
+        return None
+    c = (back + 15) * blk
+    fl, ql = tone([v / 32768 for v in left[c - 2400:c + 2400]], rate)
+    fr, qr = tone([v / 32768 for v in right[c - 2400:c + 2400]], rate)
+    return (abs(fl - 1000) < 8 and abs(fr - 1500) < 8 and ql > 0.9 and qr > 0.9,
+            "back after %.1f s: left %d Hz (%.0f %%), right %d Hz (%.0f %%)" %
+            ((back - stop) / 50, fl, 100 * ql, fr, 100 * qr))
+
+
 def hatari_keeps_parity():
     return tuple(int(x) for x in hatari().split(".")[:2]) <= (2, 4)
 
 
-def analyse(rec, skip_s, secs):
-    """the tone, and the 20 ms blocks without sound once it began"""
+def analyse(rec, skip_s, secs, at=None):
+    """the tone, and the 20 ms blocks without sound once it began; the
+    tone measured in the middle, or at s from the music's start"""
     with wave.open(rec) as w:
         rate, ch, n = w.getframerate(), w.getnchannels(), w.getnframes()
         raw = w.readframes(n)
@@ -389,7 +419,7 @@ def analyse(rec, skip_s, secs):
     a = next((i for i in loud if all(r > 1000 for r in rms[i:i + 10])), loud[0])
     b = min(len(rms) - 1, a + int(secs * 50))
     gaps = [i for i in range(a, b) if rms[i] < 1000]
-    mid = (a + b) // 2 * blk
+    mid = (a + b) // 2 * blk if at is None else (a + int(at * 50)) * blk
     seg = slice(mid - 2400, mid + 2400)
     fl, ql = tone([v / 32768 for v in left[seg]], rate)
     fr, qr = tone([v / 32768 for v in right[seg]], rate)
@@ -610,7 +640,8 @@ def run(work, case, spec):
         played = wait_line(log, said, 90)
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
-        time.sleep(14 if case in ("drop", "stall", "startfail") else 18 if case == "rough" else 10)
+        # (stall: 3 s more, the music's return after the restart recorded too)
+        time.sleep(17 if case == "stall" else 14 if case in ("drop", "startfail") else 18 if case == "rough" else 10)
         if case == "logo":
             wait_line(log, lambda l: "album art:" in l or ("logo" in l and "after" in l), 120)
             time.sleep(1)
@@ -622,7 +653,10 @@ def run(work, case, spec):
         time.sleep(1)
         text = open(log, errors="replace").read()
         titles = sorted(set(l[len("EPLAY title: "):] for l in text.split("\n") if l.startswith("EPLAY title: ")))
-        ok, what, gaps = analyse(rec, 0, 16 if case == "rough" else 8)
+        # (stall: the tone 2 s in, before the stall at 4 s; until 1.52 it was
+        # measured 4 s in, where the stall begins, and failed in about one
+        # run of three, as the 100 ms window caught the stall's first ms)
+        ok, what, gaps = analyse(rec, 0, 16 if case == "rough" else 8, 2.0 if case == "stall" else None)
         note = "%s; titles %s; %d connections" % (what, titles, st.conns)
         if case == "live":
             ok = ok and gaps == 0 and len(titles) >= 2
@@ -635,7 +669,10 @@ def run(work, case, spec):
         elif case == "stall":
             again = [l[4:] for l in text.split("\n") if l.startswith("LOG the DSP stalled: started again")]
             note += "; " + (again[0] if again else "never started again")
-            ok = ok and bool(again) and st.conns >= 2 and "DSP stopped answering." not in text
+            back = resumed(rec)
+            note += "; " + (back[1] if back else "no sound after the stall")
+            ok = ok and bool(again) and st.conns >= 2 and "DSP stopped answering." not in text and \
+                bool(back) and back[0]
         elif case == "find":
             found = [l for l in text.split("\n") if "Find station:" in l]
             note += "; " + " | ".join(l[4:] for l in found)
