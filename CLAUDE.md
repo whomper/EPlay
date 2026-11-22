@@ -110,6 +110,12 @@ read it first, and change it with the code when a decision changes.
 - **The DSP decoder** is tested as common's DSP programs are: a C model of its arithmetic against a
   reference decoder (ISO 11172-4 full accuracy), then the `.a56` against the model, bit for bit, on
   Hatari's DSP core. Third-party code: name its licence first; it goes into `NOTICES.TXT`.
+- **The FireBee stand-in's DMA puts in one stretch of about 15.5 ms a run** (Hatari's, on the
+  XBIOS's sound; gate g51c, 22 Nov 2026: the ring held the sound there, the crossbar trace showed
+  no stop). Where it lands follows the code's layout, so a passing or failing trial on the
+  stand-in says nothing about a change. `gapless` there passes it only when the sound outside it
+  is the files' whole length and no underrun is counted; a real gap still fails. On a Falcon
+  nothing is excused. See DESIGN.md's 1.51 section.
 - **Erez's set-up**: Falcon with the DFB1 (50 MHz 68030, 68882, 14 MB ST RAM, 128 MB TT RAM),
   TOS 4.04, BlueSCSI with an SD card, VGA, a SoundPool FDI (S/PDIF, 44.1 and 48 kHz clocks on the
   DSP port) set up at boot by its FDI program. Speed is still measured on `Falcon-4`.
