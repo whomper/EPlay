@@ -420,7 +420,11 @@ static void open_window(void)
 		x = sx + w > desk_x + desk_w ? desk_x + desk_w - w : sx < desk_x ? desk_x : sx;
 		y = sy + sh > desk_y + desk_h ? desk_y + desk_h - sh : sy < desk_y ? desk_y : sy;
 		saved = sh != h ? sh : 0;
-	}
+	} else if (!bar_mini)
+		/* (the first start: sized as a kept place is, below: whole rows,
+		   the list's sliders set; without it the rigs' 060 and FireBee
+		   stand-ins broke the sound as it began, 21 Nov 2026) */
+		saved = h;
 	x = wind_x8(KIND, x, y, w, h);	/* (the work area on a multiple of 8: text on a byte) */
 	wh = wind_create(KIND, desk_x, desk_y, desk_w, desk_h);
 	if (wh <= 0)

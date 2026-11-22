@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against this commit's build/atari/eplay.map (the profiling build at the shipped layout): do not edit.
-| 223 pads, 36492 bytes, each section at its place there, mod the 68030's
+| 223 pads, 36436 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -402,7 +402,7 @@ ep_pad_98:
 	.section ".text.open_window!","ax"
 	.globl ep_pad_99
 ep_pad_99:
-	.space 136
+	.space 80
 	.section ".text.ovl_load!","ax"
 	.globl ep_pad_100
 ep_pad_100:

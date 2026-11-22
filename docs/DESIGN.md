@@ -2798,6 +2798,12 @@ it in 1.44".
   was, as before; each player's place is remembered as it moves. The rigs: `firstrun` (six rows,
   centred), `miniplace` (a `MINIWINDOW=` past the desk opens at its corner; the quit writes the
   place, `WINDOW=` left as it was), `place` as before.
+- **The first start still goes through `sized()`** (gate g51b, 21 Nov 2026). The first
+  candidate opened the six rows without it; the window was the same on the screen, but the
+  rigs' 68060 Falcon (`vgmopn`: a 4 ms slip in the YM2612's tone) and FireBee stand-in
+  (`gapless`: 10 ms without sound 50 ms in) failed every time, and passed every time with a
+  `WINDOW=` at the same place, which goes through `sized()`. The first start now does as a kept
+  place does: whole rows, the list's sliders set.
 - **The Output DSP crackle stays open.** 8c5bb34c8 put left and right in step once at a
   stream's start, not before each frame; gate g51 then played them swapped in about a third of
   the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
