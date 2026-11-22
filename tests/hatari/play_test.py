@@ -1072,12 +1072,35 @@ def run(work, case, spec):
                 loud = [i for i, v in enumerate(rms) if v > 1000]
                 if loud and (best is None or len(loud) > best[0]):
                     a, b = loud[0], loud[-1]
-                    best = (len(loud), (b - a + 1) * 0.005, sum(1 for i in range(a, b + 1) if rms[i] < 1000))
+                    best = (len(loud), (b - a + 1) * 0.005, sum(1 for i in range(a, b + 1) if rms[i] < 1000), x)
             if best:
                 what += "; %.3f s of sound, %d 5 ms blocks without it" % (best[1], best[2])
+                quiet_ok = best[2] == 0
+                if not quiet_ok and spec.split(":")[0] == "FireBee":
+                    # (the FireBee stand-in: Hatari's DMA on the XBIOS's sound
+                    # puts in one stretch of 15.5 ms once a run, where EPlay's
+                    # code lies deciding when: 1.50's a stretch of the tone 1.58 s
+                    # in, 1.51's silence 45 ms in, the ring holding the sound
+                    # there as Hatari's debugger saved it, 22 Nov 2026;
+                    # docs/DESIGN.md. Put in, not lost: the sound outside it
+                    # still the files' 6.000 s to the sample. EPlay's own gap on
+                    # this path loses sound, the ring's place moved on past it,
+                    # and counts an underrun, which fails the case below)
+                    x = best[3]
+                    big = [i for i, v in enumerate(x) if abs(v) > 3000]
+                    i0, i1 = big[0], big[-1]
+                    quiet, run = 0, 0
+                    for i in range(i0, i1):
+                        run = run + 1 if abs(x[i]) < 50 else 0
+                        quiet += 40 if run == 40 else 1 if run > 40 else 0
+                    sound = (i1 - i0 - quiet) / r
+                    if best[2] <= 4 and quiet / r <= 0.02 and abs(sound - 6.0) < 0.002:
+                        quiet_ok = True
+                        what += " (%.1f ms put in by the stand-in's DMA, %.4f s of sound outside it: none lost)" % (
+                            quiet * 1000 / r, sound)
                 # (MP3s too: the encoder's delay and padding, LAME's, left
                 # out on the DSP, so the tone runs on through the join)
-                ok = ok and abs(best[1] - 6.0) < 0.05 and best[2] == 0
+                ok = ok and abs(best[1] - 6.0) < 0.05 and quiet_ok
             else:
                 ok = False
         under = wait_line(log, lambda l: l.startswith("EPLAY ended"), 5) or "EPLAY ended: ? underruns"

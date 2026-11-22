@@ -2803,7 +2803,20 @@ it in 1.44".
   rigs' 68060 Falcon (`vgmopn`: a 4 ms slip in the YM2612's tone) and FireBee stand-in
   (`gapless`: 10 ms without sound 50 ms in) failed every time, and passed every time with a
   `WINDOW=` at the same place, which goes through `sized()`. The first start now does as a kept
-  place does: whole rows, the list's sliders set.
+  place does: whole rows, the list's sliders set. **That wasn't the cause (gate g51c, 22 Nov
+  2026):** the trial that passed had a debug line in `open_window`, and without it the FireBee
+  stand-in's `gapless` failed again, with a `WINDOW=` too. Where its fault lands follows where
+  EPlay's code lies, not what the window does: once a run, Hatari's DMA on the XBIOS's sound puts
+  in a stretch of 15.5 ms (746 frames of the recording). 1.50 has it too, every run: a stretch of
+  the tone 1.58 s in, which no check saw, its sound 6.0155 s for the files' 6.000; 1.51's is
+  silence 45 ms in, its sound outside it 6.000 s to the sample. Hatari's debugger saved the ring
+  as the DMA played there (`savebin` from the rig's command FIFO): the sound EPlay wrote was all
+  in place, written before the DMA started; the crossbar's trace showed one Buffoper(3) and
+  then only Buffptr's register reads. So the sound is put in, not lost. `gapless` on the
+  FireBee stand-in now passes such a stretch (at most 20 ms, its sound outside it 6.000 s within
+  2 ms) and says so; a gap of EPlay's own on this path loses sound, the ring's place moved on
+  past it, and counts an underrun, and either still fails the case. On a Falcon nothing is
+  excused.
 - **The Output DSP crackle stays open.** 8c5bb34c8 put left and right in step once at a
   stream's start, not before each frame; gate g51 then played them swapped in about a third of
   the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
