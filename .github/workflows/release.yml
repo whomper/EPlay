@@ -1,8 +1,8 @@
 name: Release
 
-# Builds the programs and publishes them as a GitHub Release: the standard
-# package's files each on its own and all of them in eplay-x.y.zip, and the
-# FireBee's package as eplay-x.y-firebee.zip (the guidelines 7.4; names in
+# Builds the programs and publishes them as a GitHub Release of two files
+# and nothing else: eplay-x.y.zip, the standard package, and
+# eplay-x.y-firebee.zip, the FireBee's (the guidelines 7.4; names in
 # lowercase: 6.6). Two ways to start it:
 # - Actions > Release > Run workflow, on main, with the notes: it tags
 #   main's commit vX.Y, from VERSION;

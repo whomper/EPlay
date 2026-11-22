@@ -44,9 +44,9 @@ FireBee, `eplay-x.y-firebee.zip`: the same names, built for its ColdFire):
 | `mp3fpu.ovl` | MP3 decoded by a 68060 or a 68080 with its FPU where there is no DSP free: keep it beside the program |
 | `mp3int.ovl` | the same for a 68060 or a 68080 without an FPU |
 
-The FireBee's package has `eplay.prg` (its ColdFire's; MP3 is in the program, so no `mp3*.ovl`), the
-guide, `tlsfb.ovl` in place of `tls.ovl`, `cacert.pem`, and `fbprobe.prg` for FireBee testers: it
-says what the machine's sound can do, in `FBPROBE.TXT`. Each package's `eplay.prg` says so on the
+The FireBee's package has `eplay.prg` and `tls.ovl` built for its ColdFire (MP3 is in the program, so
+no `mp3*.ovl`), the guide, `cacert.pem`, and `fbprobe.prg` for FireBee testers: it says what the
+machine's sound can do, in `FBPROBE.TXT`. Each package's `eplay.prg` says so on the
 other's machines.
 
 Start `eplay.prg`, or drop music files, a folder or a playlist on it. **File > Open...** adds more,

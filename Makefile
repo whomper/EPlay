@@ -18,8 +18,8 @@
 #   make rig        the Hatari rigs: playing (tests/hatari/play_test.py), the
 #                   speed rig (tests/hatari/speed.py) and each program's
 #                   alert on a machine it isn't for (tests/hatari/cpu_test.py)
-#   make dist       dist/eplay-x.y.zip and its files, and eplay-x.y-firebee.zip,
-#                   as on the Releases page
+#   make dist       dist/eplay-x.y.zip and dist/eplay-x.y-firebee.zip, as on
+#                   the Releases page
 # Every file is built with -ffunction-sections and linked with
 # --gc-sections, so of common/ only what EPlay calls goes in.
 CROSS   ?= m68k-linux-gnu-
@@ -436,25 +436,24 @@ $(B)/mp3ovl/mad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h th
 	@mkdir -p $(dir $@)
 	$(CC) $(OVLIF) -w -c -o $@ $<
 
-# a release's files, for the release workflow: two packages (the guidelines
-# 7.4, Erez 22 Nov 2026), every name in lowercase (6.6), the icons in icons/:
-# - dist/eplay-x.y.zip, the standard package (Falcon, TT, STE), whose files
-#   are also in dist/ each on its own;
+# a release's files, for the release workflow: two packages and nothing
+# else (the guidelines 7.4, Erez 22 Nov 2026: "Remove all files from root
+# and just have two ZIP files, one for each platform"), every name in
+# lowercase (6.6), the icons in icons/:
+# - dist/eplay-x.y.zip, the standard package (Falcon, TT, STE);
 # - dist/eplay-x.y-firebee.zip, the FireBee's: the same names built for its
 #   ColdFire (binary/eplayfb.prg as eplay.prg; its MP3 is in the program, so
-#   no mp3*.ovl), tlsfb.ovl, and fbprobe.prg for its testers.
+#   no mp3*.ovl), and fbprobe.prg for its testers.
 DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
            common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl
-DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref common/tlsovl/tlsfb.ovl
+DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
 	rm -rf dist
 	mkdir -p dist/zip/icons dist/zipfb/icons
-	cp $(DIST) $(ICONS) dist/
-	cp NOTICES.TXT dist/notices.txt
-	cp common/certs/CACERT.PEM dist/cacert.pem
 	cp $(DIST) dist/zip/
 	cp binary/eplayfb.prg dist/zipfb/eplay.prg
+	cp common/tlsovl/tlsfb.ovl dist/zipfb/tls.ovl
 	cp $(DISTFB) dist/zipfb/
 	for z in zip zipfb; do \
 		cp NOTICES.TXT dist/$$z/notices.txt && \

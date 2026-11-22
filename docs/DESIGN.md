@@ -2832,9 +2832,11 @@ it in 1.44".
   - `eplay-x.y.zip`, the standard package: EPLAY.PRG (68030), EPLAYST.PRG (68000), MP3FPU.OVL,
     MP3INT.OVL, TLS.OVL.
   - `eplay-x.y-firebee.zip`: `binary/eplayfb.prg` as EPLAY.PRG (its MP3 is in the program, so
-    no MP3*.OVL), TLSFB.OVL, and FBPROBE.PRG for the FireBee's testers.
-  - Both packages carry the guide, CACERT.PEM, NOTICES.TXT and the icons. The loose files a
-    release publishes are the standard package's.
+    no MP3*.OVL), common's TLSFB.OVL as TLS.OVL (common's tls_ovl.c loads tls.ovl on a
+    ColdFire too, AERA-Atari 8c94c08), and FBPROBE.PRG for the FireBee's testers.
+  - Both packages carry the guide, CACERT.PEM, NOTICES.TXT and the icons. A release publishes
+    the two zips and nothing else (Erez: "Remove all files from root and just have two ZIP
+    files, one for each platform"; "rename all other FB files into their standard filename").
   - Installing either package replaces the files in place.
 - **Each program names the other package on the wrong machine** (7.4's words, wrapped at 30
   columns for TOS 1.x's alert):

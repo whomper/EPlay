@@ -110,9 +110,10 @@ read it first, and change it with the code when a decision changes.
 - **The DSP decoder** is tested as common's DSP programs are: a C model of its arithmetic against a
   reference decoder (ISO 11172-4 full accuracy), then the `.a56` against the model, bit for bit, on
   Hatari's DSP core. Third-party code: name its licence first; it goes into `NOTICES.TXT`.
-- **Two packages** (the guidelines 7.4, Erez 22 Nov 2026): `eplay-x.y.zip` (EPLAY.PRG, EPLAYST.PRG,
-  the overlays, `tls.ovl`) and `eplay-x.y-firebee.zip` (`binary/eplayfb.prg` as EPLAY.PRG, `tlsfb.ovl`,
-  FBPROBE.PRG), the same names in both; the loose release files are the standard package's. Each
+- **Two packages and nothing else** (the guidelines 7.4, Erez 22 Nov 2026): `eplay-x.y.zip` (EPLAY.PRG,
+  EPLAYST.PRG, the overlays, `tls.ovl`) and `eplay-x.y-firebee.zip` (`binary/eplayfb.prg` as
+  EPLAY.PRG, `tlsfb.ovl` as `tls.ovl`, FBPROBE.PRG), the same names in both; a release has no loose
+  files. Each
   program names the other package on the wrong machine, so the FireBee stand-in runs only
   `tests/hatari/cpu_test.py` (no EPlay of the standard package plays there any more); the
   FireBee's own code is tested under qemu (`make fbtest`) and by its tester's EPLAY.LOG.
