@@ -601,6 +601,18 @@ static void make_pal(void)
 		c3[i][2] = (unsigned char)(c[2] * 255L / 1000);
 	}
 	pic_pal_init(&pal, n, (const unsigned char (*)[3])c3);
+	/* the soft dither (common's pic_pal_soft, decided 22 Nov 2026, EWeb's
+	   way): 12 sixteenths of each pixel's error passed on with 16 pens or
+	   fewer, 8 with more, for less grain on a cover's pastels. Where there
+	   is room for its longer rows: a Falcon with its DSP, the FireBee, a
+	   68060 or 68080. A TT or a Falcon with no DSP, and the STE's
+	   EPLAYST.PRG, keep the full dither, as before */
+#if defined(EPLAY_FB)
+	pic_pal_soft(&pal, n <= 16 ? 12 : 8);
+#elif !defined(EPLAY_ST)
+	if (dspjpeg_present() || cpu_fast)
+		pic_pal_soft(&pal, n <= 16 ? 12 : 8);
+#endif
 	pal_made = 1;
 }
 
