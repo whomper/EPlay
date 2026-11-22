@@ -9,7 +9,8 @@ EWEBFB.PRG at its first scroll on a tester's FireBee (the hub, AERA-Atari
 13a4971, 19 Nov 2026). EPlay uses no EMAC, so any mac, msac or movclr, or
 any move to or from an accumulator, in the FireBee's code is a Line-A call
 left in: the build fails and names its function. The one exception is
-EPlay's own MP3 decoder, whose synthesis filter is on the EMAC on purpose
+EPlay's own MP3 decoder, whose synthesis filter (and from 1.53 its IMDCT's sums and
+alias butterflies) is on the EMAC on purpose
 (src/mp3/mp3dsp.c, dspmath.h's em_*: Erez, 21 Nov 2026): its functions alone
 (ALLOWED) may hold them.
 """
@@ -19,8 +20,9 @@ import sys
 
 OBJDUMP = "m68k-linux-gnu-objdump"
 EMAC = re.compile(r"^(mac|msac|movclr)|%acc|%macsr|%mask")
-# (src/mp3/mp3dsp.c's, GCC's copies too: synth.constprop.0; where they are inlined, frame_)
-ALLOWED = {"synth", "frame_", "em_probe", "mp3dsp_frame"}
+# (src/mp3/mp3dsp.c's, GCC's copies too: synth.constprop.0; where they are inlined, frame_:
+# the synthesis filter, and from 1.53 the IMDCT's sums and the alias butterflies)
+ALLOWED = {"synth", "frame_", "em_probe", "mp3dsp_frame", "alias", "dct9", "rows36", "imdct"}
 
 
 def main():

@@ -365,9 +365,34 @@ static void reorder(GC *c, int rate)
 	}
 }
 
+#ifdef EPLAY_EMAC
+/* the IMDCT's and the alias butterflies' tables packed for the EMAC
+   (em_pack), with the synthesis filter's (em_tables); their sums made on
+   it exactly as d_mpy's (dspmath.h), each a few products */
+static unsigned long p_alias[24], p_im9[32], p_rot[36], p_sh[48];
+long em_macsr = -1;
+#endif
+
 static void alias(GC *c)
 {
 	int nb = c->bt == 2 ? (c->mixed ? 1 : 0) : 31, sb, i;
+#ifdef EPLAY_EMAC
+	if (em_macsr >= 0) {
+		/* (p_alias: cs, ca, then -ca) */
+		for (sb = 0; sb < nb; sb++)
+			for (i = 0; i < 8; i++) {
+				dw *u = &c->xr[18 * sb + 17 - i], *l = &c->xr[18 * sb + 18 + i];
+				unsigned long pu = em_pack(*u), pd = em_pack(*l);
+				em_mac(pu, p_alias[i]);
+				em_mac(pd, p_alias[16 + i]);
+				*u = d_rw(em_sum());
+				em_mac(pd, p_alias[i]);
+				em_mac(pu, p_alias[8 + i]);
+				*l = d_rw(em_sum());
+			}
+		return;
+	}
+#endif
 	for (sb = 0; sb < nb; sb++)
 		for (i = 0; i < 8; i++) {
 			dw cs = sx(t_alias[i]), ca = sx(t_alias[8 + i]);
@@ -385,6 +410,28 @@ static void alias(GC *c)
 static void dct9(const dw *v, dw *o)
 {
 	int m, j;
+#ifdef EPLAY_EMAC
+	if (em_macsr >= 0) {
+		unsigned long pv[9];
+		for (j = 1; j < 9; j++)
+			pv[j] = em_pack(v[j]);
+		for (m = 0; m < 4; m++) {
+			const unsigned long *k = &p_im9[8 * m];
+			da a, b;
+			for (j = 0; j < 4; j++)
+				em_mac(pv[2 + 2 * j], k[j]);
+			a = d_w2a(v[0]) + em_sum();
+			for (j = 0; j < 4; j++)
+				em_mac(pv[1 + 2 * j], k[4 + j]);
+			b = em_sum() + a;
+			a = d_asl(a, 1) - b;
+			o[m] = d_rw(b);
+			o[8 - m] = d_rw(a);
+		}
+		o[4] = d_a2w(d_w2a(v[0]) - d_w2a(v[2]) + d_w2a(v[4]) - d_w2a(v[6]) + d_w2a(v[8]));
+		return;
+	}
+#endif
 	for (m = 0; m < 4; m++) {
 		const unsigned long *k = &t_im9[8 * m];
 		da a = d_w2a(v[0]), b = 0;
@@ -418,6 +465,21 @@ static void rows36(const dw *x, dw u[18])
 	s[0] = x[17];
 	dct9(c, cd);
 	dct9(s, sd);
+#ifdef EPLAY_EMAC
+	if (em_macsr >= 0) {
+		for (r = 0; r < 9; r++) {
+			const unsigned long *t = &p_rot[4 * r];
+			unsigned long ps = em_pack(sd[8 - r]), pc = em_pack(cd[8 - r]);
+			em_mac(ps, t[0]);
+			em_mac(pc, t[1]);
+			u[r] = d_rw(em_sum());
+			em_mac(ps, t[2]);
+			em_mac(pc, t[3]);
+			u[9 + r] = d_rw(em_sum());
+		}
+		return;
+	}
+#endif
 	for (r = 0; r < 9; r++) {
 		const unsigned long *t = &t_rot[4 * r];
 		u[r] = d_rw(d_mpy(sd[8 - r], sx(t[0])) + d_mpy(cd[8 - r], sx(t[1])));
@@ -471,6 +533,23 @@ static void imdct(GC *c, dw *ov, dw out[32][18], int lim)
 				cs[5] = d_a2w(d_w2a(l[3]) - d_w2a(l[6]));
 				dct3(cs, cd);
 				dct3(cs + 3, sd);
+#ifdef EPLAY_EMAC
+				if (em_macsr >= 0) {
+					unsigned long pcd[3], psd[3];
+					for (i = 0; i < 3; i++) {
+						pcd[i] = em_pack(cd[i]);
+						psd[i] = em_pack(sd[i]);
+					}
+					for (i = 0; i < 12; i++) {
+						const unsigned long *t = &p_sh[(sb & 1) * 24 + 2 * i];
+						int m = (i % 6) / 2;
+						em_mac(pcd[m], t[0]);
+						em_mac(psd[m], t[1]);
+						z[6 + 6 * w + sh_at[i]] += d_w2a(d_rw(em_sum()));
+					}
+					continue;
+				}
+#endif
 				for (i = 0; i < 12; i++) {
 					const unsigned long *t = &t_sh[(sb & 1) * 24 + 2 * i];
 					int m = (i % 6) / 2;
@@ -513,7 +592,6 @@ static void imdct(GC *c, dw *ov, dw out[32][18], int lim)
  * ones (n = 4m from e2, 4m + 2 from o2). Then each sample is the window's 16 taps over the
  * last 16 slots, as the standard has them */
 #ifdef EPLAY_EMAC
-long em_macsr = -1;
 long em_disturbed;	/* (frames whose EMAC state another process changed: mp3dsp_frame) */
 
 /* which MACSR multiplies signed on this EMAC (dspmath.h): -0x800 by 0x7ff,
@@ -546,6 +624,16 @@ static void em_tables(void)
 		p_synth[k] = em_pack(sx(t_synth[k]));
 	for (k = 0; k < 512; k++)
 		p_dwin[k] = em_pack(sx(t_dwin[k]));
+	for (k = 0; k < 16; k++)
+		p_alias[k] = em_pack(sx(t_alias[k]));
+	for (k = 0; k < 8; k++)
+		p_alias[16 + k] = em_pack(-sx(t_alias[8 + k]));
+	for (k = 0; k < 32; k++)
+		p_im9[k] = em_pack(sx(t_im9[k]));
+	for (k = 0; k < 36; k++)
+		p_rot[k] = em_pack(sx(t_rot[k]));
+	for (k = 0; k < 48; k++)
+		p_sh[k] = em_pack(sx(t_sh[k]));
 	p_made = 1;
 }
 #endif

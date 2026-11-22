@@ -20,7 +20,7 @@ FILES  := tones mix128 mix320 mono lsf22 mix48 mixvbr
 VGMS   := ay sn opn md opl opl3
 VGMSRC := $(addprefix $(TOP)/src/,vgm.c vgmcpu.c sncmd.c sncpu.c opnd.c egmath.c opncpu.c opld.c oplcpu.c aycpu.c)
 
-test: $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host $(B)/fbint $(B)/fbint_host $(B)/fbmpfb
+test: $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host $(B)/fbint $(B)/fbint_host $(B)/fbinte $(B)/fbmpfb
 	for f in $(FILES); do $(QEMU) $(B)/fbmp3 $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.cf.raw && \
 		./$(B)/fbmp3_host $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.host.raw && \
 		python3 compare.py $(B)/$$f.cf.raw $(B)/$$f.host.raw $$f || exit 1; done
@@ -28,6 +28,9 @@ test: $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host $(B)/fbint $(B)/fbin
 		./$(B)/fbint_host $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.ihost.raw && \
 		cmp $(B)/$$f.icf.raw $(B)/$$f.ihost.raw && test -s $(B)/$$f.icf.raw && \
 		echo "ok   $$f: EPlay's own decoder, bit for bit" || exit 1; done
+	for f in $(FILES); do $(QEMU) $(B)/fbinte $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.iecf.raw && \
+		cmp $(B)/$$f.iecf.raw $(B)/$$f.ihost.raw && test -s $(B)/$$f.iecf.raw && \
+		echo "ok   $$f: EPlay's own decoder with the EMAC (synthesis, IMDCT, alias), bit for bit" || exit 1; done
 	for d in 0 1 2; do for f in $(FILES); do $(QEMU) $(B)/fbmpfb $(TOP)/build/mp3files/$$f.mp3 $$d > $(B)/$$f.fb$$d.raw 2>/dev/null && \
 		python3 compare.py $$([ $$d = 0 ] || echo --near) $(B)/$$f.fb$$d.raw $(B)/$$f.host.raw "$$f, EPLAYFB's decoder $$d" || exit 1; done; done
 	cmp $(B)/tones.fb1.raw $(B)/tones.fb2.raw && echo "ok   the EMAC's, the integer's, bit for bit (EPLAYFB's)"
@@ -53,6 +56,12 @@ $(B)/fbint: fbint.c $(INTSRC) $(TOP)/src/mp3/dspmath.h $(TOP)/common/atari/ll64.
 		-nostdlib -static -no-pie -Wl,-z,noexecstack -Wl,--gc-sections \
 		fbint.c $(INTSRC) $(TOP)/common/atari/ll64.c $(RT)/libc.c $(RT)/rt.S
 	cp $(B)/fbint.elf $@
+# (the same with its sums on the EMAC: EPLAY_EMAC, as EPLAYFB.PRG builds it)
+$(B)/fbinte: fbint.c $(INTSRC) $(TOP)/src/mp3/dspmath.h $(TOP)/common/atari/ll64.c $(RT)/rt.S $(RT)/libc.c Makefile | $(B)
+	$(CC) $(CF) -DEPLAY_EMAC -I$(TOP)/src/mp3 -I$(TOP)/build -ffunction-sections -fdata-sections -o $(B)/fbinte.elf \
+		-nostdlib -static -no-pie -Wl,-z,noexecstack -Wl,--gc-sections \
+		fbint.c $(INTSRC) $(TOP)/common/atari/ll64.c $(RT)/libc.c $(RT)/rt.S
+	cp $(B)/fbinte.elf $@
 $(B)/fbint_host: fbint.c $(INTSRC) $(TOP)/src/mp3/dspmath.h | $(B)
 	cc -O2 -Wall -DHOST -I$(TOP)/src/mp3 -I$(TOP)/src -I$(TOP)/build -o $@ fbint.c $(INTSRC)
 # (cmp3fb.c as EPlay's Makefile builds it: -ffast-math)

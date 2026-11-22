@@ -2867,6 +2867,25 @@ it in 1.44".
   - on the old recordings all six pass, as do this branch's three.
 - **The Release workflow** makes the release a draft, checks its two zips' order in GitHub's
   own listing, and only then publishes it (EHypView's way; the hub, 22 Nov 2026).
+- **The FireBee's decoder: more of it on the EMAC** (Erez, 22 Nov 2026: "Firebee optimization
+  MP3 decoding"). Until 1.52 only the synthesis filter (the DCT32's matrices and the window)
+  was there. From 1.53 these are too, each sum of a few products, made exactly as `d_mpy`'s
+  (`em_pack`, `em_mac`, `em_sum`), their constants packed once with the synthesis filter's
+  (`em_tables`: `p_alias`, `p_im9`, `p_rot`, `p_sh`):
+  - the alias butterflies (with `-ca` packed for the difference);
+  - the IMDCT's 9-point DCTs;
+  - its rotation into the 18 rows;
+  - a short window's 12 contributions.
+  - The ColdFire has no 32×32→64 multiply, so each `d_mpy` in C is four `muls.w` and 64-bit
+    shifts and adds. On the EMAC the four products of a sum pile up in the accumulators and are
+    put together once.
+  - The long window's single products stay in C, as does `dequant`'s (one product each, nothing
+    to pile up).
+  - `make fbtest` now runs the EMAC build of the decoder (`tests/fb`'s `fbinte`) under qemu's
+    V4e on all seven files, bit for bit against the host. `tools/emaccheck.py` allows the new
+    functions (`alias`, `dct9`, `rows36`, `imdct`).
+  - The FireBee still times the three decoders at the first MP3 and plays the fastest that is
+    right: no emulator times a V4e, so only a tester's EPLAY.LOG says what this gains.
 
 ## 1.52: common ac70637; two packages, the FireBee's of its own (22 Nov 2026)
 
