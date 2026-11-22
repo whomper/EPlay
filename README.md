@@ -24,7 +24,7 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
   Milan, a Vampire, a CT60 whose DSP another program holds), a 68060 or a 68080 decodes MP3 and web
   radio itself: with its FPU (`mp3fpu.ovl`), or without one (`mp3int.ovl`). So far tested in Hatari,
   not yet on a real 68060 or 68080.
-- **FireBee (first test edition):** `eplayfb.prg`, built for its ColdFire: MP3 and web radio
+- **FireBee (first test edition):** a package of its own, built for its ColdFire: MP3 and web radio
   decoded by the ColdFire and its FPU, WAV and AIFF, and VGM, its chips (the YM2149's music too)
   made by the ColdFire, through FireTOS's sound.
 
@@ -32,7 +32,8 @@ VGM game music and web radio, in a GEM window. Written in C and DSP56001 assembl
 
 ## Getting started
 
-Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** and unpack it:
+Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** and unpack it (on a
+FireBee, `eplay-x.y-firebee.zip`: the same names, built for its ColdFire):
 
 | File | What it is |
 |---|---|
@@ -40,18 +41,20 @@ Download the latest `eplay-x.y.zip` from **[Releases](../../releases/latest)** a
 | `eplayst.prg` | the program for an STE |
 | `eplay.hyp`, `eplay.ref` | the guide, for EHypView or ST-Guide: **Help** opens it |
 | `tls.ovl`, `cacert.pem` | secure (https) stations: keep them beside the program |
-| `tlsfb.ovl` | the same on a FireBee: EPlay loads it there instead of `tls.ovl` |
 | `mp3fpu.ovl` | MP3 decoded by a 68060 or a 68080 with its FPU where there is no DSP free: keep it beside the program |
 | `mp3int.ovl` | the same for a 68060 or a 68080 without an FPU |
-| `eplayfb.prg` | the program for a FireBee (a first test edition: MP3, web radio, WAV, AIFF and VGM) |
-| `fbprobe.prg` | for FireBee testers: says what the machine's sound can do, in `FBPROBE.TXT` |
+
+The FireBee's package has `eplay.prg` (its ColdFire's; MP3 is in the program, so no `mp3*.ovl`), the
+guide, `tlsfb.ovl` in place of `tls.ovl`, `cacert.pem`, and `fbprobe.prg` for FireBee testers: it
+says what the machine's sound can do, in `FBPROBE.TXT`. Each package's `eplay.prg` says so on the
+other's machines.
 
 Start `eplay.prg`, or drop music files, a folder or a playlist on it. **File > Open...** adds more,
 **File > Open URL...** plays a station, **Help > Keys...** lists the keys. The guide
 ([docs/GUIDE.md](docs/GUIDE.md)) has the rest.
 
 **Needs:** a Falcon030 with TOS 4.0x or EmuTOS (MP3 needs its DSP, or a 68060 or 68080), a TT,
-or an STE or Mega STE with `eplayst.prg` (WAV and AIFF), or a FireBee with `eplayfb.prg`; a screen
+or an STE or Mega STE with `eplayst.prg` (WAV and AIFF), or a FireBee with its own package; a screen
 640 pixels wide. The original ST
 has no DMA sound and isn't supported. Web radio needs a network card and
 STinG or MiNTnet.

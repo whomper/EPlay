@@ -15,9 +15,11 @@
 #                   against src/oplfast.c, bit for bit, their worst cases'
 #                   cycles
 #   make prof       build/prof/eplay.prg for the speed rig (tests/hatari)
-#   make rig        the Hatari rigs: playing (tests/hatari/play_test.py) and
-#                   the speed rig (tests/hatari/speed.py)
-#   make dist       dist/eplay-x.y.zip and its files, as on the Releases page
+#   make rig        the Hatari rigs: playing (tests/hatari/play_test.py), the
+#                   speed rig (tests/hatari/speed.py) and each program's
+#                   alert on a machine it isn't for (tests/hatari/cpu_test.py)
+#   make dist       dist/eplay-x.y.zip and its files, and eplay-x.y-firebee.zip,
+#                   as on the Releases page
 # Every file is built with -ffunction-sections and linked with
 # --gc-sections, so of common/ only what EPlay calls goes in.
 CROSS   ?= m68k-linux-gnu-
@@ -434,29 +436,40 @@ $(B)/mp3ovl/mad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h th
 	@mkdir -p $(dir $@)
 	$(CC) $(OVLIF) -w -c -o $@ $<
 
-# a release's files: each one in dist/, and all of them in
-# dist/eplay-x.y.zip (the icons in icons/; every name in lowercase, the
-# guidelines 6.6), for the release workflow
-DIST    := binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl common/tlsovl/tlsfb.ovl binary/mp3fpu.ovl binary/mp3int.ovl
+# a release's files, for the release workflow: two packages (the guidelines
+# 7.4, Erez 22 Nov 2026), every name in lowercase (6.6), the icons in icons/:
+# - dist/eplay-x.y.zip, the standard package (Falcon, TT, STE), whose files
+#   are also in dist/ each on its own;
+# - dist/eplay-x.y-firebee.zip, the FireBee's: the same names built for its
+#   ColdFire (binary/eplayfb.prg as eplay.prg; its MP3 is in the program, so
+#   no mp3*.ovl), tlsfb.ovl, and fbprobe.prg for its testers.
+DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
+           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl
+DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref common/tlsovl/tlsfb.ovl
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
 	rm -rf dist
-	mkdir -p dist/zip/icons
+	mkdir -p dist/zip/icons dist/zipfb/icons
 	cp $(DIST) $(ICONS) dist/
 	cp NOTICES.TXT dist/notices.txt
 	cp common/certs/CACERT.PEM dist/cacert.pem
 	cp $(DIST) dist/zip/
-	cp NOTICES.TXT dist/zip/notices.txt
-	cp common/certs/CACERT.PEM dist/zip/cacert.pem
-	cp $(ICONS) dist/zip/icons/
+	cp binary/eplayfb.prg dist/zipfb/eplay.prg
+	cp $(DISTFB) dist/zipfb/
+	for z in zip zipfb; do \
+		cp NOTICES.TXT dist/$$z/notices.txt && \
+		cp common/certs/CACERT.PEM dist/$$z/cacert.pem && \
+		cp $(ICONS) dist/$$z/icons/ || exit 1; \
+	done
 	cd dist/zip && zip -q -9 -r ../eplay-$(VERSION_STR).zip .
-	rm -rf dist/zip
+	cd dist/zipfb && zip -q -9 -r ../eplay-$(VERSION_STR)-firebee.zip .
+	rm -rf dist/zip dist/zipfb
 
 rig: all prof
 	$(MAKE) -C tests/hatari
 	python3 tests/hatari/play_test.py $(B)/rig/play
 	python3 tests/hatari/speed.py $(B)/rig/speed
+	python3 tests/hatari/cpu_test.py $(B)/rig/cpu
 
 .PHONY: all test dsptest fbtest prof rig dist clean icons help
 

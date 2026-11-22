@@ -11,14 +11,14 @@ after another, and the music goes on while you work in other dialogs and menus.
 | `eplay.prg` | the program, for the Falcon |
 | `eplay.hyp`, `eplay.ref` | this guide, for EHypView or ST-Guide |
 | `tls.ovl`, `CACERT.PEM` | the family's secure connections and the root certificates, for web radio stations at https addresses |
-| `tlsfb.ovl` | the same secure connections for a FireBee (its ColdFire); EPlay picks it there by itself |
+| `tlsfb.ovl` | in the FireBee's package, in place of `tls.ovl`: the same secure connections built for its ColdFire |
 | `notices.txt` | the licences of the parts EPlay is made with |
 | `icons/` | the desktop icons: `eplay.rsc` (`eplaynv.rsc` under NVDI with its own palette), or `eplay.icn` and `eplaymk.icn` for desktops that take them |
 
 - **Install:** copy `eplay.prg` into a folder of its own, such as `C:\EPLAY\`. It keeps its
   settings (`EPLAY.INF`), its log (`EPLAY.LOG`, with Options > Write a log ticked), the album art it has unpacked (`cache\`) and any
   `CRASH.LOG` beside itself. Copy `tls.ovl` and `CACERT.PEM` beside it too, for stations at
-  https addresses (on a FireBee, `tlsfb.ovl` too).
+  https addresses (`tlsfb.ovl`, in the FireBee's package).
 - **This guide:** copy `eplay.hyp` and `eplay.ref` into `C:\GUIDES\`, or beside `eplay.prg`.
   **Help** in EPlay opens it in EHypView or ST-Guide.
 - **Play something:** start EPlay and choose **File > Open...** (^O), or drop MP3, WAV or AIFF
@@ -32,8 +32,9 @@ in the list and are passed over. On an STE (or a Mega STE), start `eplayst.prg`,
 edition: WAV and AIFF on its 8-bit DMA sound (a CD's 44.1 kHz at 50 kHz, the nearest sample), its
 volume on the STE's own volume control; MP3 files show light and are passed over. While a CD-rate
 file plays, the music takes about half of the 68000, so windows and menus answer slowly then
-(EPlay is being made faster there); paused, they answer as usual. On a FireBee, start
-`eplayfb.prg`, the ColdFire's edition (a first one, for testing): MP3, web radio, WAV, AIFF and VGM
+(EPlay is being made faster there); paused, they answer as usual. On a FireBee, install
+EPlay's FireBee package (`eplay-x.y-firebee.zip`) and start its `eplay.prg`, the ColdFire's edition (a
+first one, for testing): MP3, web radio, WAV, AIFF and VGM
 through FireTOS's sound at 49.2 kHz, the ColdFire decoding and resampling them and making a VGM's
 chips (a YM2149's music too: the FireBee has none). A Falcon with TT RAM (a DFB1 and the like) has room for very long
 lists; a stock Falcon plays as well.

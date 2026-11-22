@@ -2358,14 +2358,18 @@ static void turn(int nested)
 }
 
 #if defined(EPLAY_FB)
-/* EPLAYFB.PRG: common's cpucheck_cf.S asks for _CF_ */
-const char cpu_alert[] = "[3][This EPlay is for the FireBee.|On a Falcon or a TT: EPLAY.PRG;|on an STE: EPLAYST.PRG.][ Quit ]";
+/* the FireBee package's EPLAY.PRG (built as binary/eplayfb.prg): common's
+   cpucheck_cf.S asks for _CF_; each build names the other package on the
+   wrong machine (the guidelines 7.4, Erez 22 Nov 2026) */
+const char cpu_alert[] = "[3][EPLAY.PRG is for the FireBee.|On a Falcon, a TT or an STE,|install EPlay's standard|package.][ Quit ]";
 #elif defined(EPLAY_ST)
 const long cpu_need = 0;	/* EPLAYST.PRG: the STE's (and any 68000 with DMA sound) */
 const char cpu_alert[] = "[3][EPlay can't run here.][ Quit ]";
+const char cpu_cf_alert[] = "[3][EPLAYST.PRG is for the STE.|On the FireBee, install|EPlay's FireBee package.][ Quit ]";
 #else
 const long cpu_need = 30;
 const char cpu_alert[] = "[3][This EPlay is for the Falcon and|the TT. On an STE: EPLAYST.PRG.][ Quit ]";
+const char cpu_cf_alert[] = "[3][EPLAY.PRG is for the Falcon|and the TT. On the FireBee,|install EPlay's FireBee|package.][ Quit ]";
 #endif
 int app_main(void);
 int app_main(void)

@@ -2822,6 +2822,43 @@ it in 1.44".
   the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
   salign was putting a real slip right. Reverted (14069b173): `dsp/mp3.a56` is 1.50's.
 
+## 1.52: common ac70637; two packages, the FireBee's of its own (22 Nov 2026)
+
+- **Common at ac70637** (TLS.OVL 1.18, ovl.c's ColdFire cache push, av.c's av_startprog,
+  print.c), the pads remade against 1.47's map.
+- **Two packages** (Erez, 22 Nov 2026, through the hub: "Shall we just create two packages, one
+  for FireBee and the other for standard ST? ... EUpdate can then download the right package
+  based on the running platform", and "Same names"; the guidelines 7.4, AERA-Atari cc13e75):
+  - `eplay-x.y.zip`, the standard package: EPLAY.PRG (68030), EPLAYST.PRG (68000), MP3FPU.OVL,
+    MP3INT.OVL, TLS.OVL.
+  - `eplay-x.y-firebee.zip`: `binary/eplayfb.prg` as EPLAY.PRG (its MP3 is in the program, so
+    no MP3*.OVL), TLSFB.OVL, and FBPROBE.PRG for the FireBee's testers.
+  - Both packages carry the guide, CACERT.PEM, NOTICES.TXT and the icons. The loose files a
+    release publishes are the standard package's.
+  - Installing either package replaces the files in place.
+- **Each program names the other package on the wrong machine** (7.4's words, wrapped at 30
+  columns for TOS 1.x's alert):
+  - EPLAY.PRG (68030) on a FireBee: "EPLAY.PRG is for the Falcon and the TT. On the FireBee,
+    install EPlay's FireBee package." EPLAYST.PRG says the same with "is for the STE". Both come
+    from common's `cpu_cf_alert`, shown where the jar has `_CF_`.
+  - The FireBee's EPLAY.PRG elsewhere: "EPLAY.PRG is for the FireBee. On a Falcon, a TT or an
+    STE, install EPlay's standard package." (common's `cpucheck_cf.S`.)
+  - EPLAY.PRG on an STE keeps its 68000 alert, which names EPLAYST.PRG, since both are in the
+    standard package. 7.4's words for the standard package ("is for the ST, TT and Falcon")
+    don't fit EPlay: EPLAY.PRG doesn't run on an ST.
+- **What this changes in the tests:**
+  - Until 1.51, EPLAY.PRG played on the FireBee stand-in, through the XBIOS's sound. That
+    covered the `_CF_` paths of a 68000 build on FireTOS.
+  - From 1.52 it shows the alert there, so gate row 7 (the stand-in) runs
+    `tests/hatari/cpu_test.py`. Hatari's AES trace gives each alert word for word, against
+    ui/main.c's text, and Return must end the program.
+  - The XBIOS sound path is still played on the Falcon-060 rows without a DSP (`SNDXBIOS=1`, the
+    V4 stand-in).
+  - The FireBee's own code runs under qemu-m68k -cpu cfv4e (`make fbtest`) and on the tester's
+    FireBee.
+  - The 1.51 note on the stand-in's 15.5 ms DMA stretch stays as history: no EPlay plays there
+    now.
+
 ## F3: VGM on the FireBee (Erez, 21 Nov 2026, through the hub)
 
 - **EPLAYFB.PRG makes a VGM's chips on its ColdFire**, as a 68060 with no Falcon DSP does

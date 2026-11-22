@@ -612,7 +612,8 @@ def no_dsp(spec):
     if "SNDXBIOS=1" in os.environ.get("EPLAY_RIG_INF", "") and "060" not in spec:
         return True
     # (the FireBee's stand-in running EPLAY.PRG: no DSP, and a ColdFire's
-    # MP3 is EPLAYFB.PRG's)
+    # MP3 is EPLAYFB.PRG's. Since 1.52 EPLAY.PRG names the FireBee's
+    # package there and goes, the guidelines 7.4: cpu_test.py checks it)
     return spec.split(":")[0] in ("TT", "STE", "STE-1", "FireBee")
 
 
