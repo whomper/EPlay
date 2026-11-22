@@ -15,7 +15,7 @@ CF     := -mcpu=5475 -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-p
           -fno-tree-loop-distribute-patterns -nostdinc -isystem $(GCCINC) -I$(RT) -I$(RT)/inc -I$(TOP)/common/src -I$(TOP)/src -I$(TOP)/ui \
           -I$(TOP)/third_party/minimp3 -Wall
 FILES  := tones mix128 mix320 mono lsf22 mix48 mixvbr
-# (the VGM chips on the ColdFire: Erez, 21 Nov 2026) one file each for the
+# (the VGM chips on the ColdFire: 21 Nov 2026) one file each for the
 # AY, the SN76489, the YM2612, the Mega Drive's pair, the YM3812, the YMF262
 VGMS   := ay sn opn md opl opl3
 VGMSRC := $(addprefix $(TOP)/src/,vgm.c vgmcpu.c sncmd.c sncpu.c opnd.c egmath.c opncpu.c opld.c oplcpu.c aycpu.c)

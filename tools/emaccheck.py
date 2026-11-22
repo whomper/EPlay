@@ -11,7 +11,7 @@ any move to or from an accumulator, in the FireBee's code is a Line-A call
 left in: the build fails and names its function. The one exception is
 EPlay's own MP3 decoder, whose synthesis filter (and from 1.53 its IMDCT's sums and
 alias butterflies) is on the EMAC on purpose
-(src/mp3/mp3dsp.c, dspmath.h's em_*: Erez, 21 Nov 2026): its functions alone
+(src/mp3/mp3dsp.c, dspmath.h's em_*: 21 Nov 2026): its functions alone
 (ALLOWED) may hold them.
 """
 import re

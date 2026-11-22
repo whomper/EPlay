@@ -15,16 +15,16 @@ Cases:
             titles the station sends shown (EPLAY title)
   drop      the station closes the connection after 6 s: EPlay connects
             again and the music goes on
-  stall     (Erez, 14 Nov 2026) the DSP taken as stalled at 4 s (eplay.inf's
+  stall     (14 Nov 2026) the DSP taken as stalled at 4 s (eplay.inf's
             STALLAT=, the rigs'): EPlay connects again and the music goes on
-  startfail (Erez, 17 Nov 2026: his DFB1X under load, through the Gateway:
+  startfail (17 Nov 2026: a DFB1X under load, through the Gateway:
             "the DSP stopped answering loading word 0 of 0") the DSP taken
             as not answering as the stream starts (eplay.inf's STALLAT=-1,
             the rigs'): EPlay starts it again, connects again, and the
             music plays
   pls       a .PLS station list behind a redirect (302): its first station
             plays
-  rough     a station as real ones are on a bad day (Erez, 17 Nov 2026:
+  rough     a station as real ones are on a bad day (17 Nov 2026:
             "when playing a station both in FDI and DSP, the audio stutters
             and stops"): its address answers with a 302, the station's head
             comes 1.5 s late, then Icecast's 2 s burst, the data in
@@ -56,7 +56,7 @@ Cases:
   urledit   as url, then inside the typed address: Left four times, "Z",
             Right twice, "Y" (common's field.c, an arrow one step: hub
             d5786b7): EPLAY.INF's URLTYPED ends ".../ZliYve"
-  nginx     laut.fm's way (Erez's station, 8 Nov 2026): an nginx at https
+  nginx     laut.fm's way (the owner's station, 8 Nov 2026): an nginx at https
             (AES-128-GCM, P-256 only) answers with a 302 to the station, and
             hangs up on a client that hasn't asked within 5 s
             (client_header_timeout): the handshake's curves on the DSP keep
@@ -514,7 +514,7 @@ def run(work, case, spec):
                            "https://radio.test:%d/live" % st.tls[0].getsockname()[1])
         url = "https://radio.test:%d/musickoeln" % nport
     if case == "m3u":
-        # (Erez, 9 Nov 2026: Open... of an .M3U holding a station added
+        # (9 Nov 2026: Open... of an .M3U holding a station added
         # nothing) the playlist given, the station in it, named by #EXTINF
         with open(os.path.join(hd, "RADIO.M3U"), "w", newline="") as fh:
             fh.write("#EXTM3U\r\n#EXTINF:-1,The rig radio\r\n%s\r\n" % url)
@@ -747,7 +747,7 @@ def run(work, case, spec):
 def main():
     work = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "/tmp/eplay-stream")
     cases = [a for a in sys.argv[2:] if a in CASES] or CASES
-    # (Erez's configuration by default, the hub's 10 Nov 2026: Falcon-4:256
+    # (the reference configuration by default, the hub's 10 Nov 2026: Falcon-4:256
     # with NVDI; EmuTOS without NVDI where the container has neither, a
     # stand-in, as describe() says)
     specs = [a for a in sys.argv[2:] if a not in CASES] or [machines.ERZ_MACHINE]

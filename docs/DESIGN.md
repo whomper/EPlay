@@ -3,19 +3,19 @@
 EPlay plays MP3, WAV and AIFF files. It is a GEM program (no desk accessory) in the AERA family,
 and follows the family's guidelines (AERA-Atari, `standards/ATARI-APP-GUIDELINES.md`).
 
-Erez's decisions, 31 Oct 2026:
+Decided 31 Oct 2026:
 - the name **EPlay**: `EPLAY.PRG`, `EPLAY.INF`, `EPLAY.HYP`, Desk menu entry `"  EPlay"`;
 - **a program only**, no accessory (the hub's advice: under plain TOS an accessory runs only while
   the program in front calls the AES, so any program holding the machine longer than the buffer
   would break the sound);
 - **MP3 on the Falcon only** (its DSP decodes it); **WAV and AIFF on the Falcon, TT and STE**;
 - **the DSP rule** (below) for the family;
-- Erez plays through a **SoundPool FDI** (S/PDIF, with its own 44.1 and 48 kHz clocks on the DSP
+- The owner's Falcon plays through a **SoundPool FDI** (S/PDIF, with its own 44.1 and 48 kHz clocks on the DSP
   port), set up at boot by its FDI program.
 
 ## Why other players break up, and what EPlay does instead
 
-Players written for a stock Falcon break up on an accelerated one (Erez's DFB1: a 68030 at 50 MHz,
+Players written for a stock Falcon break up on an accelerated one (the owner's DFB1: a 68030 at 50 MHz,
 128 MB TT RAM) for reasons that have nothing to do with speed. EPlay avoids each one by design:
 
 | Cause | EPlay |
@@ -37,7 +37,7 @@ disk --32 KB reads--> file buffer (TT RAM) --convert, in GEM steps--> ring (ST R
 - The ring is about 2 s of 16-bit stereo (at 49170 Hz: 384 KB), taken once at start from ST RAM.
 - The DMA plays the ring in a loop (`Setbuffer`, `Buffoper` with repeat).
 - **As built in 0.1:** GEM's steps only read the file, in 32 KB pieces, into a queue in TT RAM
-  where there is some (a third of the largest free block, 8 MB at most: on Erez's Falcon minutes
+  where there is some (a third of the largest free block, 8 MB at most: on the reference Falcon minutes
   of music, on a stock Falcon about 7 s of CD sound). A tick from the MFP's Timer A
   (`atari/feed.c`, 250 a second for WAV and AIFF) converts from the queue into the ring, up to
   1024 frames a tick. So nothing the music needs waits for GEM: a menu held down, the file
@@ -124,12 +124,12 @@ Their DMA sound is 8-bit stereo at 50066, 25033, 12517 Hz (and 6258 on the STE).
   Without the DSP, MP3 files show greyed in the playlist: "MP3 needs a Falcon's DSP."
 - To decide when this is built (the guidelines' Speed): what 44.1 kHz stereo costs an 8 MHz STE
   from its disk, and so which rates it plays from a file and which from memory.
-- **Erez, 3 Nov 2026:** WAV and AIFF of 16 and 24 bits at 44.1 and 48 kHz should play well on the
+- **3 Nov 2026:** WAV and AIFF of 16 and 24 bits at 44.1 and 48 kHz should play well on the
   TT and the STE. Phase 6 as planned, after phases 3 to 5. The TT (68030, 32 MHz) converts to
   50,066 Hz with interpolation and a dither to 8 bits; the STE more simply (the nearest sample at
   50,066, or 25,033 Hz). **The plain ST is left out:** it has no DMA sound, and samples on its YM
   chip would be about 4 bits at 10 to 16 kHz, taking nearly all of the 68000.
-- **Erez, 7 Nov 2026 (phase 6's decisions):** MP3 files on a TT or STE are shown greyed in the
+- **7 Nov 2026 (phase 6's decisions):** MP3 files on a TT or STE are shown greyed in the
   list with "MP3 needs a Falcon's DSP"; ST low (320 x 200), too narrow for the 56-column window,
   gets a message and EPlay stops; the plain ST stays out.
 
@@ -169,14 +169,14 @@ loop. The volume is the LMC1992's master volume through the Microwire (\$FF8922,
 Hatari's STE (EmuTOS, mono and medium) the 20 cases pass, a CD's 44.1 kHz at 50,066 Hz with no gap
 and no underrun, the tick some 72 % of the 68000 (24.5 kHz: 55 %). A row EPlay can't play is drawn
 light (VDI effect 2) where there's no grey pen, as in mono and four colours, where the dim pen had
-been the ground. The machine is common's `STE` (`machines.py`: TOS 1.62 where Erez has it, else
+been the ground. The machine is common's `STE` (`machines.py`: TOS 1.62 where the owner has it, else
 EmuTOS), sent to the hub as patch 5.
 
 **Not released yet (7 Nov 2026):** the window is far over the ST's times on Hatari's STE (mono):
 the About box 480 ms paused against 150, a button drawn pressed 105 against 50; and playing a CD's
 44.1 kHz at 50,066 Hz leaves GEM so little that About took 1,025 ms (515 at 25,033 Hz). EPLAYST.PRG
 is built (`make st`) and its sound passes, but it stays out of the release's files until the
-window's drawing meets the ST's times. Erez chose 50,066 Hz for a CD's 44.1 kHz on an STE (7 Nov
+window's drawing meets the ST's times. 50,066 Hz was chosen for a CD's 44.1 kHz on an STE (7 Nov
 2026), and the window to be made faster for it.
 
 **The STE's loop, then (0.34):** the sample loop has no test but the fraction's carry, and 16-bit
@@ -188,7 +188,7 @@ window x y w h"), so its rows work on an STE's screens. On Hatari's STE (mono) t
 within the ST's times (About 120 against 150, a button pressed 25 against 50); playing a CD's rate
 they are about twice them (About 330, Settings 355): the window's next work.
 
-**In the release from 0.35 (Erez, 8 Nov 2026: "Yes, include it in"):** EPLAYST.PRG goes into the
+**In the release from 0.35 (8 Nov 2026: "Yes, include it in"):** EPLAYST.PRG goes into the
 release's files before its window meets the ST's times, the over-time stated in the notes (on
 Hatari's STE, mono, a CD's rate playing: About 305 ms and Settings 330 against 150; paused, within
 them). The window's work goes on.
@@ -217,7 +217,7 @@ is two bus cycles; aligned to 4 (tried here, not committed: common's) it gave 1,
 - **One window**, with the info line as the status: the track, its time, its rate and where it
   plays ("44.1 kHz  •  FDI"). The transport in the window's top row: previous, play/pause, stop,
   next, and the position as a bar that can be clicked or dragged. Under it, the playlist, with
-  common's `panebar.c` beside it. Its rows follow the guidelines' 5.8 (Erez, 1 Nov 2026): mouse
+  common's `panebar.c` beside it. Its rows follow the guidelines' 5.8 (1 Nov 2026): mouse
   down draws the row selected at once (only the old and new rows, within 50 ms); a release over
   the same row starts the action, so a double click plays the track on its second release;
   let go elsewhere, nothing more; moved while held, a drag. Shift and Control change the
@@ -234,7 +234,7 @@ is two bus cycles; aligned to 4 (tried here, not committed: common's) it gave 1,
   (`AP_DRAGDROP`). File > Save playlist… (^S).
 - **Menus**: Desk · File · Edit · View · Play · Options · Help. Play: Play/Pause (Space),
   Stop, Next, Previous, Repeat, Shuffle. The family's shortcuts as the guidelines have them.
-- **Settings** (^,): Output (Auto, FDI, DSP, 68030; phase 2). Volume is the player's, in its window, not a setting (Erez, 2 Nov 2026).
+- **Settings** (^,): Output (Auto, FDI, DSP, 68030; phase 2). Volume is the player's, in its window, not a setting (2 Nov 2026).
 - **About**: line 2 is what plays ("Playing 3 of 12  •  44.1 kHz  •  FDI"); line 3 the memory.
 - **BGEM.NG**: "Next: title" as a track starts, where the user has it.
 - **Help**: `docs/GUIDE.md` into `EPLAY.HYP`.
@@ -251,7 +251,7 @@ is two bus cycles; aligned to 4 (tried here, not committed: common's) it gave 1,
 - **Hatari rigs** (`common/tools/machines.py`): `Falcon`, `Falcon-4`, `TT`, and an STE, with the
   sound written to a WAV by Hatari and compared with the host's decode. The speed rig as every app
   has it.
-- **Erez's Falcon** is the referee: the DFB1, the BlueSCSI's SD card, the FDI.
+- **The reference Falcon** is the referee: the DFB1, the BlueSCSI's SD card, the FDI.
 
 ## Measured: the DSP's budget for MP3 (31 Oct 2026)
 
@@ -398,7 +398,7 @@ alias reduction) doesn't depend on the bit rate: 128 kbit/s is already 76 %.
 
 ### The DSP's last gains (option 1, 31 Oct 2026)
 
-Erez chose to take what the DSP alone can still give first, and measure again. Each step kept
+The choice was to take what the DSP alone can still give first, and measure again. Each step kept
 every file bit for bit:
 - internal P (512 words) holds only loops now: the synthesis filter's set-up runs from external
   P and calls its four loops; the transform's 32 subbands are one internal loop with the line,
@@ -473,9 +473,9 @@ the 68030's time (the host-port reads for MP3, the conversion and ST RAM for WAV
 takes the samples off the 68030 (MP3 out of the DSP's SSI port, WAV through the DSP, which also
 resamples).
 
-### 0.1 on Erez's Falcon (31 Oct 2026), and what 0.2 changed
+### 0.1 on the reference Falcon (31 Oct 2026), and what 0.2 changed
 
-Erez's first try, an 8-minute MP3 with the FDI on:
+The owner's first try, an 8-minute MP3 with the FDI on:
 1. **The length said 22:10.** It came from the first frame's bit rate, and a VBR file's first
    frame is LAME's header frame (Xing), at a low rate. Now the Xing, Info or VBRI frame gives the
    frames (`mp3_info_frames`, checked by `tests/mp3/test_info.c`), the length, and the average bit
@@ -496,7 +496,7 @@ Erez's first try, an 8-minute MP3 with the FDI on:
 `EPLAY.LOG` (next to the program) says what EPlay measured and did: the machine, the FDI's driver,
 the clock as measured and as taken, each file's header, the output, how playing ended. It is
 written when a file ends or is stopped, when the DSP fails, and at the end. Since 1.12 it is
-common's conn.c log, as the family's (the hub, 9 Nov 2026; Erez: "just like the other
+common's conn.c log, as the family's (the hub, 9 Nov 2026: "just like the other
 applications"): each run added to the file, each line with its time, held in memory (16 KB,
 `conn_log_hold`) between writes, a crash's report in it, and the connections' lines (once
 EPLAYNET.LOG) in the same file. A size cap and a line at each start will come from common, for
@@ -510,9 +510,9 @@ draw). The test files
 now include LAME's header frames (VBR and CBR) and CRC-protected frames, and the play rig a VBR
 file (its length checked).
 
-### 0.2 on Erez's Falcon (1 Nov 2026), and what 0.3 changes
+### 0.2 on the reference Falcon (1 Nov 2026), and what 0.3 changes
 
-Erez's try of an MP3 with the FDI on: still "49 kHz" where it should be 44.1, so faster than the
+The owner's try of an MP3 with the FDI on: still "49 kHz" where it should be 44.1, so faster than the
 file, and after a second severe crackles that bring the playing down.
 
 1. **The FDI's clock still wasn't found.** One cause is certain, in 0.2's measure: it read the
@@ -530,9 +530,9 @@ file, and after a second severe crackles that bring the playing down.
 The log also has the DSP port's GPIO as EPlay found it (the FDI's program leaves it at direction 7,
 data 2) and each prescale tried with its measure.
 
-### 0.3 on Erez's Falcon (1 Nov 2026), and what Cubase Audio does
+### 0.3 on the reference Falcon (1 Nov 2026), and what Cubase Audio does
 
-Erez's log (an MP3 of 23 MB, VBR, 44.1 kHz, 11:45):
+The owner's log (an MP3 of 23 MB, VBR, 44.1 kHz, 11:45):
 
 ```
 the FDI's driver answers ($4711)
@@ -554,13 +554,13 @@ the sound: the first at 2010 ms; the least lead 0 ms
    the bus control register (the decoder clears it), the file's reading (seconds ahead). Not
    known yet: what on the real machine makes it six times slower.
 
-**Cubase Audio 2.06** (Erez's copy; packed with LArc's PFX lz5, unpacked to read it) knows the FDI
+**Cubase Audio 2.06** (the owner's copy; packed with LArc's PFX lz5, unpacked to read it) knows the FDI
 and plays from the DSP:
 
 - **The FDI:** the same sign, `Sndstatus($DD02)` = `$4711`, then `Gpio(0, 7)` (all three lines out).
 - **The rate:** `Gpio(2, 4)`, 50 ms, then `Gpio(2, 3)` for 48 kHz or `Gpio(2, 2)` for 44.1 (its
   rate table: index 0 44,100, 1 48,000), 50 ms. With the S/PDIF input as the clock: `Gpio(2, 0)`;
-  in its 16-track modes 7 and 5. Erez's FDI measured 48 kHz at data 2, which Cubase calls 44.1: so
+  in its 16-track modes 7 and 5. The owner's FDI measured 48 kHz at data 2, which Cubase calls 44.1: so
   EPlay must measure each, not trust the table.
 - **The FDI's own chip** is set by a control word sent as bits (`$1100` a one, `$1000` a zero) in
   a DMA buffer played to `EXTOUT` at prescale 8 with GPIO 4, then GPIO 5 or 7: two words, one for
@@ -573,7 +573,7 @@ and plays from the DSP:
   the way. That is phase 2's plan for MP3; Cubase does it for 8 tracks at 44.1/48 kHz in 16 or 24
   bits, and 16 tracks compressed on the DSP.
 
-### 0.4 on Erez's Falcon (1 Nov 2026; the DFB1X off: a stock Falcon)
+### 0.4 on the reference Falcon (1 Nov 2026; the DFB1X off: a stock Falcon)
 
 "Better in the sense of speed, and it did not stop. However there are many crackles." The log:
 
@@ -586,21 +586,21 @@ the sound: 4863 frames decoded, 3697 granules late; the DSP's waits a frame: lea
 ```
 
 1. **The FDI stayed at 48 kHz** on 2 and on 3, so the DSP played on the Falcon's 49,170 Hz into
-   an S/PDIF at 48 kHz: crackles. Erez's set-up: a sound card's optical output into the FDI's
+   an S/PDIF at 48 kHz: crackles. The owner's set-up: a sound card's optical output into the FDI's
    S/PDIF input at 44.1 kHz, and Cubase plays 44.1 kHz right. Cubase's other setting, 0, takes
    the input's clock ("S/PDIF controls the clock"): 0.5 tries it too, measured as the others.
    Cubase's routine that programs a chip by a DMA bit pattern is for its own interface (the
    C.A.C.), not the FDI: with the FDI's driver answering, Cubase only sets the lines.
 2. **The DSP fell behind:** 38 % of the granules late (played again: crackles), with about 1 ms
    to spare a frame on average, where Hatari has 4 for a heavier file (pink noise, 239 kbit/s).
-   At 49,170 Hz a 320 kbit/s frame needs 96 % of the DSP by Hatari's count; Erez's music (VBR,
+   At 49,170 Hz a 320 kbit/s frame needs 96 % of the DSP by Hatari's count; the owner's music (VBR,
    266 kbit/s) at it, on a real DSP, is past it. Next: the decoder made faster, and the output
-   at 44.1 or 48 kHz (Erez's choice for a FDI at 48 kHz: resampled to 48 kHz on the DSP).
+   at 44.1 or 48 kHz (the choice for a FDI at 48 kHz: resampled to 48 kHz on the DSP).
 3. **The stream stopped twice**, at frames 4,864 and 224 of the same file: timing, not the
    data, and never in Hatari. 0.5's log says what both sides were doing then (the host port's
    flags, the handler's, the packet going).
 
-### 0.5 on Erez's Falcon (1 Nov 2026)
+### 0.5 on the reference Falcon (1 Nov 2026)
 
 The window said "External clock 44.1 kHz": the FDI on its input's clock (0) is at the file's
 rate. Then some 24 bombs as it began to play: a spurious interrupt (one asked for that no one
@@ -614,7 +614,7 @@ slot begins, TFS says which, r7 a word on if needed): the start's alignment alon
 with them swapped now and then. The play rig no longer excuses a swap for MP3 (the SSI's, not
 Hatari's DMA).
 
-### 0.6 on Erez's Falcon (1 Nov 2026)
+### 0.6 on the reference Falcon (1 Nov 2026)
 
 ```
 the FDI to 44100 Hz: 2: 47925 Hz; 3: 48000 Hz; 0: 44125 Hz
@@ -637,7 +637,7 @@ spurious interrupts while playing: 111
   interrupt), and the 68030 gives 16 %. The spurious interrupts are still counted and let go,
   and the log will say whether they come without the DSP's interrupt.
 
-### 0.7 on Erez's Falcon (1 Nov 2026): "It played very well"
+### 0.7 on the reference Falcon (1 Nov 2026): "It played very well"
 
 ```
 the FDI to 44100 Hz: 2: 48025 Hz; 3: 48025 Hz; 0: 44050 Hz
@@ -656,7 +656,7 @@ and for a Falcon without the FDI (49,170 Hz, and resampling).
 
 "It stopped after 10 seconds with DSP not responding." The log: 730 frames decoded where the
 68030 had sent 641 packets, 1,280 granules late, and then the DSP silent, HF2 off, the host
-port empty: it had lost the packets' step (a word lost or misread on the way: Erez's DFB1X on
+port empty: it had lost the packets' step (a word lost or misread on the way: the owner's DFB1X on
 again, the 68030 at 50 MHz), taken data words for counts, decoded what came, and at last taken a
 0 for the end. 0.8: a packet's count has bit 23 set, which no data word has (23 bits a word),
 so the DSP passes stray words and takes up the stream at the next count, that frame dropped
@@ -664,7 +664,7 @@ so the DSP passes stray words and takes up the stream at the next count, that fr
 granules), so one read twice or missed takes nothing away. Tested in Hatari with a word
 dropped on purpose: one packet broken, playing on to the end.
 
-Erez also saw channel 3 of his SoundPool Analog 8 at full scale: the matrix's tracks as another
+The owner also saw channel 3 of the SoundPool Analog 8 at full scale: the matrix's tracks as another
 program left them (Cubase Audio leaves 4). The DSP sends two words a frame and decodes two
 channels; 0.8 sets one stereo pair (Settracks, Setmontracks) when the DSP plays.
 
@@ -672,9 +672,9 @@ And the DSP's reset is the tick's now (port A bit 4 at level 7, 60 ms after Play
 GEM's steps the file selector, opened at once, held it and with it the load (the play rig's
 fsel failed once in seven).
 
-## Phase 2: three ways to play MP3, chosen in the settings (Erez, 1 Nov 2026)
+## Phase 2: three ways to play MP3, chosen in the settings (1 Nov 2026)
 
-Erez started phase 2 after 0.3's log, and set what it is: every way works, and the user picks the
+Phase 2 started after 0.3's log, and what it is was set: every way works, and the user picks the
 one the machine has.
 
 | Way | For | The decoding, and the sound |
@@ -685,20 +685,20 @@ one the machine has.
 
 - **Settings:** Output: Auto (the default: the FDI where its driver answers, else the DSP on a
   Falcon, else the 68030), or one of the three; only what the machine has is offered. In
-  EPLAY.INF. **As built (Erez, 2 Nov 2026):** Options > Settings... (^,), one page: one sentence
+  EPLAY.INF. **As built (2 Nov 2026):** Options > Settings... (^,), one page: one sentence
   on what Output is ("Output: how EPlay plays the music."), then the four choices, Auto, FDI, DSP
   and 68030, as radio buttons with no notes. A choice the machine hasn't is greyed (the 68030
   until its decoder is in). A change takes effect at the next Play; what plays goes on as it is.
   An FDI chosen and its driver not loaded this time plays Auto and stays chosen. **Volume is not
-  a setting** (Erez): it is the player's, a control in its window (phase 3), so 0 dB until then.
+  a setting** (decided): it is the player's, a control in its window (phase 3), so 0 dB until then.
   FDI puts the FDI at the file's rate as Auto does, else plays on its clock as it is,
   resampled; DSP leaves the FDI and its clock out (the Falcon's clock, resampled).
-- **The 68030's quality follows the machine** (Erez's choice): the highest it keeps up with, full
+- **The 68030's quality follows the machine** (decided): the highest it keeps up with, full
   on a fast 68030 (a DFB1), half the rate or mono on a stock Falcon or a TT; the window says which
-  ("68030, half rate"). The music doesn't break up. *Since 2 Nov 2026 (Erez): Settings' Quality,
+  ("68030, half rate"). The music doesn't break up. *Since 2 Nov 2026: Settings' Quality,
   Normal (to about 15 kHz) or High, the default, sets it, for the DSP on the Falcon's clock as
   well (below).* An ST or STE has no MP3.
-- **The order:** the FDI way first (Erez's Falcon, and it removes 0.3's two faults: the clock
+- **The order:** the FDI way first (the reference Falcon, and it removes 0.3's two faults: the clock
   and the DSP's output through the host port), then the DSP way with resampling, then WAV and
   AIFF through the DSP, the settings, and the 68030's decoder last (a new part).
 - **The 68030's decoder runs in slices from the timer's interrupt** (the hub asked: slices or
@@ -713,7 +713,7 @@ one the machine has.
 
 ### The faster decoder (1 Nov 2026)
 
-0.7 played Erez's music at about 93 % of the DSP, with a few granules late; the FDI at 48 kHz
+0.7 played the owner's music at about 93 % of the DSP, with a few granules late; the FDI at 48 kHz
 and resampling need room too. Three changes, each bit for bit between the model and the DSP and
 with the error against minimp3 where it was (0.19 of ISO's limit at most):
 - **The long block's transform as two 9-point DCTs and a rotation.** The 18 lines go into sums
@@ -813,11 +813,11 @@ step through the file at a time (as the TT's path will: some frames twice), and 
 the same steps, would drop the doubles and resample what is left. It wants the DSP's receive
 interrupt, an address register of its own, and a real Falcon to check the crossbar's timing.
 
-### 0.9 on Erez's Falcon (2 Nov 2026)
+### 0.9 on the reference Falcon (2 Nov 2026)
 
 Three logs:
 - **Through the FDI at 44.1 kHz**, AUTOMATA.MP3 played 255 s clean: no granule late, no packet
-  broken, the tick 13 % of the 68030. UNCRTNTY.MP3 then stopped at 152 s, while Erez moved the
+  broken, the tick 13 % of the 68030. UNCRTNTY.MP3 then stopped at 152 s, while the owner moved the
   mouse, with AERA's accessories running. By then 45 granules had been late and 22 packets broken,
   and the DSP had all of its last packet but sent no frame after it. A DSP that waits for its
   SSI looks like that: one whose clock or matrix changed under it. A word lost or doubled on the
@@ -825,7 +825,7 @@ Three logs:
   the log now says what it needs to find out (below).
 - **Without the FDI's driver and clock**, the DSP resamples to 49,170 Hz: 829 of 2,958
   granules late, heard as crackles. That is the DSP's budget: mix320.mp3 takes 94 % of it at
-  that rate in the test, and Erez's music more. A late granule costs more than its own time:
+  that rate in the test, and the owner's music more. A late granule costs more than its own time:
   with a ring of two granules, a DSP that is late finds the SSI in the half it writes, waits for
   it to pass (13 ms), and a granule plays twice. Hatari's DSP doesn't show it (it runs faster
   than its cycles), so the cycle counts are the measure. Where the cycles go (mix320.mp3 at
@@ -846,15 +846,15 @@ What the log says now, after each file:
 (The tick's clock, Timer C's count and HZ200, could read 5 ms early while Timer C's interrupt
 waited: the first longest gap, on Hatari, came out as 22,366 ms. The pending bit is now read too.)
 
-### 0.10 on Erez's Falcon (2 Nov 2026)
+### 0.10 on the reference Falcon (2 Nov 2026)
 
 0.10 played at 48 kHz, resampled, with 279 of 930 granules late. The FDI's own clock lines give
-48 kHz at both 2 and 3 on Erez's Falcon (so since 0.4). 44.1 kHz comes only from 0, the clock
+48 kHz at both 2 and 3 on the reference Falcon (so since 0.4). 44.1 kHz comes only from 0, the clock
 of what comes into its S/PDIF input. There 0.9 measured 44,100 Hz and 0.10 39,300 Hz: 44.1 kHz
 with its first 25 ms missing, a receiver that locked later than the 200 ms it is given. 0.11
 measures again at 0, up to three times 100 ms apart, while it isn't at rate, and the log gives
 each measure. Five more tries on 0.10 all came out at 48 kHz, so the signal at the FDI's input
-may not be there; Erez is checking it.
+may not be there; the owner is checking it.
 
 The Falcon's own output was silent with 0.10, as it should be, but the Analog 8's channel 3
 still plays noise at full volume. The DAC wasn't it. What is left: the DSP's two 16-bit words
@@ -865,7 +865,7 @@ which give the slots' length whatever the frame sync does. Two slots a frame at 
 about 360 of the DSP's clocks each; eight, 90. On Hatari the count of slots reads 1 or 2,
 since its frame sync isn't the Falcon's, and the polls a steady 19,063.
 
-### 0.11 on Erez's Falcon (2 Nov 2026), and 0.12
+### 0.11 on the reference Falcon (2 Nov 2026), and 0.12
 
 Every clock 0.11 measured was 3 to 4 % fast, before the DSP had started. The FDI's 48 kHz read
 49,679 and 49,901 Hz; its input's 44.1 kHz read 45,392 to 45,837 Hz, past the 2.5 % allowed; at
@@ -886,7 +886,7 @@ manual changes them only in the SSI's reset state. 0.12 takes the count out: the
 length of eight), so EPlay's two words leave six undriven, and channel 3 is the first of them.
 
 
-### 0.12 on Erez's Falcon (2 Nov 2026; the DFB1X off)
+### 0.12 on the reference Falcon (2 Nov 2026; the DFB1X off)
 
 "Sound all good." Four files through the FDI, each opened while the one before played: the
 clocks timed by Timer A (the FDI's 48 kHz at 47,961 and 47,992 Hz, its input's 44.1 kHz at
@@ -929,7 +929,7 @@ The butterflies' first loop (2.2 %) reads both its inputs from external X while 
 external P, a cycle more each; in internal P there's no room for it.
 
 
-### File names in lowercase (Erez, 2 Nov 2026; the guidelines' 6.6)
+### File names in lowercase (2 Nov 2026; the guidelines' 6.6)
 
 On MiNT an ext2 drive tells `EPLAY.INF` from `eplay.inf`, and a tester found the family's programs
 missing their own files there. Every name EPlay gives a file is lowercase now: `eplay.inf` (and
@@ -941,9 +941,9 @@ an ext2 drive is not looked for under its old names: its folder is deleted and t
 in fresh (the release's notes say so once).
 
 
-### Quality: Normal and High (Erez, 2 Nov 2026), chosen by itself (4 Nov 2026)
+### Quality: Normal and High (2 Nov 2026), chosen by itself (4 Nov 2026)
 
-*Since 4 Nov 2026 (Erez): no longer a setting.* An MP3 on the DSP and the Falcon's own clock
+*Since 4 Nov 2026: no longer a setting.* An MP3 on the DSP and the Falcon's own clock
 plays at High; where the DSP falls behind (3 granules late, past the file's first 8 frames:
 `settings_qlate`), it goes on at Normal from where it is, as a seek does (a moment's break), until
 another file opens. The log says so ("the DSP behind at 49,170 Hz ..."), and the bar and the
@@ -953,7 +953,7 @@ keeps up at High with every file the rig can make (square waves and pink noise a
 kbit/s, all short blocks: 2,080 waits to spare a frame at least). What follows is the setting as
 it was.
 
-Erez's choice for the crackles without the FDI: a Quality setting, **High** (the default) or
+The choice for the crackles without the FDI: a Quality setting, **High** (the default) or
 **Normal**, "Normal is 15 kHz", for both the 68030's output and the DSP on the Falcon's own
 clock. Through the FDI the music is always whole. In Settings, under Output, the same way: one
 sentence ("Quality: Normal plays up to 15 kHz, for a slower machine."), then Normal and High.
@@ -993,15 +993,15 @@ slots of 32 a second:
 |---|---|---|
 | Falcon-4 (stock, 68030 at 16 MHz) | 909 | 303 % of the 68030 |
 | Falcon in Hatari (32 MHz, its most) | 1,833 | 150 % |
-| Erez's DFB1 (50 MHz), scaled from 32 | about 2,860 | about 96 % |
+| the owner's DFB1 (50 MHz), scaled from 32 | about 2,860 | about 96 % |
 
 The rest of a decoder (Huffman, dequantising, the transform, the DCT) about doubles it. So no
 68030 plays MP3 at High, nor at Normal's 15 kHz (two thirds of the rate). Half the rate (16
 subbands, about 11 kHz) halves the window: about 50 % of a DFB1 for it, 150 % of a stock
-Falcon. Mono halves it again. Put to Erez as a decision (the capability is his): every
+Falcon. Mono halves it again. Put to the owner as a decision (the capability is the owner's): every
 Falcon has the DSP, which EPlay holds only while it plays.
 
-**Dropped (Erez, 3 Nov 2026).** Settings' Output is Auto, FDI or DSP; an eplay.inf that says
+**Dropped (3 Nov 2026).** Settings' Output is Auto, FDI or DSP; an eplay.inf that says
 OUTPUT=68030 reads as Auto, and the next save writes what is chosen. Without the DSP free an MP3
 says so, as before; WAV and AIFF play on the sound DMA as ever.
 
@@ -1024,14 +1024,14 @@ read the ring in a straight line:
   timer on the frame's clock).
 - **TSR** (the SSI's time slot register) skips a slot by leaving the line undriven, as now.
 
-So it is the matrix's or the FDI's to settle. The test for Erez: a 44.1 kHz WAV through the FDI
+So it is the matrix's or the FDI's to settle. The test asked for: a 44.1 kHz WAV through the FDI
 plays on the sound DMA (DMA to EXTOUT on the FDI's clock), not on the DSP. If channel 3 is
 quiet then, the DMA drives all eight slots, and the DSP's sound can go the same way: the DSP's
 SSI recorded by the DMA into a ring in ST RAM and played from it by the DMA (no DSP time, a
 little more delay at Play and Pause). If it is noisy with the DMA too, it is the FDI's
 set-up (its channels, from its boot program) or the matrix's tracks (`Settracks`).
 
-**Erez's answer (3 Nov 2026, 0.19):** with a WAV or an AIFF (the sound DMA, one stereo track,
+**The answer (3 Nov 2026, 0.19):** with a WAV or an AIFF (the sound DMA, one stereo track,
 `Settracks(0, 0)`), all eight of the Analog 8's channels are active. So the DMA drives every slot,
 but it isn't yet known with what: the pair repeated in each of the four slot pairs, or one channel
 in all of them. `lrtest.wav` (44.1 kHz, 16-bit stereo, made with Python's `wave`) tells them apart:
@@ -1041,9 +1041,9 @@ then both. Whatever it shows, the DMA can choose what each slot carries: with fo
 tick writes only the first pair (the ring four times as large in ST RAM: 1.6 MB for two seconds at
 49,170 Hz, or 0.8 MB for one). The DSP's sound can go the same way (above), which would end the
 noise on channel 3 with Output DSP as well. Whether channels 3 to 8 carry the music or stay silent
-is Erez's call.
+is the owner's call.
 
-**lrtest.wav's answer (Erez, 3 Nov 2026):** channel 1 has the left, channel 2 the right, and
+**lrtest.wav's answer (3 Nov 2026):** channel 1 has the left, channel 2 the right, and
 channels 3 to 8 all have the left again. A stereo player's channels past 2 are silent, so the
 sound DMA now plays four tracks (`Settracks(3, 0)`, the DAC on the first, `Setmontracks(0)`):
 16 bytes a frame, the music in the first four, the other twelve zeros written once when the
@@ -1054,17 +1054,17 @@ left as they were). The ring is half a second long now, 393 KB at 49,170 Hz, the
 start to clear): the queue in TT RAM holds the file ahead, the ring only the tick's lead. The
 DSP's own sound (MP3, and a WAV it resamples) still leaves slots 2 to 7 undriven.
 
-**Parked (Erez, 5 Nov 2026: "if it is too much, let's not focus on Analog 8 issues").** With
+**Parked (5 Nov 2026: "if it is too much, let's not focus on Analog 8 issues").** With
 Output DSP, the Analog 8's channel 3 is still noise (0.25). The way out found: the DSP's SSI to the
 DAC and to the DMA's record channel, the tick copying each recorded frame into the four-track play
 ring, the DMA playing that to the port, the music in the first track and zeros in the other three
 (some 200 KB/s copied by the 68030, the port about 80 ms behind the DAC). A WAV or AIFF resampled
 on the DSP can't go that way: the play DMA feeds the DSP's receive (XSTREAM). It changes how
-every MP3 plays and only Erez's Falcon can judge it, so it waits until it is asked for again.
+every MP3 plays and only the reference Falcon can judge it, so it waits until it is asked for again.
 
-### A 24-bit AIFF on Erez's Falcon (3 Nov 2026), and 0.18
+### A 24-bit AIFF on the reference Falcon (3 Nov 2026), and 0.18
 
-Erez's 24-bit stereo AIFF at 44.1 kHz crackled through the FDI and with Output DSP alike (both
+The owner's 24-bit stereo AIFF at 44.1 kHz crackled through the FDI and with Output DSP alike (both
 play it on the sound DMA: stereo at 44.1 kHz is past what the DSP resamples): 330 underruns in 6 s,
 the first at 0.86 s, the ring's lead down to nothing, the tick's longest gap 4.2 ms. The tick made
 each sample through `sample()`, a call and a switch each, where 16 bits have loops of their own.
@@ -1083,15 +1083,15 @@ settings in eplay.inf.
 
 **Done** (0.4 to 0.17; 0.11 withdrawn, 0.12 its rollback):
 - The FDI's way, as Cubase's: the FDI put at the file's rate, each clock measured (0.4 to 0.8;
-  timed by Timer A since 0.12). Clean on Erez's Falcon with the DFB1X off (0.12).
+  timed by Timer A since 0.12). Clean on the reference Falcon with the DFB1X off (0.12).
 - The DSP's way: the faster decoder, resampling on the DSP, WAV and AIFF through it (0.9); the
   DAC out on the FDI's clock (0.10); 2 % more room (0.15).
 - The log of a stream's troubles (0.10), the free ST RAM kept whole (0.13).
 - Settings: Output (0.14), Quality (0.17); file names in lowercase (0.16).
 
 **Left:**
-- The 68030's decoder: no 68030 keeps up at High or Normal (above). Dropped (Erez, 3 Nov).
-- The Analog 8's channel 3 (above): Erez's test with a 44.1 kHz WAV.
+- The 68030's decoder: no 68030 keeps up at High or Normal (above). Dropped (3 Nov 2026).
+- The Analog 8's channel 3 (above): a test with a 44.1 kHz WAV, on the owner's Falcon.
 - Output DSP's crackle in the right channel (0.15's log): whether 0.14 had it, and whether it
   comes at the same places each time.
 
@@ -1100,9 +1100,9 @@ top row (play/pause, stop, the position bar, clicked or dragged to seek), the vo
 window, the info line as the status, Play/Pause (Space) and Stop in a Play menu, and the About
 box's line 2. The playlist and Next/Previous come with phase 4.
 
-## Phase 3: the player window (Erez, 3 Nov 2026)
+## Phase 3: the player window (3 Nov 2026)
 
-Erez started phase 3 ("a very nice and beautiful player UI similar to modern players"), chose
+Phase 3 started ("a very nice and beautiful player UI similar to modern players"), chose
 design D of four (the canvas "EPlay player designs": A Now Playing, B Hi-fi deck, C Studio
 meters, D Compact bar and list), with album art, and with B's small kbps and kHz labels.
 
@@ -1175,10 +1175,10 @@ and up to 70 on Hatari's 32 MHz Falcon: over the 40 ms GEM may be kept waiting. 
 unpacks the art only where a 50 ms measure at the start finds it three or four times a stock
 Falcon (5,800 turns of its loop; a stock Falcon 1,342, Hatari's 32 MHz one 3,312, a DFB1 about
 5,200): a 68060's Falcon. Elsewhere EPlay's picture stays, and the log says so. The DSP's way, for
-every Falcon, is put to Erez: the art unpacked on the DSP (common's `dspjpeg`) before an MP3's
+every Falcon, is put to the owner: the art unpacked on the DSP (common's `dspjpeg`) before an MP3's
 own program goes in, or while a WAV or AIFF plays on the DMA.
 
-**The album art on the DSP, and its cache (Erez, 3 Nov 2026):** "decode on the DSP. Store a cache
+**The album art on the DSP, and its cache (3 Nov 2026):** "decode on the DSP. Store a cache
 version on file in EPlay cache folder." So an MP3's art is unpacked on the DSP before its own
 program goes in (its music starts that much later, the first time); a WAV's or AIFF's while it
 plays on the DMA. The art made is kept in `cache\` next to the program, as the guidelines' 6.5
@@ -1193,11 +1193,11 @@ the hub's polls every 8 MCUs and between the set-up's steps come every 15 to 25 
 Falcon-4 a 500 x 500 cover of 48 KB: read by 95 ms, unpacked in 0.9 s, its turns 35 ms at most,
 shown after 2.0 s; from the cache the next time at once.
 
-### The window narrower, the volume, the list, the small player (Erez, 3 Nov 2026)
+### The window narrower, the volume, the list, the small player (3 Nov 2026)
 
-After 0.19 Erez found the window too wide (76 columns, 608 of a VGA screen's 640 pixels) and asked
-for it thinner, for files added in bulk (playlists later), the small player, and the volume
-working. Of two drawings on a 640 x 480 screen (48 columns in two rows; 56 in one) he chose **56
+After 0.19 the window was found too wide (76 columns, 608 of a VGA screen's 640 pixels) and was asked
+for thinner, for files added in bulk (playlists later), the small player, and the volume
+working. Of two drawings on a 640 x 480 screen (48 columns in two rows; 56 in one) the choice was **56
 columns, one row** (448 pixels):
 - the album art 56 x 56; under the title and artist the KBPS and KHZ labels;
 - in the middle Previous, Play/Pause and Next, the position bar under them with the times beside it;
@@ -1243,7 +1243,7 @@ time with any other.
   (the first plays at once), a drop on the window (added; played if nothing plays), and File >
   Open... (^O, the family's Open): the file chosen, or with none chosen every MP3, WAV and AIFF in
   the folder, in name order. A folder given or dropped adds its files the same way. Several
-  files picked at once in the file selector wait for Erez's answer on which selector he uses
+  files picked at once in the file selector wait for the answer on which selector is used
   (TOS's can't; Selectric's protocol can).
 - At a file's end the next plays. A double click or Return plays a row; Up and Down select;
   Delete removes (the one playing stopped first); a right click or Insert opens the row's menu
@@ -1263,16 +1263,16 @@ the position, the output and the volume; no list, no info line, no sizer. Its to
 stays where the window's was. EPLAY.INF keeps it (`MINI=1`), so EPlay starts as it was left. The
 list goes on underneath (the next file plays at a file's end). The art is still 56 x 56, the
 bar's: 40 x 40 needs the cover made again at that side (the cache's 64 x 64 records allow it),
-and comes if Erez wants the mini player smaller. On Falcon-4: Pause and Play 25 ms, the switch
+and comes if the mini player is wanted smaller. On Falcon-4: Pause and Play 25 ms, the switch
 to the whole window 140, back 80 (within 300).
 
 The order: the 56 columns and the volume (0.20); the list with the files added (0.21); the small
 player (0.22).
 
-### Add files: several files at once (Erez, 4 Nov 2026)
+### Add files: several files at once (4 Nov 2026)
 
 TOS 4.04's file selector gives one file. Of three ways (EPlay's own dialog, Selectric's
-protocol, both) Erez chose EPlay's own, and set how it looks over four drawings: a dialog box with
+protocol, both) EPlay's own was chosen, and how it looks was set over four drawings: a dialog box with
 the platform's look (3D where the AES has it), Selectric's width (about 40 columns), the drive in
 one pop-up button, and a selection with no check boxes.
 - **The tree** is the AES's own objects, built at run time (`ui/addfiles.c`, since 7 Nov 2026
@@ -1296,9 +1296,9 @@ one pop-up button, and a selection with no check boxes.
 - `src/dirlist.c` holds the folder's entries, the sorts, the types, the mask and the selection,
   tested on the host (`tests/dirlist`). Both are common's since 7 Nov 2026 (AERA-Atari 74daba8, the
   family's file dialog: the hub, 5 Nov), the types given by the app as a table; the move changed
-  no pixel (common's `tests/filepick` `--old`, on Erez's TOS 1.04 and 4.04 and under NVDI).
+  no pixel (common's `tests/filepick` `--old`, on the owner's TOS 1.04 and 4.04 and under NVDI).
 
-### Drawing whole (Erez, 4 Nov 2026; the guidelines' Speed, 4fd0a96)
+### Drawing whole (4 Nov 2026; the guidelines' Speed, 4fd0a96)
 
 "Drawing on screen should be the fastest possible": a picture is drawn from start to end with no
 event call between, and "a rule never costs speed". Four were drawn a piece a turn: another file's
@@ -1323,7 +1323,7 @@ played 75, Next 75, Return 85, Delete 70, Play after a pause 55; Add files opene
 150, a folder 70), reported to the hub as the rule asks, not sliced. The uncached cover's start
 turns: 20 ms.
 
-### The 24-bit tick on a stock Falcon (Erez, 4 Nov 2026: the DFB1X off)
+### The 24-bit tick on a stock Falcon (4 Nov 2026: the DFB1X off)
 
 "This app should appeal to Falcon users": a 24-bit AIFF at 44.1 kHz on a stock Falcon (no TT RAM:
 code, queue and ring in ST RAM) took 57 % of its 68030 in the tick, and the disk 246 KB/s of the
@@ -1333,7 +1333,7 @@ the tick on Hatari's Falcon-4 29 % before, 18 % after. `tests/hatari/pcm_test.py
 loops (16-bit WAV, 24-bit AIFF and WAV) against the C, bit for bit, on Hatari's 68030: the play
 rig can't hear the DMA's cases on Hatari 2.4.
 
-### WAV and AIFF at any rate on the DSP: XSTREAM (Erez, 4 Nov 2026)
+### WAV and AIFF at any rate on the DSP: XSTREAM (4 Nov 2026)
 
 "Resample on the DSP" for a WAV or AIFF the Falcon's clock hasn't the rate of (0.22 played CD's
 stereo on the DMA at 49,170 Hz: 11 % fast, two semitones high). Through the host port, a word a
@@ -1371,21 +1371,21 @@ the DMA's, not the MP3's 500: 24 %.) `pcm_test` holds the spread's asm against t
 running out among its 48 runs. A first build stalled after its first packet: the ring's count,
 `and` on B1 alone, kept B2's sign when the interrupt's place had wrapped past getrx's.
 
-### The FDI: bit for bit, never Normal (Erez, 5 Nov 2026)
+### The FDI: bit for bit, never Normal (5 Nov 2026)
 
 "On FDI it can not drop to normal and stay true to exact bits." Quality by itself stays off on the
 FDI's clock, and the FDI is set for each file as it opens, to the file's rate: a 48 kHz file on the
 FDI's own 48 kHz, a 44.1 kHz file on 44.1 kHz, back and forth from one file to the next (`snd_fdi_set`
-for every open; the rate kept only while it is the one measured). On Erez's FDI 44.1 kHz comes only
+for every open; the rate kept only while it is the one measured). On the owner's FDI 44.1 kHz comes only
 from its S/PDIF input (its lines at 0; Cubase Audio 2.06 the same, read 5 Nov 2026); while that input
 has no 44.1 kHz clock a 44.1 kHz file is resampled to 48 kHz, and the DSP's time is what decides
 whether it keeps up (the faster decoder, next).
 
-### A stock Falcon's DSP at 49,170 Hz (Erez, 7 Nov 2026)
+### A stock Falcon's DSP at 49,170 Hz (7 Nov 2026)
 
 "Many users will not have an FDI, so I need to have the stock falcon with DSP able to play mp3";
-"optimize as much as you can to make it happen". Erez's DFB1 speeds up the 68030 only: its DSP is a
-stock Falcon's, so his DSP-mode logs are the case. On it a 320 kbit/s file at 49,170 Hz left the
+"optimize as much as you can to make it happen". The owner's DFB1 speeds up the 68030 only: its DSP is a
+stock Falcon's, so the owner's DSP-mode logs are the case. On it a 320 kbit/s file at 49,170 Hz left the
 DSP some 940 waits a frame (Hatari's DSP: about 6,900 on the same kind of file), and a few granules
 came late, each a click, then Normal by itself.
 
@@ -1442,42 +1442,42 @@ mix320.mp3 resampled to 49,170 Hz, 150 frames (300 granules), granules late:
 | 110, 500 | 147 | 85 | 83 |
 
 (At SIMLAT 1500, some 47 us a word, a packet takes longer than its frame and nothing keeps up.)
-Better, not yet enough where the DSP is 5 % or more slower than Hatari's, as Erez's seems to be:
+Better, not yet enough where the DSP is 5 % or more slower than Hatari's, as the owner's seems to be:
 the decoder itself has to get faster still, or the file plays at Normal.
 
-**0.29 on Erez's Falcon (7 Nov 2026), Output DSP:** two files of about 264 kbit/s (MPEG-1, 44.1 kHz,
+**0.29 on the reference Falcon (7 Nov 2026), Output DSP:** two files of about 264 kbit/s (MPEG-1, 44.1 kHz,
 VBR), with seeks: 0 underruns, 0 late granules, 0 broken packets, the DSP's waits 844 a frame on
-average, the disk 35 s ahead at most and 9 s at least. He heard crackles. They fit the output, not
+average, the disk 35 s ahead at most and 9 s at least. The owner heard crackles. They fit the output, not
 the decoder: in Output DSP the DSP's output goes to the DAC and the DSP port together on the
-Falcon's own clock (49,170 Hz), and his FDI on the port plays at its own (48,011 Hz measured): 2.4 %
-more samples than it plays, a slip a click. What goes to the FDI in Output DSP is put to Erez (the
+Falcon's own clock (49,170 Hz), and the FDI on the port plays at its own (48,011 Hz measured): 2.4 %
+more samples than it plays, a slip a click. What goes to the FDI in Output DSP is put to the owner (the
 DAC alone, or the FDI's clock as Auto). Output DSP never touches the FDI's clock, so that log
 holds no "the FDI to 44100 Hz" line; the FDI at 44.1 kHz needs a log with Output FDI.
 
-Erez's next run (7 Nov): no crackles; Output DSP plays on the Falcon's own output and on the FDI,
+The owner's next run (7 Nov): no crackles; Output DSP plays on the Falcon's own output and on the FDI,
 FDI on the FDI alone; and the FDI "does not adhere to the file's sample rate and stays constant at
 48 kHz. This should be handled." Every log since 0.4 read 48 kHz at Cubase's 2 and 3 (its 8-track
 values for 44.1 and 48), and 44.1 kHz only at 0, from what came into the FDI's input. Cubase
-Audio's FDI routine (\$2A08 in Erez's copy) sets only these lines (its control word sent as
+Audio's FDI routine (\$2A08 in the owner's copy) sets only these lines (its control word sent as
 samples, \$5190, is for another interface: with the FDI's driver answering it is jumped over), with
 5 and 7 for the same rates in its 16-track modes. **0.30** tries 2, 5, 3 and 7 for 44.1 (3, 7, 2, 5
 for 48), each measured, the first at rate kept, then 0, and logs every reading: the log will say
 which line, if any, moves this FDI's own clock.
 
-0.30 on Erez's Falcon, Output FDI, a 44.1 kHz MP3: "the FDI to 44100 Hz: 2: 48017 Hz (48036 at 200
+0.30 on the reference Falcon, Output FDI, a 44.1 kHz MP3: "the FDI to 44100 Hz: 2: 48017 Hz (48036 at 200
 ms, 47997 at 500); 5: 39284 Hz (39272, 39283); 3: 48036 Hz; 7: 48011 Hz; 0: 39292 Hz (by the 200 Hz
 clock 39280)". So the lines choose the clock's source and nothing else: with their middle bit set
 (2, 3, 7) the FDI's own, 48 kHz; with it clear (0, 5) what comes into its S/PDIF input, here
-about 39.3 kHz, a receiver with nothing to lock to (0.6 and 0.7 read 44.1 kHz at 0 with Erez's
+about 39.3 kHz, a receiver with nothing to lock to (0.6 and 0.7 read 44.1 kHz at 0 with the owner's
 sound card feeding it; 0.25 and 0.26 read 38.6). EPlay played on at 48 kHz, resampled, with 0
-underruns. Erez: the input is his sound card's optical output at 44.1 kHz; he unplugged it and
-plugged it in again, "and now it is in 44.1". So the FDI's receiver had lost its lock on a signal
+underruns. The input is a sound card's optical output at 44.1 kHz; unplugged and
+plugged in again, "and now it is in 44.1". So the FDI's receiver had lost its lock on a signal
 there (the 38.6 to 39.3 kHz since 0.25: its oscillator free), and EPlay's 0 plays the file at
-44.1 kHz bit for bit once it has it. Put to Erez: a word in the window when the input has no
+44.1 kHz bit for bit once it has it. Put to the owner: a word in the window when the input has no
 signal to follow (the FDI's own 48 kHz then, resampled).
 
 **What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
-waiting for Erez's DSP-mode log of 0.28 to say how much more is needed before taking them on:
+waiting for the owner's DSP-mode log of 0.28 to say how much more is needed before taking them on:
 - *The synthesis window* (`swpair`, 12.4 %) is at its floor: one MAC an instruction, both
   accumulators.
 - *Dequantising* (15.2 % with its paths): 87 % of the lines are not zero, and a cached value takes
@@ -1508,9 +1508,9 @@ it doesn't. The Add files dialog has its own timer and idle, as before.
 (Fed by the DMA, a dry queue isn't an underrun: the ring has frames without samples, and the DSP
 waits for them; the time is lost instead. `play_test`'s `settings` case checks the length.)
 
-## Phase 4: playlists and folders (Erez, 4 Nov 2026)
+## Phase 4: playlists and folders (4 Nov 2026)
 
-Erez's choices: Repeat Off, All and One, one item in the Play menu that goes round; Shuffle a
+Chosen: Repeat Off, All and One, one item in the Play menu that goes round; Shuffle a
 random order with the list left as it is, each file once a round; playlists in through Add files
 (and a drop), out through **File > Save playlist…** (Control+S) and the file selector; a folder
 added with its subfolders.
@@ -1543,21 +1543,20 @@ the queue's ring and the list both taken).
 1. **Is MP3 possible on a stock Falcon's DSP?** Yes, with room (above): the two heaviest parts
    measured on Hatari's DSP core, the rest estimated. The C model of the whole decoder is done
    (above), MPEG-2 and 2.5 with it, and the whole DSP decoder, `dsp/mp3.a56`, bit for bit and
-   counted (above), with the DSP's last gains: 320 kbit/s at 86 % on a stock Falcon. To decide
-   with Erez: the 68030 taking the Huffman part and dequantising where it is fast (the DFB1), a
+   counted (above), with the DSP's last gains: 320 kbit/s at 86 % on a stock Falcon. To decide: the 68030 taking the Huffman part and dequantising where it is fast (the DFB1), a
    lighter decode of the top subbands when a stock Falcon falls behind, or both.
 2. **The sound core on the Falcon**: the ST RAM ring, the interrupts, the matrix and the external
    clock found and timed; WAV and AIFF playing. Done in phase 1 (above), with MP3 through the DSP
-   and a minimal window, for Erez's Falcon.
+   and a minimal window, for the reference Falcon.
 3. **The GEM program** around it: window, playlist, small player, files from the desktop.
 4. **MP3 on the DSP**, whole, tested as above.
 5. **TT and STE**, 8-bit WAV and AIFF.
-6. 1.0: phase 6 closed as EPlay 1.0 (Erez, 8 Nov 2026).
+6. 1.0: phase 6 closed as EPlay 1.0 (8 Nov 2026).
 7. **Phase 7, streaming** (below).
 8. **Phase 8, the player's features** (below).
-9. **Phase 9, VGM and VGZ** (below), after 1.14 (Erez, 9 Nov 2026).
+9. **Phase 9, VGM and VGZ** (below), after 1.14 (9 Nov 2026).
 
-## Phase 6 closed: EPlay 1.0 (Erez, 8 Nov 2026)
+## Phase 6 closed: EPlay 1.0 (8 Nov 2026)
 
 Phase 6 (0.33 to 1.0) set out to play WAV and AIFF on the TT and the STE. Done: the TT in 0.33
 (interpolated to 50,066 Hz and dithered to 8 bits), EPLAYST.PRG for the STE in 0.35 (the nearest
@@ -1567,7 +1566,7 @@ Hatari's STE, mono; paused, within them). The next step is known: the tick less 
 STE (its fixed cost is some 13 % of the 68000 at 250 a second), then the once-a-second times
 drawn more cheaply. It goes on as speed work beside phase 7.
 
-## Phase 7: streaming (Erez, 8 Nov 2026)
+## Phase 7: streaming (8 Nov 2026)
 
 Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Ataris with Ethernet:
 - the stream as a source of the queue in place of the file (Icecast and Shoutcast: HTTP with a
@@ -1575,7 +1574,7 @@ Web radio and audio streams from a URL, on the Falcon (MP3 on its DSP), on Atari
   reconnecting when the connection drops; no position bar or length for a stream;
 - the station's titles from the stream's ICY metadata in the bar;
 - an Open URL entry, and station lists in `.m3u` and `.pls`;
-- **how it connects, as the other AERA programs do** (Erez): a direct connection, or through the
+- **how it connects, as the other AERA programs do** (decided): a direct connection, or through the
   AERA gateway, chosen in the menu. Through the gateway, HTTPS and the stations the Falcon can't
   take (AAC, HLS) can be given to it as plain MP3;
 - the STE is left out (no MP3 there, and its 68000 already busy with the sound).
@@ -1613,11 +1612,11 @@ where it was. The station's titles go to the log
   376 KB (+20 KB).
 - **7c, through the Gateway:** a service on the Gateway that fetches the station (HTTPS, AAC,
   HLS) and gives EPlay plain MP3, written here and handed to the Gateway's session (7.3); its
-  port and any package on it (ffmpeg, to convert AAC) are Erez's to decide.
+  port and any package on it (ffmpeg, to convert AAC) are the owner's to decide.
 - **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
-  as Erez decides them.
+  as decided.
 - **7e, https on a Direct connection (8 Nov 2026):** common's `atari/tls_ovl.c` and `src/ovl.c`
-  in place of `tls_none` (whose words, "this is the ST edition", reached Erez's log from
+  in place of `tls_none` (whose words, "this is the ST edition", reached the owner's log from
   EPLAY.PRG with an https station). `TLS.OVL` and `CACERT.PEM` beside the program (the release
   carries both); `ROOTS.DAT`, `SEED.DAT` and `SIGS.DAT` beside it too. The handshake is the
   68030's: EPlay never hands TLS.OVL the DSP (`tls_ovl_dsp`), which is the music's. Without
@@ -1626,7 +1625,7 @@ where it was. The station's titles go to the log
   `radio.test`: TLS 1.2, ECDHE-RSA with ChaCha20, the tone with no gap.
 
 **7d, the window, as built (8 Nov 2026):** File > Open URL... on **⇧^O**, not ^U: ^U is the
-family's Close (3.2: a key never gets another meaning; related commands take ⇧^), put to Erez with
+family's Close (3.2: a key never gets another meaning; related commands take ⇧^), put to the owner with
 the release. `ui/urldlg.c`: the address in common's long field (255 characters, 50 shown: 5.4),
 "http://" put in front of an address without it; the last stations as lines under it, a click opening one
 at once; the dialog as tall as the stations it has. Each station opened goes to the top of the ten
@@ -1645,13 +1644,13 @@ the speed rig's "Settings closed" row press Undo. stream_test's `url` case: ⇧^
 the address typed (xdotool, as common's speed rig), Return: it plays (no gap), the row and bar show
 the station, EPLAY.INF keeps it as URL1.
 
-**The Gateway's radio service (Erez, 8 Nov 2026):** port **8580** (the row 8180, 8280, 8380, 8480
+**The Gateway's radio service (8 Nov 2026):** port **8580** (the row 8180, 8280, 8380, 8480
 goes on); **ffmpeg on the Gateway** now, so that AAC, Ogg and HLS stations play through it
 (converted to MP3 there; HTTPS MP3 passed on as it is); **AAC on the Falcon's DSP later**, in
 phase 8 (plain AAC likely fits beside the MP3 decoder's size; HE-AAC, most AAC radio, to be
 measured first; Ogg unlikely to fit the DSP's memory).
 
-**Erez's decisions (8 Nov 2026):**
+**Decided (8 Nov 2026):**
 - **Opening:** File > Open URL... (Control+U): one field for the address, and the last ten
   stations to choose from, as Add files' Folders has them; the station goes into the list and
   plays. Station URLs in `.m3u` and `.pls` playlists play too.
@@ -1664,12 +1663,12 @@ measured first; Ogg unlikely to fit the DSP's memory).
   station's name on the second; "Live" and the time since it started in place of the length; the
   position bar greyed.
 
-**The buttons (Erez, 8 Nov 2026):** from five drawn at the bar's pixels (A as it was, B bare
+**The buttons (8 Nov 2026):** from five drawn at the bar's pixels (A as it was, B bare
 symbols, C keys, D a strip, E bare in the accent), **E**: Play/Pause without its disc, the triangle
 or two bars 14 pixels high at VGA in the accent pen (cyan; black on mono), white while pressed;
 Previous and Next as they were; the click areas unchanged.
 
-**A station's picture (Erez, 8 Nov 2026: "if it is direct connection that the Atari does all,
+**A station's picture (8 Nov 2026: "if it is direct connection that the Atari does all,
 else the gateway"):** some stations name a picture with each title (ICY `StreamUrl`: Radio
 Paradise each song's cover, SomaFM its logo; laut.fm, KEXP, LBC and most send none). `stream.c`
 keeps it (an http(s) address only); `ui/sart.c` fetches it from the main loop, never inside
@@ -1683,7 +1682,7 @@ art.c's cache under the address's hash, so a cover seen again comes from the dis
 `cover` (a 500 x 500 JPEG with a photo's grain, 89 KB: fetched 17 s through fakesting's serial
 line, which the station's 16 KB/s shares; 18.2 s unpacked on Falcon-4, the longest between polls
 80 ms; a real Radio Paradise cover of 24 KB 11.3 s, 65 ms) and `gwcover` (376 bytes in 1.1 s,
-unpacked in 0.8 s, shown 3.2 s after it was named). **Logos (Erez, 8 Nov 2026: "If there is a gateway around, let it bring icons but silently without
+unpacked in 0.8 s, shown 3.2 s after it was named). **Logos (8 Nov 2026: "If there is a gateway around, let it bring icons but silently without
 the user configuring anything"):** with a Gateway's address in Settings, whatever the connection,
 8 s into a station that has named no picture EPlay asks radiogate 1.2's `GET
 /logo?station=&name=`; nothing is said, a station it knows none for keeps the disc, the logo is
@@ -1711,7 +1710,7 @@ family does.
   (TLS.OVL). [1.3](https://github.com/whomper/EPlay/releases/tag/v1.3): each connection's steps in
   the logs (EPLAYNET.LOG); Open URL keeps what was typed.
   [1.4](https://github.com/whomper/EPlay/releases/tag/v1.4): the handshake on the DSP while it is
-  free, so laut.fm and servers like it (a few seconds to ask) play; confirmed on Erez's Falcon.
+  free, so laut.fm and servers like it (a few seconds to ask) play; confirmed on the reference Falcon.
 - [1.5](https://github.com/whomper/EPlay/releases/tag/v1.5): Left and Right in the address field
   (common's field.c). [1.6](https://github.com/whomper/EPlay/releases/tag/v1.6): chunked answers
   and long header lines (a survey of 21 real stations: 15 play, BBC's is HLS only).
@@ -1731,20 +1730,20 @@ family does.
 family question for the hub; AAC on the Falcon's DSP is phase 8's (item 5); an STE plays no
 stations (no MP3 there), as planned.
 
-**The next phase, as a proposal:** phase 8 as Erez listed it, in this order: gapless playback,
+**The next phase, as a proposal:** phase 8 as listed, in this order: gapless playback,
 ReplayGain, search and sort in the list, lyrics, then the formats (AAC on the DSP first, for web
 radio on a Direct connection), and the family's links. Beside it, the STE's speed work (the window
 while a CD-rate file plays) goes on.
 
-## Phase 8: the player's features (Erez, 8 Nov 2026)
+## Phase 8: the player's features (8 Nov 2026)
 
-From the list put to Erez:
+From the list put to the owner:
 1. gapless playback (the encoder's delay and padding from LAME's header);
 2. ReplayGain (track and album gain from the tags);
 3. search and sort in the list (by text; by artist, album, track);
 4. lyrics from the tags (USLT, and timed lyrics);
 5. more formats: tracker modules (MOD) on the DSP, FLAC (to be measured on the 68030), OGG
-   and AAC (DSP projects; AAC first, for web radio on a Direct connection: Erez, 8 Nov 2026);
+   and AAC (DSP projects; AAC first, for web radio on a Direct connection: 8 Nov 2026);
 6. working with the family: a "now playing" message to the other AERA programs, remote control
    from a phone through the gateway, scrobbling (Last.fm) through the gateway.
 
@@ -1787,7 +1786,7 @@ of lead and is partly played. play_test `gaplessmp3` (two LAME halves of one ton
 49,170 Hz on Falcon-4): 6.005 s of sound, not a 5 ms block without it.
 
 
-## Phase 9: VGM and VGZ (Erez, 9 Nov 2026)
+## Phase 9: VGM and VGZ (9 Nov 2026)
 
 A VGM file is a game machine's sound chips' register writes, timed in samples of 44,100 Hz; a VGZ
 is one gzipped (common's `inflate.c`). What the chip is decides the way, as proposed and approved:
@@ -1797,9 +1796,9 @@ is one gzipped (common's `inflate.c`). What the chip is decides the way, as prop
    by its periods. Barely any CPU.
 2. **SN76489** (Master System, Game Gear, BBC Micro): on the Falcon's DSP, a small program.
 3. The bar shows the game and the track from GD3; a file with a loop plays it (once, then a fade,
-   as players do; to be put to Erez with the step).
+   as players do; to be put to the owner with the step).
 4. Then a measurement: **YM2612** (Mega Drive) on the DSP. Six FM voices at 44.1 kHz is near the
-   DSP's whole time; the rate it reaches is reported, and Erez decides.
+   DSP's whole time; the rate it reaches is reported, for the owner to decide.
 
 OPL, YM2151 and the arcade chips are not part of it.
 
@@ -1829,22 +1828,22 @@ second on a stock Falcon's DSP (the chip's own rate 53,267). Parallel moves migh
 chip's whole work (feedback, detune, key scaling, the LFO, the envelope's states, the DAC channel
 of its drums) adds to it. So: 24,585 Hz likely, 32,780 Hz perhaps, 49,170 Hz no.
 
-**For discussion with Erez (10 Nov 2026: "let's go back to this soon").** Which chips next, by how
+**For discussion (10 Nov 2026: "let's go back to this soon").** Which chips next, by how
 much of the VGM archive they open: the YM2612 (the Mega Drive, the largest share, at a lower rate:
 above), the YM2151 (arcade, X68000: heavier still), the OPN family (PC-88/98), OPL2/OPL3 (DOS:
-likely feasible), the NES and the Game Boy (cheap, as the SN76489 was). Nothing starts before he
-chooses.
+likely feasible), the NES and the Game Boy (cheap, as the SN76489 was). Nothing starts before it is
+chosen.
 
-## Phase 10: the YM2612, then OPL2 and OPL3 (Erez, 10 Nov 2026)
+## Phase 10: the YM2612, then OPL2 and OPL3 (10 Nov 2026)
 
-Erez chose: "Add OPL2 support after the YM2612 and then OPL3", with MP3 on the 68060 in the
+Chosen: "Add OPL2 support after the YM2612 and then OPL3", with MP3 on the 68060 in the
 YM2612's release. The YM2612 plays on the DSP at the Falcon's 24,585 Hz, the same way the MP3
 decoder was made: a model first, then the program held to it bit for bit.
 
 1. **The chip, accurately (done).** `src/opn.c`, a C model of the YM2612: its log-sine and
    exponent tables, the envelope's rates, detune, key scaling, the eight algorithms, the LFO,
    channel 3's mode, the DAC. `tests/ym2612` holds it against Nuked-OPN2 (LGPL-2.1+, a test's
-   reference only: fetched by `fetch-ref.sh`, never committed or shipped; Erez allowed it, 10 Nov
+   reference only: fetched by `fetch-ref.sh`, never committed or shipped; allowed, 10 Nov
    2026) on nine test files: pitch exact, level within 0.1 dB.
 2. **The DSP's arithmetic (done).** The 68030's half, `src/opnd.c`, turns the registers into
    what the DSP works with. It sends what changed as the DSP's commands (`opnd_send`): each
@@ -1872,7 +1871,7 @@ decoder was made: a model first, then the program held to it bit for bit.
    1,133 cycles a sample, 87% of a stock Falcon's DSP at 24,585 Hz (1,301). The Hatari rig's
    cases vgmopn (a YM2612 sine) and vgmmd (a Mega Drive file's SN76489) pass on ERZ.
 6. **MP3 on the 68060** (below), then the release.
-7. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way. **Order (Erez, 12 Nov
+7. **Then OPL2 (the YM3812), then OPL3 (the YMF262)**, the same way. **Order (12 Nov
    2026):** step 7 now, on the Falcon's DSP; the YM2612 and SN76489 on a 68060 with no DSP (6c)
    later, with the XBIOS output and the FireBee edition, once FBPROBE 2's answer is in.
 
@@ -1950,7 +1949,7 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
   1,626 (83 %), 18 to both outputs 1,698 (87 %), the rhythm mode with the second bank's nine in
   FM 1,751 (**89.7 %**, the worst), six pairs with six channels 1,602 to 1,626; the OPL2's worst
   1,106 down to 1,013 (78 % at 24,585 Hz).
-- **The rate, by the file (Erez, 13 and 14 Nov 2026):** 24,585 Hz where the file never keys its
+- **The rate, by the file (13 and 14 Nov 2026):** 24,585 Hz where the file never keys its
   second bank (nine channels), else 16,390 Hz ("16,390 Hz, go on with the 68030 side"). The
   Falcon's clock has no 14,049 Hz (its prescale 6 can't be set): below 16,390 come 12,292 and
   9,834. A stock Falcon looks through a MB of commands in 1.4 s, so only a file's first 64 KB are
@@ -1970,7 +1969,7 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
   whole frame (below) is the STE's alone, so the Falcon's tick code sits where 1.35's did.
   The start's paths are pinned after the ticks' too (`tools/pinobj.py`, the Falcon's and the TT's
   build: the list's tags and lengths, common's inflate, the VGM chips' DSP loaders), as the hub
-  asked. **What was left, accepted by Erez (14 Nov 2026, "Release EPlay"):** a few rows 10 to 30
+  asked. **What was left, accepted (14 Nov 2026, "Release EPlay"):** a few rows 10 to 30
   ms slower than 1.35's in both runs, from where the code sits against the 68030's 256-byte caches
   rather than from work (others came faster by as much): on Falcon-4:16 the mini player's start
   (535 to 565 ms), the VGZ's start (2,400 to 2,430), the About box with a VGM playing (200 to 220);
@@ -1981,7 +1980,7 @@ The YM2612's way: a model, the DSP's arithmetic, the program held to it bit for 
   1,534 words) and `vgmopl3late` (the key past the first 64 KB: 24,585 Hz, then 16,390 with 18)
   pass on Falcon-4 with TOS 4.04 and NVDI.
 
-### A rate lowered where EPlay can't keep up (Erez, 14 Nov 2026)
+### A rate lowered where EPlay can't keep up (14 Nov 2026)
 
 "EPlay should detect when it can not keep up and automatically reduce audio resolution to match.
 This should be only for a given track, once another track is played or an audio station EPlay
@@ -2020,10 +2019,10 @@ starts with the maximum designed for that type."
   STE (`DMA8LOW=0`): 50,066 to 25,033 to 12,517 Hz, the 1,000 and 1,500 Hz tones whole at each
   (99 and 98 % of their power at 25,033 Hz), a break of about 0.3 s at each change.
 
-### The 68030's tick with drums (1.19, 1.20: Erez's Falcon, 11 Nov 2026)
+### The 68030's tick with drums (1.19, 1.20: the reference Falcon, 11 Nov 2026)
 
 EPlay 1.18 played "Spinning Machine" (Streets of Rage 3, its drums 44 DAC samples a millisecond)
-at 40 % of its speed on Erez's Falcon, crackling, and crashed. What was found, on Hatari's
+at 40 % of its speed on the reference Falcon, crackling, and crashed. What was found, on Hatari's
 stock Falcon with the file:
 
 - **The crash (1.19):** the tick ran on the stack the interrupt came in on, the AES's in a
@@ -2042,12 +2041,12 @@ stock Falcon with the file:
   whole file's).
 - **What is left:** on a stock Falcon (16 MHz, code in ST RAM) this file's tick is still some
   1,070 us a millisecond: the music slows to two thirds and GEM's longest stretch is some 10 s
-  (the speed rig's `vgm` kind, a file given in `EPLAY_SPEED_VGM`). Erez's 50 MHz DFB1 with TT
+  (the speed rig's `vgm` kind, a file given in `EPLAY_SPEED_VGM`). The owner's 50 MHz DFB1 with TT
   RAM has three to four times the room. Drum-heavy Mega Drive music on a stock Falcon needs
-  another design: Erez's decision (to put to him).
+  another design: the owner's decision (to be put).
 - `EPLAY.LOG` gives each play's tick: how many came, were left out, not made up, past its
   period, its mean and longest time.
-- **The drums on the DSP (1.21; Erez, 11 Nov 2026: "Move the drums to the DSP").** The 68030
+- **The drums on the DSP (1.21; 11 Nov 2026: "Move the drums to the DSP").** The 68030
   sends the tick's DAC writes as events, each its place in the tick and its byte (`OPNC_DACE`,
   some 9 a millisecond in "Spinning Machine"); `opn.a56` reads them into a table, counts the
   tick's output samples (a 24-step division) and makes each from the last byte at or before its
@@ -2056,8 +2055,8 @@ stock Falcon with the file:
   file: 1,083 cycles a sample (1.20: 1,058), its mean 880 (856): some 90 % of a real DSP at
   the peak. The operators' steps in 32-bit multiplies (`stepk`, Q16; within 1e-5 of the
   64-bit form). The YM2612's tick 500 times a second, its fixed part halved.
-- **1.22 (Erez's 1.21 log, 11 Nov 2026; "Make the file reading faster for stock Falcons").**
-  Three of his plays had a tick of 1,001 ms: the 68030's second-long wait for the DSP to take a
+- **1.22 (the owner's 1.21 log, 11 Nov 2026; "Make the file reading faster for stock Falcons").**
+  Three of the plays had a tick of 1,001 ms: the 68030's second-long wait for the DSP to take a
   word, after which nothing more is sent. Not seen on Hatari; the likeliest cause, DACE's drum
   loop jumping out of a hardware DO loop and back to its last instruction, is gone (a compare
   loop, as 1.20's). `EPLAY.LOG` now says when the DSP stops taking words, with the last burst's
@@ -2069,7 +2068,7 @@ stock Falcon with the file:
   Pause, a seek) and for the list's tags. Stock Falcon (speed rig, `vgm`): a seek 14,250 to 270
   ms, Play after Pause 5,290 to 295 ms, the start's stretch 6,365 to 2,350 ms (the VGZ unpacked in
   one turn: left to do). The tick some 1,100 us of its 2 ms.
-- **1.23 (Erez, 11 Nov 2026: a noise as EPlay opened, no badge for a YM2612 file, a 7 MB VGZ
+- **1.23 (11 Nov 2026: a noise as EPlay opened, no badge for a YM2612 file, a 7 MB VGZ
   slow to open and opened twice, a seek into a 13-minute file that seemed to freeze; and the
   title's scroll).**
   - The noise: the external clock's measure at the start ran the DMA's sound on it with the
@@ -2093,7 +2092,7 @@ stock Falcon with the file:
     (`seek_run`): every place checked the same as before.
   - The title and the artist scroll a character every 250 ms when wider than their place, 2 s at
     each end (`bar_scroll_step`, `BP_TITLE`: the two lines alone).
-- **1.24 (Erez, 11 Nov 2026, with 1.22: a YM2612 file played nothing, then "can't play: the DSP
+- **1.24 (11 Nov 2026, with 1.22: a YM2612 file played nothing, then "can't play: the DSP
   didn't answer", then played; once it stopped while playing).** `dspopn.c`'s `put` raised HF0
   at a burst's first word, and the bootstrap's 512 words went through `put` from 1.19: the
   56001's boot ROM ends the load when the host sets HF0, so the DSP ran a part of `opn.a56`
@@ -2102,15 +2101,15 @@ stock Falcon with the file:
   memory, which hid it. The bootstrap now goes with HF0 down; `dspopn_close` puts HF0 down for
   the next program's bootstrap. Also: Find station's double click (its own test of
   `dlg_do`'s 0x8000 on a `short` threw every double away).
-- **1.25 (Erez, 11 Nov 2026: a 17 MB VGZ for the YM2149, sampled sound at 22,500 register
+- **1.25 (11 Nov 2026: a 17 MB VGZ for the YM2149, sampled sound at 22,500 register
   writes a second, played badly).** `ay_burst()` runs the YM2149's writes and the waits inline
   in the tick, as `drums()` does: on Hatari's 32 MHz Falcon the tick 724 → 252 µs of its
   1,000, none left out, the unpacking keeping ahead. Each write still goes at its tick, not at
-  its own moment (within 1 ms). **Decided (Erez, 12 Nov 2026): B, a second, faster timer,
+  its own moment (within 1 ms). **Decided (12 Nov 2026): B, a second, faster timer,
   only for the files that need it and not on slow machines.** A file whose YM2149 writes come
   closer than 1 ms apart (sampled sound) has them played each at its own moment by a second MFP
   timer, from a queue the 1 ms tick fills; other files stay on the tick as now. The ST edition
-  (`EPLAYST.PRG`, the 68000 at 8 MHz) keeps the tick alone (A). After phase 10's step 7. **Accepted figures (Erez, 12 Nov 2026, "Ok", through the hub).** The speed rig's vgm
+  (`EPLAYST.PRG`, the 68000 at 8 MHz) keeps the tick alone (A). After phase 10's step 7. **Accepted figures (12 Nov 2026, "Ok", through the hub).** The speed rig's vgm
   kind with a 20 s cut (1.5 MB) of that file, fresh `make prof`/`profst` builds each side
   (before 13fb729, after fd9de69); neither machine keeps up with such a file in either, every
   row over its time. The rows that grew: Falcon-4:16 started 2575 → 2705, Pause let go 135 →
@@ -2126,9 +2125,9 @@ stock Falcon with the file:
   kind). Left: the file's parsing (`vgm_run`, `commands`) and the tick's fixed part, from ST
   RAM through a 256-byte cache.
 
-## A FireBee edition (Erez, 10 Nov 2026)
+## A FireBee edition (10 Nov 2026)
 
-Erez asked for one, "just like the EWeb plan". The hub's order (AERA-Atari's standards/PARKED.md):
+Asked for: one "just like the EWeb plan". The hub's order (AERA-Atari's standards/PARKED.md):
 after the family rework and EWeb 1.0, EWeb first (it builds common's ColdFire layer: crt0, crash,
 inflate_fast, mont030, sting, nf, the FPU), then EPDF, then EPlay; nothing of the build before.
 What EPlay needs beyond common's layer:
@@ -2137,11 +2136,11 @@ What EPlay needs beyond common's layer:
   decoder (`src/mp3/mp3dsp.c`, ISO full accuracy); its 64-bit arithmetic on the C path (the V4e
   has no 64-bit `mulu.l`/`divu.l`), checked against the model's bit-exact tests under QEMU's
   cfv4e once the layer exists. The SN76489 likewise on the ColdFire.
-- **The sound.** The FireBee's codec is a Cirrus Logic CS4299 (AC'97: Erez found it, 10 Nov
+- **The sound.** The FireBee's codec is a Cirrus Logic CS4299 (AC'97: the owner found it, 10 Nov
   2026), not the Falcon's DMA sound, and no YM2149 is implied. Whether FireTOS gives Falcon XBIOS
   sound calls over it (a ring to feed, its rates), an MFP Timer A, or a PSG at $FF8800 decides a
   small port or a new audio driver (and a software AY for VGM). `FBPROBE.PRG` (1.16,
-  `tools/fbprobe`) asks the machine, for its tester through Erez.
+  `tools/fbprobe`) asks the machine, for its tester.
 - **What the probe found (FBPROBE 1, the tester's FireBee, 10 Nov 2026):**
   - FireTOS says `_CPU` 60, `_FPU` 0, `_MCH` and `_VDO` a Falcon's ($00030000), and gives `_CF_`
     ($01032400): `_CF_` is the only sign of a ColdFire. Every check by `_CPU` must test `_CF_`
@@ -2152,7 +2151,7 @@ What EPlay needs beyond common's layer:
     matrix's and the codec's $FFFF, the DSP's port a bus error: no Falcon sound hardware at its
     addresses. So EPlay 1.18 takes a FireBee for an STE (bit 1 without bit 4) and plays
     silently into registers that aren't there.
-    No "not supported yet" message meanwhile (Erez, 10 Nov 2026: it will be supported soon).
+    No "not supported yet" message meanwhile (10 Nov 2026: it will be supported soon).
   - The XBIOS sound calls answer: `Locksnd` 1, `Sndstatus` 0, the attenuations 32 and gains
     240, `Buffptr` 0; `Soundcmd(4, -1)` 439 is no ADDERIN a Falcon gives. The sound is the
     XBIOS's (GSXB's over the AC'97), not the registers': the edition feeds a ring through
@@ -2164,7 +2163,7 @@ What EPlay needs beyond common's layer:
   - Next, when the FireBee's turn comes: FBPROBE 2, which plays (a second of tone through
     `Setbuffer`/`Buffoper` at each `Devconnect` rate, `Buffptr` timed against the 200 Hz clock,
     and a PSG tone), for the tester to listen to and send back.
-- **What FBPROBE 2 found (the tester's FireBee, through Erez, 13 Nov 2026):** the same cookies
+- **What FBPROBE 2 found (the tester's FireBee, through 13 Nov 2026):** the same cookies
   (`_CPU` 60, `_FPU` 0, `_CF_` $01032400, `_SND` $27, no DSP: its port a bus error; the DMA's
   registers $FF00, the matrix's $FFFF), FreeMiNT 1.19 with N.AES and NVDI; ST RAM 5.4 MB free,
   other RAM 345 MB.
@@ -2176,10 +2175,10 @@ What EPlay needs beyond common's layer:
     path with `Buffptr` in place of the DMA's registers.
   - **MFP Timer A works:** `Xbtimer(0, 3, 154)` gave 994 interrupts in a second (997 wanted).
     The tick stays on Timer A, set with `Xbtimer`.
-  - Whether the four tones sounded clean is the tester's ear (asked through Erez).
+  - Whether the four tones sounded clean is the tester's ear (asked).
 - **EPlay's own assembly:** `feed.S` (the tick), `hostirq.S` (the DSP's: not built), `term.c`'s
   trap 13, `div64.c`'s 64-bit forms (the C path).
-- **The plan (Erez, 13 Nov 2026: the FireBee before OPL3), `EPLAYFB.PRG`, built with
+- **The plan (13 Nov 2026: the FireBee before OPL3), `EPLAYFB.PRG`, built with
   `-mcpu=5475` and `EPLAY_FB` in `build/fb`:**
   - **F1, the build and the sound.** common's ColdFire layer as it is (crt0, the crash catcher,
     nf, inflate, STinG, `ll64.c` for the 64-bit helpers: libgcc is 68020 code). EPlay's Falcon
@@ -2197,7 +2196,7 @@ What EPlay needs beyond common's layer:
   - **F3, VGM on the CPU:** the SN76489, the YM2612 and the YM3812 from their C models into the
     queue, played ahead; the AY in software.
   - Only the tester's FireBee can show it runs: no emulator runs FireTOS. Each step a release,
-    the tester's `EPLAY.LOG` back through Erez.
+    the tester's `EPLAY.LOG` back.
   - **Done (13 Nov 2026), F1 and F2 together:** `make fb` builds `EPLAYFB.PRG` (in `all` and
     the release). `fbstub.c` answers for the DSP's modules, the YM2149 and the host port;
     `sndfb.c` and `feedfb.c` (and, until 1.42, `feedfb.S`) as above; `term.c`'s handler in ColdFire forms;
@@ -2221,7 +2220,7 @@ What EPlay needs beyond common's layer:
   the tick reaches holds no trap (its code read from the build), and no FPU instruction (its
   handler saves none).
 
-## Write a log (Erez, 14 Nov 2026; the guidelines' 6.5, AERA-Atari 84aeb6e)
+## Write a log (14 Nov 2026; the guidelines' 6.5, AERA-Atari 84aeb6e)
 
 "No log without its switch": EPLAY.LOG is written only with **Options > Write a log** ticked (last
 in Options, after a line; Settings' Files page, "Write a log (EPLAY.LOG)", the same setting, the
@@ -2231,7 +2230,7 @@ CRASH.LOG's alone); each line still goes to the emulator's console for the rigs.
 "see EPLAY.LOG" (the FDI's clock) says "tick Write a log" with it off. The play rig's `quit` (no
 EPLAY.LOG) and `quitlog` (`LOG=1`: written, the quit's steps in it); the speed rig's MP3 session
 reads the console's lines where there is no file. With it ticked, EPLAY.LOG is written as it goes, each
-line at once (Erez, 15 Nov 2026: "if the LOG is only written in the end, when the app crashes there will
+line at once (15 Nov 2026: "if the LOG is only written in the end, when the app crashes there will
 be no log"; a FireBee tester's 1.36 crashed under MiNT and under FireTOS and left neither its lines nor
 CRASH.LOG): common's conn.c from AERA-Atari c9a6896 (one open and one append a line; conn_log_hold holds
 nothing), taken alone into EPlay's common. The play rig's `logasgo` (`LOG=1`: EPLAY.LOG on the disk while
@@ -2243,7 +2242,7 @@ supervisor mode with no limit; each wait now has one from the 200 Hz clock (100 
 for the 200), and a Timer A that reads stopped but doesn't count times it by the 200 Hz clock instead (the
 log: "timed by the 200 Hz clock: Timer A didn't count"). And NatFeats' probe (the rigs' console, nf_debug)
 ran an instruction illegal on real hardware with its handler at 0x10, though the vector table is at VBR
-on a 68010 or later. Now NatFeats are looked for only where EPLAY.INF has `NATFEATS=1` (Erez, 15 Nov
+on a 68010 or later. Now NatFeats are looked for only where EPLAY.INF has `NATFEATS=1` (15 Nov
 2026: "a .INF setting so that it can be added in our testing but have no bearing outside"): read at the
 start's first step (`settings_read`, before EPlay's first line), not in Settings, never written by
 EPlay; on a real machine nf_debug does nothing and no probe runs. Common's nf.S, tos.c and tos.h from
@@ -2254,8 +2253,8 @@ console (checked: `EPLAY_RIG_NONATFEATS=1`). The FireBee's quit says "the XBIOS'
 
 **FreeMiNT, XaAES and NVDI with memory protection (15 Nov 2026).** A tester's Falcon with a CT60 and
 a SuperVidel, under FreeMiNT, XaAES and NVDI, ran EPlay 1.36: the window at the desk's full height (W11,
-Erez's); a MEMORY VIOLATION (type SUPER) on loading an MP3; and after that crash the sound and the DSP
-stayed locked. Erez: "fix the unlock and setup a FreeMiNT XaAES NVDI testing rig. We must test this
+the owner's); a MEMORY VIOLATION (type SUPER) on loading an MP3; and after that crash the sound and the DSP
+stayed locked. Asked for: "fix the unlock and setup a FreeMiNT XaAES NVDI testing rig. We must test this
 scenario as I assume most 68060 configs will use this setup."
 - **The violation: NVDI reads the word before a raster.** A blit shifted by some pixels (vrt_cpyfm,
   vro_cpyfm) reads a long from the word before each line's first, and under MiNT's memory protection
@@ -2284,7 +2283,7 @@ scenario as I assume most 68060 configs will use this setup."
   (mprot040.c), the MMU turned on with page tables first as a CT60's TOS does (0MMU040.PRG: MiNT
   takes it only so, and with RAM under transparent translation says "Couldn't initialize memory
   protection"), _CPU set to 60 after MiNT (ZCPU060.PRG). memprot.py passes on it (a private
-  program's interrupt killed under protection, a global one's counting). `--nvdi` puts Erez's NVDI
+  program's interrupt killed under protection, a global one's counting). `--nvdi` puts the owner's NVDI
   in AUTO before MiNT and deletes the work drive after. The crash case: EPLAY.INF's CRASHAT=1500 (the
   rigs' key: an illegal instruction 1.5 s into playing) with LOCKCHK.PRG started beside it, asking for
   the sound system and the DSP: "sound -129 dsp -1" without the fix (as the tester found), "sound 1
@@ -2293,7 +2292,7 @@ scenario as I assume most 68060 configs will use this setup."
   status ended play_test's recording early (now let through: the mp3art case, an MP3 with a 500 x 500
   JPEG and tags); under XaAES the first focus is the shell's unless xaaes.cnf names the program.
 
-**1.37's speed against 1.36, accepted by Erez (15 Nov 2026):** three rows slower in both runs. On
+**1.37's speed against 1.36, accepted by (15 Nov 2026):** three rows slower in both runs. On
 Falcon-4:16, Settings opened with a VGM playing (165 and 185 ms to 195 and 205): Settings builds all
 its pages, this tick some 10 ms more, and a VGM's tick takes some 60 % of the 68030 (with an MP3 or
 a WAV playing the row is level). Under NVDI, Play let go with a VGM playing (160 and 150 to 185 and
@@ -2301,7 +2300,7 @@ a WAV playing the row is level). Under NVDI, Play let go with a VGM playing (160
 the Delete's own steps take the same (280 ms to its drawing's end, the log on or off), the queue's
 refill falling into its turn with the log off (275 with `LOG=1`; 1.37 without this commit 260).
 
-## Phase 11: VGM on a 68060 without the Falcon's DSP (Erez, 14 Nov 2026: "VGM on 68060 first")
+## Phase 11: VGM on a 68060 without the Falcon's DSP (14 Nov 2026: "VGM on 68060 first")
 
 Before the FireBee's VGM. Where a VGM's chip is the DSP's and the Falcon's DSP isn't there or free,
 on a 68060 (not a ColdFire: `_CF_` first), the chips are made on the CPU, ahead, into play.c's
@@ -2362,7 +2361,7 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    MFP Timer A is taken as on the Falcon (a Milan has the MFP). `SNDXBIOS=1` (the rigs') makes it so
    on a Falcon: play_test on Falcon-4:256 (wav, aiff, list, quit; MP3 refused, as on a 68030 with
    no DSP) and play060 (wav, aiff, mp3, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3) pass. Not run on a
-   Milan: none here; a tester's report to come. **A FireBee running EPLAY.PRG** (15 Nov 2026, Erez:
+   Milan: none here; a tester's report to come. **A FireBee running EPLAY.PRG** (15 Nov 2026:
    "put the FireBee fix in 1.40") takes the same way: its _SND $27 has no matrix, and EPLAY.PRG took it
    for a TT's 8-bit DMA, which isn't there (the tester's log). With _CF_ set it plays through the
    XBIOS's calls, its tick through Xbtimer (`atari/feedfb.c` built again as `feedxb.o`: no write to
@@ -2376,7 +2375,7 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    always pending, taken at once through a vector FireTOS needn't have filled. Now Jdisint first,
    then Setexc, as mxPlay (Mikro's, GPL 2) stops: Buffoper(0), Jdisint. The stand-in can't show it
    (EmuTOS's vector is a handler); the tester's run will.
-   **The XBIOS's sound alone, mxPlay's way (after 1.40; Erez, 15 Nov 2026: "agreed, do it after
+   **The XBIOS's sound alone, mxPlay's way (after 1.40; 15 Nov 2026: "agreed, do it after
    1.40").** mxPlay (Mikro's, GPL 2) plays on the FireBee with no interrupt at all: its MP3 plugin's
    Makefile has `TIMER_A = no`, Timer A only in its ARAnyM build (whose DMA pointer "sooner or later
    runs away"), and its notes call the Atari and ColdFire builds "100% system friendly, not a single
@@ -2400,13 +2399,13 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    drops are the emulator's, not EPlay's (EPlay's own crossbar path, on the 68030 and the 68060
    Falcons, has none). The rig moves its measuring window off them on the stand-in and says how many
    there were; on a Falcon one still fails the case.
-   **Pads, 1.42 (Erez, 16 Nov 2026: "Approve your recommendations", the hub's reading):** the XBIOS
+   **Pads, 1.42 (16 Nov 2026: "Approve your recommendations", the hub's reading):** the XBIOS
    path's tick (`feedxb.o`, never run on a Falcon) lost 700 bytes with Xbtimer, and every function
    sorting after it moved: a Falcon's start 610 -> 630 ms, and under NVDI 675 -> 705 (a WAV), 560 ->
    575 (the mini player), 2,555 -> 2,580 (a Mega Drive VGM), in every pair against 1.41, no work added.
    `tools/mkpad.py` writes `atari/pad.S`: a pad after each section whose size changed (14, 2,012
    bytes), every one of the 68030 build's 1,416 code sections at 1.41's address mod 256. The Falcon's
-   rows go; under NVDI two remain, accepted by Erez (PERF-REVISIT, AERA-Atari 544f68d): started with a
+   rows go; under NVDI two remain, accepted (PERF-REVISIT, AERA-Atari 544f68d): started with a
    WAV 675 -> 700, in the mini player 560 -> 580. The pads hold against 1.41's map until the next
    release that moves code: recheck at every change (`make PADS=no`, `tools/mkpad.py` against the
    same map, each section's shift 0 mod 256), as the other apps do. The STE's and the FireBee's
@@ -2414,7 +2413,7 @@ the DSP is there (Hatari's can't be taken away). The steps, each released when d
    (`vp_has_ym`), so nothing writes the chip. The Falcon, the TT and the STE keep Timer A: there GEM
    can't feed the ring through a menu or the file selector, and their tick is the hardware's own.
 
-**1.38's speed against 1.37, accepted by Erez (15 Nov 2026):** the rows slower beyond a tick in both
+**1.38's speed against 1.37, accepted by (15 Nov 2026):** the rows slower beyond a tick in both
 runs, with phase 11's step 3, the log at once, Timer A's limits and NATFEATS. On Falcon-4:16: a Mega
 Drive VGM's start (2,410 to 2,455 ms), the About box with it playing (210 and 215 to 220 and 230), its
 3 s after a seek (20 and 25 to 40). Under NVDI: the VGM's start (2,570 to 2,610), the About box (460 to
@@ -2425,12 +2424,12 @@ after the release, for the record.
 
 **1.39: TOS 1.x has no Mxalloc (15 Nov 2026).** On a real STE (TOS 1.62) EPlay 1.38 and before
 couldn't add a file: GEMDOS answers Mxalloc with EINVFN (-32), which EPlay took for no memory ("the list
-full at 0 files"). EmuTOS has Mxalloc, so the rigs never saw it until they ran on Erez's TOS images.
+full at 0 files"). EmuTOS has Mxalloc, so the rigs never saw it until they ran on the owner's TOS images.
 `atari/xalloc.h`'s x_alloc: Mxalloc, else Malloc (all RAM is ST RAM there; TT RAM alone, mode 1, has
-none), at every one of EPlay's own calls. Erez accepted two rows under NVDI against 1.38: started with a
+none), at every one of EPlay's own calls. Two rows under NVDI against 1.38 were accepted: started with a
 WAV playing 695 to 705 ms, with a Mega Drive VGM 2,610 to 2,640.
 
-**1.40's speed against 1.39, accepted by Erez (15 Nov 2026):** with TLSFB.OVL, phase 11's step 4
+**1.40's speed against 1.39, accepted by (15 Nov 2026):** with TLSFB.OVL, phase 11's step 4
 (the AY on the CPU, the XBIOS's sound alone) and the FireBee's fixes, two rows slower beyond a tick in
 both runs, the start with eight files given: Falcon-4:16 635 to 660 ms, STE:mono 1,955 to 1,965. Under
 NVDI none; a Mega Drive VGM's start on Falcon-4:16 faster (2,455 to 2,430). Built at each commit since
@@ -2441,17 +2440,17 @@ the code's size changes. One round of pads (the hub's rule, AERA-Atari 098183d) 
 function, the ticks' and the start's, at 1.39's place modulo 256: the row stayed at 660 and Volume +
 went from under 20 to 25 ms, so the pads were left out.
 
-**The STE's baseline on TOS 1.62 (1.39, the first rows on Erez's real STE TOS, two runs alike).** Many
+**The STE's baseline on TOS 1.62 (1.39, the first rows on the owner's real STE TOS, two runs alike).** Many
 over the guidelines' times (8 MHz, the 8-bit DMA, the nearest sample): the About box with a WAV playing
 230, 235 ms (150); Settings opened 345 (150); Pause let go 90 (50); Play let go 150, 180 (50); the
 position bar let go 180 (50); the 5 s while it plays 55 to 60 (50); a row selected 75 (50); a row played,
 the whole picture 365, 370 (165); Next 405, 410 (185); Down 250, 235 (50); Return 355 (145); Delete 315
-(300). Recorded, not worked on: the STE's speed as a phase of its own is Erez's to decide.
+(300). Recorded, not worked on: the STE's speed as a phase of its own is the owner's to decide.
 
 ## 1.43: a crash at interrupt time, Output DSP's volume, the SSI's misses (16 Nov 2026)
 
 - **A crash at interrupt time writes nothing.** A tester's Falcon with a CT60 under plain TOS 4.04
-  (via Erez) crashed while loading an MP3, and each time the partition the MP3 came from was damaged.
+  crashed while loading an MP3, and each time the partition the MP3 came from was damaged.
   Common's crash catcher used to land a supervisor fault in the program's code wherever it came from,
   including an interrupt routine of EPlay's (the sound tick, the DSP's host port), and wrote CRASH.LOG
   and EPLAY.LOG through GEMDOS. With the main program inside an Fread at that moment, GEMDOS was
@@ -2466,12 +2465,12 @@ the whole picture 365, 370 (165); Next 405, 410 (185); Down 250, 235 (50); Retur
   find, from the tester's CRASH.LOG and EPLAY.LOG.
 - **Output DSP's volume reaches the FDI.** With Output DSP the matrix sends the sound to the DAC and
   to the DSP port (DAC | EXTOUT), and the codec's attenuation reaches only the DAC. Through the FDI,
-  Erez heard the volume only at 0, where EPlay mutes. On the Falcon's 16-bit matrix (not the 8-bit
+  the owner heard the volume only at 0, where EPlay mutes. On the Falcon's 16-bit matrix (not the 8-bit
   DMA, not the XBIOS path) the volume is now applied to the samples, with the codec at 0 dB. The STE
   and the XBIOS path work as before.
-- **The SSI's misses counted.** Erez hears quiet crackles with Output DSP (an MP3 or a station,
+- **The SSI's misses counted.** the owner hears quiet crackles with Output DSP (an MP3 or a station,
   resampled on the DSP to 49,170 Hz on the Falcon's clock). They are in 1.12 too, with the DFB1X's TT
-  RAM off too, and never through the FDI or with a WAV or an AIFF resampled the same way. His logs show
+  RAM off too, and never through the FDI or with a WAV or an AIFF resampled the same way. The logs show
   no granule late, but the DSP's least wait is 0 (an AIFF's is 2,112). The simulator plays such files
   bit for bit with a DSP up to 13 % slower. Hatari's DSP core, though, never raises the SSI's transmit
   underrun, the one fault that would click without a late granule. So `dsp/mp3.a56`'s `tue` (the
@@ -2480,14 +2479,14 @@ the whole picture 365, 370 (165); Next 405, 410 (185); Down 250, 235 (50); Retur
   in bits 0 to 6 (at most 8,128). `dspmp3.c` counts them, and EPLAY.LOG's line at a stop says
   "N with a slot missed". Three misses, like three granules late, put the rest of the file on Normal
   (32,780 Hz). `tests/dspmp3/stream.c`'s `SIMTUE=N` raises the exception on every Nth slot (in
-  `make dsptest`): the sound stays bit for bit the model's, and the frames are counted. What Erez's
+  `make dsptest`): the sound stays bit for bit the model's, and the frames are counted. What the owner's
   log shows with 1.43 decides the next step: misses mean the DSP's slot loop needs more lead, and none
   means the crackles come from somewhere else on Output DSP's path.
-- **1.43's speed against 1.42:** one row slower beyond a tick in both runs, accepted by Erez
+- **1.43's speed against 1.42:** one row slower beyond a tick in both runs, accepted
   ("accept the row, release 1.43"): Falcon-4:16's start with a WAV, 610 to 635 ms, probably the data's
   placement (the pads hold the code at 1.41's places). Its cause is to find for the next release.
 
-## A DSP that stalls while it plays (Erez, 14 Nov 2026)
+## A DSP that stalls while it plays (14 Nov 2026)
 
 An https station through the Gateway on the FDI's 44.1 kHz stopped twice in 5 minutes, "The DSP
 stopped answering": each time the DSP had kept up (no granule late, no packet broken), had taken all
@@ -2505,14 +2504,14 @@ Its Direct connection (https, TLS.OVL) to the same station: the handshake whole,
 the connection closed 30 ms later with no answer, twice; the same request from a computer gets the
 station's 302. Common's TLS, the hub's (14 Nov 2026).
 
-## Next, to propose: a Jellyfin library (Erez, 10 Nov 2026)
+## Next, to propose: a Jellyfin library (10 Nov 2026)
 
-After the YM2612 (phase 10's first part), a design for Erez: EPlay browsing and playing a
+After the YM2612 (phase 10's first part), a design to put to the owner: EPlay browsing and playing a
 Jellyfin server's music (its JSON API on the home network, its tracks sent as MP3 at a rate
 EPlay asks, its cover art resized), with the browser's layout, a Settings page and the steps.
-Design only; nothing before he decides.
+Design only; nothing before it is decided.
 
-A tester's notes (Erez relayed them, 11 Nov 2026), for the design:
+A tester's notes (relayed, 11 Nov 2026), for the design:
 
 - **A track** comes whole with `GET /Audio/<item id>/stream?static=true` (the file as it is, no
   transcode) on the server's port (8096 by default, plain http on the home network), with the
@@ -2526,14 +2525,14 @@ A tester's notes (Erez relayed them, 11 Nov 2026), for the design:
 - EPlay keeps a token in EPLAY.INF only as a secret is kept there (never in a log or a test
   run's files kept).
 
-## MP3 on the CPU (Erez, 10 Nov 2026)
+## MP3 on the CPU (10 Nov 2026)
 
-A user's note (Erez relayed it): 68060 machines (the Raven clone, others) and the FireBee decode MP3
-on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474's EMAC). Erez:
+A user's note (relayed): 68060 machines (the Raven clone, others) and the FireBee decode MP3
+on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474's EMAC). Decided:
 "68060 support with the YM2612 and FireBee release". So:
 
-- **Decided (Erez, 10 Nov 2026): B as two overlays.** After the YM2612's release (1.17, which
-  goes out first: Erez, 10 Nov), two decoders, each an overlay beside the program (common's
+- **Decided (10 Nov 2026): B as two overlays.** After the YM2612's release (1.17, which
+  goes out first: 10 Nov 2026), two decoders, each an overlay beside the program (common's
   `ovl.c`, as `TLS.OVL`), loaded only when an MP3 is to play on a 68060 with no Falcon DSP
   (`_CPU`), the one the `_FPU` cookie says: `MP3FPU.OVL`, EPlay's decoder steps in floating
   point on the 68060's FPU, and `MP3INT.OVL`, in integers on its 32-bit multiply, for the
@@ -2542,7 +2541,7 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
   overlay is said ("MP3 on a 68060 needs MP3FPU.OVL beside EPlay").
 - **With the YM2612's release:** where there is no Falcon DSP but a 68060, MP3 decodes on the CPU
   from EPlay's C model of its DSP decoder (`src/mp3/mp3dsp.c`), chosen at run time (the `_CPU`
-  cookie, as `div64_cpu60`). Never on a 68030 or slower (Erez, 3 Nov 2026). Measured first on
+  cookie, as `div64_cpu60`). Never on a 68030 or slower (3 Nov 2026). Measured first on
   Hatari's 68060; the Raven's DSP56303 is not the 56001 (another host port and sound wiring), so
   it is not used.
 - **Measured (11 Nov 2026, `tests/hatari/mp3cpu.py`):** the C model of the DSP's decoder, built
@@ -2562,7 +2561,7 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
   CPU). `MP3INT.OVL` (the 68LC060 and 68EC060, no FPU) needs a fixed-point decoder, and the
   68060 has no 32 x 32 → 64 multiply either: its third-party choice (licence first) is still
   open.
-- **VGM on the 68060 too (Erez, 12 Nov 2026: "make sure to have the VGM player also supported in
+- **VGM on the 68060 too (12 Nov 2026: "make sure to have the VGM player also supported in
   68060").** Two cases:
   - **A 68060 Falcon (a CT60's), the DSP there:** as now: the YM2149 on the chip, the SN76489
     and the YM2612 on the DSP. `tests/hatari/play060.py` runs play_test's cases on Hatari's
@@ -2583,7 +2582,7 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
     and the VGM played ahead into the queue (as MP3 on the CPU is), not commands to the DSP
     from the tick. Its machines (no Falcon DSP) have no Atari DMA sound either, so it comes
     with the XBIOS output, after FBPROBE 2's answer.
-- **Where the sound goes (Erez, 12 Nov 2026): the XBIOS sound path when there is no Atari DMA
+- **Where the sound goes (12 Nov 2026): the XBIOS sound path when there is no Atari DMA
   sound; a 68060 isn't taken to mean XBIOS.** The output is chosen by what the machine has,
   not by its CPU: the Falcon's, TT's or STE's DMA sound wherever its registers answer (a CT60
   Falcon, a Falcon whose DSP is taken); else the XBIOS sound calls (`Locksnd`, `Setbuffer`,
@@ -2596,9 +2595,9 @@ on the CPU with little load (MxPlay's ColdFire module; AniPlayer on the MCF5474'
 - **With the FireBee's release:** the same decoder in the ColdFire edition, its synthesis filter
   and IMDCT on the EMAC later.
 
-### 1.44: a 68060 or a 68080, with an FPU or none; stations too (Erez, 16 and 17 Nov 2026)
+### 1.44: a 68060 or a 68080, with an FPU or none; stations too (16 and 17 Nov 2026)
 
-Erez: "if there is a 68060 or 68080 without an FPU, EPlay should decode on the CPU, not ask for a
+Decided: "if there is a 68060 or 68080 without an FPU, EPlay should decode on the CPU, not ask for a
 DSP"; "a 68060 and 68080 without an FPU must play mp3 with room to spare ... It can not take the
 machine down"; "let's see the real numbers and then decide"; then, shown the figures below, "A, ship
 it in 1.44".
@@ -2658,7 +2657,7 @@ it in 1.44".
 - **No line at the start on MP3 on the CPU.** One cost a stock Falcon's start 30 ms (Falcon-4:16, a
   CD-quality WAV, 635 with it, 605 without, pads remade each time), and only where `_CPU` said 40 or
   more still 630: it is gone. The line when an MP3 plays on the CPU says which CPU and decoder.
-- **1.44 checked against the testers' reports (Erez, 17 Nov 2026: "test 1.44 in light of the
+- **1.44 checked against the testers' reports (17 Nov 2026: "test 1.44 in light of the
   latest bug reports").** The V4SA's: play060.py's `Falcon-v4`, a stand-in (Hatari's 68060 Falcon,
   no DSP, C:\AUTO\V4STAND.PRG writing `_CPU 80` and `_SND` without the DSP, from common's FBSTAND
   with three bytes changed): MP3 and gapless MP3 play on the "68080", and stream_test.py's live,
@@ -2672,15 +2671,15 @@ it in 1.44".
   code at 1.42's map's places (1.41's). With the data at 1.42's places too, 1.43's Falcon-4:16
   start with a WAV, 635, went back to 610, but with 1.44's code no layout of the constants, data
   and BSS (each at 1.42's or 1.43's, `--rodata`, `--data`, `--bss`) suited both Falcon-4:16 and
-  Erez's Falcon-4:256 with NVDI: 323 kept Falcon-4:16 clean (610) and cost NVDI's Mega Drive VGM
+  the reference Falcon-4:256 with NVDI: 323 kept Falcon-4:16 clean (610) and cost NVDI's Mega Drive VGM
   start +100 ms; 332 kept NVDI within a tick of 1.43 and the WAV start at 1.43's 635. The hub:
-  Erez's configuration decides; 1.44 ships 332 (Erez, 17 Nov 2026: "go ahead with 332"). The 610
+  the owner's configuration decides; 1.44 ships 332 (17 Nov 2026: "go ahead with 332"). The 610
   waits for a layout that suits both.
 
 ## 1.46: the volume, the log kept open, a DSP that fails at a station's start (17 Nov 2026)
 
-- **The volume, logarithmic, 24 steps** (Erez, 17 Nov 2026: "it should be logarithmic and not
-  linear. The lower volume is not low enough just before full off"; his choice "24 steps, fine at
+- **The volume, logarithmic, 24 steps** (17 Nov 2026: "it should be logarithmic and not
+  linear. The lower volume is not low enough just before full off"; the choice "24 steps, fine at
   top"). `VOL_MAX` is 24. `play.c`'s `vol_att[]` gives each step's attenuation in 1.5 dB units:
   1.5 dB a step to 18 dB, 3 dB to 39, 6 dB to 60, so step 1 is 60 dB down (it was 22.5 dB with 16
   linear steps). `src/attq15.h`'s `att_q15()` turns it into a Q15 gain: the old 16 values, then a
@@ -2689,21 +2688,21 @@ it in 1.44".
   it through `att_q15()` on the DSP and the CPU, and the Falcon's YM2149 past 15 through its own
   attenuation. EPLAY.INF writes `VOLUME=n/24`; an old `VOLUME=n` (0 to 16) is taken to the step with
   the nearest level. + and - move one step.
-- **The log kept open** (common b51644b, the hub's merge of EPlay's patch; Erez: "if other AERA apps
+- **The log kept open** (common b51644b, the hub's merge of EPlay's patch; decided: "if other AERA apps
   behave the same … they need to change accordingly as well"). Opening and closing EPLAY.LOG for each
   line took some 143 ms on a DFB1's IDE disk; kept open, 1.4 ms. Common's conn.c now keeps the file
   open and closes it after 1 s without a line (`conn_log_idle()`, from gem.c's event calls, never in
   a TLS handshake), at once before a connection, at a " !! " line, at a flush, at the quit, and when
   the log is switched off or renamed. A crash or a freeze loses at most the last second.
-- **A DSP that fails as a station starts** (Erez's log through the Gateway: "the DSP stopped
+- **A DSP that fails as a station starts** (the owner's log through the Gateway: "the DSP stopped
   answering loading word 0 of 0"). A failure with `what == 3` and no frame sent yet takes the same
   once-in-20-s restart as a stall mid-play (`what == 4`): the DSP's program loaded again, the station
   connected again. Rig: `STALLAT=-1` (`dspmp3_start_fail_test()`), `stream_test.py startfail`.
 - **A station's refill before drawing** (the hub, 17 Nov 2026). `play_net_low()` is true while a
   station's DSP MP3 queue holds less than 2 s; main.c's turn then reads even where it drew, with
-  20 ms at least. Erez's slow DFB1X session starved at 14.3 KB/s. `stream_test.py rough` (a 302, the
+  20 ms at least. The owner's slow DFB1X session starved at 14.3 KB/s. `stream_test.py rough` (a 302, the
   head 1.5 s late, jitter, a 1.5 s stall at 8 s, a 40 s tone) passes on 1.41, 1.45 and 1.46: the
-  stutter he heard came from that session, not from a change between those releases.
+  stutter heard came from that session, not from a change between those releases.
 - **Busy turns** (the hub's rule): a turn with a message, a key or a click, or one that has used
   30 ms, sets `play_busy_turn`, and a big VGZ then unpacks only within 64 KB of the playhead. The
   least margin is logged.
@@ -2713,9 +2712,9 @@ it in 1.44".
 
 ## 1.47: 10 seconds back and forward, gapless on the XBIOS, Settings' quick click (17 Nov 2026)
 
-- **10 seconds back and forward on the bar** (Erez, 17 Nov 2026: "a small circle with an arrow to
+- **10 seconds back and forward on the bar** (17 Nov 2026: "a small circle with an arrow to
   the back and to the front with the number 10 inside it … placed surrounding the play/pause
-  button"; the icons redrawn after his picture: a thin ring, open on the arrow's side, a clear
+  button"; the icons redrawn after the owner's picture: a thin ring, open on the arrow's side, a clear
   arrowhead at its end, a bold "10"). `bar.h`'s `BH_BACK10` and `BH_FWD10` sit either side of Play,
   Previous and Next a button further out. The icons are hand-drawn tables in `bar.c` (`skip_big`,
   22x22, for `ch >= 16`; `skip_small`, 17x11, at low resolution), drawn through `mask_skip()`. A
@@ -2737,12 +2736,12 @@ it in 1.44".
   page (Falcon-4:16 125 -> 60 ms, under NVDI 185 -> 90, an STE 345 -> 170); `dlg_find` asks the
   AES only for a press just outside a 3D button; a turn between a dialog's screen save and its
   drawing; describe() names NVDI on the TT too.
-- **The 10 s buttons' sign smaller** (Erez, 18 Nov 2026: "too big ... and also the 10 is not
+- **The 10 s buttons' sign smaller** (18 Nov 2026: "too big ... and also the 10 is not
   centered"): 18x13 on the VGA (was 22x22), 18x9 at low resolution, a 3x5 "10" centred, a gap after
   the arrowhead. The low resolution's 10 s buttons a pixel wider.
 - **pad.S against 1.47's link map** (every section at 1.47's places mod 256): with the pads against
   1.42's the synced build's WAV start under NVDI was 700 -> 725 ms; against 1.47's, 700.
-- Rows slower than 1.47 by 10 to 50 ms (start rows, the STE's list clicks) accepted by Erez,
+- Rows slower than 1.47 by 10 to 50 ms (start rows, the STE's list clicks) accepted,
   18 Nov 2026. A Mega Drive VGM's start, timed alone, is 1.47's to the tick in all 20 runs:
   the rows move with where code and buffers land, not with changed code.
 - The FireBee:16 gapless case: the join is whole; 55 ms of quiet after the 6 s tone, before a blip
@@ -2767,7 +2766,7 @@ it in 1.44".
   the Makefile on build/fb/eplay.elf, fails the build on any EMAC instruction (1.48's fails it).
 - **A 68080 plays through the XBIOS by itself** (the section above).
 - Common c0fa029 also: About opens sooner (no copy of the screen under the box on TOS with NVDI)
-  and closes later; Erez accepted the close (19 Nov 2026), and the other slower rows (Falcon-4:16
+  and closes later; the close was accepted (19 Nov 2026), and the other slower rows (Falcon-4:16
   window 585 -> 595, NVDI Volume pressed 10 -> 20, an STE's start with 8 files 1910 -> 1965) with
   1.49 ("Accept, release 1.49").
 - Gate row 1's stream `stall` case fails now and then on its tone (78 %), on 1.48 too (1 in 3).
@@ -2782,15 +2781,15 @@ it in 1.44".
   win_paint_some puts the tree at the window's current place (WF_WORKXYWH) before each piece.
   Plain TOS unchanged; XaAES gave the area back either way.
 - Gate g50: the https and settings cases failed with the disk full (a recording "not a WAVE
-  file"); 3 of 3 each pass on 1.50 and 1.49 after it was freed. Slower rows accepted by Erez
+  file"); 3 of 3 each pass on 1.50 and 1.49 after it was freed. Slower rows accepted
   (20 Nov 2026, "Accept, release 1.50"): Falcon-4:16 Volume + 10 -> 25, NVDI Mega Drive VGM start
   2370 -> 2385, NVDI About opened 345 -> 370.
 
 ## 1.51: the window's first height, the mini player's own place (21 Nov 2026)
 
-- **A tester, through the hub and Erez (21 Nov 2026):** the list opened over the desk's whole
-  height; he preferred the height the mini player's switch gives, and the place and size kept
-  across runs. Erez decided (21 Nov 2026): the first start (no `WINDOW=` kept) opens at the bar's
+- **A tester, through the hub (21 Nov 2026):** the list opened over the desk's whole
+  height; they preferred the height the mini player's switch gives, and the place and size kept
+  across runs. Decided (21 Nov 2026): the first start (no `WINDOW=` kept) opens at the bar's
   own height, six rows of the list, centred as the mini player's switch gives it, in place of
   D39's whole height; and the mini player keeps its own place, `MINIWINDOW=x,y` beside the full
   window's `WINDOW=x,y,w,h` (D43), each kept on the desk at the start and written at the quit
@@ -2819,12 +2818,12 @@ it in 1.44".
   excused.
 - **The Output DSP crackle stays open.** 8c5bb34c8 put left and right in step once at a
   stream's start, not before each frame; gate g51 then played them swapped in about a third of
-  the DSP runs (Falcon-4:16, Erez's configuration, true colour with NVDI), so the per-frame
+  the DSP runs (Falcon-4:16, the reference configuration, true colour with NVDI), so the per-frame
   salign was putting a real slip right. Reverted (14069b173): `dsp/mp3.a56` is 1.50's.
 
 ## 1.53: salign without the wait; the stall case measured outside the stall (22 Nov 2026)
 
-- **What Erez's Falcon showed** (Output DSP, the Falcon's clock, a station resampled to 49,170
+- **What the reference Falcon showed** (Output DSP, the Falcon's clock, a station resampled to 49,170
   Hz):
   - quiet clicks, mostly in the right channel (0.15's log on);
   - the SSI's misses in 498 frames of 641, none late (1.43's count);
@@ -2867,7 +2866,7 @@ it in 1.44".
   - on the old recordings all six pass, as do this branch's three.
 - **The Release workflow** makes the release a draft, checks its two zips' order in GitHub's
   own listing, and only then publishes it (EHypView's way; the hub, 22 Nov 2026).
-- **The FireBee's decoder: more of it on the EMAC** (Erez, 22 Nov 2026: "Firebee optimization
+- **The FireBee's decoder: more of it on the EMAC** (22 Nov 2026: "Firebee optimization
   MP3 decoding"). Until 1.52 only the synthesis filter (the DCT32's matrices and the window)
   was there. From 1.53 these are too, each sum of a few products, made exactly as `d_mpy`'s
   (`em_pack`, `em_mac`, `em_sum`), their constants packed once with the synthesis filter's
@@ -2891,7 +2890,7 @@ it in 1.44".
 
 - **Common at ac70637** (TLS.OVL 1.18, ovl.c's ColdFire cache push, av.c's av_startprog,
   print.c), the pads remade against 1.47's map.
-- **Two packages** (Erez, 22 Nov 2026, through the hub: "Shall we just create two packages, one
+- **Two packages** (22 Nov 2026, through the hub: "Shall we just create two packages, one
   for FireBee and the other for standard ST? ... EUpdate can then download the right package
   based on the running platform", and "Same names"; the guidelines 7.4, AERA-Atari cc13e75):
   - `eplay-x.y.zip`, the standard package: EPLAY.PRG (68030), EPLAYST.PRG (68000), MP3FPU.OVL,
@@ -2900,7 +2899,7 @@ it in 1.44".
     no MP3*.OVL), common's TLSFB.OVL as TLS.OVL (common's tls_ovl.c loads tls.ovl on a
     ColdFire too, AERA-Atari 8c94c08), and FBPROBE.PRG for the FireBee's testers.
   - Both packages carry the guide, CACERT.PEM, NOTICES.TXT and the icons. A release publishes
-    the two zips and nothing else (Erez: "Remove all files from root and just have two ZIP
+    the two zips and nothing else (decided: "Remove all files from root and just have two ZIP
     files, one for each platform"; "rename all other FB files into their standard filename").
   - Installing either package replaces the files in place.
 - **Each program names the other package on the wrong machine** (7.4's words, wrapped at 30
@@ -2926,7 +2925,7 @@ it in 1.44".
   - The 1.51 note on the stand-in's 15.5 ms DMA stretch stays as history: no EPlay plays there
     now.
 
-## F3: VGM on the FireBee (Erez, 21 Nov 2026, through the hub)
+## F3: VGM on the FireBee (21 Nov 2026, through the hub)
 
 - **EPLAYFB.PRG makes a VGM's chips on its ColdFire**, as a 68060 with no Falcon DSP does
   (phase 11): the SN76489, the YM2612, the YM3812 and YMF262, and the AY (the FireBee has no
@@ -2943,7 +2942,7 @@ it in 1.44".
   What only the tester's FireBee can show: the ColdFire's time for each chip, in EPLAY.LOG's VGM
   lines.
 
-## MP3 on the FireBee's EMAC (Erez, 21 Nov 2026, through the hub)
+## MP3 on the FireBee's EMAC (21 Nov 2026, through the hub)
 
 - **Two decoders in EPLAYFB.PRG, and the FireBee chooses.** minimp3 on the V4e's FPU as before,
   and EPlay's own decoder in integers (`src/mp3/mp3dsp.c`, the DSP's C model, ISO 11172-4 full

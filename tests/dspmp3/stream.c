@@ -21,7 +21,7 @@
  * SIMTUE=N raises the SSI's transmit with exception (an underrun's, which
  * Hatari's core never raises) for every Nth slot in place of its plain
  * one: tue's word the same, the frames it came in counted in the status
- * words ("with a slot missed"; Erez, 16 Nov 2026: clicks on the Falcon's
+ * words ("with a slot missed"; 16 Nov 2026: clicks on the Falcon's
  * clock that no late granule showed).
  *
  *     stream FILE.MP3 [FRAMES]

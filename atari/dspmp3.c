@@ -488,7 +488,7 @@ void dspmp3_stall_test(void)
 }
 
 /* the rigs' STALLAT=-1: the DSP taken as not answering as its stream
-   starts, no frame yet (Erez's DFB1X, 17 Nov 2026: "loading word 0 of 0
+   starts, no frame yet (the owner's DFB1X, 17 Nov 2026: "loading word 0 of 0
    (host status $00)") */
 void dspmp3_start_fail_test(void)
 {
@@ -527,7 +527,7 @@ long dspmp3_stream_resyncs(void)
 }
 
 /* the frames in which the SSI had no word for a slot (an underrun: the
-   sound played the last one again), counted on the DSP (Erez, 16 Nov
+   sound played the last one again), counted on the DSP (16 Nov
    2026: clicks on the Falcon's clock that no late granule showed) */
 long dspmp3_stream_misses(void)
 {

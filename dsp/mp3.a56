@@ -217,7 +217,7 @@ cmd	jsr	rd			; LOADP here; the rest from the external part
 ; a packet's word from the host, a long interrupt while a stream wants
 ; one (pkfree to pkpoll): to y:V_PKP on, its count first (at the packet's
 ; place less 1), taken while the DSP decodes, where it was taken only in
-; its waits (Erez, 7 Nov 2026: a stock Falcon's DSP has no waits to
+; its waits (7 Nov 2026: a stock Falcon's DSP has no waits to
 ; spare at 49,170 Hz, and a 68030 busy with GEM sent its words late). r0:
 ; m0 is linear but in XSTREAM's getrx, where the host's one word, the
 ; end, lands where modulo 2048 changes nothing
@@ -1004,7 +1004,7 @@ stl	jsr	salign			; left and right in step, each frame
 	jsr	decode
 	jclr	#5,x:V_SF,sun9		; the SSI missed a slot since the last frame
 	bclr	#5,x:V_SF		; (tue): the frame counted, bits 6-7 running on
-	bchg	#6,x:V_SF		; (Erez, 16 Nov 2026: clicks on the Falcon's
+	bchg	#6,x:V_SF		; (16 Nov 2026: clicks on the Falcon's
 	jset	#6,x:V_SF,sun9		; clock, none counted late; Hatari's DSP has
 	bchg	#7,x:V_SF		; no underrun to show it)
 sun9	move	x:V_FRM,b		; the frames decoded
@@ -1079,7 +1079,7 @@ stx	ori	#3,mr			; the end: interrupts and the SSI off
 ; even; r7 one word on if not, counted (V_ALN). The status read twice:
 ; if a slot began between the two reads (TDE or TFS changed), nothing is
 ; done until the next frame. Until 1.52 salign waited, the interrupts
-; held, for a slot to begin and read TFS just then: Erez's Falcon (Output
+; held, for a slot to begin and read TFS just then: the reference Falcon (Output
 ; DSP, the Falcon's clock) heard clicks and counted the SSI's misses in
 ; 498 frames of 641, Hatari never, its flags changing at once. The
 ; start's own alignment met Hatari with left and right swapped now and

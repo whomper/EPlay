@@ -17,7 +17,7 @@
  * So the music doesn't wait for GEM: a menu held open, the file selector,
  * a dialog or another program stop only the reading, and the queue holds
  * seconds to minutes of music (a stock Falcon's 4 MB: about 3 s of CD
- * sound, 12 s of MP3 at 320 kbit/s; Erez's 128 MB TT RAM: 47 s, minutes).
+ * sound, 12 s of MP3 at 320 kbit/s; the owner's 128 MB TT RAM: 47 s, minutes).
  * The DMA starts when a quarter of a second is in the ring; after the
  * file's end, silence follows until the last sample has played.
  *
@@ -124,7 +124,7 @@ static void cmp_trim(int has_lt, const MP3LAME *lt, long fs, int from_start)
 			cmp_keep = fs - lt->delay - lt->padding;
 	}
 }
-/* a WAV or AIFF the DSP resamples (XSTREAM: Erez, 4 Nov 2026, the right
+/* a WAV or AIFF the DSP resamples (XSTREAM: 4 Nov 2026, the right
    pitch at any rate): the ring at the DSP's rate, through the matrix to
    its receive, a frame with a sample where the step has one (pcm_spread).
    xs_acc the step's phase; xs_in the file's frames sent; xs_sil the end's
@@ -136,8 +136,8 @@ static long xs_acc, xs_in, xs_sil, xs_end_at = -1, xs_dry;	/* xs_dry: the queue'
 static short xsbuf[XS_BUF * 2];
 static int s_ext;		/* on the FDI's clock (the volume digital) */
 
-/* the volume (Erez, 3 Nov 2026: a bar like the position's, and + and -):
-   0 silent, VOL_MAX full (0 dB); since 1.46 logarithmic, 24 steps (Erez,
+/* the volume (3 Nov 2026: a bar like the position's, and + and -):
+   0 silent, VOL_MAX full (0 dB); since 1.46 logarithmic, 24 steps (decided
    17 Nov 2026: "it should be logarithmic and not linear. The lower volume
    is not low enough just before full off"): vol_att's 1.5 dB steps down,
    fine at the top, 60 dB down at 1. The codec takes 22.5 dB at most: past
@@ -165,7 +165,7 @@ static const unsigned short gain_tab[VOL_MAX] = {
 	8192, 6889, 5793, 4871, 4096, 3444, 2896, 2435
 };
 
-/* ReplayGain (phase 8b, Erez, 9 Nov 2026: Auto by default, louder only
+/* ReplayGain (phase 8b, 9 Nov 2026: Auto by default, louder only
    as far as the peak lets it): in the volume's steps, on top of it. Kept
    digital where the samples are touched anyway (an MP3's global_gain, WAV
    and AIFF scaled by the tick), so that the gapless join changes it where
@@ -207,7 +207,7 @@ static void apply_volume(void)
 	}
 	/* (the Falcon's own clock too: the matrix sends the sound to the FDI
 	   as well as the DAC, and the codec's attenuation is the DAC's alone:
-	   Erez, 16 Nov 2026, Output DSP's volume heard only at 0. Volume on
+	   16 Nov 2026, Output DSP's volume heard only at 0. Volume on
 	   the samples there, the codec at 0 dB) */
 	int matrix = !snd_dma8 && !SND_XB;
 	if ((s_ext || matrix || (snd_dma8 && snd_dma8_interp)) && play_is_open()) {
@@ -315,7 +315,7 @@ const char *play_path(void)
 {
 	return cur_path;
 }
-/* Quality, by itself (Erez, 4 Nov 2026: no longer a setting): an MP3 on
+/* Quality, by itself (4 Nov 2026: no longer a setting): an MP3 on
    the DSP and the Falcon's clock plays at High (49,170 Hz); one the DSP
    falls behind with (granules late) goes on at Normal (32,780 Hz, up to
    about 15 kHz) from where it is, until another file opens (granules
@@ -1075,7 +1075,7 @@ static long q_lead_ms(void)
 
 /* the queue filled from the file for ms, a piece at a time. low (the lead
    short): a piece read whatever the turn has left, and pieces of half the
-   size, so that a turn stays near its 50 ms (Erez, 4 Nov 2026, a stock
+   size, so that a turn stays near its 50 ms (4 Nov 2026, a stock
    Falcon: the turns' 20 ms often spent before the reading, which then
    came at 246 KB/s, the music 295: the queue ran dry in 4 s) */
 /* (cmp) ns samples a channel from cmp_pcm (ch channels) into the queue at
@@ -1107,7 +1107,7 @@ static void cmp_put(int from, int ns, int ch)
 }
 
 /* (cmp) an MP3 on the CPU, for the log: the time its turns took, reads
-   left out, and the sound decoded in them (Erez, 16 Nov 2026: "let's see
+   left out, and the sound decoded in them (16 Nov 2026: "let's see
    the real numbers and then decide": a 68060's, a 68080's) */
 static unsigned long cmp_busy_ms, cmp_snd;
 static long cmp_hz;
@@ -1330,7 +1330,7 @@ int play_open(const char *path, char *err, int n)
 	if (net) {
 		/* a station: connected and its answer read (Esc stops it), the
 		   first few KB of its audio for the probe; no tags, no length,
-		   no seeking (Erez, 8 Nov 2026: Pause connects again) */
+		   no seeking (8 Nov 2026: Pause connects again) */
 		if (!ns_open(path, err, n)) {
 			net = 0;
 			return 0;
@@ -1385,7 +1385,7 @@ int play_open(const char *path, char *err, int n)
 		}
 		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
 		if (vp_cpu()) {
-			/* (phase 11, Erez, 14 Nov 2026: the chips made on the CPU,
+			/* (phase 11, 14 Nov 2026: the chips made on the CPU,
 			   ahead, into the queue: from here a WAV of 16-bit stereo at
 			   the output's rate, fill_cmp's, as an MP3 on the CPU) */
 			cmp = cmp_vgm = 1;
@@ -1415,7 +1415,7 @@ int play_open(const char *path, char *err, int n)
 			goto made_ahead;
 		}
 		vgm = 1;
-		play_via = vp_via();	/* (the bar's badge: Erez, 11 Nov 2026, saw none) */
+		play_via = vp_via();	/* (the bar's badge: 11 Nov 2026, saw none) */
 		rate = VGM_RATE;
 		play_hz = 0;
 		play_kbps = 0;
@@ -1593,7 +1593,7 @@ int play_open(const char *path, char *err, int n)
 			Fseek(at, fh, 0);	/* the frames read from here into the queue */
 		{
 			/* the DSP where it is there and free; else, on a 68060 or a
-			   68080, the CPU: MP3FPU.OVL on its FPU (Erez, 12 Nov 2026),
+			   68080, the CPU: MP3FPU.OVL on its FPU (12 Nov 2026),
 			   MP3INT.OVL without one (16 Nov 2026), a station's too */
 			int dr = settings_mp3cpu() && cmp3_can() ? DSPMP3_BUSY : dspmp3_open();
 			if (dr != DSPMP3_OK && (dr == DSPMP3_NONE || dr == DSPMP3_BUSY) && cmp3_can()) {
@@ -1682,7 +1682,7 @@ made_ahead:
 		play_stop();
 		return 0;
 	}
-	/* Settings' Output, as it is at this Play (Erez, 2 Nov 2026): Auto and
+	/* Settings' Output, as it is at this Play (2 Nov 2026): Auto and
 	   FDI put the FDI at the file's rate where they can; FDI then plays on
 	   its clock as it is, resampled; DSP leaves the FDI and its clock out */
 	out_set = settings_output();
@@ -1817,7 +1817,7 @@ made_ahead:
 		char fr[16];
 		khz(fr, sizeof(fr), rate);
 		if (ext && snd_fdi_nosig && out_set != OUT_DSP) {
-			/* the FDI couldn't follow its input (Erez, 7 Nov 2026: the
+			/* the FDI couldn't follow its input (7 Nov 2026: the
 			   words his): the window's info line says it alone */
 			snprintf(play_out, sizeof(play_out), "FDI %s (from %s): no signal at the FDI's input", kr, fr);
 			play_nosig = 1;
@@ -1899,7 +1899,7 @@ int play_chain(const char *path)
 		int pcm2 = Fread((short)h2, 4, hd) == 4 && (!memcmp(hd, "RIFF", 4) || !memcmp(hd, "FORM", 4));
 		/* (a WAV or AIFF through the CPU's path, the XBIOS's sound:
 		   still a WAV's kind. 1.46 took it for an MP3's, so the next
-		   opened at its end, a gap between: the FireBee's, Erez 17
+		   opened at its end, a gap between: the FireBee's, 17
 		   Nov 2026) */
 		if (pcm2 != !(dsp || (cmp && !CMP_WAV))) {
 			Fclose((short)h2);
@@ -2251,7 +2251,7 @@ int play_is_open(void)
 /* a station is what plays or is paused (its address, not a file) */
 /* a station's queue under 2 s of its sound (DSP's MP3: the bytes ahead at
    its bit rate): main.c's turn reads it even where it drew (the hub, 17
-   Nov 2026: refill before drawing on a lead that low; Erez's slow DFB1X
+   Nov 2026: refill before drawing on a lead that low; the owner's slow DFB1X
    session starved at 14.3 KB/s) */
 int play_net_low(void)
 {
@@ -2395,7 +2395,7 @@ const char *play_stream_note(void)
 			n += snprintf(b + n, sizeof(b) - n, "; the first packet broken at %ld ms", fr_ms(ra));
 		if (fps)
 			n += snprintf(b + n, sizeof(b) - n, "; the file's samples came at %ld Hz", fps * s_spf / 1000);
-		if (dspmp3_stream_aligns() >= 0)	/* (Output DSP's clicks: Erez, 16 Nov 2026) */
+		if (dspmp3_stream_aligns() >= 0)	/* (Output DSP's clicks: 16 Nov 2026) */
 			n += snprintf(b + n, sizeof(b) - n, "; left and right put back in step %ld times",
 				      dspmp3_stream_aligns());
 		if (dspmp3_stream_slots() >= 0)
@@ -2599,7 +2599,7 @@ int play_step(int ms)
 		elog("the sound: %s", play_keep_up());
 		elog("the stream: %s", play_stream_note());
 		/* (and a DSP that stopped answering as its stream started, no
-		   frame yet: Erez's DFB1X under load, 17 Nov 2026, "loading word
+		   frame yet: the owner's DFB1X under load, 17 Nov 2026, "loading word
 		   0 of 0 (host status $00)" through the Gateway: started again
 		   the same way, its program loaded afresh) */
 		if (what == 4 || (what == 3 && t_frames == 0)) {
@@ -2610,7 +2610,7 @@ int play_step(int ms)
 				dspmp3_stall_note(note, sizeof(note));
 				elog("the stream then: %s", note);
 			}
-			/* (Erez, 14 Nov 2026: a station through the FDI stalled twice
+			/* (14 Nov 2026: a station through the FDI stalled twice
 			   in 5 minutes, the DSP waiting, its packets all taken) once in
 			   20 s, from where it was: a file at its place, a station
 			   connected again; the FDI's clock measured again first (a
@@ -2676,7 +2676,7 @@ int play_step(int ms)
 	}
 	/* the TT's or STE's DMA past what was written, a second into this play:
 	   the CPU (or the disk) behind, so the next lower rate from here, for
-	   this track (Erez, 14 Nov 2026), half the CPU's work a frame; a moment's
+	   this track (14 Nov 2026), half the CPU's work a frame; a moment's
 	   break, as an MP3's Normal. Not a station: it can't be opened again
 	   where it was */
 	if (snd_dma8 && kind && !net && !t_end && snd_underruns >= settings_dma8low() && play_ms() - base_ms > 1000 &&
@@ -2698,7 +2698,7 @@ int play_step(int ms)
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
 		/* (and the frames in which the SSI missed a slot: the DSP behind
-		   by a sample, a click, though no granule was late: Erez, 16 Nov
+		   by a sample, a click, though no granule was late: 16 Nov
 		   2026, Output DSP) */
 		long miss = dspmp3_stream_misses();
 		if ((late >= settings_qlate() || miss >= settings_qlate()) && fr >= 8) {	/* (past the start: its first frames) */

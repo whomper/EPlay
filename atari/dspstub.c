@@ -71,7 +71,7 @@ void dspopn_sn(int byte) { (void)byte; }
 int dspopn_psg(void) { return 0; }
 #ifdef EPLAY_FB
 /* (the FireBee's edition: the YM2612's and the OPL's tables for their
-   models on its ColdFire, vgmcpu.c's: Erez, 21 Nov 2026) */
+   models on its ColdFire, vgmcpu.c's: 21 Nov 2026) */
 #include "opntab.h"
 #include "oplexp.h"
 #include "opltab.h"
