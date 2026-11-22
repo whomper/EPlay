@@ -70,7 +70,7 @@ CASES = {
     # VIOLATION at an MP3 (15 Nov 2026)
     "mp3art": ("ART.MP3", ["-r", "32000", "-c", "2", "-b", "16"], ["-b", "128", "-m", "s", "ART",
                                                                  "--tt", "Tone", "--ta", "The rig", "--tl", "Art"],
-               32780, (1000, 1500), 3),
+               32780, (1000, 1500), 6),
     # ten seconds at 320 kbit/s: the ring wraps four times, the file
     # buffer (64 KB) is refilled six times across the bit reservoir
     "mp3long": ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
@@ -742,6 +742,12 @@ def run(work, case, spec):
             return False, m.describe(), played or "nothing played"
         time.sleep(1.5)
         cmd(fifo, "hatari-shortcut", "screenshot")
+        if case == "mp3art":
+            # (the cover drawn, some 3 s in on a Falcon: a second screenshot,
+            # its dither to be seen; 6 s of sound for it, 3 until 1.54)
+            if wait_line(log, lambda l: l.startswith("LOG album art:") and "shown after" in l, 30):
+                time.sleep(0.5)
+                cmd(fifo, "hatari-shortcut", "screenshot")
         if case == "logasgo":
             logf = machines.ci_path(hd, "EPLAY.LOG")
             text = open(logf, errors="replace").read() if os.path.exists(logf) else ""
