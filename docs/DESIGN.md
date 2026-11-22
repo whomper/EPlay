@@ -2885,6 +2885,15 @@ it in 1.44".
     functions (`alias`, `dct9`, `rows36`, `imdct`).
   - The FireBee still times the three decoders at the first MP3 and plays the fastest that is
     right: no emulator times a V4e, so only a tester's EPLAY.LOG says what this gains.
+- **The gate against 1.52** (g56, pairs spd63):
+  - Every row passes but the stall case: on Falcon-4:256 with NVDI it failed 2 runs in 6, its
+    hook lost to the tick (1.54 makes the hook a flag).
+  - The STE's Next, the whole picture, reads 405 or 450 ms in either release: not counted.
+  - One row slower beyond a tick, accepted (22 Nov 2026): a Mega Drive VGM's start, 2220 to 2235
+    ms on Falcon-4:16 and 2345 to 2360 with NVDI, the same in every run. It comes from the salign
+    commit alone, though nothing it changes runs then and every symbol keeps its place mod 256:
+    the start's parts are within 1 ms, its 5 ms ticks after the 20 ms timer make that 15. Every
+    other row is 1.52's or faster.
 
 ## 1.52: common ac70637; two packages, the FireBee's of its own (22 Nov 2026)
 
