@@ -77,8 +77,11 @@ jobs:
           fi
           # (a draft first: published only once its files' order is checked,
           # EHypView's way, the hub 22 Nov 2026)
-          gh release create "$TAG" dist/* --draft --target "$GITHUB_SHA" --title "${GITHUB_REPOSITORY#*/} $(cat VERSION)" \
-            --notes-file "$RUNNER_TEMP/notes.md"
+          url=$(gh release create "$TAG" dist/* --draft --target "$GITHUB_SHA" --title "${GITHUB_REPOSITORY#*/} $(cat VERSION)" \
+            --notes-file "$RUNNER_TEMP/notes.md")
+          # (the draft's own page, to find it in the list below; the list may
+          # not show a draft made a second ago: 1.53's run)
+          echo "DRAFT_URL=$url" >> "$GITHUB_ENV"
       - name: Check the zips' order, then publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,9 +90,17 @@ jobs:
         # two zips, the standard one last, in GitHub's own order, unsorted;
         # the guidelines 7.4)
         run: |
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\") | .id")
+          # (the draft as the list gives it, waited for up to a minute: the
+          # list is what EUpdate reads; one draft for the tag, the one made)
+          id=
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.tag_name == \"$TAG\" and .html_url == \"$DRAFT_URL\") | .id")
+            [ -n "$id" ] && break
+            sleep 5
+          done
+          [ -n "$id" ] || { echo "::error::the draft $DRAFT_URL is not in the releases list: left as a draft"; exit 1; }
           names=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id" --jq '.assets[].name')
           printf '%s\n' "$names"
           want=$(printf 'eplay-%s-firebee.zip\neplay-%s.zip' "$(cat VERSION)" "$(cat VERSION)")
           [ "$names" = "$want" ] || { echo "::error::the release's files are not the FireBee zip then the standard zip: left as a draft"; exit 1; }
-          gh release edit "$TAG" --draft=false
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" -F draft=false --jq .html_url
