@@ -81,6 +81,28 @@ void mp3_drop_set(MP3RS *r, const unsigned long *pk);
    less a drop's (r: its drop only) */
 int mp3_copy_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX]);
 
+/* ---- the same filter a sample at a time (the CPU paths: the FireBee's
+ * cmp_put), its outputs those of mp3rs_run on the same input, bit for bit:
+ * the last 8 inputs kept (an output at position p takes inputs p - 3 to
+ * p + 4), so nothing is held but those 4 ahead. mp3rss_run takes 16-bit
+ * samples (interleaved, ch 1 or 2) and gives 16-bit stereo, rounded from
+ * the filter's 24 bits as int_frame rounds the decoder's; on the FireBee
+ * its 8-tap sums on the EMAC (dspmath.h) where it multiplies signed */
+typedef struct {
+	const unsigned long *tab;	/* t_rsup or one of the t_rsdn* (mp3rs_set's choice) */
+	unsigned long si, sf, f;	/* the step, and the position's fraction (24 bits) */
+	long p, i;		/* the next output's position; the next input's index */
+	dw x[2][8];		/* the last 8 inputs, at index & 7 */
+#ifdef EPLAY_EMAC
+	unsigned long px[2][8];	/* (and packed for the EMAC) */
+#endif
+} MP3RSS;
+
+void mp3rss_set(MP3RSS *r, long rin, long rout);
+/* ns frames of ch channels in; the outputs (stereo) into out, at most max
+   frames: gives how many (more than max: an output left out at the end) */
+int mp3rss_run(MP3RSS *r, const short *in, int ns, int ch, short *out, int max);
+
 #ifdef MP3DSP_HUFF_HOOK
 /* the tests' look at each granule's Huffman part: its side information,
  * the main data, where its codes start and end, and the values they gave */

@@ -21,14 +21,30 @@ import sys
 OBJDUMP = "m68k-linux-gnu-objdump"
 EMAC = re.compile(r"^(mac|msac|movclr)|%acc|%macsr|%mask")
 # (src/mp3/mp3dsp.c's, GCC's copies too: synth.constprop.0; where they are inlined, frame_:
-# the synthesis filter, and from 1.53 the IMDCT's sums and the alias butterflies)
-ALLOWED = {"synth", "frame_", "em_probe", "mp3dsp_frame", "alias", "dct9", "rows36", "imdct"}
+# the synthesis filter, from 1.53 the IMDCT's sums and the alias butterflies, from 1.54 the
+# resampler a sample at a time)
+ALLOWED = {"synth", "frame_", "em_probe", "mp3dsp_frame", "alias", "dct9", "rows36", "imdct",
+           "mp3rss_run"}
+
+
+# jsr, jmp, pea and lea (any register) to an absolute long address: their
+# address's low word may read as an EMAC instruction where objdump has lost
+# step after a jump table's words (.short) in a function (ui/main.c's can(),
+# 1.54: jsr $0004ae02, its "ae02" taken for mac.l)
+ABS_L = {0x4eb9, 0x4ef9, 0x4879} | {0x41f9 | (r << 9) for r in range(8)}
 
 
 def main():
     elf = sys.argv[1]
     out = subprocess.run([OBJDUMP, "-d", "-m", "m68k:cfv4e", elf], capture_output=True, text=True,
                          check=True).stdout
+    words = {}
+    for line in out.splitlines():
+        m = re.match(r"^\s*([0-9a-f]+):\t((?:[0-9a-f]{4} ?)+)", line)
+        if m:
+            a = int(m.group(1), 16)
+            for i, w in enumerate(m.group(2).split()):
+                words[a + 2 * i] = int(w, 16)
     fn, bad = "?", []
     for line in out.splitlines():
         m = re.match(r"^[0-9a-f]+ <(.+)>:$", line)
@@ -37,6 +53,9 @@ def main():
             continue
         parts = line.split("\t")
         if len(parts) >= 3 and EMAC.search(parts[2].strip()) and fn.split(".")[0] not in ALLOWED:
+            a = int(parts[0].strip().rstrip(":"), 16)
+            if words.get(a - 4) in ABS_L:
+                continue	# (an address's low word, read out of step: not an instruction)
             bad.append("%s: %s (%s)" % (fn, parts[2].strip(), parts[0].strip()))
     if bad:
         print("emaccheck: %s has EMAC instructions (Line-A left in for a ColdFire?):" % elf)

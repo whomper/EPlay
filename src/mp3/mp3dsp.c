@@ -967,3 +967,105 @@ int mp3rs_run(MP3RS *r, dw pcm[2][1152], int ns, int nch, dw out[2][MP3RS_MAX])
 	return k;
 }
 
+
+/* ---- the filter a sample at a time (mp3dsp.h's MP3RSS) */
+#ifdef EPLAY_EMAC
+static unsigned long p_rs[256];	/* (the chosen taps, packed for the EMAC) */
+static const unsigned long *p_rs_for;
+static long rs_macsr = -2;	/* (em_probe's, once: -1 none, -2 not yet) */
+long em_rs_disturbed;		/* (runs another process's EMAC use disturbed: plain C from then on) */
+#endif
+
+void mp3rss_set(MP3RSS *r, long rin, long rout)
+{
+	MP3RS b;
+	mp3rs_set(&b, rin, rout);
+	memset(r, 0, sizeof(*r));
+	r->tab = b.tab;
+	r->si = b.si;
+	r->sf = b.sf;
+#ifdef EPLAY_EMAC
+	if (rs_macsr == -2) {
+		long keep = em_macsr;
+		rs_macsr = em_probe();
+		em_macsr = keep;
+	}
+	if (rs_macsr >= 0 && p_rs_for != r->tab) {
+		int k;
+		for (k = 0; k < 256; k++)
+			p_rs[k] = em_pack(sx(r->tab[k]));
+		p_rs_for = r->tab;
+	}
+#endif
+}
+
+static inline short rss_out(da a)
+{
+	long w = ((long)d_a2w_out(d_rnd(a)) + 128) >> 8;
+	return (short)(w > 32767 ? 32767 : w);
+}
+
+int mp3rss_run(MP3RSS *r, const short *in, int ns, int ch, short *out, int max)
+{
+	int k, n = 0, c, j;
+#ifdef EPLAY_EMAC
+	EMSAVE es;
+	long keep = em_macsr;
+	int em = rs_macsr >= 0 && !em_rs_disturbed;
+	if (em) {
+		em_macsr = rs_macsr;
+		em_begin(&es);
+	}
+#endif
+	for (k = 0; k < ns; k++) {
+		int at = (int)(r->i & 7);
+		for (c = 0; c < 2; c++) {
+			dw v = (dw)in[k * ch + (ch == 2 ? c : 0)] << 8;
+			r->x[c][at] = v;
+#ifdef EPLAY_EMAC
+			if (em)
+				r->px[c][at] = em_pack(v);
+#endif
+		}
+		/* the outputs whose last tap (p + 4) this input is */
+		while (r->p + 4 <= r->i) {
+			const unsigned long *h = &r->tab[((r->f >> 19) + 16) & 31];
+			int b = (int)((r->p - 3) & 7);
+			for (c = 0; c < 2; c++) {
+				da a = 0;
+#ifdef EPLAY_EMAC
+				if (em) {
+					const unsigned long *ph = &p_rs[h - r->tab];
+					for (j = 0; j < 8; j++)
+						em_mac(r->px[c][(b + j) & 7], ph[32 * j]);
+					a = em_sum();
+				} else
+#endif
+					for (j = 0; j < 8; j++)
+						a += d_mpy(r->x[c][(b + j) & 7], sx(h[32 * j]));
+				if (n < max)
+					out[2 * n + c] = rss_out(a);
+			}
+			n++;
+			r->f += r->sf;
+			r->p += (long)r->si + (long)(r->f >> 24);
+			r->f &= 0xffffff;
+		}
+		r->i++;
+	}
+#ifdef EPLAY_EMAC
+	if (em) {
+		/* (another process's EMAC use during the run, as mp3dsp_frame
+		   checks it: from then on plain C) */
+		unsigned long m, a0, a1, a2, a3;
+		__asm__ volatile("move.l %%macsr,%0\n\tmove.l %%acc0,%1\n\tmove.l %%acc1,%2\n\t"
+				 "move.l %%acc2,%3\n\tmove.l %%acc3,%4"
+				 : "=d"(m), "=d"(a0), "=d"(a1), "=d"(a2), "=d"(a3));
+		if ((m & 0xf0) != ((unsigned long)rs_macsr & 0xf0) || (a0 | a1 | a2 | a3))
+			em_rs_disturbed++;
+		em_end(&es);
+		em_macsr = keep;
+	}
+#endif
+	return n;
+}

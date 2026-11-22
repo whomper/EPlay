@@ -85,6 +85,19 @@ static short cmp_pcm[1152 * 2];
 static long cmp_rin;			/* the file's rate */
 static unsigned long cmp_step, cmp_pos;	/* Q16: input samples an output sample */
 static short cmp_prev[2];
+#ifdef EPLAY_FB
+/* the FireBee: the DSP's 8-tap filter a sample at a time (mp3rss, its
+   sums on the EMAC) in place of the straight line between two samples
+   (22 Nov 2026: "Firebee optimization ... sample rate"); set up at
+   the first samples after each play_open (cmp_rs_ok 0) */
+static MP3RSS cmp_rs;
+static long cmp_rs_out;			/* the output's rate */
+static int cmp_rs_ok;
+static short cmp_rsbuf[(1152 * 7 + 8) * 2];	/* (1,152 in, 8 kHz to 49,170 Hz: 7,080 out) */
+#define CMP_RS_RESET() (cmp_rs_ok = 0)
+#else
+#define CMP_RS_RESET() ((void)0)
+#endif
 /* LAME's delay and padding (its tag), the decoder's 529 samples with it:
    the samples left out at the start, and how many there are to play (-1:
    not known: a file with no tag, or played from a place in it) */
@@ -1085,6 +1098,29 @@ static void cmp_put(int from, int ns, int ch)
 {
 	long at = q_woff, put = 0;
 	int i;
+#ifdef EPLAY_FB
+	if (cmp_rs_out > 0 && cmp_rin != cmp_rs_out) {
+		int n;
+		if (!cmp_rs_ok) {
+			mp3rss_set(&cmp_rs, cmp_rin, cmp_rs_out);
+			cmp_rs_ok = 1;
+		}
+		n = mp3rss_run(&cmp_rs, cmp_pcm + from * ch, ns, ch, cmp_rsbuf, (int)(sizeof(cmp_rsbuf) / 4));
+		if (n > (int)(sizeof(cmp_rsbuf) / 4))
+			n = (int)(sizeof(cmp_rsbuf) / 4);
+		for (i = 0; i < n; i++) {
+			short *o = (short *)(q + at);
+			o[0] = cmp_rsbuf[2 * i];
+			o[1] = cmp_rsbuf[2 * i + 1];
+			at += 4;
+			if (at >= q_size)
+				at = 0;
+		}
+		q_woff = at;
+		q_w += 4L * n;		/* (last: the tick sees the samples there) */
+		return;
+	}
+#endif
 	for (i = from; i < from + ns; i++) {
 		short l = cmp_pcm[i * ch], r = ch == 2 ? cmp_pcm[i * ch + 1] : l;
 		while (cmp_pos < 65536UL) {
@@ -1131,7 +1167,10 @@ static void fill_cmp_(unsigned long t0, int ms, int low)
 		long room = q_size - (q_w - q_r);
 		int ns;
 		MP3OVL_INFO fi;
-		if (room < 1152L * 9 / 4 * 4 + 64)
+		/* (from the step: an 8 kHz MP3 to 49,170 Hz has 6.15 outputs an
+		   input, more than the 49,170 / 22,050 this took until 1.53) */
+		long need = cmp_step ? (long)(1152UL * 65536UL / cmp_step + 8) * 4 + 64 : 1152L * 9 / 4 * 4 + 64;
+		if (room < need)
 			break;
 		must = 0;
 		if (cmp_vgm) {
@@ -1400,6 +1439,7 @@ int play_open(const char *path, char *err, int n)
 			cmp_at = cmp_n = 0;
 			cmp_pos = 65536UL;
 			cmp_prev[0] = cmp_prev[1] = 0;
+			CMP_RS_RESET();
 			cmp_skip = 0;
 			cmp_keep = -1;
 			data_left = 0;
@@ -1453,6 +1493,7 @@ int play_open(const char *path, char *err, int n)
 			cmp_keep = -1;
 			cmp_pos = 0;
 			cmp_prev[0] = cmp_prev[1] = 0;
+			CMP_RS_RESET();
 			fmt.bits = 16;
 			fmt.channels = 2;
 			fmt.bytes = 4;
@@ -1627,6 +1668,7 @@ int play_open(const char *path, char *err, int n)
 				cmp_busy_ms = cmp_snd = 0;
 				cmp_pos = 65536UL;
 				cmp_prev[0] = cmp_prev[1] = 0;
+				CMP_RS_RESET();
 				cmp3_reset();
 				cmp_trim(open_has_lt, &open_lt, open_fs, base_ms == 0);
 			}
@@ -1737,9 +1779,18 @@ made_ahead:
 			/* (an MP3 on the CPU: fill_cmp resamples to the output's
 			   rate, so the queue plays at it as it is) */
 			cmp_step = ((unsigned long)cmp_rin << 16) / (unsigned long)out_rate;
+#ifdef EPLAY_FB
+			cmp_rs_out = out_rate;
+			cmp_rs_ok = 0;
+#endif
 			rate = fmt.rate = out_rate;
 			if (cmp_rin != out_rate)
+#ifdef EPLAY_FB
+				elog("%ld Hz to the XBIOS's %ld Hz by the ColdFire, as it decodes (the DSP's 8-tap filter, "
+				     "its sums on the EMAC where it multiplies signed)", cmp_rin, out_rate);
+#else
 				elog("%ld Hz to the DMA's %ld Hz by the CPU, as it decodes", cmp_rin, out_rate);
+#endif
 			if (net) {
 				/* a station decoded on the CPU (task 83): its 3 s in
 				   the queue as the DSP's are, decoded and resampled to

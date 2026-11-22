@@ -2865,6 +2865,36 @@ it in 1.44".
 - **The Release workflow** waits up to a minute for the draft it made before checking its
   zips' order (1.53's run looked a second after and found none).
 
+## 1.55: the FireBee's sample rate through the DSP's filter, on the EMAC (22 Nov 2026)
+
+- **What it replaces:** until 1.53 the FireBee resampled to FireTOS's 49,170 Hz by a straight line
+  between two samples (`cmp_put`), which lets through the images of the file's top octave.
+  The plan of 22 Nov 2026 ("Firebee optimization ... sample rate") puts the DSP's own filter there
+  (8 taps of a windowed sinc, 32 phases: `t_rsup`, the `t_rsdn*` going down).
+- **A sample at a time** (`mp3rss_set`, `mp3rss_run` in `src/mp3/mp3dsp.c`):
+  - the CPU paths give samples in pieces of any size (an MP3 frame's, less a gapless trim;
+    a VGM's; a WAV's), so the filter keeps its last 8 inputs;
+  - an output at position p takes inputs p - 3 to p + 4 and comes as soon as p + 4 is in;
+  - nothing is held back but those 4, so a gapless file's end loses no block of samples, as
+    `mp3rs_run`'s blocks of 32 would.
+  - Its outputs are `mp3rs_run`'s, bit for bit: `tests/fb/fbrs.c` holds them to it on the
+    host at nine pairs of rates (44.1, 48, 32, 22.05, 11.025 and 8 kHz to 49,170 Hz; 48 to
+    44.1 kHz; 44.1 and 48 kHz to 32,780 Hz), in pieces of 1 to 4,093 samples.
+- **On the EMAC:**
+  - each input is packed once (`px`), the chosen taps once (`p_rs`);
+  - an output's 8 products pile up in the accumulators;
+  - the MACSR is em_probe's own, kept apart from the decoder's choice;
+  - another process's EMAC use during a run is seen after it and counted (`em_rs_disturbed`),
+    and the filter goes on in plain C from then on.
+  - `make fbtest` runs `fbrs` under qemu's V4e, bit for bit with the host's.
+  - `tools/emaccheck.py` allows `mp3rss_run`. It also no longer takes the low word of a jsr,
+    jmp, pea or lea to an absolute address for an EMAC instruction: objdump loses step after
+    `can()`'s jump table in `ui/main.c`, and one build of this work put `$ae02` there (`mac.l`).
+- **The room a frame needs** (`fill_cmp_`, every CPU path) comes from the step now. It was
+  1,152 x 49,170 / 22,050 samples. An 8 kHz MP3 (MPEG 2.5) has 6.15 outputs an input, so its
+  frame could run past what was free.
+- On the 68060 and the 68080 the straight line stays: their CPU paths are #100's.
+
 ## 1.53: salign without the wait; the stall case measured outside the stall (22 Nov 2026)
 
 - **What the reference Falcon showed** (Output DSP, the Falcon's clock, a station resampled to 49,170
