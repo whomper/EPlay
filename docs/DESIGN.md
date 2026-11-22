@@ -2858,7 +2858,10 @@ it in 1.44".
   Until 1.54 a stream swapped before the music passed.
 - **The stall case's hook** (the rigs' `STALLAT=`): a flag GEM's check reads, once, not the
   last status word's time moved back, which the tick could set again first (the case failed 2
-  runs in 6 on 1.53).
+  runs in 6 on 1.53). The flag is `f_what` at -1, not a variable of its own: one more int, and
+  the check that read it, moved the code and data by 256 bytes against 1.53's, and the
+  Falcon-4:16 VGM start went from 2235 to 2290 ms with the same cycles run. EPLAY.PRG is laid
+  out as 1.53's, every symbol at its address.
 - **The Release workflow** waits up to a minute for the draft it made before checking its
   zips' order (1.53's run looked a second after and found none).
 
