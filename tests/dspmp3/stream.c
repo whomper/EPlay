@@ -45,6 +45,14 @@ static long tde_miss, tde_first = -1;	/* slots whose word wasn't written since t
 #define CAP_MAX (1L << 22)
 static unsigned short cap[CAP_MAX];	/* what the SSI sent, a word each slot */
 static long ncap;
+/* the left's slots: those the frame sync starts (slot0), cap's index mod 2
+   (-1: none yet); a stream is in step when the model's left words land in
+   them. Until 1.54 the sound was looked for anywhere in what was sent, so
+   left and right swapped (by an underrun before the music) still passed,
+   and salign's step back, after the sound was found, did not */
+static int left_par = -1;
+#define URUN_MAX 256
+static long urun_at[URUN_MAX], nurun;	/* cap's index at each underrun */
 
 /* the matrix: a time slot when its time comes */
 static void clock_ssi(void)
@@ -58,7 +66,11 @@ static void clock_ssi(void)
 			if (tde_first < 0)
 				tde_first = ncap;
 			tde_miss++;
+			if (nurun < URUN_MAX)
+				urun_at[nurun++] = ncap;
 		}
+		if (slot0 && left_par < 0)
+			left_par = (int)(ncap & 1);
 		dsp_core_ssi_Receive_SCK();
 		if (tue_every && ++slot_n % tue_every == 0) {
 			dsp_set_interrupt(DSP_INTER_SSI_TRX_DATA, 0);
@@ -98,6 +110,20 @@ static long falcon_rate(long rin)
 		if (491700 / k10[i] >= rin)
 			best = 491700 / k10[i];
 	return best;
+}
+
+/* a word within a frame and a half of an underrun: an underrun puts the
+   words a slot late (the DSP56001's manual: the word before sent again,
+   the late one in the next slot; Hatari's core does the same), left and
+   right swapped until salign, once a frame, puts r7 one word on. A frame
+   of 1,152 stereo samples is 2,304 words, more where the DSP resamples up */
+static int in_urun(long c)
+{
+	long i;
+	for (i = 0; i < nurun; i++)
+		if (c >= urun_at[i] && c < urun_at[i] + 3 * 2304 + 64)
+			return 1;
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -322,9 +348,18 @@ int main(int argc, char **argv)
 		while (e0 < nexp && !exp_w[e0])
 			e0++;
 		e0 &= ~1L;
-		for (k = 0; k + 64 <= ncap && at < 0; k++)
-			if (!memcmp(cap + k, exp_w + e0, 64 * sizeof(*cap)))
-				at = k - e0;
+		/* (in a left's slot, and past any underrun's window: left and
+		   right out of step there until salign puts them back) */
+		{
+			/* (the model's first 64 words; where they fall in an
+			   underrun's window, a later 64, a left's word first) */
+			long j;
+			for (j = e0; j + 64 <= nexp && j < e0 + 32768 && at < 0; j += 2)
+				for (k = 0; k + 64 <= ncap && at < 0; k++)
+					if ((left_par < 0 || (k & 1) == left_par) && !in_urun(k) &&
+					    !in_urun(k + 63) && !memcmp(cap + k, exp_w + j, 64 * sizeof(*cap)))
+						at = k - j;
+		}
 		if (at < 0) {
 			printf("%s: the model's sound not found in what the SSI sent\n", argv[1]);
 			dead = 1;
@@ -332,7 +367,7 @@ int main(int argc, char **argv)
 			cmpn = nexp < ncap - at ? nexp : ncap - at;
 			cmpn -= 2304;		/* (the end: the last granule's, played or not yet) */
 			for (k = e0; k < cmpn; k++)
-				if (cap[at + k] != exp_w[k]) {
+				if (cap[at + k] != exp_w[k] && !in_urun(at + k)) {
 					if (first_bad < 0)
 						first_bad = k;
 					bad++;
