@@ -924,6 +924,21 @@ def run(work, case, spec):
             time.sleep(4)
             # Esc closes the pop-up; Return saves under the name given
             cmd(fifo, "hatari-event", "keypress", "0x01" if case == "popuphold" else "0x1c")
+            cpu = "MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "") or os.environ.get("EPLAY_RIG_CPUMP3") == "1"
+            if case == "savehold":
+                # (the owner, 23 Nov 2026: the music paused while the
+                # system's selector is open, and on from where it was)
+                paused = wait_line(log, lambda l: l.startswith("EPLAY paused at "), 2)
+                resumed = wait_line(log, lambda l: l.startswith("EPLAY resumed at "), 20)
+                end = wait_line(log, lambda l: l.startswith("EPLAY ended"), 60) or "EPLAY ended: ? underruns"
+                at = [int(x.split()[3]) for x in (paused, resumed) if x]
+                ok = len(at) == 2 and abs(at[1] - at[0]) < 300 and " 0 underruns" in end
+                return ok, m.describe(), "%s; %s; %s" % (paused or "never paused", resumed or "never resumed", end)
+            if cpu:
+                # (the CPU's MP3 through Hatari 2.4's DMA: what it records
+                # is no evidence (holdnone's skip); EPlay's own count is)
+                end = wait_line(log, lambda l: l.startswith("EPLAY ended"), 60) or "EPLAY ended: ? underruns"
+                return " 0 underruns" in end, m.describe(), "the pop-up held 6 s: " + end
         if case == "settings":
             # (once the music is heard: the DSP's program is sent first, and
             # Control+comma's key click before the music reads as a gap)

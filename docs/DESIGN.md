@@ -3061,3 +3061,23 @@ it in 1.44".
   EPLAYFB.PRG builds it, each of its three decoders against the host's minimp3 (`fbmpfb`): minimp3
   within a step, EPlay's within 2 (about 90 dB under the music), the EMAC's the integer's bit for
   bit.
+
+## 1.56: the music fed, or paused, while something holds the program (23 Nov 2026)
+
+- **Reported:** a FireBee tester, and the owner on TOS: an MP3 (a file or a station) went round a
+  short loop while a row's pop-up menu was open, or while the list was saved as a playlist.
+- **Why:** EPlay feeds the sound from its event loop's turns. While something else waits on the
+  AES for the user, nothing new reaches the sound and the hardware plays what it last had again.
+  Dialogs already feed it (common's `dlg_idle`, 0.24), as does the family's file dialog.
+  - common's pop-up (`popup.c`) waits in its own loop, which didn't call `dlg_idle`. On a Falcon
+    the DSP's lead covers it; on a CPU path (the FireBee, a 68060 or 68080) the queue runs dry.
+    The fix is common's: each of its 20 ms turns calls `dlg_idle`, through AERA-Atari.
+  - The system's file selector (Save as playlist; Add files with "Use the system file selector")
+    holds the program until it closes, so nothing can feed it. Decided 23 Nov 2026: the music is
+    paused before it opens and goes on after, as Pause and Play do (`sysfsel_begin`, `_end`).
+- **The rigs** (`play_test.py`, `play060.py`): `popuphold` and `savehold` hold each one 6 s while
+  HOLD.MP3 plays (128 kbit/s at 32 kHz, which the CPU's decoders keep up with in Hatari), with
+  `holdnone` the same file held by nothing. On 1.55: the Falcon's Save stopped the music; on the
+  68060 without a DSP, the pop-up 951 underruns and Save the loop. Now every case passes: no
+  underrun, and Save paused and went on at the same millisecond. On the CPU path the pop-up is
+  judged by EPlay's count, Hatari 2.4's DMA recording a silent track there (`holdnone`'s skip).

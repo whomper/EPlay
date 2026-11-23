@@ -1047,12 +1047,38 @@ static const DL_TYPE add_types[] = { { "Music files", "MP3 WAV AIF AIFF AIFC VGM
 static const FP_SPEC add_spec = { "Add files", "Add", "No folder added from yet", "EPLAY", add_types,
 				  (int)(sizeof(add_types) / sizeof(add_types[0])) };
 
+/* the system's file selector holds the program until it closes, and
+   nothing feeds the music meanwhile: it is paused before it opens and
+   goes on after (the owner, 23 Nov 2026, from a FireBee tester's short
+   loop and his own on TOS), as Pause and Play would */
+static void command(int c);
+static int sel_paused;
+
+static void sysfsel_begin(void)
+{
+	sel_paused = play_state() == PS_PLAYING;
+	if (sel_paused) {
+		elog("the system file selector: the music paused while it is open");
+		command(C_PLAY);
+	}
+}
+
+static void sysfsel_end(void)
+{
+	if (sel_paused && play_paused())
+		command(C_PLAY);
+	sel_paused = 0;
+}
+
 static void open_file(void)
 {
 	int before = list_count();
 	first_added = -1;
 	draw_forget();			/* (the text's height set again at its first) */
+	if (filepick_system)
+		sysfsel_begin();
 	filepick_run(&add_spec, settings_add_dir(), settings_recent(), add_one_file, feed_only);
+	sysfsel_end();
 	settings_recent_changed();	/* (its folder kept, and the last folders if any were added) */
 	{
 		char line[60];
@@ -1501,8 +1527,12 @@ static void save_playlist(void)
 		return;			/* (greyed: menu_update) */
 	if (!path[0])
 		snprintf(path, sizeof(path), "%s*.M3U", settings_add_dir()[0] ? settings_add_dir() : app_dir());
-	if (!fsel_exinput(path, name, &button, "Save the list as a playlist") || !button || !name[0])
+	sysfsel_begin();
+	if (!fsel_exinput(path, name, &button, "Save the list as a playlist") || !button || !name[0]) {
+		sysfsel_end();
 		return;
+	}
+	sysfsel_end();
 	snprintf(dir, sizeof(dir), "%s", path);
 	e = strrchr(dir, '\\');
 	if (e)
