@@ -103,6 +103,13 @@ CASES = {
 # 4 Nov 2026, from 0.22's 451 underruns with modal dialogs open), so the
 # queue's lead (3 s) never runs out
 CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 49170, (1000, 1500), 14)
+# a FireBee tester's report (23 Nov 2026), and the owner's on TOS: an MP3
+# (a file or a station) went round a short loop while a row's pop-up menu
+# was open, or while the list was saved as a playlist. Both held open 6 s
+# while LONG.MP3 plays: the queue goes on being fed, no underrun
+CASES["popuphold"] = ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
+                      (1000, 1500), 14)
+CASES["savehold"] = CASES["popuphold"]
 # phase 9 (Erez, 9 Nov 2026): a VGM and a VGZ on the YM2149, a 1 kHz square
 # wave (the chip's), its file's AY at 1.7734 MHz turned to the Atari's 2 MHz
 CASES["vgm"] = ("TONE.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
@@ -897,6 +904,22 @@ def run(work, case, spec):
             row = row if row and "playing: ANOTHER.MP3" in open(log, errors="replace").read() else None
             return bool(row), m.describe(), "addplay: ANOTHER.MP3 added while LONG.MP3 played: %s; %s" % (
                 added, row or "not \"Playing 2 of 2\"")
+        if case in ("popuphold", "savehold"):
+            # (once the music is heard)
+            time.sleep(2)
+            if case == "popuphold":
+                cmd(fifo, "hatari-event", "keypress", "0x50")     # Down: the row selected
+                time.sleep(0.5)
+                cmd(fifo, "hatari-event", "keypress", "0x52")     # Insert: its pop-up menu
+            else:
+                cmd(fifo, "hatari-event", "keydown", "0x1d")
+                cmd(fifo, "hatari-event", "keypress", "0x1f")     # ^S: Save as playlist
+                cmd(fifo, "hatari-event", "keyup", "0x1d")
+            time.sleep(2)
+            cmd(fifo, "hatari-shortcut", "screenshot")
+            time.sleep(4)
+            # Esc closes the pop-up; Return saves under the name given
+            cmd(fifo, "hatari-event", "keypress", "0x01" if case == "popuphold" else "0x1c")
         if case == "settings":
             # (once the music is heard: the DSP's program is sent first, and
             # Control+comma's key click before the music reads as a gap)
