@@ -106,10 +106,14 @@ CASES["settings"] = ("CD.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 491
 # a FireBee tester's report (23 Nov 2026), and the owner's on TOS: an MP3
 # (a file or a station) went round a short loop while a row's pop-up menu
 # was open, or while the list was saved as a playlist. Both held open 6 s
-# while LONG.MP3 plays: the queue goes on being fed, no underrun
-CASES["popuphold"] = ("LONG.MP3", ["-r", "44100", "-c", "2", "-b", "16"], ["-b", "320", "-m", "s"], 49170,
+# while an MP3 plays: the queue goes on being fed, no underrun
+# (HOLD.MP3: 128 kbit/s at 32 kHz, which the CPU's decoders keep up with
+# in Hatari, so the hold alone is what's tried; holdnone the same file with
+# nothing held, the control)
+CASES["popuphold"] = ("HOLD.MP3", ["-r", "32000", "-c", "2", "-b", "16"], ["-b", "128", "-m", "s"], 32780,
                       (1000, 1500), 14)
 CASES["savehold"] = CASES["popuphold"]
+CASES["holdnone"] = CASES["popuphold"]
 # phase 9 (Erez, 9 Nov 2026): a VGM and a VGZ on the YM2149, a 1 kHz square
 # wave (the chip's), its file's AY at 1.7734 MHz turned to the Atari's 2 MHz
 CASES["vgm"] = ("TONE.VGM", ["-r", "44100", "-c", "1", "-b", "16"], None, 44100, (1000, 1000), 3)
