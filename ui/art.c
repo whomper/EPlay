@@ -88,6 +88,11 @@ static unsigned long now_ms(void)
 static long cpu_turns;
 #define FAST_TURNS 5800L
 static int cpu_fast;
+#if defined(EPLAY_FB)
+#define CPU_WORD "ColdFire"
+#else
+#define CPU_WORD (cpu_fast ? "CPU" : "68030")
+#endif
 
 static long spin(void)
 {
@@ -106,6 +111,12 @@ void art_init(short size)
 	long n;
 	cpu_turns = spin();
 	cpu_fast = cpu_turns >= FAST_TURNS;
+#if defined(EPLAY_FB)
+	/* the FireBee: no DSP, its ColdFire the one way (a tester's 1.52 log,
+	   23 Nov 2026: a file's cover refused at its start, "the 68030 too
+	   slow", and shown only for the file that followed on) */
+	cpu_fast = 1;
+#endif
 	elog("the CPU: %ld turns in 50 ms (album art unpacked by it from %ld; else on the DSP%s)", cpu_turns,
 	     FAST_TURNS, dspjpeg_present() ? "" : ", which this machine hasn't");
 	side = size > REC_SIDE ? REC_SIDE : size;
@@ -396,7 +407,7 @@ int art_begin(const char *path)
 	}
 	on_dsp = !cpu_fast && !force_cpu;
 	if (on_dsp && !dspjpeg_present()) {
-		fail("no DSP here to unpack it, and the 68030 too slow");
+		fail("no DSP here to unpack it, and the CPU too slow");
 		elog("%s", note);
 		return ART_NOW;
 	}
@@ -738,7 +749,7 @@ static void decode(void)
 	buf = 0;
 	snprintf(note, sizeof(note), "album art: %s, %ld KB, unpacked on the %s: read by %lu ms, its first poll %lu ms "
 		 "later, done %lu ms after (the longest between polls %lu; %ld scan words, %ld MCUs)",
-		 pic_kind_name(kind), (blen + 1023) / 1024, on_dsp ? pic_dsp_state() : "68030", t_dec0 - t_job,
+		 pic_kind_name(kind), (blen + 1023) / 1024, on_dsp ? pic_dsp_state() : CPU_WORD, t_dec0 - t_job,
 		 t_feed1 ? t_feed1 - t_dec0 : 0, now_ms() - (t_feed1 ? t_feed1 : t_dec0), t_gapmax, n_put16, n_get);
 	cache_store();
 	st = A_DITHER;
