@@ -1057,6 +1057,9 @@ static int take_queue(int unit)
 		n = QMIN;
 	if (n > big - 32768)
 		return 0;
+	n -= n % PIECE;		/* whole pieces: the reads meet the ring's end the same whatever a
+				   few KB more or less of free memory (1.57: 2 KB more program made
+				   a stock Falcon's start 25 ms slower) */
 	n -= n % unit;
 	q = x_alloc(n, 3);		/* TT RAM where there is some */
 	if ((long)q <= 0) {

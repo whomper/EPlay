@@ -3088,12 +3088,29 @@ A tester on a Raven (68060, EmuTOS and MagiC) found that EPlay changed pens 16 t
 a desktop picture in 256 colours that uses them came out wrong until EPlay quit. Decided 24 Nov
 2026: in 256 colours EPlay leaves the palette alone. The bar's seven colours (`bar.c`'s `theme`)
 are each the nearest of the screen's own 256 pens (pen_nearest's weights), the bar's text not the
-bar's pen, the accent not the bar's or the text's, the track none of those; the palette is read
-once at the start (`bar_pal`), and the album art's dither takes that read instead of reading it
-again. In true colour the pens are still set (there is no palette there for a picture to lose),
+bar's pen, the accent not the bar's or the text's, the track none of those. In true colour the pens are still set (there is no palette there for a picture to lose),
 and put back at the end; in 16 colours and mono nothing changes. The album art never took pens of
 its own: it is dithered to the screen's 256.
 
 The rig's `palkeep` reads the Falcon's palette registers for pens 16 to 22 ($FF9840) through
 Hatari's debugger as EPlay starts and again while it plays, and wants them the same: 1.56 fails
 it (EPlay's own blue-greys in the second read), 1.57 passes, with NVDI's palette and TOS's.
+
+The first candidate read all 256 pens and searched them at every start: 32 ms on a stock Falcon
+(the 256 `vq_color` calls 16 ms, the seven searches 16), and the speed pairs against 1.56 showed it
+on every start row of Falcon-4:256 with NVDI (650 -> 685 ms and the like). So the search's answers
+on the standard palettes, TOS 4's (NVDI's the same: pens 255, 0, 253, 80, 254, 250, 254) and
+EmuTOS's (29, 0, 21, 73, 26, 17, 26), are kept in `bar.c` with the colours those pens hold there.
+At the start EPlay reads those six pens (`std_holds`, under a millisecond); while they hold those
+colours it takes them. A picture or a palette of its own that changes any of them has all 256 read
+(`bar_pal`, which the album art's dither then takes instead of reading again) and searched, the
+search now leaving a pen as soon as its sum passes the best (the same answers as before: 200,000
+random palettes compared on the host). A picture that changes other pens but not those six leaves
+the bar in its standard pens, which still hold their colours.
+
+The same pairs showed Falcon-4:16's "started, 8 files given" at 680 against 655. A build of 1.56
+with 2,304 bytes more BSS and nothing else read 680 too: the row has two states, about 650 and
+about 680 (1.56 itself read 655 and 675 in its own gate's pairs), and a few hundred cycles more at
+the start, such as TOS clearing more BSS, tip it into the slower one. `take_queue` now rounds the
+queue down to whole pieces (the hub's item from 1.56), so the reads meet the ring's end the same
+whatever the free memory.

@@ -11,9 +11,9 @@
  *
  * Colours: in true colour, pens 16 to 22 are set to the bar's (the
  * guidelines' 5.2: put back at the end); in 256 colours each is the
- * nearest of the screen's own 256, the palette left as it is (decided
- * 24 Nov 2026: a desktop picture in pens 16 and up stays right while
- * EPlay runs); in 16 colours the bar is black with white text and the
+ * nearest of the screen's own 256 (the standard palettes' answers kept,
+ * std_pal), the palette left as it is (decided 24 Nov 2026: a desktop
+ * picture in pens 16 and up stays right while EPlay runs); in 16 colours the bar is black with white text and the
  * others are the nearest of pens 0 to 15;
  * in mono black and white, the position's fill thicker than its track,
  * the controls that don't work yet in a grey pattern.
@@ -55,29 +55,76 @@ short bar_pal[256][3];
 int bar_pal_read;
 
 /* the nearest of the screen's 256 pens to a theme colour (pen_nearest's
-   weights), not one of the pens in not[0..nn-1] while another is near */
+   weights), not one of the pens in not[0..nn-1] while another is near.
+   A pen is left as soon as its sum passes the best (the green and blue
+   terms not multiplied for most), and not[] looked at only for a pen
+   that is the nearest so far */
 static short nearest256(const short *want, const short *not, int nn)
 {
 	short p, best = 1;
 	long bd = 0x7fffffffL;
 	int k;
 	for (p = 0; p < 256; p++) {
-		short dr = (short)(bar_pal[p][0] - want[0]), dg = (short)(bar_pal[p][1] - want[1]),
-		      db = (short)(bar_pal[p][2] - want[2]);
-		long d = 3 * ((long)dr * dr) + 4 * ((long)dg * dg) + 2 * ((long)db * db);
+		const short *c = bar_pal[p];
+		short dr = (short)(c[0] - want[0]), dg, db;
+		long d = 3 * ((long)dr * dr);
+		if (d >= bd)
+			continue;
+		dg = (short)(c[1] - want[1]);
+		d += 4 * ((long)dg * dg);
+		if (d >= bd)
+			continue;
+		db = (short)(c[2] - want[2]);
+		d += 2 * ((long)db * db);
+		if (d >= bd)
+			continue;
 		for (k = 0; k < nn; k++)
 			if (not[k] == p)
 				break;
 		if (k < nn)
 			continue;
-		if (d < bd) {
-			bd = d;
-			best = p;
-			if (!d)
-				break;
-		}
+		bd = d;
+		best = p;
+		if (!d)
+			break;
 	}
 	return best;
+}
+
+/* the search's answers on the standard palettes, TOS 4's (NVDI's the
+   same) and EmuTOS's: the pens it finds there and the colours they hold.
+   While a screen's pens still hold those colours, they are taken and the
+   256 reads and the search (32 ms on a stock Falcon, at every start) are
+   left out; a picture that changes them (or a palette of its own) has
+   the 256 searched */
+#define NSTD 2
+static const struct {
+	short pen[TPENS];
+	short rgb[TPENS][3];
+} std_pal[NSTD] = {
+	{ { 255, 0, 253, 80, 254, 250, 254 },
+	  { { 102, 102, 102 }, { 1000, 1000, 1000 }, { 702, 702, 702 }, { 200, 800, 1000 },
+	    { 302, 302, 302 }, { 949, 949, 949 }, { 302, 302, 302 } } },
+	{ { 29, 0, 21, 73, 26, 17, 26 },
+	  { { 133, 133, 133 }, { 1000, 1000, 1000 }, { 667, 667, 667 }, { 0, 733, 1000 },
+	    { 333, 333, 333 }, { 933, 933, 933 }, { 333, 333, 333 } } },
+};
+
+/* 1 if the screen's pens hold standard palette n's colours */
+static int std_holds(int n)
+{
+	short c[3];
+	int k, j;
+	for (k = 0; k < TPENS; k++) {
+		for (j = 0; j < k && std_pal[n].pen[j] != std_pal[n].pen[k]; j++)
+			;
+		if (j < k)
+			continue;	/* (a pen read already) */
+		vq_color(vdi_h, std_pal[n].pen[k], c);
+		if (c[0] != std_pal[n].rgb[k][0] || c[1] != std_pal[n].rgb[k][1] || c[2] != std_pal[n].rgb[k][2])
+			return 0;
+	}
+	return 1;
 }
 
 void bar_colours(void)
@@ -87,19 +134,31 @@ void bar_colours(void)
 	themed = planes > 8;
 	if (planes == 8) {
 		short not[3];
-		for (i = 0; i < 256; i++)
-			vq_color(vdi_h, (short)i, bar_pal[i]);
-		bar_pal_read = 1;
-		p_bar = nearest256(theme[0], 0, 0);
-		not[0] = p_bar;
-		p_txt = nearest256(theme[1], not, 1);
-		not[1] = p_txt;
-		p_dim = nearest256(theme[2], not, 2);
-		p_acc = nearest256(theme[3], not, 2);
-		not[2] = p_acc;
-		p_trk = nearest256(theme[4], not, 3);
-		p_alt = nearest256(theme[5], not, 1);
-		p_hdr = nearest256(theme[6], not + 1, 1);
+		for (i = 0; i < NSTD && !std_holds(i); i++)
+			;
+		if (i < NSTD) {
+			p_bar = std_pal[i].pen[0];
+			p_txt = std_pal[i].pen[1];
+			p_dim = std_pal[i].pen[2];
+			p_acc = std_pal[i].pen[3];
+			p_trk = std_pal[i].pen[4];
+			p_alt = std_pal[i].pen[5];
+			p_hdr = std_pal[i].pen[6];
+		} else {
+			for (i = 0; i < 256; i++)
+				vq_color(vdi_h, (short)i, bar_pal[i]);
+			bar_pal_read = 1;
+			p_bar = nearest256(theme[0], 0, 0);
+			not[0] = p_bar;
+			p_txt = nearest256(theme[1], not, 1);
+			not[1] = p_txt;
+			p_dim = nearest256(theme[2], not, 2);
+			p_acc = nearest256(theme[3], not, 2);
+			not[2] = p_acc;
+			p_trk = nearest256(theme[4], not, 3);
+			p_alt = nearest256(theme[5], not, 1);
+			p_hdr = nearest256(theme[6], not + 1, 1);
+		}
 	}
 	if (!pool) {
 		/* (ST RAM at the start, before any file's queue: 0.13's lesson) */
