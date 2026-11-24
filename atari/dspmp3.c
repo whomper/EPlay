@@ -494,8 +494,8 @@ void dspmp3_stall_test(void)
 }
 
 /* the rigs' STALLAT=-1: the DSP taken as not answering as its stream
-   starts, no frame yet (the owner's DFB1X, 17 Nov 2026: "loading word 0 of 0
-   (host status $00)") */
+   starts, no frame yet (a fault reported 17 Nov 2026: the DSP took no word
+   of its program) */
 void dspmp3_start_fail_test(void)
 {
 	failed = 1;

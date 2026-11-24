@@ -265,9 +265,8 @@ void bar_layout(const GRECT *work)
 	/* the middle: Previous, 10 s back, Play/Pause, 10 s forward, Next,
 	   the position under them (Shuffle and Repeat: the Play menu's). The
 	   10 s buttons either side of Play/Pause, Previous and Next a button
-	   further out (Erez, 17 Nov 2026: "a small circle with an arrow to the
-	   back and to the front with the number 10 inside it ... surrounding
-	   the play/pause button") */
+	   further out (decided 17 Nov 2026: a small circle with an arrow back
+	   or forward and a 10 inside, either side of Play/Pause) */
 	x = w_txt.x + w_txt.w + 6;
 	rect(&w_ctl, x, work->y, w_out.x - 8 - x, bar_h);
 	rad = (ch * 13 + 8) / 16;		/* the round button's radius: 13 on VGA */
@@ -509,10 +508,8 @@ static void mask_tri(MASK *m, short w, short h, int dir)
 	}
 }
 
-/* the 10 s buttons' sign (Erez, 17 Nov 2026, a picture of it: "make sure
-   the arrows are clearly visible ... and the circle line is thinner"; 18
-   Nov: "too big ... bigger than the other buttons and also the 10 is not
-   centered. You can reduce the font size of the number 10"): a ring a
+/* the 10 s buttons' sign (decided 17-18 Nov 2026: clear arrows, a thinner
+   ring, no bigger than the other buttons, a smaller 10 centred): a ring a
    pixel wide, its end turned into an arrowhead pointing down and a gap
    after it, a pixel clear of a small "10" (3 by 5) centred in it; drawn
    by hand, a pixel at a time, for the VGA's square pixels (18
@@ -584,7 +581,7 @@ static void mask_draw(const MASK *m, short x, short y, short pen)
 
 /* ---- the badges (the bit rate, the rate, where it plays): common's
    badge.c (AERA-Atari 7a84fd1, from this bar's own of 0.27): the text in
-   the system font's small size (6 x 6; Erez, 5 Nov 2026: "too big"), in a
+   the system font's small size (6 x 6; decided 5 Nov 2026), in a
    box a pixel clear of it all round, centred in the row of height rh at
    y, made once as it changes into a one-plane form, box and all, and
    drawn with one raster copy */
@@ -651,9 +648,8 @@ static void draw_art(void)
 	mask_draw(&k_spot, cx - 2, cy - 2, p_bar);
 }
 
-/* ---- the title's and the artist's scroll (Erez, 11 Nov 2026: "if the
-   text is cut on the right side, it should nicely scroll left to right and
-   vice versa"): a line wider than its place moves a character every
+/* ---- the title's and the artist's scroll (decided 11 Nov 2026: a line cut
+   on the right scrolls to and fro): a line wider than its place moves a character every
    SCR_STEP ms, and waits SCR_HOLD at each end. A character at a time
    keeps the text on its cells (text_plain's fast way: one line drawn, the
    stock machines' speed rule) */

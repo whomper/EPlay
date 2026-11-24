@@ -5,7 +5,7 @@
  * the DSP's model (mp3dsp.c's huffman()) gives, from the main data as
  * bytes: measured (bench.c) as the 68030's possible share of the decode,
  * so that a stock Falcon's DSP had the time for the rest at 49,170 Hz
- * (Erez, 7 Nov 2026: "Many users will not have an FDI"). A stock 68030
+ * (decided 7 Nov 2026: most users have no FDI). A stock 68030
  * decodes 63 granules a second of a 320 kbit/s file, where playing needs
  * 153: 243 % of it. Not in the program (docs/DESIGN.md).
  */

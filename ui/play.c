@@ -2650,8 +2650,8 @@ int play_step(int ms)
 		elog("the sound: %s", play_keep_up());
 		elog("the stream: %s", play_stream_note());
 		/* (and a DSP that stopped answering as its stream started, no
-		   frame yet: the owner's DFB1X under load, 17 Nov 2026, "loading word
-		   0 of 0 (host status $00)" through the Gateway: started again
+		   frame yet: a fault reported 17 Nov 2026, a DFB1 under load through
+		   the Gateway, the DSP taking no word of its program: started again
 		   the same way, its program loaded afresh) */
 		if (what == 4 || (what == 3 && t_frames == 0)) {
 			char note[160];

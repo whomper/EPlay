@@ -964,7 +964,7 @@ static void full_note(void)
 }
 
 /* files came in and none can play here (MP3s without a DSP): said so,
-   when nothing plays (Erez, 7 Nov 2026: "MP3 needs a Falcon's DSP") */
+   when nothing plays (decided 7 Nov 2026) */
 static void none_playable(int before)
 {
 	if (list_count() > before && play_state() != PS_PLAYING && !play_paused() &&
@@ -1959,7 +1959,7 @@ static void drag_pos(short mx, short my)
 }
 
 /* the volume pressed (or dragged): it changes as the pointer moves, as a
-   slider does (Erez, 3 Nov 2026: "like the progress bar"), and is kept */
+   slider does (decided 3 Nov 2026: as the position bar does), and is kept */
 static void volume_to(int v)
 {
 	if (v == play_volume())
@@ -2499,8 +2499,8 @@ int app_main(void)
 	elog("EPlay %s; _MCH $%08lX, _CPU %ld, _SND $%02lX; the FDI's driver %s", app_version,
 	     get_cookie(0x5F4D4348L), get_cookie(0x5F435055L), get_cookie(0x5F534E44L),
 	     snd_fdi ? "answers ($4711)" : "doesn't answer");
-	/* (TT RAM is the DFB1's: Erez's logs of 0.11 had a queue of 1.9 MB,
-	   8 MB with it, and nothing else to say whether it was on) */
+	/* (TT RAM is the DFB1's: the queue's size was all the log had to say
+	   whether it was on) */
 	{
 		long st = (long)x_alloc(-1L, 0), tt = (long)x_alloc(-1L, 1);
 		elog("free memory, the largest blocks: ST RAM %ld KB, TT RAM %ld KB", st > 0 ? st / 1024 : 0,

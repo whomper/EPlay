@@ -106,8 +106,8 @@ void settings_read(void)
 	}
 	/* NATFEATS=1 (the rigs', never written; not in Settings): the
 	   emulator's console looked for only then, before EPlay's first line
-	   (Erez, 15 Nov 2026: "a .INF setting so that it can be added in our
-	   testing but have no bearing outside"). Else nf_debug does nothing
+	   (decided 15 Nov 2026: for the tests, with no effect outside them).
+	   Else nf_debug does nothing
 	   and no machine runs NatFeats' probe */
 	if (inf_get(inf, inf_n, "NATFEATS", v, sizeof(v)) && v[0] == '1')
 		nf_on = 1;

@@ -32,8 +32,8 @@ int cmp3_kind(void)
 		return kind;
 	cpu = get_cookie(0x5F435055L);		/* '_CPU' */
 	/* a 68060; a 68080 (a Vampire's): a V4SA's TOS says 80, EmuTOS 40,
-	   told from a 68040 as EmuTOS tells it (Erez, 16 Nov 2026: "if there is a
-	   68060 or 68080 without an FPU, EPlay should decode on the CPU") */
+	   told from a 68040 as EmuTOS tells it (decided 16 Nov 2026: a 68060 or
+	   68080 without an FPU decodes on the CPU too) */
 	if (cpu == 80)
 		is080 = 1;	/* (a V4SA's TOS says 80: its tester's EPLAY.LOG, 1.40) */
 	else if (cpu == 40)

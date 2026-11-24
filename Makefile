@@ -445,8 +445,8 @@ $(B)/mp3ovl/mad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h th
 	$(CC) $(OVLIF) -w -c -o $@ $<
 
 # a release's files, for the release workflow: two packages and nothing
-# else (the guidelines 7.4, Erez 22 Nov 2026: "Remove all files from root
-# and just have two ZIP files, one for each platform"), every name in
+# else (the guidelines 7.4, decided 22 Nov 2026: no loose files, one zip
+# for each platform), every name in
 # lowercase (6.6), the icons in icons/:
 # - dist/eplay-x.y.zip, the standard package (Falcon, TT, STE);
 # - dist/eplay-x.y-firebee.zip, the FireBee's: the same names built for its

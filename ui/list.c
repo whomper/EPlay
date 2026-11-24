@@ -121,7 +121,7 @@ int list_add(const char *path)
 	e->path = p;
 	e->title = e->artist = e->album = "";
 	/* an MP3 where there's no DSP (a TT, an STE): shown dim, passed over
-	   (Erez, 7 Nov 2026: "MP3 needs a Falcon's DSP"); known from its name
+	   (decided 7 Nov 2026, with its alert's words); known from its name
 	   at once, before its tags are read, for files given at the start */
 	{
 		const char *d = strrchr(p, '.');

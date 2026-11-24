@@ -61,8 +61,8 @@ int main(void)
 	check(!strcmp(rel, "LIVE\\A.MP3"), "written relative where in the folder (the case aside)");
 	m3u_rel("D:\\X\\B.MP3", "C:\\MUSIC\\", rel, sizeof(rel));
 	check(!strcmp(rel, "D:\\X\\B.MP3"), "else whole");
-	n = m3u_entry(out, sizeof(out), "C:\\MUSIC\\01.MP3", "C:\\MUSIC\\", 245, "Erez", "Night");
-	check(n > 0 && !strcmp(out, "#EXTINF:245,Erez - Night\r\n01.MP3\r\n"), "an entry: #EXTINF, artist - title");
+	n = m3u_entry(out, sizeof(out), "C:\\MUSIC\\01.MP3", "C:\\MUSIC\\", 245, "Artist", "Night");
+	check(n > 0 && !strcmp(out, "#EXTINF:245,Artist - Night\r\n01.MP3\r\n"), "an entry: #EXTINF, artist - title");
 	m3u_entry(out, sizeof(out), "C:\\MUSIC\\02.WAV", "C:\\MUSIC\\", -1, "", "");
 	check(!strcmp(out, "#EXTINF:-1,02.WAV\r\n02.WAV\r\n"), "no tags, no length: the file's name, -1");
 	check(m3u_entry(out, 10, "C:\\MUSIC\\01.MP3", "C:\\MUSIC\\", 1, "", "") < 0, "too long for out: -1");

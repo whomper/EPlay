@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """natfeats.py - NATFEATS=1 in the eplay.inf a rig sets up: EPlay looks for
-the emulator's console (NatFeats) only then (Erez, 15 Nov 2026: "a .INF
-setting so that it can be added in our testing but have no bearing
-outside"), and the rigs read what EPlay says there."""
+the emulator's console (NatFeats) only then (decided 15 Nov 2026: an .INF
+setting for the tests, with no effect outside them), and the rigs read what EPlay says there."""
 import os
 
 

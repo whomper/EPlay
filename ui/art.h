@@ -1,9 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
- * art.h - the album art in the bar (Erez, 3 Nov 2026: design D "with album
- * art"; "decode on the DSP. Store a cache version on file in EPlay cache
- * folder"): the file's own picture (its tags' APIC: JPEG or PNG), unpacked
+ * art.h - the album art in the bar (design D, decided 3 Nov 2026: unpacked
+ * on the DSP, kept in a cache in EPlay's folder): the file's own picture (its tags' APIC: JPEG or PNG), unpacked
  * on the DSP, kept in cache\ next to the program, made in steps, then drawn
  * by one copy from ST RAM.
  */

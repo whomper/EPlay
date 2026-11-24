@@ -2,8 +2,8 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * elog.c - EPLAY.LOG (elog.h) through common's conn.c logger, as the
- * family's logs (the hub, 9 Nov 2026; Erez: "just like the other
- * applications"): one file beside the program, added to across runs, each
+ * family's logs (the hub, 9 Nov 2026; decided: as the other apps do):
+ * one file beside the program, added to across runs, each
  * line with its time; the network's lines (conn, TLS) in the same file.
  * A line at each start (conn_log_start), the file capped at 256 KB and
  * rolled over to EPLAY.OLD (common's). Each line written at once (conn.c

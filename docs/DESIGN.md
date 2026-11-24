@@ -512,8 +512,8 @@ file (its length checked).
 
 ### 0.2 on the reference Falcon (1 Nov 2026), and what 0.3 changes
 
-The owner's try of an MP3 with the FDI on: still "49 kHz" where it should be 44.1, so faster than the
-file, and after a second severe crackles that bring the playing down.
+0.2 on the reference Falcon, an MP3 with the FDI on: still 49 kHz where it should be 44.1, so faster
+than the file, and after a second severe crackles that bring the playing down.
 
 1. **The FDI's clock still wasn't found.** One cause is certain, in 0.2's measure: it read the
    DMA's position only at the start and the end of 200 ms, over a ring of 16384 frames. A clock
@@ -532,16 +532,8 @@ data 2) and each prescale tried with its measure.
 
 ### 0.3 on the reference Falcon (1 Nov 2026), and what Cubase Audio does
 
-The owner's log (an MP3 of 23 MB, VBR, 44.1 kHz, 11:45):
-
-```
-the FDI's driver answers ($4711)
-the DSP port's clock: 48150 Hz at prescale 1 (a clock of 24652800 Hz); taken as 48000 Hz
-the DSP port's GPIO: direction 7, data 2; tried 48000 Hz at prescale 1: 48150 Hz
-output: 49170 Hz, the Falcon's clock
-the DSP stopped answering reading word 5 of 2304 (host status $06), frame 202; 21803 ms played, 13870 underruns
-the sound: the first at 2010 ms; the least lead 0 ms
-```
+0.3 on the reference Falcon, a long VBR MP3 at 44.1 kHz: the FDI's clock was found, and the DSP
+fell behind and stopped answering after some 20 s of underruns.
 
 1. **The clock is found now, and it is 48 kHz** (24.576 MHz, prescale 1), with the GPIO as the
    FDI's program leaves it (data 2). A 44.1 kHz file can't play on it bit for bit, so EPlay used
@@ -554,7 +546,7 @@ the sound: the first at 2010 ms; the least lead 0 ms
    the bus control register (the decoder clears it), the file's reading (seconds ahead). Not
    known yet: what on the real machine makes it six times slower.
 
-**Cubase Audio 2.06** (the owner's copy; packed with LArc's PFX lz5, unpacked to read it) knows the FDI
+**Cubase Audio 2.06** (a copy; packed with LArc's PFX lz5, unpacked to read it) knows the FDI
 and plays from the DSP:
 
 - **The FDI:** the same sign, `Sndstatus($DD02)` = `$4711`, then `Gpio(0, 7)` (all three lines out).
@@ -1383,9 +1375,9 @@ whether it keeps up (the faster decoder, next).
 
 ### A stock Falcon's DSP at 49,170 Hz (7 Nov 2026)
 
-"Many users will not have an FDI, so I need to have the stock falcon with DSP able to play mp3";
-"optimize as much as you can to make it happen". The owner's DFB1 speeds up the 68030 only: its DSP is a
-stock Falcon's, so the owner's DSP-mode logs are the case. On it a 320 kbit/s file at 49,170 Hz left the
+Decided 7 Nov 2026: most users have no FDI, so a stock Falcon's DSP must play MP3, made as fast as it
+can be. The owner's DFB1 speeds up the 68030 only: its DSP is a stock Falcon's, so the reference
+Falcon's DSP mode is the case. On it a 320 kbit/s file at 49,170 Hz left the
 DSP some 940 waits a frame (Hatari's DSP: about 6,900 on the same kind of file), and a few granules
 came late, each a click, then Normal by itself.
 
@@ -1458,7 +1450,7 @@ The owner's next run (7 Nov): no crackles; Output DSP plays on the Falcon's own 
 FDI on the FDI alone; and the FDI "does not adhere to the file's sample rate and stays constant at
 48 kHz. This should be handled." Every log since 0.4 read 48 kHz at Cubase's 2 and 3 (its 8-track
 values for 44.1 and 48), and 44.1 kHz only at 0, from what came into the FDI's input. Cubase
-Audio's FDI routine (\$2A08 in the owner's copy) sets only these lines (its control word sent as
+Audio's FDI routine (\$2A08 in the copy read) sets only these lines (its control word sent as
 samples, \$5190, is for another interface: with the FDI's driver answering it is jumped over), with
 5 and 7 for the same rates in its 16-track modes. **0.30** tries 2, 5, 3 and 7 for 44.1 (3, 7, 2, 5
 for 48), each measured, the first at rate kept, then 0, and logs every reading: the log will say
@@ -1477,7 +1469,7 @@ there (the 38.6 to 39.3 kHz since 0.25: its oscillator free), and EPlay's 0 play
 signal to follow (the FDI's own 48 kHz then, resampled).
 
 **What is left to gain, measured (7 Nov 2026, mix320.mp3 resampled, 92.1 %)**, each about 1 %, so
-waiting for the owner's DSP-mode log of 0.28 to say how much more is needed before taking them on:
+waiting for 0.28 on the reference Falcon to say how much more is needed before taking them on:
 - *The synthesis window* (`swpair`, 12.4 %) is at its floor: one MAC an instruction, both
   accumulators.
 - *Dequantising* (15.2 % with its paths): 87 % of the lines are not zero, and a cached value takes
@@ -1616,8 +1608,7 @@ where it was. The station's titles go to the log
 - **7d, the window:** Open URL, the menu's Direct connection or Gateway, the bar for a stream,
   as decided.
 - **7e, https on a Direct connection (8 Nov 2026):** common's `atari/tls_ovl.c` and `src/ovl.c`
-  in place of `tls_none` (whose words, "this is the ST edition", reached the owner's log from
-  EPLAY.PRG with an https station). `TLS.OVL` and `CACERT.PEM` beside the program (the release
+  in place of `tls_none` (whose ST-edition message EPLAY.PRG gave for an https station). `TLS.OVL` and `CACERT.PEM` beside the program (the release
   carries both); `ROOTS.DAT`, `SEED.DAT` and `SIGS.DAT` beside it too. The handshake is the
   68030's: EPlay never hands TLS.OVL the DSP (`tls_ovl_dsp`), which is the music's. Without
   TLS.OVL: "A secure station needs TLS.OVL and CACERT.PEM beside EPlay." `stream_test https`: a
@@ -2021,7 +2012,7 @@ starts with the maximum designed for that type."
 
 ### The 68030's tick with drums (1.19, 1.20: the reference Falcon, 11 Nov 2026)
 
-EPlay 1.18 played "Spinning Machine" (Streets of Rage 3, its drums 44 DAC samples a millisecond)
+EPlay 1.18 played a Mega Drive VGM whose drums are 44 DAC samples a millisecond
 at 40 % of its speed on the reference Falcon, crackling, and crashed. What was found, on Hatari's
 stock Falcon with the file:
 
@@ -2048,19 +2039,19 @@ stock Falcon with the file:
   period, its mean and longest time.
 - **The drums on the DSP (1.21; 11 Nov 2026: "Move the drums to the DSP").** The 68030
   sends the tick's DAC writes as events, each its place in the tick and its byte (`OPNC_DACE`,
-  some 9 a millisecond in "Spinning Machine"); `opn.a56` reads them into a table, counts the
+  some 9 a millisecond in that file); `opn.a56` reads them into a table, counts the
   tick's output samples (a 24-step division) and makes each from the last byte at or before its
   place (the chip's DAC holds its byte: no longer linear between them), in a hardware loop. The
   68030 no longer fills a byte per file sample nor resamples. The DSP's busiest 31 ms in the
   file: 1,083 cycles a sample (1.20: 1,058), its mean 880 (856): some 90 % of a real DSP at
   the peak. The operators' steps in 32-bit multiplies (`stepk`, Q16; within 1e-5 of the
   64-bit form). The YM2612's tick 500 times a second, its fixed part halved.
-- **1.22 (the owner's 1.21 log, 11 Nov 2026; "Make the file reading faster for stock Falcons").**
+- **1.22 (1.21 on the reference Falcon, 11 Nov 2026; decided: faster file reading for stock Falcons).**
   Three of the plays had a tick of 1,001 ms: the 68030's second-long wait for the DSP to take a
   word, after which nothing more is sent. Not seen on Hatari; the likeliest cause, DACE's drum
   loop jumping out of a hardware DO loop and back to its last instruction, is gone (a compare
   loop, as 1.20's). `EPLAY.LOG` now says when the DSP stops taking words, with the last burst's
-  first words. The 68030's words a 2 ms tick in "Spinning Machine": 46 to 22 (`OPNC_STEP`, an
+  first words. The 68030's words a 2 ms tick in that file: 46 to 22 (`OPNC_STEP`, an
   operator's step alone, where a frequency write sent all four operators' 10 words; drum writes of
   the byte already held left out, half of them; a tick's words sent together). The file's reading:
   a seek runs the drums without a call each and starts from a copy of the run the tick keeps every
@@ -2673,7 +2664,7 @@ it in 1.44".
   and BSS (each at 1.42's or 1.43's, `--rodata`, `--data`, `--bss`) suited both Falcon-4:16 and
   the reference Falcon-4:256 with NVDI: 323 kept Falcon-4:16 clean (610) and cost NVDI's Mega Drive VGM
   start +100 ms; 332 kept NVDI within a tick of 1.43 and the WAV start at 1.43's 635. The hub:
-  the owner's configuration decides; 1.44 ships 332 (17 Nov 2026: "go ahead with 332"). The 610
+  the owner's configuration decides; 1.44 ships 332 (decided 17 Nov 2026). The 610
   waits for a layout that suits both.
 
 ## 1.46: the volume, the log kept open, a DSP that fails at a station's start (17 Nov 2026)
@@ -2688,14 +2679,14 @@ it in 1.44".
   it through `att_q15()` on the DSP and the CPU, and the Falcon's YM2149 past 15 through its own
   attenuation. EPLAY.INF writes `VOLUME=n/24`; an old `VOLUME=n` (0 to 16) is taken to the step with
   the nearest level. + and - move one step.
-- **The log kept open** (common b51644b, the hub's merge of EPlay's patch; decided: "if other AERA apps
-  behave the same … they need to change accordingly as well"). Opening and closing EPLAY.LOG for each
+- **The log kept open** (common b51644b, the hub's merge of EPlay's patch; decided: other AERA apps
+  that behave the same change too). Opening and closing EPLAY.LOG for each
   line took some 143 ms on a DFB1's IDE disk; kept open, 1.4 ms. Common's conn.c now keeps the file
   open and closes it after 1 s without a line (`conn_log_idle()`, from gem.c's event calls, never in
   a TLS handshake), at once before a connection, at a " !! " line, at a flush, at the quit, and when
   the log is switched off or renamed. A crash or a freeze loses at most the last second.
-- **A DSP that fails as a station starts** (the owner's log through the Gateway: "the DSP stopped
-  answering loading word 0 of 0"). A failure with `what == 3` and no frame sent yet takes the same
+- **A DSP that fails as a station starts** (a fault reported through the Gateway: the DSP
+  taking no word of its program). A failure with `what == 3` and no frame sent yet takes the same
   once-in-20-s restart as a stall mid-play (`what == 4`): the DSP's program loaded again, the station
   connected again. Rig: `STALLAT=-1` (`dspmp3_start_fail_test()`), `stream_test.py startfail`.
 - **A station's refill before drawing** (the hub, 17 Nov 2026). `play_net_low()` is true while a
@@ -2982,8 +2973,8 @@ it in 1.44".
     no MP3*.OVL), common's TLSFB.OVL as TLS.OVL (common's tls_ovl.c loads tls.ovl on a
     ColdFire too, AERA-Atari 8c94c08), and FBPROBE.PRG for the FireBee's testers.
   - Both packages carry the guide, CACERT.PEM, NOTICES.TXT and the icons. A release publishes
-    the two zips and nothing else (decided: "Remove all files from root and just have two ZIP
-    files, one for each platform"; "rename all other FB files into their standard filename").
+    the two zips and nothing else (decided 22 Nov 2026: the two zips only, the FireBee's
+    files under the standard names).
   - Installing either package replaces the files in place.
 - **Each program names the other package on the wrong machine** (7.4's words, wrapped at 30
   columns for TOS 1.x's alert):

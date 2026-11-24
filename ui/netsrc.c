@@ -305,7 +305,7 @@ static int via_gateway(const char *url, char *out, int omax, char *err, int n)
    with the XBIOS for each job, the 68030 when the music holds it): a
    station connected before it plays has it. laut.fm's front hangs up on a
    client that hasn't asked within about 4 s, and P-256 on a 50 MHz 68030
-   took 3.95 s of that (Erez's EPLAYNET.LOG, 8 Nov 2026); on the DSP 0.44 s */
+   takes nearly all of that; on the DSP well under a second */
 static void tls_paths(void)
 {
 	static int done;

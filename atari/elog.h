@@ -4,8 +4,8 @@
  * elog.h - EPLAY.LOG: what EPlay measured and did (the clock, each file,
  * how it ended), through common's conn.c logger as the family's logs are:
  * added to across runs, next to the program, each line written at once
- * (conn.c, AERA-Atari c9a6896: Erez, 15 Nov 2026, "apps should write log
- * at once as otherwise it may be ineffective to trace errors"), so a crash
+ * (conn.c, AERA-Atari c9a6896, decided 15 Nov 2026: written at once, so
+ * that it traces faults), so a crash
  * or a freeze keeps it to its last line.
  * Written only with Options > Write a log ticked (LOG=1 in EPLAY.INF: the
  * guidelines' 6.5, Erez, 14 Nov 2026); each line still goes to the

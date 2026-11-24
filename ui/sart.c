@@ -3,8 +3,8 @@
 /*
  * sart.c - a station's picture in the bar's art square (sart.h). Some
  * stations name one with each title (ICY's StreamUrl: a song's cover at
- * Radio Paradise, the station's logo at SomaFM). Erez, 8 Nov 2026: "if it
- * is direct connection the Atari does all, else the gateway":
+ * Radio Paradise, the station's logo at SomaFM). Decided 8 Nov 2026: on a
+ * Direct connection the Atari does it all, else the Gateway:
  *   - Direct: EPlay fetches the picture itself (http or https, through
  *     TLS.OVL; up to three redirects; 512 KB at most) and the 68030
  *     unpacks it (art.c: the DSP plays the station meanwhile);
@@ -300,8 +300,8 @@ static int fetch_show(const char *what, const char *u0, const char *name, unsign
 }
 
 /* the station's logo, when it names no picture of its own and a Gateway is
-   given in Settings, whatever the connection (Erez, 8 Nov 2026: "if there
-   is a gateway around, let it bring icons, silently"): GET /logo of its
+   given in Settings, whatever the connection (decided 8 Nov 2026: a Gateway
+   there brings logos, without a word): GET /logo of its
    radio service, 8 s into the station; a station it knows none for keeps
    the disc, and nothing is said */
 enum { L_NONE, L_ASK, L_HAVE, L_NO };
