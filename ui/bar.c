@@ -51,8 +51,7 @@ static const short theme[TPENS][3] = {
 	{ 290, 322, 384 },		/* #4a5262 the header */
 };
 
-short bar_pal[256][3];
-int bar_pal_read;
+static short (*bar_pal)[3];	/* the screen's 256 pens, while they are searched */
 
 /* the nearest of the screen's 256 pens to a theme colour (pen_nearest's
    weights), not one of the pens in not[0..nn-1] while another is near.
@@ -137,6 +136,7 @@ void bar_colours(void)
 		for (i = 0; i < NSTD && !std_holds(i); i++)
 			;
 		if (i < NSTD) {
+std:
 			p_bar = std_pal[i].pen[0];
 			p_txt = std_pal[i].pen[1];
 			p_dim = std_pal[i].pen[2];
@@ -145,9 +145,16 @@ void bar_colours(void)
 			p_alt = std_pal[i].pen[5];
 			p_hdr = std_pal[i].pen[6];
 		} else {
+			/* (taken for the search alone, not kept: 1.5 KB more program
+			   made a stock Falcon's start 20 ms slower, 1.57's gate) */
+			bar_pal = x_alloc(256L * sizeof *bar_pal, 3);
+			if ((long)bar_pal <= 0) {
+				bar_pal = 0;
+				i = 0;
+				goto std;
+			}
 			for (i = 0; i < 256; i++)
 				vq_color(vdi_h, (short)i, bar_pal[i]);
-			bar_pal_read = 1;
 			p_bar = nearest256(theme[0], 0, 0);
 			not[0] = p_bar;
 			p_txt = nearest256(theme[1], not, 1);
@@ -158,6 +165,8 @@ void bar_colours(void)
 			p_trk = nearest256(theme[4], not, 3);
 			p_alt = nearest256(theme[5], not, 1);
 			p_hdr = nearest256(theme[6], not + 1, 1);
+			Mfree(bar_pal);
+			bar_pal = 0;
 		}
 	}
 	if (!pool) {

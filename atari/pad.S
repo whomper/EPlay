@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.56's build/atari/eplay.map: do not edit.
-| 245 pads, 39700 bytes, each section at its place there, mod the 68030's
+| 245 pads, 39672 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -90,7 +90,7 @@ ep_pad_20:
 	.section ".text.art_step!","ax"
 	.globl ep_pad_21
 ep_pad_21:
-	.space 36
+	.space 184
 	.section ".text.atoi!","ax"
 	.globl ep_pad_22
 ep_pad_22:
@@ -126,7 +126,7 @@ ep_pad_29:
 	.section ".text.bar_colours!","ax"
 	.globl ep_pad_30
 ep_pad_30:
-	.space 220
+	.space 42
 	.section ".text.bar_draw!","ax"
 	.globl ep_pad_31
 ep_pad_31:
@@ -778,7 +778,7 @@ ep_pad_192:
 	.section ".rodata.xb_rates!","a"
 	.globl ep_pad_193
 ep_pad_193:
-	.space 252
+	.space 254
 	.section ".data.!","aw"
 	.globl ep_pad_194
 ep_pad_194:
@@ -839,7 +839,7 @@ ep_pad_207:
 	.globl ep_pad_208
 ep_pad_208:
 	.space 248
-	.section ".bss.bar_pal_read!","aw",@nobits
+	.section ".bss.bar_pal!","aw",@nobits
 	.globl ep_pad_209
 ep_pad_209:
 	.space 252
