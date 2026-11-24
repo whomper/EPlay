@@ -87,6 +87,10 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   - real addresses from the owner's network: use `192.168.1.x`, `PI_IP`, `ATARI_IP`
   - passwords, session keys, `.KEY` / `.INF` files from a test run
   - photos that still carry EXIF/GPS data
+  - anything the owner provides (decided 24 Nov 2026; AERA-Atari `standards/GITHUB-IDENTITY.md`): his
+    files (music, PDFs, archives, pictures, screenshots), logs such as EPLAY.LOG, links to his own
+    things, his messages and words, his machine's settings; nor quoted in a commit message, test name or
+    note. A fault he reports becomes a case made from scratch that shows the same thing
 - **README:** keep the section order from the template (Highlights, Getting started, How it reaches the
   servers, Building, Source, Tests, Licence, family footer). Use British English.
 
