@@ -386,6 +386,7 @@ fbtest: $(B)/mp3files/.made $(B)/opntab.h $(B)/opltab.h binary/eplayfb.prg binar
 	@# tlsfb.ovl, and the 68030's EPLAY.PRG still swaps on a ColdFire, for the
 	@# installs made before the two packages)
 	@if grep -q tlsfb.ovl build/fb/tls_ovl.o; then echo "FAIL the FireBee's tls_ovl.o still swaps to tlsfb.ovl"; exit 1; fi
+	@if grep -qa '%sTLSFB.OVL' binary/eplayfb.prg || ! grep -qa '%sTLS.OVL' binary/eplayfb.prg; then echo "FAIL the FireBee's EPLAY.PRG doesn't ask for TLS.OVL in its folder (its package's name)"; exit 1; fi
 	@grep -q tlsfb.ovl $(B)/atari/tls_ovl.o || { echo "FAIL the 68030's tls_ovl.o has no tlsfb.ovl swap"; exit 1; }
 	@echo "ok   tls.ovl as named in the FireBee's EPLAY.PRG; the 68030's swaps to tlsfb.ovl on a ColdFire"
 
