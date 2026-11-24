@@ -3103,14 +3103,22 @@ on the standard palettes, TOS 4's (NVDI's the same: pens 255, 0, 253, 80, 254, 2
 EmuTOS's (29, 0, 21, 73, 26, 17, 26), are kept in `bar.c` with the colours those pens hold there.
 At the start EPlay reads those six pens (`std_holds`, under a millisecond); while they hold those
 colours it takes them. A picture or a palette of its own that changes any of them has all 256 read
-(`bar_pal`, which the album art's dither then takes instead of reading again) and searched, the
+into memory taken for the search alone and given back after (a 1.5 KB table kept in the program
+made the starts slower, below) and searched, the
 search now leaving a pen as soon as its sum passes the best (the same answers as before: 200,000
 random palettes compared on the host). A picture that changes other pens but not those six leaves
 the bar in its standard pens, which still hold their colours.
 
-The same pairs showed Falcon-4:16's "started, 8 files given" at 680 against 655. A build of 1.56
-with 2,304 bytes more BSS and nothing else read 680 too: the row has two states, about 650 and
-about 680 (1.56 itself read 655 and 675 in its own gate's pairs), and a few hundred cycles more at
-the start, such as TOS clearing more BSS, tip it into the slower one. `take_queue` now rounds the
-queue down to whole pieces (the hub's item from 1.56), so the reads meet the ring's end the same
-whatever the free memory.
+The same pairs showed Falcon-4:16's "started, 8 files given" at 680 against 655, and the STE's
+at 1970 against 1960. Rounding the queue down to whole pieces, tried for it, made the queue 16 KB
+smaller (393,216 bytes against 410,092 on a stock Falcon) and was the cause on both: without it
+the two rows are 1.56's again (655, 1960). The queue is 1.56's size.
+
+What is left against 1.56 (the gate's pairs): Falcon-4:256 with NVDI is a 5 ms tick slower in some
+of its start's stretches (740 -> 755 with 8 files; the About box and the Mega Drive VGM's start
++15). Every symbol sits where 1.56's does mod 256, and 256 to 1024 bytes more BSS change nothing;
+the same build drawing in 1.56's pen numbers (16 to 22, the palette left alone) reads 735, and
+with only the text's pen moved off pen 0, 745. The drawing's timed parts are 1.56's to a tenth of
+a millisecond: the bar's white is pen 0, the only white in NVDI's palette, so the look keeps it.
+Falcon-4:16's Mega Drive VGM start read 2265 against 2200; 1.56 itself has read 2200 and 2280 in
+different gates, and 1.57's earlier candidates 2250 and 2200.
