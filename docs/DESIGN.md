@@ -3122,3 +3122,16 @@ with only the text's pen moved off pen 0, 745. The drawing's timed parts are 1.5
 a millisecond: the bar's white is pen 0, the only white in NVDI's palette, so the look keeps it.
 Falcon-4:16's Mega Drive VGM start read 2265 against 2200; 1.56 itself has read 2200 and 2280 in
 different gates, and 1.57's earlier candidates 2250 and 2200.
+
+## The FireBee's "ALERT killed: Bus ERROR" (open, 24 Nov 2026)
+
+A FireBee tester (MyAES 0.99 under FreeMiNT) saw EPlay's error alerts for a VGZ of chips it doesn't
+play and for an https station die with "ALERT killed: Bus ERROR", EPlay going on. MyAES draws
+form_alert in a system program of its own, `desk/alert.prg` (`app_system ALERT`), so that is the
+process that dies. Both alerts are [3] with one button, within 5 lines of 30; the [2] "Replace it?"
+shows there from the same `alert()`. Under MyAES 0.99's 68020 build in common's rig
+(`run.py --aes myaes --machine ct60`) the file-open turn's [3] shows and nothing dies; that build
+draws no stop icon at all, which is its way, not a fault. The ColdFire build's `alert.prg` is
+another program (159 KB against 12 KB). Waiting on the tester: their MyAES build, and whether
+another program's one-button [3] alert dies too (then it is MyAES's, and what the family does
+meanwhile is the owner's choice through the hub).
