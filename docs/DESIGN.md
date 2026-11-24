@@ -3081,3 +3081,19 @@ it in 1.44".
   68060 without a DSP, the pop-up 951 underruns and Save the loop. Now every case passes: no
   underrun, and Save paused and went on at the same millisecond. On the CPU path the pop-up is
   judged by EPlay's count, Hatari 2.4's DMA recording a silent track there (`holdnone`'s skip).
+
+## 1.57: 256 colours, the system's palette left as it is (24 Nov 2026)
+
+A tester on a Raven (68060, EmuTOS and MagiC) found that EPlay changed pens 16 to 22 while it ran:
+a desktop picture in 256 colours that uses them came out wrong until EPlay quit. Decided 24 Nov
+2026: in 256 colours EPlay leaves the palette alone. The bar's seven colours (`bar.c`'s `theme`)
+are each the nearest of the screen's own 256 pens (pen_nearest's weights), the bar's text not the
+bar's pen, the accent not the bar's or the text's, the track none of those; the palette is read
+once at the start (`bar_pal`), and the album art's dither takes that read instead of reading it
+again. In true colour the pens are still set (there is no palette there for a picture to lose),
+and put back at the end; in 16 colours and mono nothing changes. The album art never took pens of
+its own: it is dithered to the screen's 256.
+
+The rig's `palkeep` reads the Falcon's palette registers for pens 16 to 22 ($FF9840) through
+Hatari's debugger as EPlay starts and again while it plays, and wants them the same: 1.56 fails
+it (EPlay's own blue-greys in the second read), 1.57 passes, with NVDI's palette and TOS's.

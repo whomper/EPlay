@@ -32,6 +32,8 @@ enum { BH_NONE, BH_SHUFFLE, BH_PREV, BH_PLAY, BH_NEXT, BH_REPEAT, BH_BACK10, BH_
 #define BP_ALL   0xff
 
 void bar_colours(void);		/* the pens, from the screen (at the start) */
+extern short bar_pal[256][3];	/* 256 colours: the screen's palette, read by bar_colours */
+extern int bar_pal_read;
 void bar_colours_back(void);	/* pens 16 and up as they were (at the end) */
 void bar_size(short *w, short *h);	/* the work area it is laid out for */
 extern int bar_mini;		/* the mini player: the bar alone, no list (bar_size's) */

@@ -225,6 +225,10 @@ INFS = {"quitlog": "LOG=1\r\n\r\n", "logasgo": "LOG=1\r\n\r\n", "stall": "STALLA
 CASES["mini"] = CASES["mp3"]
 # and on a machine without a DSP (a TT, an STE), a WAV in it
 CASES["miniwav"] = CASES["wav"]
+# (256 colours: the palette's pens 16 to 22, read from the Videl before EPlay
+# starts and while it plays, the same: EPlay takes the nearest of the screen's
+# own pens, decided 24 Nov 2026, a Raven tester's report)
+CASES["palkeep"] = CASES["wav"]
 # ReplayGain (phase 8b): the file tagged (ID3v2.3's TXXX; a WAV's in its
 # "id3 " chunk) and its level against the untagged file's, in dB: -6.02 dB
 # is 4 steps down; +6.00 dB with a peak of 0.502 (sox's -6 dB tone) is held
@@ -421,6 +425,19 @@ def cmd(fifo, *args):
     with open(fifo, "w") as fh:
         fh.write(" ".join(args) + "\n")
     time.sleep(0.05)
+
+
+def videl_pens(fifo, log):
+    """the Falcon's palette registers for pens 16 to 22 ($FF9840, a long
+    each), through Hatari's debugger: the dump's hex words"""
+    mark = os.path.getsize(log)
+    cmd(fifo, "hatari-debug", "m $ff9840-$ff985c")
+    time.sleep(1)
+    with open(log, errors="replace") as fh:
+        fh.seek(mark)
+        got = fh.read()
+    words = re.findall(r"^00ff98[45][0-9a-f]: ((?:[0-9a-f]{2} ){1,16})", got, re.M | re.I)
+    return " ".join(w.strip() for w in words) or None
 
 
 def wait_line(log, pred, secs):
@@ -742,6 +759,8 @@ def run(work, case, spec):
         if not wait_line(log, lambda l: l.startswith("LAUNCH shel_write"), 120):
             return False, m.describe(), "the launcher never ran"
         cmd(fifo, "hatari-shortcut", "recsound")
+        if case == "palkeep":
+            pal0 = videl_pens(fifo, log)
         played = wait_line(log, lambda l: l.startswith(("EPLAY playing", "EPLAY refused", "EPLAY no sound")), 60)
         if no_dsp(spec) and played and CASES[case][0].endswith(".MP3"):
             # (no DSP: an MP3 refused, in Erez's words, 7 Nov 2026)
@@ -759,6 +778,10 @@ def run(work, case, spec):
             if wait_line(log, lambda l: l.startswith("LOG album art:") and "shown after" in l, 30):
                 time.sleep(0.5)
                 cmd(fifo, "hatari-shortcut", "screenshot")
+        if case == "palkeep":
+            pal1 = videl_pens(fifo, log)
+            if not pal0 or pal0 != pal1:
+                return False, m.describe(), "pens 16-22 before EPlay %s, while it plays %s" % (pal0, pal1)
         if case == "logasgo":
             logf = machines.ci_path(hd, "EPLAY.LOG")
             text = open(logf, errors="replace").read() if os.path.exists(logf) else ""

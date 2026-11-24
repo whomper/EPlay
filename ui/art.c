@@ -40,6 +40,7 @@
 #include "elog.h"
 #include "xalloc.h"
 #include "ui.h"
+#include "bar.h"
 
 enum { A_NONE, A_READ, A_DECODE, A_DITHER, A_PENS, A_READY, A_FAILED };
 
@@ -606,7 +607,12 @@ static void make_pal(void)
 	static unsigned char c3[256][3];
 	short i, n = planes >= 8 ? 256 : (short)(1 << planes), c[3];
 	for (i = 0; i < n; i++) {
-		vq_color(vdi_h, i, c);
+		if (n == 256 && planes == 8 && bar_pal_read) {	/* (read once, at the start) */
+			c[0] = bar_pal[i][0];
+			c[1] = bar_pal[i][1];
+			c[2] = bar_pal[i][2];
+		} else
+			vq_color(vdi_h, i, c);
 		c3[i][0] = (unsigned char)(c[0] * 255L / 1000);
 		c3[i][1] = (unsigned char)(c[1] * 255L / 1000);
 		c3[i][2] = (unsigned char)(c[2] * 255L / 1000);

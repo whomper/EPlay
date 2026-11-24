@@ -9,9 +9,12 @@
  * took a stock Falcon 165 ms. Sizes follow the system font's cell (ch 16
  * on VGA: the bar 68 pixels high, the art 56).
  *
- * Colours: in 256 colours and more, pens 16 to 22 are set to the bar's
- * (the guidelines' 5.2: put back at the end); in 16 colours the bar is
- * black with white text and the others are the nearest of pens 0 to 15;
+ * Colours: in true colour, pens 16 to 22 are set to the bar's (the
+ * guidelines' 5.2: put back at the end); in 256 colours each is the
+ * nearest of the screen's own 256, the palette left as it is (decided
+ * 24 Nov 2026: a desktop picture in pens 16 and up stays right while
+ * EPlay runs); in 16 colours the bar is black with white text and the
+ * others are the nearest of pens 0 to 15;
  * in mono black and white, the position's fill thicker than its track,
  * the controls that don't work yet in a grey pattern.
  */
@@ -48,16 +51,63 @@ static const short theme[TPENS][3] = {
 	{ 290, 322, 384 },		/* #4a5262 the header */
 };
 
+short bar_pal[256][3];
+int bar_pal_read;
+
+/* the nearest of the screen's 256 pens to a theme colour (pen_nearest's
+   weights), not one of the pens in not[0..nn-1] while another is near */
+static short nearest256(const short *want, const short *not, int nn)
+{
+	short p, best = 1;
+	long bd = 0x7fffffffL;
+	int k;
+	for (p = 0; p < 256; p++) {
+		short dr = (short)(bar_pal[p][0] - want[0]), dg = (short)(bar_pal[p][1] - want[1]),
+		      db = (short)(bar_pal[p][2] - want[2]);
+		long d = 3 * ((long)dr * dr) + 4 * ((long)dg * dg) + 2 * ((long)db * db);
+		for (k = 0; k < nn; k++)
+			if (not[k] == p)
+				break;
+		if (k < nn)
+			continue;
+		if (d < bd) {
+			bd = d;
+			best = p;
+			if (!d)
+				break;
+		}
+	}
+	return best;
+}
+
 void bar_colours(void)
 {
 	int i;
 	mono = planes < 2;
-	themed = planes >= 8;
+	themed = planes > 8;
+	if (planes == 8) {
+		short not[3];
+		for (i = 0; i < 256; i++)
+			vq_color(vdi_h, (short)i, bar_pal[i]);
+		bar_pal_read = 1;
+		p_bar = nearest256(theme[0], 0, 0);
+		not[0] = p_bar;
+		p_txt = nearest256(theme[1], not, 1);
+		not[1] = p_txt;
+		p_dim = nearest256(theme[2], not, 2);
+		p_acc = nearest256(theme[3], not, 2);
+		not[2] = p_acc;
+		p_trk = nearest256(theme[4], not, 3);
+		p_alt = nearest256(theme[5], not, 1);
+		p_hdr = nearest256(theme[6], not + 1, 1);
+	}
 	if (!pool) {
 		/* (ST RAM at the start, before any file's queue: 0.13's lesson) */
 		pool = st_raster((long)POOL_WORDS * 2);	/* (draw.c: its guard, for NVDI's blits) */
 	}
-	if (themed) {
+	if (planes == 8) {
+		/* (the pens above) */
+	} else if (themed) {
 		for (i = 0; i < TPENS; i++) {
 			vq_color(vdi_h, 16 + i, saved[i]);
 			vs_color(vdi_h, 16 + i, theme[i]);
