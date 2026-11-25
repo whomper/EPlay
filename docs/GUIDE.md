@@ -112,7 +112,9 @@ place (it stays as small as it is).
 
 - **File:** Open... (^O) opens **Add files**; Open URL... (Shift+^O) opens a web radio station;
   Find station... finds one by name, genre, country or language;
-  Save playlist... (^S) writes the list as an `.M3U`; Quit (^Q).
+  Save playlist... (^S) writes the list as an `.M3U`, in the same file dialog as Open... (a name
+  to save as, the folders and the playlists there; it asks before replacing a file, and the music
+  goes on while it is open); Quit (^Q).
 - **Edit:** Remove from the list (Del), the selected rows; Clear the list keeps only the file that
   plays; Select all (^A).
 - **View:** Mini player: the window becomes the bar alone, and back. `EPLAY.INF` keeps it.
@@ -241,9 +243,10 @@ order and the track's while it is shuffled. A file is made louder only as far as
 go without clipping, and not at all when its tags give no peak; on an STE it is only made
 quieter. A file with no ReplayGain values plays as it is.
 
-**Files: Use the system file selector** (off at the start): Open... opens the system's own file
-selector (TOS's, or Selectric, FreeMiNT's, MagiC's) instead of **Add files**. It gives one file at
-a time and shows every file in the folder.
+**Files: Use the system file selector** (off at the start): Open... and Save playlist... open the
+system's own file selector (TOS's, or Selectric, FreeMiNT's, MagiC's) instead of EPlay's file
+dialog. It gives one file at a time and shows every file in the folder, and the music pauses while
+it is open.
 
 A change of Output takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
 the window's place, the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and

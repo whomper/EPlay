@@ -1516,35 +1516,39 @@ static void mini_switch(void)
 /* File > Save playlist... (^S; Erez, 4 Nov 2026): the list as an .M3U,
    named in the file selector, each file's path relative to the
    playlist's folder where it is in it (m3u.h) */
+/* File > Save playlist...: the family's file dialog in its save mode
+   (guidelines 5.12, decided 25 Nov 2026), which asks before replacing a
+   file and feeds the music while it is open; the system's selector where
+   Settings says so, the music paused while it holds the program */
+static const DL_TYPE save_types[] = { { "Playlists", "M3U" }, { "All files", "" } };
+static const FP_SPEC save_spec = { "Save the list as a playlist", "Save", "No folder saved in yet", "EPLAY",
+				   save_types, (int)(sizeof(save_types) / sizeof(save_types[0])) };
+
 static void save_playlist(void)
 {
-	static char path[200], name[64] = "PLAYLIST.M3U";
+	static char sdir[FP_PATH], name[FP_NAMEW] = "PLAYLIST.M3U";
 	char full[260], dir[200], *e, buf[4096];
-	short button = 0;
 	long h, n = 0, k;
-	int i, ok = 1;
+	int i, ok = 1, got;
 	if (!list_count())
 		return;			/* (greyed: menu_update) */
-	if (!path[0])
-		snprintf(path, sizeof(path), "%s*.M3U", settings_add_dir()[0] ? settings_add_dir() : app_dir());
-	sysfsel_begin();
-	if (!fsel_exinput(path, name, &button, "Save the list as a playlist") || !button || !name[0]) {
-		sysfsel_end();
-		return;
-	}
+	if (!sdir[0])
+		snprintf(sdir, sizeof(sdir), "%s", settings_add_dir()[0] ? settings_add_dir() : app_dir());
+	draw_forget();
+	if (filepick_system)
+		sysfsel_begin();
+	got = filepick_save(&save_spec, sdir, settings_recent(), name, (int)sizeof(name), full, (int)sizeof(full),
+			    feed_only);
 	sysfsel_end();
-	snprintf(dir, sizeof(dir), "%s", path);
+	settings_recent_changed();
+	if (!got)
+		return;
+	snprintf(dir, sizeof(dir), "%s", full);
 	e = strrchr(dir, '\\');
 	if (e)
 		e[1] = 0;
 	else
 		dir[0] = 0;
-	if (!strchr(name, '.'))
-		strncat(name, ".M3U", sizeof(name) - strlen(name) - 1);
-	snprintf(full, sizeof(full), "%s%s", dir, name);
-	if (Fattrib(full, 0, 0) >= 0 &&
-	    alert(2, "[2][%s is there already.|Replace it?][Replace|Cancel]", name) != 1)
-		return;
 	h = Fcreate(full, 0);
 	if (h < 0) {
 		alert(1, "[3][The playlist couldn't be saved|(%s).][ OK ]", name);
