@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
 """FPTEST.PRG (make) in save mode, filepick_save (C:\\FPSAVE.TXT there): the dialog opened on C:\\MUSIC\\ with
-"PLAYLIST.M3U" proposed, the types Playlists and All files. Down three times reaches LIVE.M3U (the folders first),
+"PLAYLIST.M3U" proposed, the types Playlists and All files. "LIVE" typed over it with the keys' place on a
+folder and Return asks to replace LIVE.M3U (it saves, never opens the folder), Return again is Cancel. Down three times reaches LIVE.M3U (the folders first),
 whose name goes to the field; Return asks "LIVE.M3U is there already. Replace it?", Return again is Cancel and
 the dialog stays; the field emptied with Esc, "PARTY" typed, Return saves as C:\\MUSIC\\PARTY.M3U (the
 extension added). Checks: each step changed the screen, the path saved, idle() called, no CRASH.LOG. A
@@ -45,7 +46,10 @@ def session(work, machine, nvdi, prg, display):
         run.move(r, 5, 5)
         r.still(most=5)
         prev = shots["1-save-open"] = r.shot("1-save-open")
-        steps = [("2-chosen", ["Down", "Down", "Down"]), ("3-replace", ["Return"]), ("4-kept", ["Return"]),
+        # the name typed with the keys' place on a folder, nothing chosen: Return saves (the replace question
+        # here), never opens the folder; Return again is Cancel
+        steps = [("1b-typed", ["Escape", "type:LIVE"]), ("1c-replace", ["Return"]), ("1d-kept", ["Return"]),
+                 ("2-chosen", ["Down", "Down", "Down"]), ("3-replace", ["Return"]), ("4-kept", ["Return"]),
                  ("5-emptied", ["Escape"]), ("6-typed", ["type:PARTY"])]
         for name, keys in steps:
             for k in keys:
