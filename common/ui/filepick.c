@@ -2,7 +2,7 @@
  * Copyright (C) 2026 AERA | Erez Yaary */
 /*
  * filepick.c - the family's file dialog, several files at once
- * (filepick.h; EPlay's Add files, Erez, 4 Nov 2026). The tree is the AES's
+ * (filepick.h; EPlay's Add files, decided 4 Nov 2026). The tree is the AES's
  * own objects, given the AES's 3D look by dlg_3d (dlg_open); the list in
  * its white well is drawn here, as the Font dialog draws its lists
  * (fontsel.c), through dlg_more and dlg_cut so that it is right in a
@@ -27,8 +27,11 @@ enum { O_ROOT, O_BAND, O_DRIVE, O_PATH, O_PATHT, O_UP, O_FOLDERS, O_TYPE, O_SORT
        O_ALL, O_NONE, O_CANCEL, O_ADD, O_N };
 static OBJECT tree[O_N];
 static TEDINFO ted_band, ted_path, ted_mask, ted_drive, ted_folders, ted_type, ted_sort;
-static char s_path[FP_PATH], s_mask[13], t_mask[13], v_mask[13], s_drive[8], s_folders[16], s_type[20],
-	s_sort[16], s_info[48];
+static char s_path[FP_PATH], s_mask[FP_NAMEW + 1], t_mask[FP_NAMEW + 1], v_mask[FP_NAMEW + 1], s_drive[8],
+	s_folders[16], s_type[20], s_sort[16], s_info[48];
+/* save mode (filepick_save): the Name field holds the name to save as, one
+   row is chosen at a time, All and None are hidden */
+static int saving;
 
 /* the pop-up buttons' widths in cells (5.7: the words, the arrow in the last cell) */
 enum { W_DRIVE = 5, W_FOLDERS = 12, W_TYPE = 15, W_SORT = 11 };
@@ -117,14 +120,20 @@ static void build(void)
 	pop_button(O_FOLDERS, &ted_folders, s_folders, W_FOLDERS, 1, 4, "Folders");
 	pop_button(O_TYPE, &ted_type, s_type, W_TYPE, 14, 4, "");
 	pop_button(O_SORT, &ted_sort, s_sort, W_SORT, 30, 4, "");
-	obj(O_NAMEL, G_STRING, 0, 0, (long)"Name", 1, 6, 4, 1);
-	ted(&ted_mask, s_mask, t_mask, v_mask, 0, 0x1180, -1);
-	obj(O_MASK, G_FBOXTEXT, EDITABLE, 0, (long)&ted_mask, 7, 6, 13, 1);
+	if (saving) {
+		obj(O_NAMEL, G_STRING, 0, 0, (long)"Save as", 1, 6, 7, 1);
+		ted(&ted_mask, s_mask, t_mask, v_mask, 0, 0x1180, -1);
+		obj(O_MASK, G_FBOXTEXT, EDITABLE, 0, (long)&ted_mask, 9, 6, FP_NAMEW, 1);
+	} else {
+		obj(O_NAMEL, G_STRING, 0, 0, (long)"Name", 1, 6, 4, 1);
+		ted(&ted_mask, s_mask, t_mask, v_mask, 0, 0x1180, -1);
+		obj(O_MASK, G_FBOXTEXT, EDITABLE, 0, (long)&ted_mask, 7, 6, 13, 1);
+	}
 	/* a white well with a frame: ten rows and its edges */
 	obj(O_LIST, G_BOX, 0, 0, 0x00FF1100L, 1, 8, 40, (short)(2 << 8 | 10));
 	obj(O_INFO, G_STRING, 0, 0, (long)s_info, 1, (short)(4 << 8 | 18), 40, 1);
-	obj(O_ALL, G_BUTTON, SELECTABLE | EXIT, 0, (long)"All", 1, (short)(4 << 8 | 20), 5, 1);
-	obj(O_NONE, G_BUTTON, SELECTABLE | EXIT, 0, (long)"None", 7, (short)(4 << 8 | 20), 6, 1);
+	obj(O_ALL, G_BUTTON, SELECTABLE | EXIT | (saving ? HIDETREE : 0), 0, (long)"All", 1, (short)(4 << 8 | 20), 5, 1);
+	obj(O_NONE, G_BUTTON, SELECTABLE | EXIT | (saving ? HIDETREE : 0), 0, (long)"None", 7, (short)(4 << 8 | 20), 6, 1);
 	/* Cancel then OK, 10 wide, at W - 24 and W - 12 (5.10, D26) */
 	obj(O_CANCEL, G_BUTTON, SELECTABLE | EXIT, 0, (long)"Cancel", 18, (short)(4 << 8 | 20), 10, 1);
 	obj(O_ADD, G_BUTTON, SELECTABLE | EXIT | DEFAULT, 0, (long)spec->ok, 30, (short)(4 << 8 | 20), 10, 1);
@@ -275,6 +284,8 @@ static void info(void)
 		snprintf(s_info, sizeof(s_info), "%d file%s%s selected", files, files == 1 ? "" : "s", fo);
 	if (!k && !dirs)
 		snprintf(s_info, sizeof(s_info), "%d file%s", files, files == 1 ? "" : "s");
+	if (saving)
+		snprintf(s_info, sizeof(s_info), "%d file%s of this type here", files, files == 1 ? "" : "s");
 }
 
 /* ---- drawing ---- */
@@ -536,7 +547,7 @@ static void folder_shown(void)
 	draw_obj(O_DRIVE);
 	draw_obj(O_PATH);
 	draw_obj(O_INFO);
-	draw_list();			/* (whole, no event call between: Erez, 4 Nov 2026) */
+	draw_list();			/* (whole, no event call between: decided 4 Nov 2026) */
 	pic_end();
 }
 
@@ -728,6 +739,8 @@ static void select_to(int r, int shift)
 {
 	if (r < 0 || r >= dl.nview)
 		return;
+	if (saving)
+		shift = 0;
 	snap();
 	cur = r;
 	if (shift && anchor >= 0)
@@ -761,6 +774,8 @@ static int list_press(short mx, short my, short ks)
 		return 0;
 	dbl = press_double((short)r, mx, my);
 	snap();
+	if (saving)
+		ks = 0;
 	if (ks & 3) {
 		dl_toggle(&dl, r);
 		anchor = cur = r;
@@ -788,6 +803,8 @@ static int list_press(short mx, short my, short ks)
 		}
 		return 0;
 	case PRESS_DRAG: {
+		if (saving)
+			return 0;
 		/* the rows it passes, from where it began; the list moves on
 		   at its edges */
 		short x, y, b, k, last = -1;
@@ -890,7 +907,7 @@ static void mask_changed(void)
 
 short filepick_system;
 
-/* "Use the system file selector" (Erez, 9 Nov 2026): the AES's own, through fsel_exinput (titled where the AES is 1.4
+/* "Use the system file selector" (decided 9 Nov 2026): the AES's own, through fsel_exinput (titled where the AES is 1.4
    or newer: gem.c), on the folder dir and its files whatever their type (the AES's mask is one, and the app's types
    are several). One file, which plain TOS gives and nothing more; it goes to add() once, the folder it was
    chosen in is left in dir with its '\\' and put first in recent[], as the dialog does. idle() isn't called while
@@ -916,27 +933,80 @@ static int run_system(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PA
 	return 1;
 }
 
-int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path),
-		 void (*idle)(void))
+/* save mode: the name in the field when a file row is chosen */
+static short *field_idx;
+static void field_set(const char *t)
 {
-	if (filepick_system)
-		return run_system(sp, dir, recent, add);
+	objc_edit(tree, O_MASK, 0, field_idx, ED_END);
+	snprintf(s_mask, sizeof(s_mask), "%s", t);
+	draw_obj(O_MASK);
+	objc_edit(tree, O_MASK, 0, field_idx, ED_INIT);
+}
+static void field_from_row(void)
+{
+	DENT *c = dl_at(&dl, cur);
+	if (saving && c && !c->dir && c->sel)
+		field_set(c->name);
+}
+
+/* the name to save as, made whole: the type's first extension added when
+   it has none; 0 when it can't be a file's name here (said in an alert) */
+static int save_name(char *out, int len)
+{
+	char n[FP_NAMEW + 8], *dot;
+	const char *ext = dl.types && dl.types[dl.type].exts[0] ? dl.types[dl.type].exts :
+			  dl.types && dl.types[0].exts[0] ? dl.types[0].exts : "";
+	int i, base;
+	snprintf(n, sizeof(n), "%s", s_mask);
+	for (i = (int)strlen(n); i > 0 && n[i - 1] == ' '; i--)
+		n[i - 1] = 0;
+	if (!n[0])
+		return 0;
+	if (strpbrk(n, "*?\\:")) {
+		form_alert(1, "[1][A name can't have * ? \\ or :|in it.][  OK  ]");
+		return 0;
+	}
+	dot = strrchr(n, '.');
+	if (!dot && ext[0]) {
+		size_t l = strlen(n);
+		n[l] = '.';
+		for (i = 0; ext[i] && ext[i] != ' ' && l + 2 + i < sizeof(n); i++)
+			n[l + 1 + i] = ext[i];
+		n[l + 1 + i] = 0;
+		dot = n + l;
+	}
+	base = dot ? (int)(dot - n) : (int)strlen(n);
+	if (!mint_here() && (base > 8 || (dot && strlen(dot + 1) > 3))) {
+		form_alert(1, "[1][That name is too long for|this drive: up to 8 letters,|a dot and 3 more.][  OK  ]");
+		return 0;
+	}
+	return snprintf(out, len, "%s%s", dir_now, n) < len;
+}
+
+static int run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path),
+	       void (*idle)(void), char *path, int pathlen)
+{
 	short x, y, w, h, idx = 0, m[8];
 	int done = 0, added = 0, i;
 	AEVENT e;
 	spec = sp;
+	field_idx = &idx;
 	idle_fn = idle;
 	dl_init(&dl);
 	dl_types(&dl, sp->types, sp->ntypes);
 	build();
-	memset(t_mask, '_', 12);
-	t_mask[12] = 0;
-	memset(v_mask, 'X', 12);	/* (any letter, wildcards too) */
-	v_mask[12] = 0;
-	s_mask[0] = 0;
+	{
+		int fw = saving ? FP_NAMEW : 12;
+		memset(t_mask, '_', fw);
+		t_mask[fw] = 0;
+		memset(v_mask, 'X', fw);	/* (any letter, wildcards too) */
+		v_mask[fw] = 0;
+		if (!saving)
+			s_mask[0] = 0;
+		ted_mask.te_txtlen = (short)(fw + 1);
+		ted_mask.te_tmplen = (short)(fw + 1);
+	}
 	ted_path.te_txtlen = FP_PATH;
-	ted_mask.te_txtlen = 13;
-	ted_mask.te_tmplen = 13;
 	if (dir[0])
 		snprintf(dir_now, sizeof(dir_now), "%s", dir);
 	else
@@ -970,11 +1040,13 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 		if (e.which & MU_KEYBD) {
 			short scan = (e.kreturn >> 8) & 0xff, a = e.kreturn & 0xff;
 			int shift = (e.kstate & 3) != 0;
-			if (scan == 0x48)
+			if (scan == 0x48) {
 				select_to(cur - 1, shift);
-			else if (scan == 0x50)
+				field_from_row();
+			} else if (scan == 0x50) {
 				select_to(cur + 1, shift);
-			else if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
+				field_from_row();
+			} else if (scan == 0x1c || scan == 0x72) {	/* Return, Enter */
 				/* (a folder at the keys' place, alone or nothing
 				   selected: opened, as before; Add adds it) */
 				DENT *c = dl_at(&dl, cur);
@@ -985,7 +1057,7 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 					done = 2;
 			} else if (scan == 0x61)			/* Undo */
 				done = 1;
-			else if (key_ctrl(e.kstate, e.kreturn) && (a == 1 || (a | 0x20) == 'a')) {	/* ^A */
+			else if (!saving && key_ctrl(e.kstate, e.kreturn) && (a == 1 || (a | 0x20) == 'a')) {	/* ^A */
 				dl_select_all(&dl, 1);
 				draw_list();
 				show_info();
@@ -997,14 +1069,15 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 					s_mask[0] = 0;
 					draw_obj(O_MASK);
 					objc_edit(tree, O_MASK, 0, &idx, ED_INIT);
-					mask_changed();
+					if (!saving)
+						mask_changed();
 				}
 			} else {
 				/* the mask: typed into, the list narrowed as it is */
-				char was[13];
+				char was[sizeof(s_mask)];
 				strcpy(was, s_mask);
 				objc_edit(tree, O_MASK, e.kreturn, &idx, ED_CHAR);
-				if (strcmp(was, s_mask))
+				if (!saving && strcmp(was, s_mask))
 					mask_changed();
 			}
 		}
@@ -1048,12 +1121,34 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 					slider_press(e.my);
 				else if (list_press(e.mx, e.my, e.kstate))
 					done = 2;
+				field_from_row();
 				break;
+			}
+		}
+		/* save: the name made whole, and a file there replaced only when
+		   the user says so; the dialog stays open otherwise */
+		if (saving && done == 2) {
+			if (!save_name(path, pathlen))
+				done = 0;
+			else if (Fattrib(path, 0, 0) >= 0) {
+				char q[FP_NAMEW + 80];
+				const char *b = strrchr(path, '\\');
+				snprintf(q, sizeof(q), "[2][%s is there already.|Replace it?][Replace|Cancel]", b ? b + 1 : path);
+				if (form_alert(2, q) != 1)
+					done = 0;
 			}
 		}
 	}
 	objc_edit(tree, O_MASK, 0, &idx, ED_END);
 	dlg_close();
+	if (saving) {
+		snprintf(dir, FP_PATH, "%s", dir_now);
+		dl_free(&dl);
+		if (done != 2)
+			return 0;
+		dl_recent_front(recent[0], FP_PATH, FP_RECENT, dir_now);
+		return 1;
+	}
 	if (done == 2) {
 		/* the selected files and folders in the list's order (a folder
 		   with its subfolders: its name ending in '\'); with none, the
@@ -1074,4 +1169,68 @@ int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], 
 	snprintf(dir, FP_PATH, "%s", dir_now);
 	dl_free(&dl);
 	return added;
+}
+
+int filepick_run(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], void (*add)(const char *path),
+		 void (*idle)(void))
+{
+	if (filepick_system)
+		return run_system(sp, dir, recent, add);
+	saving = 0;
+	return run(sp, dir, recent, add, idle, 0, 0);
+}
+
+/* the system's selector to save (filepick_system): the name given, its
+   folder's files of the first type, the same replace question */
+static int save_system(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], char *name, int namelen,
+		       char *path, int pathlen)
+{
+	static char p[FP_PATH + 8], folder[FP_PATH], n[DL_NAME];
+	const char *ext = sp->ntypes && sp->types[0].exts[0] ? sp->types[0].exts : "*";
+	short button = 0;
+	int i;
+	char e4[4];
+	for (i = 0; i < 3 && ext[i] && ext[i] != ' '; i++)
+		e4[i] = ext[i];
+	e4[i] = 0;
+	if (dir[0])
+		snprintf(p, sizeof(p), "%s*.%s", dir, e4);
+	else
+		snprintf(p, sizeof(p), "%c:\\*.%s", (char)('A' + Dgetdrv()), e4);
+	snprintf(n, sizeof(n), "%s", name);
+	fsel_exinput(p, n, &button, sp->title);
+	fsel_settle();
+	if (!button || !n[0] || !dl_folder_of(p, folder, sizeof(folder)))
+		return 0;
+	if (!strchr(n, '.') && e4[0] != '*')
+		snprintf(n + strlen(n), sizeof(n) - strlen(n), ".%s", e4);
+	if (!dl_join(folder, n, path, pathlen))
+		return 0;
+	if (Fattrib(path, 0, 0) >= 0) {
+		char q[DL_NAME + 60];
+		snprintf(q, sizeof(q), "[2][%s is there already.|Replace it?][Replace|Cancel]", n);
+		if (form_alert(2, q) != 1)
+			return 0;
+	}
+	snprintf(dir, FP_PATH, "%s", folder);
+	snprintf(name, namelen, "%s", n);
+	dl_recent_front(recent[0], FP_PATH, FP_RECENT, folder);
+	return 1;
+}
+
+int filepick_save(const FP_SPEC *sp, char *dir, char recent[FP_RECENT][FP_PATH], char *name, int namelen,
+		  char *path, int pathlen, void (*idle)(void))
+{
+	int r;
+	if (filepick_system)
+		return save_system(sp, dir, recent, name, namelen, path, pathlen);
+	saving = 1;
+	snprintf(s_mask, sizeof(s_mask), "%s", name);
+	r = run(sp, dir, recent, 0, idle, path, pathlen);
+	saving = 0;
+	if (r) {
+		const char *b = strrchr(path, '\\');
+		snprintf(name, namelen, "%s", b ? b + 1 : path);
+	}
+	return r;
 }
