@@ -271,6 +271,11 @@ def add_rg(path, case):
 # taken in whole rows
 CASES["place"] = CASES["wav"]
 INFS["place"] = "WINDOW=24,96,480,330\r\n\r\n"
+# (save and savehold drive the AES's selector with Return, as they did before
+# Save playlist went through the family's file dialog (guidelines 5.12):
+# Settings' "Use the system file selector"; save_test.py has the dialog's)
+INFS["save"] = "SYSFSEL=1\r\n\r\n"
+INFS["savehold"] = "SYSFSEL=1\r\n\r\n"
 # the first start: no place kept, the window at the bar's own height (six
 # rows of the list, as the mini player's switch gives it), centred across
 # (its width design D's): Erez, 21 Nov 2026, in place of D39's whole height
