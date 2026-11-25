@@ -9,7 +9,8 @@ family's file dialog in its save mode (common's filepick_save, guidelines
            paused and no underrun while the dialog was open
   replace  PLAYLIST.M3U there already: ^S, Return asks "Replace it?",
            Return there is Cancel (the file as it was, the dialog still
-           open), Return again and Replace clicked saves over it
+           open), Return again and Replace clicked saves over it (the
+           family's alert: Esc and Undo are Cancel too)
   system   SYSFSEL=1 (Settings' "Use the system file selector"): the AES's
            selector, the music paused while it is open and on from where it
            was after, the file saved
@@ -124,18 +125,14 @@ def session(work, spec, case):
 
 
 def save(r, spec):
-    """the dialog's Save button clicked (Return goes to the list's row the
-    keyboard is on, the AUTO folder in C:\\, and opens it)"""
-    x, y = SAVE_AT.get(spec, SAVE_AT["*"])
-    speed.speed.Rig.click(r, x, y)
+    """Return: the dialog saves under the name in its field (the keyboard
+    still on the field, not the list: common 4d083dc)"""
+    r.key("Return")
 
-
-# the dialog's Save button on the screen (its place on a 640 x 480 Falcon)
-SAVE_AT = {"*": (440, 401)}
 
 # the "Replace" button of the dialog's question, on the screen (TOS's
-# form_alert centres it; found from 2-question's screenshot)
-REPLACE_AT = {"*": (273, 292)}
+# alert centres it; found from 4-question's screenshot)
+REPLACE_AT = {"*": (278, 272)}
 
 
 def main():
