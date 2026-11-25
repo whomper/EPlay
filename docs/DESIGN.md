@@ -3140,5 +3140,16 @@ A tester asked for MIDI files played out of the MIDI port to a synth or module. 
   sounds into the next.
 - Made alongside #100 (the 68060 and 68080 work), whichever is ready first released first.
 
+The port is shared, so MIDI.OVL keeps to the family's rules for it (the hub, 25 Nov 2026; the
+family has no MIDI code in common, so the overlay is EPlay's own, and its sending part moves to
+common only if a second app needs MIDI):
+- Bytes go out through the OS (`Midiws`, `Bconout(3, ...)`), or to the MIDI ACIA directly with its
+  TDRE flag waited for, as the DSP's host port is: never timed by the CPU's speed.
+- The ACIA's interrupt and `midivec` are left alone: the MIDI ACIA shares its interrupt with the
+  keyboard's, so the keyboard and the mouse would go with them.
+- Nothing is sent while no MIDI file plays, so another program or networking over the MIDI port
+  under MiNT is never disturbed between files; the help says that a MIDI file plays out of the MIDI
+  port.
+
 The design (the file types, the timing, seeking, what the bar shows) follows here as it is made;
 anything in it that is the owner's (the words, the look) goes to him first.

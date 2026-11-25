@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.57's build/atari/eplay.map: do not edit.
-| 267 pads, 43180 bytes, each section at its place there, mod the 68030's
+| 267 pads, 43104 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -70,7 +70,7 @@ ep_pad_15:
 	.section ".text.alert!","ax"
 	.globl ep_pad_16
 ep_pad_16:
-	.space 176
+	.space 110
 	.section ".text.app_main!","ax"
 	.globl ep_pad_17
 ep_pad_17:
@@ -754,68 +754,68 @@ ep_pad_186:
 	.section ".rodata.m3u_add.str1.1!","a"
 	.globl ep_pad_187
 ep_pad_187:
-	.space 75
-	.section ".rodata.m3u_rel.str1.1!","a"
+	.space 66
+	.section ".rodata.mwnote.8!","a"
 	.globl ep_pad_188
 ep_pad_188:
-	.space 255
-	.section ".rodata.mwnote.8!","a"
-	.globl ep_pad_189
-ep_pad_189:
 	.space 182
 	.section ".rodata.pages.14!","a"
-	.globl ep_pad_190
-ep_pad_190:
+	.globl ep_pad_189
+ep_pad_189:
 	.space 11
 	.section ".rodata.pcm_probe.str1.1!","a"
-	.globl ep_pad_191
-ep_pad_191:
+	.globl ep_pad_190
+ep_pad_190:
 	.space 1
 	.section ".rodata.pen.1!","a"
-	.globl ep_pad_192
-ep_pad_192:
+	.globl ep_pad_191
+ep_pad_191:
 	.space 249
 	.section ".rodata.pls_read.str1.1!","a"
-	.globl ep_pad_193
-ep_pad_193:
+	.globl ep_pad_192
+ep_pad_192:
 	.space 3
 	.section ".rodata.save_types!","a"
-	.globl ep_pad_194
-ep_pad_194:
+	.globl ep_pad_193
+ep_pad_193:
 	.space 216
 	.section ".rodata.skip_big!","a"
-	.globl ep_pad_195
-ep_pad_195:
+	.globl ep_pad_194
+ep_pad_194:
 	.space 72
 	.section ".rodata.skip_small!","a"
-	.globl ep_pad_196
-ep_pad_196:
+	.globl ep_pad_195
+ep_pad_195:
 	.space 8
 	.section ".rodata.std_pal!","a"
-	.globl ep_pad_197
-ep_pad_197:
+	.globl ep_pad_196
+ep_pad_196:
 	.space 144
 	.section ".rodata.v16.3!","a"
-	.globl ep_pad_198
-ep_pad_198:
+	.globl ep_pad_197
+ep_pad_197:
 	.space 240
 	.section ".rodata.vol_att!","a"
-	.globl ep_pad_199
-ep_pad_199:
+	.globl ep_pad_198
+ep_pad_198:
 	.space 232
 	.section ".rodata.xb_rates!","a"
+	.globl ep_pad_199
+ep_pad_199:
+	.space 254
+	.section ".data.!","aw"
 	.globl ep_pad_200
 ep_pad_200:
 	.space 252
-	.section ".data.!","aw"
+	.section ".data.cf.8!","aw"
 	.globl ep_pad_201
 ep_pad_201:
 	.space 252
-	.section ".data.cf.8!","aw"
+	.section ".data.cpu_kind!","aw"
 	.globl ep_pad_202
 ep_pad_202:
 	.space 252
-	.section ".data.cpu_kind!","aw"
+	.section ".data.fails.0!","aw"
 	.globl ep_pad_203
 ep_pad_203:
 	.space 252
