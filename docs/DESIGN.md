@@ -3126,3 +3126,19 @@ draws no stop icon at all, which is its way, not a fault. The ColdFire build's `
 another program (159 KB against 12 KB). Waiting on the tester: their MyAES build, and whether
 another program's one-button [3] alert dies too (then it is MyAES's, and what the family does
 meanwhile is the owner's choice through the hub).
+
+## MIDI files through the MIDI port (decided 25 Nov 2026)
+
+A tester asked for MIDI files played out of the MIDI port to a synth or module. Decided 25 Nov 2026:
+- **MIDI.OVL**, an overlay loaded only when a MIDI file plays, as MP3FPU.OVL and TLS.OVL are: 68000
+  code in the standard package (so the STE edition loads it too), a ColdFire build in the FireBee's,
+  under the standard name in both.
+- **Every machine**: the ST, STE, TT, Falcon, 68060 and 68080 machines and the FireBee, all of which
+  have the MIDI port.
+- **A GM reset** (General MIDI System On) at each file's start, and All Notes Off with the
+  controllers reset on all 16 channels at its start and at Stop and Pause, so nothing of one song
+  sounds into the next.
+- Made alongside #100 (the 68060 and 68080 work), whichever is ready first released first.
+
+The design (the file types, the timing, seeking, what the bar shows) follows here as it is made;
+anything in it that is the owner's (the words, the look) goes to him first.
