@@ -1180,6 +1180,8 @@ static void fill_cmp_(unsigned long t0, int ms, int low)
 				src_done = 1;
 				break;
 			}
+			cmp_snd += (unsigned long)ns;	/* (for the log: the CPU's share, #100) */
+			cmp_hz = vp_cpu_rate();
 			cmp_put(0, ns, 2);
 			continue;
 		}
@@ -1428,6 +1430,8 @@ int play_open(const char *path, char *err, int n)
 			   ahead, into the queue: from here a WAV of 16-bit stereo at
 			   the output's rate, fill_cmp's, as an MP3 on the CPU) */
 			cmp = cmp_vgm = 1;
+			cmp_busy_ms = cmp_snd = 0;	/* (this file's share, for the log) */
+			cmp_hz = 0;
 			memset(&fmt, 0, sizeof(fmt));
 			fmt.kind = kind = PCM_WAV;
 			fmt.bits = 16;
@@ -2488,6 +2492,15 @@ void play_log_stop(void)
 const char *play_keep_up(void)
 {
 	static char b[260];
+	if (cmp && cmp_vgm && cmp_hz > 0) {
+		/* (the chips made on the CPU, ahead: its share of the time, as
+		   an MP3's is, the measure for the 68060 and 68080 work, #100) */
+		long snd_ms = (long)(cmp_snd * 1000UL / (unsigned long)cmp_hz);
+		snprintf(b, sizeof(b), "%s; the %s making the chips %ld%% of the time (%lu ms for %ld ms of sound)",
+			 snd_underruns ? "underruns" : "no underrun", cmp3_cpu(),
+			 snd_ms > 0 ? (long)(cmp_busy_ms * 100UL / (unsigned long)snd_ms) : 0L, cmp_busy_ms, snd_ms);
+		return b;
+	}
 	if (vgm) {
 		snprintf(b, sizeof(b), "its chips from the tick");
 		return b;
