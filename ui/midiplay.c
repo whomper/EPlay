@@ -142,7 +142,7 @@ static void make(unsigned long ms, long budget)
 	unsigned long t0 = tos_ms();
 	while (making && (made_ms < ms || (budget && (long)(tos_ms() - t0) < budget))) {
 		long made;
-		int r = ov->more(st, 256, &made, &made_ms);
+		int r = ov->more(st, 32, &made, &made_ms);	/* (32: some 10 ms on an STE) */
 		mem_n = made;	/* (whole records: the tick may send them now) */
 		if (r == 1) {
 			if (budget && (long)(tos_ms() - t0) >= budget)

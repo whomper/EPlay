@@ -94,7 +94,7 @@ def session(work, spec, case):
     try:
         st = r.m.name.startswith("STE")
         prg = os.path.join(r.work, "eplay.prg")
-        shutil.copy(os.path.join(TOP, "binary", "eplayst.prg" if st else "eplay.prg"), prg)
+        shutil.copy(os.environ.get("EPLAY_MIDI_PRG") or os.path.join(TOP, "binary", "eplayst.prg" if st else "eplay.prg"), prg)
         r.put(prg)
         r.put(os.path.join(TOP, "binary", "midi.ovl"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
