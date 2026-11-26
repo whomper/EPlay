@@ -308,6 +308,12 @@ $(B)/test_probe: tests/probe/test_probe.c src/probe.c src/probe.h src/tags.c src
 		common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Isrc/mp3 -Icommon/src -o $@ tests/probe/test_probe.c \
 		src/probe.c src/tags.c src/rgain.c src/pcm.c src/mp3/mp3frame.c common/src/charset.c common/src/bidi.c
+$(B)/test_gmset: tests/gmset/test_gmset.c src/gmset.c src/gmset.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/gmset/test_gmset.c src/gmset.c
+$(B)/gm8.dat: tools/mkgmset.py third_party/sonivox/wt_22khz.c | $(B)
+	python3 tools/mkgmset.py third_party/sonivox/wt_22khz.c $@
+$(B)/gm16.dat: tools/mkgmset.py third_party/sonivox/wt_22khz.c | $(B)
+	python3 tools/mkgmset.py third_party/sonivox/wt_22khz.c $@ --bits 16
 $(B)/test_smf: tests/smf/test_smf.c src/smf.c src/smf.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/smf/test_smf.c src/smf.c
 $(B)/test_m3u: tests/m3u/test_m3u.c src/m3u.c src/m3u.h
@@ -352,7 +358,8 @@ $(B)/hmad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h third_pa
 $(B)/test_mp3int: tests/mp3/test_mp3int.c mp3ovl/madhead.c $(HMADO)
 	$(HOSTCC) $(HMADF) -Wall -Wextra -Wno-unused-function -o $@ tests/mp3/test_mp3int.c $(HMADO) -lm
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay $(B)/test_smf
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay $(B)/test_smf \
+		$(B)/test_gmset $(B)/gm8.dat $(B)/gm16.dat
 	./$(B)/test_inf
 	mkdir -p $(B)/vgmfiles && ./$(B)/test_vgm $(B)/vgmfiles
 	./$(B)/test_stream
@@ -361,6 +368,7 @@ test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test
 	./$(B)/test_gain
 	./$(B)/test_m3u
 	python3 tests/smf/run.py $(B)/test_smf $(B)/smffiles
+	./$(B)/test_gmset $(B)/gm8.dat $(B)/gm16.dat
 	./$(B)/test_order
 	./$(B)/test_tags
 	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh

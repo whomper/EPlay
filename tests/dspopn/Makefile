@@ -6,16 +6,27 @@
 H := ../../common/tests/ec/build/hatari
 B := build
 TOP := ../..
-FILES := SINE FM CHAIN ENV DAC CHORD LFO CH3 DETUNE PSG
+FILES := SINE FM CHAIN ENV DAC CHORD LFO CH3 DETUNE PSG FB6
 
-run: $(B)/sim $(B)/files/.made
+run: $(B)/sim $(B)/play $(B)/files/.made
 	./$(B)/sim $(addprefix $(B)/files/,$(addsuffix .VGM,$(FILES)))
+	@echo "PLAY, the DSP port's 128-bit frame, the 68030's tick: left and right the same in a file in the middle"
+	./$(B)/play $(B)/files/FB6.VGM 24585 1 3
+	./$(B)/play $(B)/files/FB6.VGM 48000 2 3
+	./$(B)/play $(B)/files/FB6.VGM 44100 2 3
 $(B)/opn_prog.h: $(TOP)/dsp/opn.a56 | $(B)
 	cd $(B) && a56 ../$(TOP)/dsp/opn.a56 > a56.lst && ! grep -q 'warning:\|error:' a56.lst && \
 		python3 ../$(TOP)/common/dsp/mkh.py a56.out opn_prog.h dsp_opn_prog opn.a56
 $(B)/sim: sim.c ../dspsim.h $(B)/opn_prog.h $(H)/dsp_core.c $(TOP)/src/opnd.c $(TOP)/src/opnd.h $(TOP)/src/egmath.c \
 		$(TOP)/src/opnfast.c $(TOP)/src/opnfast.h $(TOP)/src/vgm.c $(TOP)/src/sncmd.c $(TOP)/src/sncmd.h
 	cc -O2 -w -I$(B) -I$(H) -I$(H)/stub -I$(TOP)/src -I$(TOP)/common/src -o $@ sim.c $(H)/dsp_core.c $(H)/dsp_cpu.c \
+		$(TOP)/src/opnd.c $(TOP)/src/egmath.c $(TOP)/src/opnfast.c $(TOP)/src/vgm.c $(TOP)/src/sncmd.c $(TOP)/common/src/charset.c \
+		$(TOP)/common/src/bidi.c -lm
+# PLAY as the Falcon plays it (26 Nov 2026: opn.a56's PLAY state overwritten
+# by channel 6's feedback, left and right a sample apart)
+$(B)/play: play.c ../dspsim.h $(B)/opn_prog.h $(H)/dsp_core.c $(TOP)/src/opnd.c $(TOP)/src/opnd.h $(TOP)/src/egmath.c \
+		$(TOP)/src/opnfast.c $(TOP)/src/opnfast.h $(TOP)/src/vgm.c $(TOP)/src/sncmd.c $(TOP)/src/sncmd.h
+	cc -O2 -w -I$(B) -I$(H) -I$(H)/stub -I$(TOP)/src -I$(TOP)/common/src -o $@ play.c $(H)/dsp_core.c $(H)/dsp_cpu.c \
 		$(TOP)/src/opnd.c $(TOP)/src/egmath.c $(TOP)/src/opnfast.c $(TOP)/src/vgm.c $(TOP)/src/sncmd.c $(TOP)/common/src/charset.c \
 		$(TOP)/common/src/bidi.c -lm
 $(B)/files/.made: ../ym2612/mkvgm.py | $(B)

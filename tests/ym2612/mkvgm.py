@@ -304,10 +304,30 @@ def psg(out):
     v.save(out)
 
 
+def fb6(out):
+    """channel 6 with feedback 7 on its operator 1 (algorithm 7, operator 1
+    alone heard), in the middle, held 3 s: its operator 1's outputs once
+    overwrote opn.a56's PLAY state (26 Nov 2026), so in PLAY the left and
+    right came a sample apart (tests/dspopn/play.c: they must be the same)"""
+    v = Vgm()
+    init(v)
+    chan(v, 5, 7, fb=7)
+    for o in range(4):
+        op(v, 5, o, dt_mul=3 if o == 0 else 1, tl=0 if o == 0 else 127)
+    freq(v, 5, 1084, 3)
+    key(v, 5, True)
+    for k in range(30):
+        v.wait(RATE // 10)
+        freq(v, 5, 900 + 23 * k, 3)
+    key(v, 5, False)
+    v.wait(RATE // 4)
+    v.save(out)
+
+
 def main():
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    for f in (sine, fm, chain, env, dac, chord, lfo, ch3, detune, psg):
+    for f in (sine, fm, chain, env, dac, chord, lfo, ch3, detune, psg, fb6):
         f(os.path.join(out, f.__name__.upper() + ".VGM"))
 
 

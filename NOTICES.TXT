@@ -29,6 +29,14 @@ EPlay includes or uses, under their own licences (compatible with the GPL):
   code must retain the above copyright notice." It decodes the album art's
   JPEGs (common/src/pic.c), in EPLAY.PRG.
 
+- third_party/sonivox/wt_22khz.c: the General MIDI sound set of Sonivox
+  EAS (wt_200k_G), Copyright (c) 2004-2009 Sonic Network Inc., under the
+  Apache License, Version 2.0 (third_party/sonivox/LICENSE-2.0.txt and
+  NOTICE), as Android's Open Source Project carries it (its README.txt).
+  tools/mkgmset.py makes it into the synth's sound set, a data file of its
+  own beside EPLAY.PRG: it stays a separate work under the Apache License
+  and is not part of EPLAY.PRG.
+
 - tls.ovl (common/tlsovl/): the AERA family's secure connections, for web
   radio stations at https addresses on a Direct connection. It is made with
   BearSSL 0.6 by Thomas Pornin (common/third_party/bearssl/, MIT licence:

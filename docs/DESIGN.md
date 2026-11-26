@@ -3217,3 +3217,39 @@ Nothing simple is left. Two options were weighed (decided 26 Nov 2026):
 The machines that decode MP3 on the CPU: the Milan 060 and the Vampire V4 (the standard
 package), the FireBee (its own decoder, on its EMAC); a CT60/63 only while the DSP is held. None
 but the FireBee has been tried on real hardware: the others are Hatari's stand-ins.
+
+## The synth: MIDI files played by EPlay itself (decided 26 Nov 2026)
+
+Decided 26 Nov 2026: EPlay gets a General MIDI synth of its own, so a MIDI file plays with no
+module on the MIDI port; and it plays on a fast 68060 or 68080 as well as on the Falcon.
+- **The sound set: Sonivox EAS's** (Android's own synth, `wt_200k_G`): 128 instruments and the drum
+  kit, 377 key ranges, 185 envelopes, 150 samples, 212,177 sample points at 22,050 Hz. Apache
+  License 2.0 (Sonic Network, 2004-2009), so it ships as **a separate data file** beside EPLAY.PRG,
+  named in NOTICES.TXT, never built into the program (EPlay is GPL-2.0-or-later, and Apache 2.0
+  combines with the GPL's version 3 only). The set was chosen over TimGM6mb (GPL-2, 6 MB), GeneralUser
+  GS (30 MB) and FluidR3 (141 MB): it is the only free one that fits a stock Falcon's 4 MB.
+- Looked at first (26 Nov 2026): Softjee's Expand and MidPlay (Falcon, late 1990s, commercial, no
+  licence) both run their sound on the DSP: `Dsp_ExecProg` with a program of their own (Expand 426
+  words of P, MidPlay 318), its SSI transmit interrupt sending the samples to the DAC; MidPlay's GM
+  set is 7.1 MB of 8-bit 24,585 Hz samples. Neither's code nor sounds are used.
+
+How it is made, in order (each step tested before the next):
+1. **The data file** (done): tools/mkgmset.py makes third_party/sonivox/wt_22khz.c into the file
+   (its layout in the tool's header), 227 KB with 8-bit samples or 439 KB with 16-bit; src/gmset.c
+   reads it on the Atari side; tests/gmset checks every index and loop in it.
+2. **The engine in C** (src/gmsynth.c), host-testable, the same code for every CPU: a voice per
+   note (its key range found from the program and key), the sample read with its loop and pitch
+   (linear interpolation, the step a 16.16 fixed-point fraction), EG1 on the gain, EG2 and the LFO
+   on the pitch, pan, the channel's volume, expression and pitch bend; the oldest voice taken when
+   all are busy. Rendered into the queue as a WAV's PCM is, at the output's rate. Its reference:
+   Sonivox's own engine built on the host for the tests only (never shipped), the two compared on
+   test files within a tolerance (its filter and reverb are left out at first).
+3. **The 68060 and 68080 path**: the engine as an overlay (as MP3FPU.OVL), on the CPU, fed from the
+   MIDI records MIDI.OVL already makes; measured on Hatari's 68060 (the 68080 on the V4 stand-in).
+4. **The Falcon**: first measured, the engine on the 68030 at 16 MHz (how many voices keep up);
+   then the DSP: its 32K words can't hold the 212,177 points, so the open question is how much of
+   the work moves to the DSP (the mixing, with the points sent through the host port a block at a
+   time, or the interpolation of a mix the 68030 makes) — measured before it is chosen, then its
+   C model and the .a56 bit for bit, as the decoder's are.
+5. **The words and the choice** (the owner's): the file's name, the output's name beside "MIDI port"
+   and where the choice sits (Settings' Output, or a MIDI file's own), its help.
