@@ -651,6 +651,37 @@ ly
 	jmp	cmd
 
 ; a command (x0 its number), from cmd or play's loop: not a load, not RUN
+
+; left and right in step (mp3.a56's salign, 1.54): the SSI's status and r7
+; read together, the interrupts held for the reads alone. The slot whose
+; word y:(r7) is: with TDE (the next slot's word not yet written) the next,
+; else the one after it, the slot it is in; the right's slot wants r7 odd,
+; the left's (TFS, slot 0) even; r7 one word on if not. A slot begun
+; between the two reads (TDE or TFS changed): nothing done until the next
+; sample. (A start that met the frame on the right's slot left the two
+; sides a sample apart for the whole file: 26 Nov 2026.) a, b, x0, x1 used
+salign	ori	#3,mr
+	nop
+	nop
+	movep	x:SSISR,x0
+	move	r7,b
+	movep	x:SSISR,x1
+	andi	#$fc,mr
+	move	x0,a
+	eor	x1,a
+	move	#>$44,x1		; TDE (6) and TFS (2)
+	and	x1,a
+	jne	sa9
+	jset	#6,x0,sa2
+	jset	#2,x0,sa4		; TDE clear: the slot it is in; slot 0, the left's
+	jmp	sa5
+sa2	jset	#2,x0,sa5		; TDE: the next slot; in slot 0, the right's next
+sa4	jclr	#0,b1,sa9		; the left's: r7 even, in step
+	jmp	sa8
+sa5	jset	#0,b1,sa9		; the right's: r7 odd, in step
+sa8	move	(r7)+			; one word on
+sa9	rts
+
 hcmd	move	x0,a
 	move	#>2,x1
 	cmp	x1,a
@@ -1220,13 +1251,16 @@ pmt	jclr	#6,x:SSISR,pmt
 	jclr	#2,x:SSISR,pmr
 	movep	#0,x:TX
 pmt2	jclr	#6,x:SSISR,pmt2
-pmr	andi	#$fc,mr			; interrupts on: the left first
+pmr	movep	y:(r7)+,x:TX		; the ring's first word (the left's) here, as its
+					; slot begins, not by the interrupt (mp3.a56's, 1.54)
+	andi	#$fc,mr			; interrupts on
 ploop	jclr	#0,x:HSR,pgen0
 	jsr	rd
 	jsr	hcmd
 	jmp	ploop
 pgen0	jset	#3,x:HSR,ploop		; (HF0: a burst of commands still coming)
-pgen	move	r6,a
+pgen	jsr	salign			; left and right in step, each sample
+	move	r6,a
 	move	r7,x0
 	sub	x0,a
 	move	#>2047,x1

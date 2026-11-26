@@ -14,6 +14,9 @@ run: $(B)/sim $(B)/play $(B)/files/.made
 	./$(B)/play $(B)/files/FB6.VGM 24585 1 3
 	./$(B)/play $(B)/files/FB6.VGM 48000 2 3
 	./$(B)/play $(B)/files/FB6.VGM 44100 2 3
+	@echo "a slot missed at frame 5000 (SIMSLIP): salign puts left and right back"
+	SIMSLIP=5000 ./$(B)/play $(B)/files/FB6.VGM 24585 1 2
+	SIMSLIP=5000 ./$(B)/play $(B)/files/FB6.VGM 48000 2 2
 $(B)/opn_prog.h: $(TOP)/dsp/opn.a56 | $(B)
 	cd $(B) && a56 ../$(TOP)/dsp/opn.a56 > a56.lst && ! grep -q 'warning:\|error:' a56.lst && \
 		python3 ../$(TOP)/common/dsp/mkh.py a56.out opn_prog.h dsp_opn_prog opn.a56

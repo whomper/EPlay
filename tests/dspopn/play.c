@@ -48,6 +48,12 @@ static void clock_ssi(void)
 		}
 		if (slot0 && left_par < 0 && dsp_core.ssi.crb_te)
 			left_par = ncap & 1;
+		/* SIMSLIP=N: at frame N the ring read one word on, as a slot the
+		   SSI missed leaves it: left and right a sample apart after, until
+		   salign puts them back */
+		if (getenv("SIMSLIP") && ncap == 2 * atol(getenv("SIMSLIP")) + 1)
+			dsp_core.registers[DSP_REG_R7] = (dsp_core.registers[DSP_REG_R7] & ~2047U) |
+							 ((dsp_core.registers[DSP_REG_R7] + 1) & 2047U);
 		dsp_core_ssi_Receive_SCK();
 		if (ncap < CAP_MAX) {
 			cap_r7[ncap] = (unsigned short)dsp_core.registers[DSP_REG_R7];
@@ -191,7 +197,9 @@ int main(int argc, char **argv)
 	hput(NULL, OPNC_PLAY);
 	hput(NULL, k);
 	hflag(0);
-	next_slot = cycles + frame_cycles;
+	/* SIMPHASE=N: the frame's first slot N sixteenths of a frame later, so
+	   that PLAY's start meets each slot (its race: 26 Nov 2026) */
+	next_slot = cycles + frame_cycles + (getenv("SIMPHASE") ? atol(getenv("SIMPHASE")) : 0) * frame_cycles / 16;
 	tick_cycles = 32000000ULL * 2005 / 1000000;
 	next_tick = cycles + tick_cycles;
 	frames = (long)(secs * rate);
@@ -249,7 +257,8 @@ int main(int argc, char **argv)
 			printf("    frame %ld: L %04x R %04x%s (r7 after: %04x %04x)\n", (a - left_par) / 2 + j, cap[a + 2 * j], cap[a + 2 * j + 1],
 			       cap[a + 2 * j] != cap[a + 2 * j + 1] ? "  <<" : "", cap_r7[a + 2 * j], cap_r7[a + 2 * j + 1]);
 	}
-	bad = dead || tde_miss > 0 || diff > 0;
+	/* (SIMSLIP: the frame the slip itself spoils, one; salign's next sample puts it back) */
+	bad = dead || tde_miss > 0 || diff > (getenv("SIMSLIP") ? 2 : 0);
 	printf(bad ? "play: FAILED\n" : "play: all passed\n");
 	free(b);
 	free(cap);
