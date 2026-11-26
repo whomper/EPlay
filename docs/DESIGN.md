@@ -3151,5 +3151,45 @@ common only if a second app needs MIDI):
   under MiNT is never disturbed between files; the help says that a MIDI file plays out of the MIDI
   port.
 
-The design (the file types, the timing, seeking, what the bar shows) follows here as it is made;
-anything in it that is the owner's (the words, the look) goes to him first.
+How it is made (26 Nov 2026):
+- **MIDI.OVL** (`midiovl/`, `src/smf.c`, `src/midiovl.h`): a Standard MIDI File (types 0, 1 and
+  2; tempo maps from any track; SMPTE times, 29.97 too; running status; system exclusive messages,
+  split at 255 bytes; F7 packets as they are) made into records of a time in ms, a length and the
+  bytes, the channel messages of one ms together. The times are kept as whole ms and a 32-bit
+  fraction, the ms a tick found once at each tempo change: a message's time is three 16 x 16
+  products, a 68000's `mulu.w` (a divide a message took the STE 2,800 cycles). The tracks are
+  merged a tick at a time: the earliest tick found once, then every track's events at it in the
+  tracks' order. The 68000 build has its own multiply and divide (`midiovl/lib000.c`): the cross
+  compiler's libgcc uses `bsr.l`, a 68020 instruction that took the STE to an address error; the
+  Makefile refuses a 68020 instruction in it. The ColdFire build is the FireBee package's
+  `midi.ovl`. 5.6 KB and 5.0 KB.
+- **Made as it plays**: at the open, a quick pass for the length and the first track's name (each
+  track read on its own, no merging and no bytes written), then the first 4 s of records; the
+  rest in GEM's turns (`mp_step`, 4 s ahead of the music; the file dialog's and the dialogs' turns
+  too), into one block taken for the most the records can be (3.5 times the file) and shrunk to
+  them at the end. A 192 KB file of 48,008 messages (Hatari): Falcon-4:16 545 ms to the start,
+  STE 2,745 ms (2,300 of them the length's pass); made whole, 5.3 and 14.7 s of the turns.
+- **The tick** (`ui/midiplay.c`, Timer A 997 times a second; the GEM turns' on the FireBee and with
+  the XBIOS's sound alone): the records due into a 512-byte ring, the ring to the ACIA a byte each
+  time TDRE says the last has gone, for 350 us a tick at most (10 ms a turn on the FireBee).
+- **The start**: the GM reset, 150 ms for the synth, the master volume, then the file's state before
+  that place (its system exclusive messages; each channel's bank, program, controllers but the
+  data entry and (N)RPN numbers, pitch bend: Play after Pause and a seek), then its records. Stop,
+  Pause and the end: All Notes Off and Reset All Controllers on all 16 channels, from GEM's side with
+  TDRE waited for (100 ms at most a byte, then given up).
+- **The volume**: the GM master volume (F0 7F 7F 04 01), 1.5 dB a step.
+- **Machines**: the ST, STE, Mega STE, TT and Falcon (`_MCH` 0 to 3) and the FireBee (`_CF_`, its
+  ACIA at the same place); elsewhere "This machine has no MIDI port." Files: MID, MIDI, KAR, SMF,
+  by the name (folders, Open's types) and by "MThd" (a file opened).
+- **The log**: the file's type, tracks, messages and length; how long its start took; at the end
+  the bytes sent and the latest a message went after its time.
+- **Tests**: `tests/smf/run.py` (in `make test`): the stream against the test's own reading of the
+  files (exact fractions), within 1 ms, the same in pieces and the quick length the stream's;
+  damaged and random files under the sanitizers. `tests/hatari/midi_test.py`: Hatari's MIDI out
+  (`--midi-out`) checked byte for byte: play to the end, Pause and Play (the notes off, the reset,
+  the chase, the rest), and nothing on the port with a WAV playing; passed on STE:mono (TOS 1.62),
+  Falcon-4:16 (TOS 4.04) and TT:mono (TOS 3.06).
+
+For the owner (the words and the look; written as the defaults until he says): the bar's info
+"MIDI  type 1  2 tracks" and output "MIDI port"; the list's title from the first track's name;
+"This machine has no MIDI port."; "MIDI files need MIDI.OVL beside EPlay."; the help's words.

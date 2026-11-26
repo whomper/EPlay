@@ -47,6 +47,7 @@
 #include "conn.h"
 #include "busy.h"
 #include "vgm.h"
+#include "midiplay.h"
 #include "vgmfile.h"
 #include "vgmplay.h"
 #include "xalloc.h"
@@ -67,6 +68,7 @@ int play_busy_turn;
 static int state = PS_IDLE, kind, fh = -1, eof;
 static int dsp;			/* the DSP decodes it: an MP3 */
 static int vgm;			/* a VGM or VGZ plays on the YM2149 (phase 9: vgmplay.c) */
+static int mid;			/* a MIDI file plays out of the MIDI port (midiplay.c, decided 25 Nov 2026) */
 /* an MP3 decoded on the CPU (MP3FPU.OVL, cmp3.c: a 68060 with no Falcon DSP
    free), played as a WAV is: its frames decoded into the queue by fill,
    resampled there to the output's rate (16-bit big-endian stereo) */
@@ -216,6 +218,10 @@ static void apply_volume(void)
 	long g, gn;
 	if (vgm) {
 		vp_volume(a, !vol);	/* (vgmplay.c: the chips' ways) */
+		return;
+	}
+	if (mid) {
+		mp_volume(a, !vol);	/* (the GM master volume) */
 		return;
 	}
 	/* (the Falcon's own clock too: the matrix sends the sound to the FDI
@@ -1416,6 +1422,25 @@ int play_open(const char *path, char *err, int n)
 		     play_tags.album, play_tags.pic_end - play_tags.pic_at, play_tags.pic_unsync ? " (unsynchronised)" : "");
 	if (net || !vgm_magic(fbuf, fend))
 		vp_forget();	/* (a VGM's unpacked file, kept for its next open, given back) */
+	if (net || !mp_magic(fbuf, fend))
+		mp_forget();	/* (a MIDI file's bytes, the same) */
+	if (!net && mp_magic(fbuf, fend)) {
+		/* a MIDI file (decided 25 Nov 2026): made into the port's bytes by
+		   MIDI.OVL, sent by the tick */
+		if (!mp_open(fh, file_size, seek_ms, play_name, &play_tags, play_info, sizeof(play_info), play_out,
+			     sizeof(play_out), &len_ms, err, n)) {
+			close_file();
+			return 0;
+		}
+		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
+		mid = 1;
+		play_via = "";
+		rate = 44100;
+		play_hz = 0;
+		play_kbps = 0;
+		elog("MIDI: %s; %s; %ld ms%s", play_info, play_out, len_ms, base_ms ? " (from a place in it)" : "");
+		return 1;
+	}
 	if (!net && vgm_magic(fbuf, fend)) {
 		/* a VGM or VGZ (phase 9): read whole, played by the tick on
 		   the YM2149 */
@@ -2181,6 +2206,8 @@ void play_pause(void)
 	long fr, late, wmin, wavg, k;
 	if (state != PS_PLAYING)
 		return;
+	if (mid)
+		mp_halt();	/* (first: its place then this one; the notes off) */
 	if (vgm)
 		vp_halt();	/* (first: Play goes on from the copy of the run taken as its tick
 				   stopped, which then is this place; read before, it was some
@@ -2229,6 +2256,12 @@ void play_start(void)
 		apply_volume();
 		return;
 	}
+	if (mid && state != PS_PLAYING) {
+		state = PS_PLAYING;
+		mp_start();
+		apply_volume();
+		return;
+	}
 	if ((fh >= 0 || net) && state != PS_PLAYING) {
 		state = PS_PLAYING;
 		if (dsp) {
@@ -2259,6 +2292,10 @@ void play_stop(void)
 	if (vgm) {
 		vp_stop();		/* (silent: the chip as the machine had it) */
 		vgm = 0;
+	}
+	if (mid) {
+		mp_stop();		/* (every channel's notes off; the bytes kept for its next open) */
+		mid = 0;
 	}
 	feed_off();			/* first: the tick and the DSP's interrupt no longer run */
 	hostirq_off();
@@ -2387,6 +2424,8 @@ long play_ms(void)
 		return pause_ms;
 	if (vgm)
 		return vp_ms();
+	if (mid)
+		return mp_ms();
 	if (dsp) {			/* (the file's samples: at its rate, resampled or not) */
 		long fr, late, wmin, wavg;
 		if (!s_started)
@@ -2505,6 +2544,8 @@ const char *play_keep_up(void)
 		snprintf(b, sizeof(b), "its chips from the tick");
 		return b;
 	}
+	if (mid)
+		return mp_log();
 	if (dsp) {
 		long fr, late, wmin, wavg;
 		dspmp3_stream_info(&fr, &late, &wmin, &wavg);
@@ -2580,6 +2621,22 @@ int play_step(int ms)
 		feed_poll();
 	}
 #endif
+	if (mid) {
+		mp_step(play_busy_turn ? 2 : ms > 20 ? ms : 10);	/* (its records ahead of the music) */
+		if (mp_ended()) {
+			nf_debug("EPLAY ended: 0 underruns\n");	/* (the rigs) */
+			elog("played to the end: %ld ms, a MIDI file (%s)", play_ms(), mp_log());
+			play_stop();
+			elog_save();
+			return 1;
+		}
+		sec = play_ms() / 1000;
+		if (sec != last_sec) {
+			last_sec = sec;
+			return 1;
+		}
+		return 0;
+	}
 	if (vgm) {
 		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once
 		   it is all there */
@@ -2829,6 +2886,8 @@ int play_wait_ms(void)
 	long ahead;
 	if (state != PS_PLAYING)
 		return 500;
+	if (mid)
+		return SND_XB ? 0 : 100;	/* (the GEM turns are the port's tick there) */
 	if (src_done || vgm)
 		return 100;
 	ahead = q_w - q_r;		/* seconds of music, near enough */

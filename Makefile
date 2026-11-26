@@ -59,7 +59,7 @@ LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
            -Wl,--sort-section=name \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay midiplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -118,7 +118,8 @@ HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common
            common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
-all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl binary/mp3int.ovl
+all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl \
+     binary/midifb.ovl
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
@@ -307,6 +308,8 @@ $(B)/test_probe: tests/probe/test_probe.c src/probe.c src/probe.h src/tags.c src
 		common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Isrc/mp3 -Icommon/src -o $@ tests/probe/test_probe.c \
 		src/probe.c src/tags.c src/rgain.c src/pcm.c src/mp3/mp3frame.c common/src/charset.c common/src/bidi.c
+$(B)/test_smf: tests/smf/test_smf.c src/smf.c src/smf.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/smf/test_smf.c src/smf.c
 $(B)/test_m3u: tests/m3u/test_m3u.c src/m3u.c src/m3u.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/m3u/test_m3u.c src/m3u.c
 $(B)/test_order: tests/m3u/test_order.c src/order.c src/order.h
@@ -349,7 +352,7 @@ $(B)/hmad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h third_pa
 $(B)/test_mp3int: tests/mp3/test_mp3int.c mp3ovl/madhead.c $(HMADO)
 	$(HOSTCC) $(HMADF) -Wall -Wextra -Wno-unused-function -o $@ tests/mp3/test_mp3int.c $(HMADO) -lm
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay $(B)/test_smf
 	./$(B)/test_inf
 	mkdir -p $(B)/vgmfiles && ./$(B)/test_vgm $(B)/vgmfiles
 	./$(B)/test_stream
@@ -357,6 +360,7 @@ test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test
 	./$(B)/fuzz_replay tests/fuzz/seeds/* tests/fuzz/found/*
 	./$(B)/test_gain
 	./$(B)/test_m3u
+	python3 tests/smf/run.py $(B)/test_smf $(B)/smffiles
 	./$(B)/test_order
 	./$(B)/test_tags
 	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh
@@ -444,6 +448,45 @@ $(B)/mp3ovl/mad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h th
 	@mkdir -p $(dir $@)
 	$(CC) $(OVLIF) -w -c -o $@ $<
 
+# MIDI.OVL (midiovl/, src/midiovl.h, src/smf.c): a MIDI file made into the
+# MIDI port's timed bytes, loaded only when one is played or read (decided
+# 25 Nov 2026); 68000 code for the standard package (the STE's edition
+# too), the ColdFire's for the FireBee's (midifb.ovl, as midi.ovl there)
+OVLMID  := -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+           -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -Wall -Wextra -nostdinc \
+           -isystem $(GCCINC) -Isrc -DMIDIOVL_VERSION=\"$(VERSION_STR)\"
+binary/midi.ovl: $(B)/midiovl/midi.elf common/tools/elf2tos.py | binary
+	python3 common/tools/elf2tos.py $< $@
+binary/midifb.ovl: $(B)/midiovl/midifb.elf common/tools/elf2tos.py | binary
+	python3 common/tools/elf2tos.py $< $@
+$(B)/midiovl/midi.elf: $(B)/midiovl/head.o $(B)/midiovl/smf.o $(B)/midiovl/lib000.o midiovl/ovl.ld
+	$(CC) -m68000 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,midiovl/ovl.ld -Wl,--build-id=none \
+	    -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $(B)/midiovl/head.o $(B)/midiovl/smf.o \
+	    $(B)/midiovl/lib000.o
+	@! m68k-linux-gnu-objdump -d $@ | grep -qE '\s(bsrl|jbsr|bral|divul|divsl|mulul|mulsl|extbl)\s|\s61ff\s' || \
+	    { echo "midi.elf: a 68020 instruction in the 68000's overlay"; rm -f $@; exit 1; }
+$(B)/midiovl/midifb.elf: $(B)/midiovl/headfb.o $(B)/midiovl/smffb.o midiovl/ovl.ld
+	$(CC) -mcpu=5475 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,midiovl/ovl.ld -Wl,--build-id=none \
+	    -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $(B)/midiovl/headfb.o $(B)/midiovl/smffb.o -lgcc
+# (the 68000's: no byte reads merged into a word or a long, which faults
+# at an odd address there, as EPLAYST.PRG's build)
+OVL000  := -m68000 -fdisable-tree-bswap -fno-store-merging
+$(B)/midiovl/head.o: midiovl/head.c src/midiovl.h src/smf.h VERSION
+	@mkdir -p $(dir $@)
+	$(CC) $(OVL000) $(OVLMID) -c -o $@ $<
+$(B)/midiovl/smf.o: src/smf.c src/smf.h
+	@mkdir -p $(dir $@)
+	$(CC) $(OVL000) $(OVLMID) -c -o $@ $<
+$(B)/midiovl/lib000.o: midiovl/lib000.c
+	@mkdir -p $(dir $@)
+	$(CC) $(OVL000) $(OVLMID) -c -o $@ $<
+$(B)/midiovl/headfb.o: midiovl/head.c src/midiovl.h src/smf.h VERSION
+	@mkdir -p $(dir $@)
+	$(CC) -mcpu=5475 $(OVLMID) -c -o $@ $<
+$(B)/midiovl/smffb.o: src/smf.c src/smf.h
+	@mkdir -p $(dir $@)
+	$(CC) -mcpu=5475 $(OVLMID) -c -o $@ $<
+
 # a release's files, for the release workflow: two packages and nothing
 # else (the guidelines 7.4, decided 22 Nov 2026: no loose files, one zip
 # for each platform), every name in
@@ -453,7 +496,7 @@ $(B)/mp3ovl/mad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h th
 #   ColdFire (binary/eplayfb.prg as eplay.prg; its MP3 is in the program, so
 #   no mp3*.ovl), and fbprobe.prg for its testers.
 DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl
+           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl
 DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
@@ -462,6 +505,7 @@ dist: all fbprobe help
 	cp $(DIST) dist/zip/
 	cp binary/eplayfb.prg dist/zipfb/eplay.prg
 	cp common/tlsovl/tlsfb.ovl dist/zipfb/tls.ovl
+	cp binary/midifb.ovl dist/zipfb/midi.ovl
 	cp $(DISTFB) dist/zipfb/
 	for z in zip zipfb; do \
 		cp NOTICES.TXT dist/$$z/notices.txt && \

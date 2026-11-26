@@ -13,6 +13,7 @@
 #include "probe.h"
 #include "vgmfile.h"
 #include "vgmplay.h"
+#include "midiplay.h"
 #include "cmp3.h"
 #include "xalloc.h"
 
@@ -383,6 +384,24 @@ int list_step(int *row)
 			e->title = keep(t.title);
 			e->artist = keep(t.artist);
 			e->album = keep(t.album);
+			if (e->len_ms < 0) {
+				e->bad = 1;
+				e->len_ms = 0;
+			}
+			Fclose((short)fh_);
+			fh_ = -1;
+			return 1;
+		}
+	}
+	{
+		/* a MIDI file (decided 25 Nov 2026): its first track's name and
+		   its length, MIDI.OVL's */
+		unsigned char m[4];
+		if (rd(0, 0, m, 4) == 4 && mp_magic(m, 4)) {
+			tags_clear(&t);
+			e->len_ms = mp_probe(fh_, size, &t);
+			t.title[39] = 0;
+			e->title = keep(t.title);
 			if (e->len_ms < 0) {
 				e->bad = 1;
 				e->len_ms = 0;
