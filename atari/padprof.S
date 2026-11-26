@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against this commit's build/atari/eplay.map (the profiling build at the shipped layout): do not edit.
-| 338 pads, 56804 bytes, each section at its place there, mod the 68030's
+| 338 pads, 56808 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -586,7 +586,7 @@ ep_pad_144:
 	.section ".text.play_step!","ax"
 	.globl ep_pad_145
 ep_pad_145:
-	.space 148
+	.space 152
 	.section ".text.play_stop!","ax"
 	.globl ep_pad_146
 ep_pad_146:
@@ -867,7 +867,7 @@ ep_pad_214:
 	.globl ep_pad_215
 ep_pad_215:
 	.space 168
-	.section ".rodata.CSWTCH.1368!","a"
+	.section ".rodata.CSWTCH.1370!","a"
 	.globl ep_pad_216
 ep_pad_216:
 	.space 56

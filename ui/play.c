@@ -2622,7 +2622,9 @@ int play_step(int ms)
 	}
 #endif
 	if (mid) {
-		mp_step(play_busy_turn ? 2 : ms > 20 ? ms : 10);	/* (its records ahead of the music) */
+		/* (its records ahead of the music; little in a busy turn or one
+		   that draws the time, as a VGZ's pieces) */
+		mp_step(play_busy_turn || play_ms() / 1000 != last_sec ? 2 : ms > 20 ? ms : 10);
 		if (mp_ended()) {
 			nf_debug("EPLAY ended: 0 underruns\n");	/* (the rigs) */
 			elog("played to the end: %ld ms, a MIDI file (%s)", play_ms(), mp_log());
@@ -2640,7 +2642,12 @@ int play_step(int ms)
 	if (vgm) {
 		/* a big VGZ unpacking as it plays: a piece each turn; its GD3 once
 		   it is all there */
-		int st = vp_step(play_busy_turn ? -1 : ms > 20 ? ms : 10);	/* (a turn's 10 ms at least: some 30 KB on a 32 MHz Falcon) */
+		/* (a turn's 10 ms at least: some 30 KB on a 32 MHz Falcon; none
+		   in a turn that draws the time, its 25 ms on a stock Falcon,
+		   as none in a busy turn: the two in one turn were 35 ms of
+		   GEM's, 26 Nov 2026) */
+		int draws = play_ms() / 1000 != last_sec;
+		int st = vp_step(play_busy_turn || draws ? -1 : ms > 20 ? ms : 10);
 		if (st == 2) {
 			vp_tags(&play_tags);
 			play_tags_late = 1;	/* (main.c: the list's row again) */
