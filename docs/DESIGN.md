@@ -3190,6 +3190,7 @@ How it is made (26 Nov 2026):
   the chase, the rest), and nothing on the port with a WAV playing; passed on STE:mono (TOS 1.62),
   Falcon-4:16 (TOS 4.04) and TT:mono (TOS 3.06).
 
-For the owner (the words and the look; written as the defaults until he says): the bar's info
+The words (agreed 26 Nov 2026): the bar's info
 "MIDI  type 1  2 tracks" and output "MIDI port"; the list's title from the first track's name;
-"This machine has no MIDI port."; "MIDI files need MIDI.OVL beside EPlay."; the help's words.
+"This machine has no MIDI port."; "MIDI files need MIDI.OVL beside EPlay."; the help's paragraph
+(docs/GUIDE.md, "MIDI files"). It goes out with #100 in one release (fewer releases, 26 Nov 2026).
