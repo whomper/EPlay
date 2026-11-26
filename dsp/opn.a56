@@ -126,8 +126,12 @@ DQ	equ	$1400		; the DAC's queue, 1,024 (modulo 1,024)
 EVY	equ	$1300		; (DACE) the tick's events' bytes, 96 and one
 ; ---- external X (more)
 EVX	equ	$1100		; (DACE) the tick's events' places, 96 and a last
-PLX	equ	$30		; (PLAY) 2: each sample twice; the one before (L, R)
-PREVL	equ	$31
+; (PLAY) 2: each sample twice; the one before (L, R): beyond FB's six
+; channels of three ($20-$31), whose sixth's operator 1 outputs once
+; overwrote them (26 Nov 2026: the twice path taken at 24,585 Hz now and
+; then, left and right a sample apart: noise on one side)
+PLX	equ	$84
+PREVL	equ	$85
 PREVR	equ	$0c		; (Y)
 
 O_MODE	equ	0
@@ -1425,9 +1429,9 @@ rs3
 ; ---- PLAY: the SSI on (sn.a56's way), the ring kept LEAD words ahead,
 ; the commands taken between samples
 c_play	jsr	rd			; k: 1, or 2 (each sample twice)
-	move	x0,x:<PLX
+	move	x0,x:PLX
 	clr	a
-	move	a,x:<PREVL
+	move	a,x:PREVL
 	move	a,y:<PREVR
 	move	#>2047,x1
 	move	x1,x:<MINLD
@@ -1477,10 +1481,11 @@ pg1	move	#>LEAD,x0
 	cmp	x0,a
 	jge	ploop
 	jsr	sample
-	jclr	#1,x:<PLX,pone
+	move	x:PLX,x1		; (PLX beyond the short addresses: jclr on a register)
+	jclr	#1,x1,pone
 	move	a,x1			; twice: first halfway from the one before
-	move	x:<PREVL,y1
-	move	x1,x:<PREVL
+	move	x:PREVL,y1
+	move	x1,x:PREVL
 	move	a,y0
 	tfr	y1,a
 	add	y0,a
@@ -1494,7 +1499,7 @@ pg1	move	#>LEAD,x0
 	add	y0,b
 	asr	b
 	move	b,y:(r6)+
-	move	x:<PREVL,a
+	move	x:PREVL,a
 	move	y:<PREVR,b
 pone	move	a,y:(r6)+
 	move	b,y:(r6)+
