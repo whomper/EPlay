@@ -35,7 +35,8 @@ EPlay includes or uses, under their own licences (compatible with the GPL):
   NOTICE), as Android's Open Source Project carries it (its README.txt).
   tools/mkgmset.py makes it into the synth's sound set, a data file of its
   own beside EPLAY.PRG: it stays a separate work under the Apache License
-  and is not part of EPLAY.PRG.
+  and is not part of EPLAY.PRG. Changed there: the 20 key ranges whose
+  samples the file leaves silent play their program's nearest one instead.
 
 - tls.ovl (common/tlsovl/): the AERA family's secure connections, for web
   radio stations at https addresses on a Direct connection. It is made with

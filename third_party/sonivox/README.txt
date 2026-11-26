@@ -18,3 +18,8 @@ sample points at 22,050 Hz, both as 8-bit and as 16-bit samples.
 EPlay doesn't build this file into its program: tools/mkgmset.py makes it
 into a data file of its own (built into binary/, shipped beside EPLAY.PRG),
 which stays a separate work under the Apache License (NOTICES.TXT).
+
+Changed in that data file (mkgmset.py's mend()): the file declares 212,177
+sample points and initialises 212,050, so waves 143 to 149 lie past them
+and are silent; the 20 key ranges that play them are given the nearest key
+range's of the same program instead (its wave, loop and tuning).

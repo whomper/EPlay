@@ -64,6 +64,40 @@ def lib_numbers(src):
     return [int(x, 0) for x in re.findall(r"\b(?:0x[0-9a-fA-F]+|\d+)\b", t)]
 
 
+def mend(regs, banks, progs, lens, offs, init):
+    """Sonivox's array holds 212,050 points, its waves' table 212,177: the
+    last seven waves (143-149, single cycles of 20-23 points) are past the
+    points it has, so C makes them zeros, and the 20 key ranges that play
+    them are silent (Clavinet from A4 up, organs, accordion, brass, a lead,
+    sound effect 123). Each such range takes the wave, the loop and the
+    tuning (which holds the wave's root key) of the nearest range of its own
+    program that has a wave: that sample played higher; its keys, gain and
+    envelope its own. A change to the set, named in
+    third_party/sonivox/README.txt and NOTICES.TXT"""
+    regs = list(regs)
+    n = len(regs) // 9
+    bad = {w for w in range(len(lens)) if offs[w] + lens[w] > init}
+    starts = [banks[1 + k] & 0x3fff for k in range(128)] + [progs[2 * k + 1] for k in range(len(progs) // 2)]
+    for first in set(starts):
+        walk = []
+        k = first
+        while k < n:
+            walk.append(k)
+            if regs[9 * k] & 0x8000:
+                break
+            k += 1
+        good = [k for k in walk if regs[9 * k + 7] not in bad]
+        for k in walk:
+            if regs[9 * k + 7] in bad and good:
+                # the nearest by key: its lowest key's distance
+                src = min(good, key=lambda j: abs(regs[9 * j + 1] - regs[9 * k + 1]))
+                looped = regs[9 * src] & 1
+                regs[9 * k] = (regs[9 * k] & ~1) | looped
+                regs[9 * k + 3] = regs[9 * src + 3]   # (the tuning: the wave's root key with it)
+                regs[9 * k + 5:9 * k + 8] = regs[9 * src + 5:9 * src + 8]   # loop start, end, wave
+    return regs
+
+
 def pad4(b):
     return b + b"\0" * (-len(b) % 4)
 
@@ -89,6 +123,7 @@ def make(src, bits):
     assert len(regs) == nreg * 9
     assert len(arts) == nart * 17
     assert len(lens) == nwave and len(offs) == nwave
+    regs = mend(regs, banks, progs, lens, offs, len(body(src, "eas_samples", 0)))
     head = MAGIC + struct.pack(">HHII6HI", 1, 1 if bits == 16 else 0, rate, fmt8 if bits == 8 else
                                (fmt8 & ~0x00100000) | 0x00200000, nbank, nprog, nreg, nart, nwave, 0, pool)
     out = [pad4(head)]
