@@ -99,11 +99,12 @@ static void op_rates(OPND *d, OPND_OP *op)
 }
 
 TICK_CODE("6Bopnd_ch_steps")
-static void ch_steps(OPND *d, int c)
+/* operator i's step from its channel's frequency (channel 3's own in its
+   special mode) */
+static void op_step(OPND *d, int c, int i)
 {
 	OPND_CH *ch = &d->ch[c];
-	int i;
-	for (i = 0; i < 4; i++) {
+	{
 		OPND_OP *op = &ch->op[i];
 		int fnum = ch->fnum, block = ch->block, kc, fc, dd;
 		long inc;
@@ -133,6 +134,13 @@ static void ch_steps(OPND *d, int c)
 		} else
 			d->step_dirty |= 1UL << (c * 4 + i);	/* (its step alone: STEP's 3 words, not OP's 10) */
 	}
+}
+
+static void ch_steps(OPND *d, int c)
+{
+	int i;
+	for (i = 0; i < 4; i++)
+		op_step(d, c, i);
 }
 
 void opnd_init(OPND *d, unsigned long clock, long rate)
@@ -256,11 +264,21 @@ void opnd_write(OPND *d, int port, int reg, int val)
 		return;
 	}
 	switch (reg & 0xfc) {
-	case 0xa0:
-		d->ch[c].fnum = (d->latch[port] & 7) << 8 | val;
-		d->ch[c].block = (d->latch[port] >> 3) & 7;
-		ch_steps(d, c);
+	case 0xa0: {
+		/* (a frequency written again as it was, three in four of a dense
+		   file's, changes no step: nothing to make nor send, 26 Nov 2026;
+		   channel 3 in its special mode: this one is its operator 4's) */
+		int fnum = (d->latch[port] & 7) << 8 | val, block = (d->latch[port] >> 3) & 7;
+		if (fnum == d->ch[c].fnum && block == d->ch[c].block)
+			break;
+		d->ch[c].fnum = fnum;
+		d->ch[c].block = block;
+		if (c == 2 && (d->ch3_mode & 0x40))
+			op_step(d, 2, 3);
+		else
+			ch_steps(d, c);
 		break;
+	}
 	case 0xa4:
 		d->latch[port] = (unsigned char)val;
 		break;
@@ -268,9 +286,13 @@ void opnd_write(OPND *d, int port, int reg, int val)
 		if (!port) {
 			static const int k[3] = { 2, 0, 1 };
 			int j = k[reg & 3];
-			d->ch[2].fnum3[j] = (d->latch3 & 7) << 8 | val;
-			d->ch[2].block3[j] = (d->latch3 >> 3) & 7;
-			ch_steps(d, 2);
+			int fnum = (d->latch3 & 7) << 8 | val, block = (d->latch3 >> 3) & 7;
+			if (fnum == d->ch[2].fnum3[j] && block == d->ch[2].block3[j])
+				break;
+			d->ch[2].fnum3[j] = fnum;
+			d->ch[2].block3[j] = block;
+			if (d->ch3_mode & 0x40)
+				op_step(d, 2, j);	/* (the one operator it is; none out of the mode) */
 		}
 		break;
 	case 0xac:

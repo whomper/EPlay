@@ -3253,3 +3253,26 @@ How it is made, in order (each step tested before the next):
    C model and the .a56 bit for bit, as the decoder's are.
 5. **The words and the choice** (the owner's): the file's name, the output's name beside "MIDI port"
    and where the choice sits (Settings' Output, or a MIDI file's own), its help.
+
+## 1.60: a dense Mega Drive file on a stock Falcon; channel 3's special mode (26 Nov 2026)
+
+A tester's game file (YM2612 alone, channel 3 in its special mode, its drums in it with feedback 6
+and 7, some 650 writes a second, nearly every write between two short waits):
+- **The 68030's tick** (Hatari, Falcon-4:16, 40 s): vgm.c's drums() now takes the YM2612's writes
+  ($52, $53) and the long waits ($61-$63) inline as it took the DAC's and the short waits, with no
+  return to vgm_run and no commands() for each write; opnd.c makes nothing for a frequency
+  written again as it was (76 % of this file's $A0-$A2, 58 % of its $A8-$AA) and, in channel 3's
+  special mode, an $A8-$AA or $A2 write's one operator alone. The writes passed on, and the DSP's
+  sound, are the same bit for bit (every tests/ym2612 file, the tester's, a real game's with DAC
+  drums). The tick: 614 to 395 us on average, 2,363 to 661 left out, 999 to 389 not made up, the
+  longest 33.8 to 27.5 ms. What remains is TOS's level-6 handlers holding the tick up (its
+  comment in vgmplay.c), not its own work; the gate's real VGZ, with Settings open, has 2,071 not
+  made up at 1,229 us a tick and passes.
+- **Channel 3** sounds unlike Nuked-OPN2 on that file (its loudness 10 ms at a time -21 to +13 dB
+  of the reference's; the other five channels within 1 dB): the float model at the chip's own
+  53,267 Hz is within -3.2 to +0.7 dB of it, at 24,585 Hz not. So it is the rate, not the
+  registers: a drum made of feedback 6 or 7 is chaotic, and half the rate changes its feedback's
+  loop. The register map ($A8-$AA to operators 3, 1, 2; the key-on bits; the $AC-$AE latch) was
+  checked against Nuked's and is the same; the six possible maps tried, the present one the
+  closest. Not changed: the feedback operator at the chip's rate would take the DSP past its
+  worst case's 82 %.

@@ -409,6 +409,8 @@ static void drums(VGMRUN *r, long lim)
 	VGMDAC *q = r->dac;
 	long p = r->pos, n = r->avail ? r->avail : r->n, at = r->at, wait = 0;
 	long pp = r->pcm_pos, plen = r->pcm_len, base = q ? q->base : 0;
+	VGM_OPN fn = r->opn_fn;
+	void *u = r->u;
 	int v = -1;
 	while (p < n) {
 		unsigned c = b[p];
@@ -421,6 +423,32 @@ static void drums(VGMRUN *r, long lim)
 			wait = c & 15;
 		} else if ((c & 0xf0) == 0x70)
 			wait = (c & 15) + 1;
+		else if ((c == 0x52 || c == 0x53) && p + 3 <= n) {
+			/* the YM2612's writes too, inline (opn_write's, with no call
+			   to it nor to commands() each: a dense file, every write
+			   between two short waits, had the 68030's tick past its
+			   period on a stock Falcon, 26 Nov 2026) */
+			unsigned port = c & 1, reg = b[p + 1], val = b[p + 2];
+			if (port == 0 && reg == 0x2a && v >= 0) {
+				r->opn[0][0x2a] = (unsigned char)v;	/* (the DAC's last, as the end below) */
+				v = -1;
+			}
+			r->opn[port][reg] = (unsigned char)val;
+			if (port == 0 && reg == 0x28)
+				r->opn_key[val & 7] = (unsigned char)val;
+			if (fn) {
+				r->at = at;	/* (the write's place: opnd.c's at_fn reads it) */
+				fn(u, (int)port, (int)reg, (int)val);
+			}
+			p += 3;
+			continue;
+		} else if (c == 0x61 && p + 3 <= n) {
+			wait = (long)b[p + 1] | (long)b[p + 2] << 8;
+			p += 2;
+		} else if (c == 0x62)
+			wait = 735;
+		else if (c == 0x63)
+			wait = 882;
 		else
 			break;
 		p++;
