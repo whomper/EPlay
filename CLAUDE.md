@@ -41,6 +41,14 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   `main`, nothing else: no test builds, no CI artifacts, no builds from a branch.
   Work lands on `main`; to try a fix on real hardware, release it. If a release doesn't work, fix
   forward: a new release with the next number, before any other work; never a rollback (Erez, 7 Nov 2026).
+- **Fewer releases, each carrying more** (decided 26 Nov 2026; guidelines 1.2, AERA-Atari 9da7632):
+  no release for every single fix or feature. Changes gather on `main` and go out together when a
+  body of work is complete (the fixes known then and the phase's features), as one candidate through
+  the gate and the hub's family check. Only a fault that loses or damages data, a security fault, or
+  a crash or breakage that stops users working goes out on its own at once, with only that fix, its
+  notes saying why. A fault a user reports is still fixed with its rig case, in the next release
+  unless it is one of those. Docs and rig changes need no release; the hub's shared fixes ride the
+  next one unless the hub names one the exception. For EPlay now: #100 and MIDI.OVL go out together.
 - **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2), once the
   candidate has passed **the regression gate** (Erez, 17 Nov 2026: extra care over regressions, as
   the software has users, so testing across all configurations and no loss of performance; guidelines
