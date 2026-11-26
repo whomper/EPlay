@@ -3205,7 +3205,15 @@ On Hatari's 68060 at 32 MHz (a guide only: its 68060 isn't cycle-exact), a 44.1 
 - `-O3 -funroll-loops` for libmad: 2,185 to 2,140 ms of 3,060 (2%) for 8 KB more: not taken.
 - VGM made on the CPU: 12 to 20%.
 
-Nothing simple is left: what remains is libmad's transforms rewritten for the 68060 (some 15 to
-25%, with the accuracy kept to ISO 11172-4 to be shown again), or a 68080 build of MP3INT.OVL with
-its 64-bit `muls.l` (the 68060 traps on it), which can only be measured on a Vampire. Both are the
-owner's to weigh; neither is in the release that carries MIDI.OVL.
+Nothing simple is left. Two options were weighed (decided 26 Nov 2026):
+- **Dropped:** libmad's transforms rewritten for the 68060 (some 15 to 25%, the accuracy to
+  ISO 11172-4 to be shown again). It would help only a 68060 without an FPU: a 68LC060 in a
+  Milan, or a CT60 while another program holds the DSP (a CT60/63 is a Falcon: its MP3 is the
+  DSP's). Those are rare, and they already keep up at 71%.
+- **Waiting for a tester with a Vampire V4:** a 68080 build with its 64-bit `muls.l` (the 68060
+  traps on it). The V4 is the one machine with real use that decodes MP3 on the CPU (46% with
+  MP3FPU.OVL now); Hatari has no 68080, so it can only be measured on a real V4.
+
+The machines that decode MP3 on the CPU: the Milan 060 and the Vampire V4 (the standard
+package), the FireBee (its own decoder, on its EMAC); a CT60/63 only while the DSP is held. None
+but the FireBee has been tried on real hardware: the others are Hatari's stand-ins.
