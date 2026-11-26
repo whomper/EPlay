@@ -83,15 +83,24 @@ own pitch.
   keyboard's click and the bell are off. Music for another chip (an arcade board's) says so and isn't played
   yet.
 - **MIDI files.** A `.MID`, `.MIDI`, `.KAR` or `.SMF` file (a Standard MIDI File, type 0, 1 or 2)
-  plays out of the computer's MIDI port, to the synth or sound module you have connected there:
-  EPlay makes no sound of its own for it. It plays on the ST, STE, Mega STE, TT, Falcon and
-  FireBee; elsewhere EPlay says "This machine has no MIDI port." Each file starts with a General
-  MIDI reset, and Stop, Pause and a file's end turn every note off on all 16 channels, so nothing
-  of one song sounds on into the next; after a Pause or a move on the position bar, each channel
-  is given the program and controllers the file has at that place. The volume is sent as the
-  General MIDI master volume. The list shows the file's first track's name. EPlay sends nothing
-  to the MIDI port while no MIDI file plays, so another program using the port is left alone.
-  MIDI files need `midi.ovl` beside `eplay.prg` (it is in both packages).
+  plays on EPlay's own synth, or out of the computer's MIDI port to the synth or sound module you
+  have connected there (**Settings, MIDI files**).
+  - **The synth** plays the General MIDI instruments and drums from the Sonivox sound set in
+    `synth.dat`, beside `eplay.prg` (it is in both packages). It needs a fast CPU: a 68060, a
+    68080 or the FireBee's. On a 68030 EPlay times the CPU at the first MIDI file and uses the
+    synth only if it can play four notes at once or more; a Falcon with a 16 or 32 MHz 68030
+    can't, so its MIDI files go to the MIDI port, and the log says why. When a song asks for more
+    notes than the CPU can make in time, the oldest notes give way to the new ones.
+  - **The MIDI port** is on the ST, STE, Mega STE, TT, Falcon and FireBee; elsewhere EPlay says
+    "This machine has no MIDI port." Each file starts with a General MIDI reset, and Stop, Pause
+    and a file's end turn every note off on all 16 channels, so nothing of one song sounds on into
+    the next; after a Pause or a move on the position bar, each channel is given the program and
+    controllers the file has at that place. The volume is sent as the General MIDI master volume.
+    EPlay sends nothing to the MIDI port while no MIDI file plays, so another program using the
+    port is left alone.
+
+  The list shows the file's first track's name. MIDI files need `midi.ovl` beside `eplay.prg` (it
+  is in both packages).
 
 ## Windows and menus
 
@@ -242,6 +251,10 @@ list and Up or Down):
   keep up with there goes on by itself at 32,780 Hz, up to about 15 kHz; the info line shows the
   rate.
 
+**MIDI files** (on the Playing page too): **Synth**, EPlay's own (the start, where the machine
+has it), or **MIDI port**. A choice the machine hasn't is greyed: the synth in the STE's edition,
+the port on a machine without one.
+
 **Stations: Through the Gateway, Address and Port** are the AERA Gateway's, for stations reached through it
 (the Options menu). The port is a number from 1 to 65535 (the Gateway's radio service: 8580);
 left empty it is 8580.
@@ -258,7 +271,7 @@ system's own file selector (TOS's, or Selectric, FreeMiNT's, MagiC's) instead of
 dialog. It gives one file at a time and shows every file in the folder, and the music pauses while
 it is open.
 
-A change of Output takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
+A change of Output or of MIDI files takes effect at the next Play. `EPLAY.INF`, beside the program, keeps it with the volume,
 the window's place, the mini player, Shuffle, Repeat, the Add files dialog's folders, the way stations are reached and
 the last ten stations.
 

@@ -3,7 +3,7 @@
 <img src="docs/icon16.png" width="96" align="right" alt="EPlay icon: a loudspeaker sending out a play triangle">
 
 An audio player for the Atari Falcon, TT and STE: MP3 decoded on the Falcon's DSP, WAV and AIFF,
-VGM game music, MIDI files through the MIDI port and web radio, in a GEM window. Written in C and DSP56001 assembly.
+VGM game music, MIDI files on its own synth or through the MIDI port, and web radio, in a GEM window. Written in C and DSP56001 assembly.
 
 ![EPlay on a Falcon in 256 colours (Hatari): an album of five tracks in the list, the first playing, its cover, title and artist in the bar with the position, the volume and DSP as the output](docs/player.png)
 
@@ -16,7 +16,7 @@ VGM game music, MIDI files through the MIDI port and web radio, in a GEM window.
 - **Gapless:** an album encoded with LAME plays from one track into the next with no gap.
 - **ReplayGain:** evens out the loudness of tracks or albums from their tags.
 - **VGM and VGZ game music:** AY and YM2149 files on the Atari's own YM2149 (Falcon, TT, STE); SN76489 files (Master System, Game Gear), YM2612 files (Mega Drive), YM3812 (OPL2) files (AdLib and Sound Blaster music, MSX) and YMF262 (OPL3) files (Sound Blaster Pro 2 and 16) on the Falcon's DSP, a file's rate lowered where the DSP can't keep up with it.
-- **MIDI files out of the MIDI port:** Standard MIDI Files (types 0, 1 and 2) played to the synth on the MIDI port of an ST, STE, TT, Falcon or FireBee, with a GM reset at each file and every note off at Stop and Pause (MIDI.OVL, loaded only when a MIDI file plays).
+- **MIDI files:** Standard MIDI Files (types 0, 1 and 2) played on EPlay's own General MIDI synth (the Sonivox sound set in SYNTH.DAT, on a 68060, a 68080 or the FireBee), or to the synth on the MIDI port of an ST, STE, TT, Falcon or FireBee, with a GM reset at each file and every note off at Stop and Pause (MIDI.OVL, loaded only when a MIDI file plays).
 - **Web radio:** Icecast and Shoutcast stations, http or https, with titles and pictures; Find station searches by genre, country and language.
 - **Playlists:** files, folders and `.M3U`; reorder by dragging; Shuffle and Repeat.
 - **Mini player:** the bar alone, in a small window.

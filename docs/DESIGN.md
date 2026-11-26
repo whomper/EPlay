@@ -3254,6 +3254,45 @@ How it is made, in order (each step tested before the next):
 5. **The words and the choice** (the owner's): the file's name, the output's name beside "MIDI port"
    and where the choice sits (Settings' Output, or a MIDI file's own), its help.
 
+### Where the synth stands (26 Nov 2026, for 1.60)
+
+- **Step 2, the engine, done:** `src/gmsynth.c` (tests/gmsynth: 110 of 111 pitched programs on A
+  within 25 cents, the bend, the release, the drums, pan, volume, stealing, the cap, the GM reset,
+  random messages under ASan and UBSan). Its reference is the set's own numbers (Sonivox's units:
+  EG steps every 128 samples at 22,050 Hz, the pitch in cents, the gains as Sonivox's), not
+  Sonivox's engine built on the host: its filter and reverb are left out, as step 2 said.
+- **Step 3, on the CPU, done, in the program, not an overlay:** the engine is some 6 KB of
+  68020-60 code in EPLAY.PRG (an overlay of the 68000's MIDI.OVL would run it as 68000 code
+  everywhere), not in the STE's edition. midiplay.c feeds it MIDI.OVL's records at their samples
+  in GEM's turns, into the queue as an MP3 on the CPU (play.c's `cmp_mid`). SYNTH.DAT is the set
+  with 16-bit points (439 KB), read once; `gms_prepare` halves its points in place so that the
+  interpolation is one 16 x 16 multiply. The CPU's time is watched: past 70 % of the sound's in a
+  second of it, two voices fewer for new notes (`gms_cap`); under 40 %, one more.
+- **Step 4, measured** (tests/hatari/gmscpu.py: a second at 24,585 Hz, 16 voices, an organ's held
+  notes): Hatari's 68060 at 32 MHz 895 ms; a 68030 at 32 MHz with TT RAM 2,290 ms; at 16 MHz
+  4,580 ms, some three voices in all. So a 68030 is timed at its first MIDI file on the synth
+  (`gms_bench`, 8 voices for 167 ms of sound) and keeps the synth with four voices or more (a
+  DFB1's 50 MHz: some five), else the MIDI port, the log saying why: Falcon-4:16 is timed at 1,
+  Falcon:256 at 3.
+- **The Falcon's DSP, not in 1.60.** Measured against it:
+  - Points through the host port as a song needs them don't work: a host-port word is 3 to 4 us of
+    a stock Falcon's 68030 whatever its clock (above), and 16 voices at 24,585 Hz need some
+    400,000 points a second, 133,000 words packed three to a word, plus 49,000 back: 55 to 73 % of
+    the 68030 before any of its own work.
+  - So the samples must live in the DSP's 32K words, packed (8-bit, three to a word: some 84,000
+    points with the program). The whole set is 212,177 points; a song needs those of its programs
+    and drums (the kit 57,707, the strings 22,708, the piano 8,721, a bass 2,500), loaded as it
+    goes, and the DSP plays them through its SSI as the VGM chips do, the 68030 sending each
+    voice's start, pitch and gains (some 22,000 words a second for 16 voices: 7 to 9 %).
+  - Its own design: the wave memory and what a song that doesn't fit does, 8-bit samples, the
+    positions in packed words, its C model and the .a56 bit for bit. Days of work; its limits (the
+    8-bit set on the Falcon, songs that don't fit) are the owner's to weigh: a proposal, after 1.60.
+- **Step 5, the words** (chosen in EPlay's style, the owner's to change): Settings, Playing:
+  "MIDI files:" with **Synth** and **MIDI port**; the info line's output "Synth"; the file
+  `synth.dat` (SYNTH.DAT); the alerts "The internal synth needs SYNTH.DAT beside EPlay.",
+  "SYNTH.DAT isn't this EPlay's: copy it from its release.", "There isn't the memory for the
+  internal synth."; the default the synth where the machine has it.
+
 ## 1.60: a dense Mega Drive file on a stock Falcon; channel 3's special mode (26 Nov 2026)
 
 A tester's game file (YM2612 alone, channel 3 in its special mode, its drums in it with feedback 6
