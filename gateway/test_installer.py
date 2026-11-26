@@ -131,7 +131,7 @@ class FakePi(ag.Pi):
         elif c[:2] == ["uname", "-m"]:
             text = self.arch + "\n"
         elif c[:2] == ["hostname", "-I"]:
-            text = "192.168.1.10 fd00::10\n"
+            text = "192.168.1.50 fd00::10\n"
         elif c[:3] == ["python3", "-m", "venv"]:
             os.makedirs(os.path.join(c[3], "bin"), exist_ok=True)
             for py in ("python", "python3"):
@@ -169,7 +169,7 @@ Wants=network-online.target
 
 [Service]
 User=emailgate
-ExecStart=/usr/bin/python3 /usr/local/bin/emailgate.py -v --ports 2143,2587,2110 --allow 192.168.1.50 \
+ExecStart=/usr/bin/python3 /usr/local/bin/emailgate.py -v --ports 2143,2587,2110 --allow 192.168.1.60 \
 imap.mail.me.com smtp.mail.me.com:587
 Restart=always
 RestartSec=5
@@ -212,7 +212,7 @@ Wants=network-online.target
 
 [Service]
 User=eftpgate
-ExecStart=/usr/bin/python3 /usr/local/bin/eftpgate.py --port 2121 --pasv-ports 30000-30099 --allow 192.168.1.50 \
+ExecStart=/usr/bin/python3 /usr/local/bin/eftpgate.py --port 2121 --pasv-ports 30000-30099 --allow 192.168.1.60 \
 --cafile /etc/ssl/nas-ca.pem -v
 StateDirectory=eftpgate
 Restart=always
@@ -336,9 +336,9 @@ class MailTest(Base):
         for f in ag.FILES:
             self.assertTrue(self.pi.exists("/opt/aera-gateway/" + f), f)
         self.assertIn("emailgate", self.pi.users)
-        self.assertIn("Incoming:  IMAP   Server: 192.168.1.10   Port: 143", self.out)
-        self.assertIn("(or POP3        Server: 192.168.1.10   Port: 110)", self.out)
-        self.assertIn("Outgoing (SMTP)   Server: 192.168.1.10   Port: 587", self.out)
+        self.assertIn("Incoming:  IMAP   Server: 192.168.1.50   Port: 143", self.out)
+        self.assertIn("(or POP3        Server: 192.168.1.50   Port: 110)", self.out)
+        self.assertIn("Outgoing (SMTP)   Server: 192.168.1.50   Port: 587", self.out)
 
     def test_servers_needed(self):
         self.assertEqual(self.run_ag("install", "mail"), 2)
@@ -346,12 +346,12 @@ class MailTest(Base):
         self.assertIsNone(self.unit("emailgate"))
 
     def test_settings_kept_and_changed(self):
-        self.run_ag("install", "mail", "--allow", "192.168.1.50", "imap.gmail.com", "smtp.gmail.com")
+        self.run_ag("install", "mail", "--allow", "192.168.1.60", "imap.gmail.com", "smtp.gmail.com")
         self.assertEqual(self.run_ag("install", "mail", "--ports", "2143,2587,2110"), 0, self.err)
         self.assertEqual(self.execstart("emailgate"),
                          "ExecStart=/usr/bin/python3 /opt/aera-gateway/emailgate.py -v --ports 2143,2587,2110 "
-                         "--allow 192.168.1.50 imap.gmail.com smtp.gmail.com")
-        self.assertIn("for 192.168.1.50 only", self.out)
+                         "--allow 192.168.1.60 imap.gmail.com smtp.gmail.com")
+        self.assertIn("for 192.168.1.60 only", self.out)
         self.assertNotIn("POP3", self.out)
         self.assertNotIn("CAP_NET_BIND_SERVICE", self.unit("emailgate"))     # no low port: no privilege
         self.run_ag("install", "mail", "--allow", "any")
@@ -392,14 +392,14 @@ class MailTest(Base):
         def out(*cmd):
             if cmd[:3] == ("ufw", "show", "added"):         # whether ufw is on or not
                 return "Added user rules (see 'ufw status' for running firewall):\n" \
-                       "ufw allow from 192.168.1.50 to any port 1143 proto tcp\nufw deny 1143/tcp\n" \
+                       "ufw allow from 192.168.1.60 to any port 1143 proto tcp\nufw deny 1143/tcp\n" \
                        "ufw deny 1025/tcp\nufw deny 1110/tcp\n"
             return status(*cmd)
         self.pi.out = out
-        self.assertEqual(self.run_ag("install", "mail", "--allow", "192.168.1.50"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "mail", "--allow", "192.168.1.60"), 0, self.err)
         self.assertEqual(self.execstart("emailgate"),
                          "ExecStart=/usr/bin/python3 /opt/aera-gateway/emailgate.py -v --ports 1143,1025,1110 "
-                         "--allow 192.168.1.50 imap.mail.me.com smtp.mail.me.com:587 pop.example.com")
+                         "--allow 192.168.1.60 imap.mail.me.com smtp.mail.me.com:587 pop.example.com")
         for port in ("1143", "1025", "1110"):
             self.assertIn(("ufw", "delete", "deny", port + "/tcp"), self.pi.cmds)
         self.assertNotIn("change them in EMail", self.out)
@@ -446,13 +446,13 @@ class TakeOverTest(Base):
         self.assertEqual(self.run_ag("update"), 0, self.err)
         self.assertEqual(self.execstart("emailgate"),
                          "ExecStart=/usr/bin/python3 /opt/aera-gateway/emailgate.py -v --ports 2143,2587,2110 "
-                         "--allow 192.168.1.50 imap.mail.me.com smtp.mail.me.com:587")
+                         "--allow 192.168.1.60 imap.mail.me.com smtp.mail.me.com:587")
         self.assertEqual(self.execstart("ecalgate"),
                          "ExecStart=/usr/bin/python3 /opt/aera-gateway/ecalgate.py --port 8180 --allow-local")
         self.assertIn("Environment=HTTPS_PROXY=http://192.168.1.2:3128", self.unit("ecalgate"))
         self.assertEqual(self.execstart("eftpgate"),
                          "ExecStart=/usr/bin/python3 /opt/aera-gateway/eftpgate.py --port 2121 --pasv-ports "
-                         "30000-30099 --allow 192.168.1.50 --cafile /etc/ssl/nas-ca.pem -v")
+                         "30000-30099 --allow 192.168.1.60 --cafile /etc/ssl/nas-ca.pem -v")
         self.assertIn("StateDirectory=eftpgate", self.unit("eftpgate"))
         for name in ("emailgate", "ecalgate", "eftpgate"):
             self.assertFalse(self.pi.exists("/usr/local/bin/%s.py" % name), name)
@@ -465,7 +465,7 @@ class TakeOverTest(Base):
     def test_status_before(self):
         self.run_ag("status")
         self.assertIn("app's own install.sh", self.out)
-        self.assertIn("port 2143 2587; only 192.168.1.50; imap.mail.me.com smtp.mail.me.com:587", self.out)
+        self.assertIn("port 2143 2587; only 192.168.1.60; imap.mail.me.com smtp.mail.me.com:587", self.out)
 
     def test_old_one_back_when_the_new_one_fails(self):
         self.pi.broken = True
@@ -505,11 +505,11 @@ class DavFtpTest(Base):
         self.assertEqual(self.run_ag("install", "dav"), 0, self.err)
         self.assertEqual(self.execstart("ecalgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/ecalgate.py "
                                                      "--port 8180")
-        self.assertIn("Gateway:     192.168.1.10", self.out)
-        self.run_ag("install", "ecal", "--allow-local", "--allow", "192.168.1.50,192.168.1.51")
+        self.assertIn("Gateway:     192.168.1.50", self.out)
+        self.run_ag("install", "ecal", "--allow-local", "--allow", "192.168.1.60,192.168.1.51")
         self.run_ag("install", "econtact", "--port", "8181", "-v")
         self.assertEqual(self.execstart("ecalgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/ecalgate.py "
-                                                     "--port 8181 --allow 192.168.1.50 --allow 192.168.1.51 "
+                                                     "--port 8181 --allow 192.168.1.60 --allow 192.168.1.51 "
                                                      "--allow-local -v")
         self.run_ag("install", "dav", "--no-allow-local", "--no-verbose", "--allow", "any")
         self.assertEqual(self.execstart("ecalgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/ecalgate.py "
@@ -517,22 +517,24 @@ class DavFtpTest(Base):
 
     def test_ftp_fresh_and_firewall(self):
         self.pi.ufw = True
-        self.assertEqual(self.run_ag("install", "ftp", "--allow", "192.168.1.50"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "ftp", "--allow", "192.168.1.60"), 0, self.err)
         self.assertEqual(self.execstart("eftpgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/eftpgate.py "
-                                                     "--port 2121 --pasv-ports 30000-30099 --allow 192.168.1.50")
-        self.assertEqual(self.pi.rules, [("192.168.1.50", "2121"), ("192.168.1.50", "30000:30099")])
+                                                     "--port 2121 --pasv-ports 30000-30099 --allow 192.168.1.60")
+        self.assertEqual(self.pi.rules, [("192.168.1.60", "2121"), ("192.168.1.60", "30000:30099")])
         self.assertIn("Options > Settings > Secure", self.out)
 
     def test_web(self):
         self.pi.ufw = True
-        self.assertEqual(self.run_ag("install", "eweb", "--allow", "192.168.1.50"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "eweb", "--allow", "192.168.1.60"), 0, self.err)
         self.assertEqual(self.execstart("webgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/webgate.py "
-                                                    "--port 8280 --allow 192.168.1.50")
-        self.assertEqual(self.pi.rules, [("192.168.1.50", "8280")])
+                                                    "--port 8280 --allow 192.168.1.60")
+        self.assertEqual(self.pi.rules, [("192.168.1.60", "8280")])
         self.assertIn("In EWeb on the Atari, Settings > Secure:", self.out)
-        self.assertIn("Gateway:     192.168.1.10", self.out)
+        self.assertIn("Gateway:     192.168.1.50", self.out)
         self.assertIn("Port:        8280", self.out)
         self.assertTrue(self.pi.exists("/opt/aera-gateway/webgate.py"))
+        self.assertIn(("usermod", "-a", "-G", "aera-translate", "webgate"), self.pi.cmds)
+        self.assertTrue(self.pi.exists("/opt/aera-gateway/translateclient.py"))
         self.assertNotIn(("apt-get", "install", "-y", "-qq", "python3-pil"), self.pi.cmds)  # Pillow there
         self.pi.no_modules = {"PIL"}
         self.run_ag("install", "web")
@@ -540,7 +542,7 @@ class DavFtpTest(Base):
         self.pi.no_modules = set()
         self.run_ag("install", "web", "--allow-local", "-v")
         self.assertEqual(self.execstart("webgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/webgate.py "
-                                                    "--port 8280 --allow 192.168.1.50 --allow-local -v")
+                                                    "--port 8280 --allow 192.168.1.60 --allow-local -v")
 
     def test_web_browser(self):
         self.pi.write("/proc/meminfo", "MemTotal:        3884136 kB\nMemFree: 1 kB\n")
@@ -590,7 +592,7 @@ class DavFtpTest(Base):
         self.assertEqual(self.run_ag("install", "web", "--browser"), 0, self.err)
         useradd = next(c for c in self.pi.cmds if c[0] == "useradd" and c[-1] == "webgate")
         self.assertEqual(useradd[useradd.index("--home-dir") + 1], "/var/lib/webgate")
-        self.assertNotIn("usermod", [c[0] for c in self.pi.cmds])       # its home was right from the start
+        self.assertFalse([c for c in self.pi.cmds if c[:2] == ("usermod", "--home")])       # its home was right from the start
         self.assertEqual(self.pi.homedirs, "/srv,/var/lib")             # added to, not replaced
         self.assertIn(("loginctl", "enable-linger", "webgate"), self.pi.cmds)
         self.assertIsNone(self.unit("webgate-browser"))                 # not a system unit
@@ -710,16 +712,19 @@ class DavFtpTest(Base):
                          "needs AERA-Gateway's pdf/ (an app's copy of gateway/ has none)")
     def test_pdf(self):
         self.pi.ufw = True
-        self.assertEqual(self.run_ag("install", "epdf", "--allow", "192.168.1.50"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "epdf", "--allow", "192.168.1.60"), 0, self.err)
         self.assertEqual(self.execstart("pdfgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/pdfgate.py "
-                                                    "--port 8380 --allow 192.168.1.50")
-        self.assertEqual(self.pi.rules, [("192.168.1.50", "8380")])
-        self.assertIn("Gateway:     192.168.1.10", self.out)
+                                                    "--port 8380 --allow 192.168.1.60")
+        self.assertEqual(self.pi.rules, [("192.168.1.60", "8380")])
+        self.assertIn("Gateway:     192.168.1.50", self.out)
         self.assertIn("Port:        8380", self.out)
         make = [c for c in self.pi.cmds if c[0] == "make" and os.path.basename(c[3]) == "pdf"][-1]
         self.assertFalse(make[3].startswith(os.path.dirname(ag.HERE)))      # never in the copy itself
         self.assertTrue(self.pi.exists("/opt/aera-gateway-pdf/aerapdf"))
         self.assertTrue(self.pi.exists("/opt/aera-gateway-pdf/fonts/sans.ttf"))
+        # aerapdf's translator may use translategate's local socket
+        self.assertIn(("groupadd", "--system", "aera-translate"), self.pi.cmds)
+        self.assertIn(("usermod", "-a", "-G", "aera-translate", "pdfgate"), self.pi.cmds)
         with open(os.path.join(ag.Pdf.PDF_SRC, "EPDF")) as f:
             self.assertEqual(self.pi.read("/opt/aera-gateway-pdf/SOURCE"), f.read().strip() + "\n")
         # built from the same pdf/: kept, not built again; another: built
@@ -727,7 +732,7 @@ class DavFtpTest(Base):
         n = builds()
         self.assertEqual(self.run_ag("install", "pdf", "-v"), 0, self.err)
         self.assertEqual(builds(), n)
-        self.assertIn("--port 8380 --allow 192.168.1.50 -v", self.execstart("pdfgate"))
+        self.assertIn("--port 8380 --allow 192.168.1.60 -v", self.execstart("pdfgate"))
         self.pi.write("/opt/aera-gateway-pdf/BUILT", "another\n")
         self.assertEqual(self.run_ag("install", "pdf"), 0, self.err)
         self.assertEqual(builds(), n + 1)
@@ -752,10 +757,10 @@ class DavFtpTest(Base):
         self.assertEqual(self.run_ag("install", "web"), 0, self.err)        # without it, as before
 
     def test_translate(self):
-        self.assertEqual(self.run_ag("install", "translate", "--allow", "192.168.1.50"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "translate", "--allow", "192.168.1.60"), 0, self.err)
         unit = self.unit("translategate")
         self.assertIn("ExecStart=/opt/translategate/venv/bin/python3 /opt/aera-gateway/translategate.py "
-                      "--port 8480 --allow 192.168.1.50 --engine argos --local /run/translategate/local.sock\n", unit)
+                      "--port 8480 --allow 192.168.1.60 --engine argos --local /run/translategate/local.sock\n", unit)
         for want in ("User=translategate", "MemoryMax=1536M", "OOMScoreAdjust=-300", "StateDirectory=translategate",
                      "Group=aera-translate", "RuntimeDirectory=translategate", "RuntimeDirectoryMode=0750", "ProtectSystem=strict", "NoNewPrivileges=yes"):
             self.assertIn(want, unit)
@@ -764,13 +769,13 @@ class DavFtpTest(Base):
         pip = [c for c in self.pi.cmds if c[0].endswith("/venv/bin/pip")]
         self.assertEqual(pip[-1][3:], ag.Translate.PIP)
         self.assertEqual(self.fetched, [[("de", "en"), ("en", "de")]])            # English and German
-        self.assertIn("Gateway:  192.168.1.10", self.out)
+        self.assertIn("Gateway:  192.168.1.50", self.out)
         self.assertIn("Port:     8480", self.out)
         # an update keeps the engine, its models and the settings
         self.assertEqual(self.run_ag("install", "translate", "--port", "8481"), 0, self.err)
         self.assertEqual(len([c for c in self.pi.cmds if c[:3] == ("python3", "-m", "venv")]), 1)
         self.assertEqual(len(self.fetched), 1)
-        self.assertIn("--port 8481 --allow 192.168.1.50 --engine argos --local /run/translategate/local.sock\n",
+        self.assertIn("--port 8481 --allow 192.168.1.60 --engine argos --local /run/translategate/local.sock\n",
                       self.execstart("translategate") + "\n")
         # another language: only its models
         self.assertEqual(self.run_ag("install", "translate", "--languages", "en,de,he"), 0, self.err)
@@ -862,39 +867,139 @@ class ClaudeTest(Base):
             fh.write("[Service]\nExecStart=/opt/claude-st/venv/bin/python ...\n")
         self.conf = ag.Claude.CONF
 
+    def test_update_keeps_hand_set_options(self):
+        """settings set by hand on the unit's line (no installer option for
+        them) are kept by an update: pdf's, translate's and radio's"""
+        if os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")):
+            self.assertEqual(self.run_ag("install", "pdf"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "translate", "--engine", "stand-in"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "radio"), 0, self.err)
+        hand = {"pdfgate": " --time 900 --jobs 2 --max-mb 128",
+                "translategate": " --workers 3 --time 90",
+                "radiogate": " --timeout 30 --jobs 3 --memory-mb 384"}
+        for name, more in list(hand.items()):
+            text = self.unit(name)
+            if text is None:
+                del hand[name]
+                continue
+            line = self.execstart(name)
+            self.pi.write(ag.unit_path(name), text.replace(line, line + more))
+        self.assertEqual(self.run_ag("update"), 0, self.err)
+        for name, more in hand.items():
+            for flag, value in zip(more.split()[::2], more.split()[1::2]):
+                self.assertIn("%s %s" % (flag, value), self.execstart(name), name)
+        # and a plain install writes none of them
+        self.assertNotIn("--timeout", self.execstart("radiogate").replace("--timeout 30", ""))
+
+    def test_radio(self):
+        self.pi.ufw = True
+        self.assertEqual(self.run_ag("install", "eplay", "--allow", "192.168.1.60"), 0, self.err)
+        self.assertEqual(self.execstart("radiogate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/radiogate.py "
+                                                      "--port 8580 --allow 192.168.1.60")
+        unit = self.unit("radiogate")
+        for want in ("User=radiogate", "MemoryMax=768M", "ProtectSystem=strict", "NoNewPrivileges=yes"):
+            self.assertIn(want, unit)
+        self.assertEqual(self.pi.rules, [("192.168.1.60", "8580")])
+        self.assertIn(("apt-get", "install", "-y", "-qq", "ffmpeg"), self.pi.cmds)
+        self.assertIn("Port:        8580", self.out)
+        self.assertTrue(self.pi.exists("/opt/aera-gateway/radiogate.py"))
+        # settings kept, one changed
+        self.assertEqual(self.run_ag("install", "radio", "--allow-local"), 0, self.err)
+        self.assertEqual(self.execstart("radiogate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/radiogate.py "
+                                                      "--port 8580 --allow 192.168.1.60 --allow-local")
+        self.assertEqual(self.run_ag("remove", "radio"), 0, self.err)
+        self.assertIsNone(self.unit("radiogate"))
+
+    def test_dash(self):
+        self.pi.ufw = True
+        self.assertEqual(self.run_ag("install", "dashboard"), 0, self.err)
+        self.assertEqual(self.execstart("dashgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/dashgate.py "
+                                                     "--port 8888")
+        unit = self.unit("dashgate")
+        for want in ("User=dashgate", "RuntimeDirectory=aera-dash", "RuntimeDirectoryMode=0755",
+                     "ProtectSystem=strict", "NoNewPrivileges=yes"):
+            self.assertIn(want, unit)
+        self.assertNotIn("CAP_NET_BIND_SERVICE", unit)
+        self.assertEqual(self.pi.rules, [(n, "8888") for n in ag.HOME_NETS])
+        self.assertIn(":8888/", self.out)
+        self.assertEqual(self.pi.read("/opt/aera-gateway/VERSION"), ag.VERSION + "\n")
+        # settings kept, one changed
+        self.assertEqual(self.run_ag("install", "dash", "--allow", "192.168.1.60"), 0, self.err)
+        self.assertEqual(self.run_ag("install", "dash", "-v"), 0, self.err)
+        self.assertEqual(self.execstart("dashgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/dashgate.py "
+                                                     "--port 8888 --allow 192.168.1.60 -v")
+        self.assertEqual(self.run_ag("remove", "dash"), 0, self.err)
+        self.assertIsNone(self.unit("dashgate"))
+
     def test_install_all(self):
-        rc = self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src,
+        rc = self.run_ag("install", "all", "--allow", "192.168.1.60", "--from", self.src,
                          "--mail", "imap.mail.me.com", "smtp.mail.me.com:587")
         self.assertEqual(rc, 0, self.err)
         for name in ("emailgate", "ecalgate", "eftpgate", "webgate"):
-            self.assertIn("--allow 192.168.1.50", self.execstart(name), name)
+            self.assertIn("--allow 192.168.1.60", self.execstart(name), name)
         self.assertIn("imap.mail.me.com smtp.mail.me.com:587", self.execstart("emailgate"))
-        self.assertIn("--tcp 0.0.0.0:2323 --allow 192.168.1.50", self.pi.read(self.conf))
-        self.assertIn("Installed: mail, dav, ftp, web, %stranslate, claude" %
+        self.assertIn("--tcp 0.0.0.0:2323 --allow 192.168.1.60", self.pi.read(self.conf))
+        # the dashboard: for the Mac or PC, so the home network, not the Atari's --allow
+        self.assertEqual(self.execstart("dashgate"), "ExecStart=/usr/bin/python3 /opt/aera-gateway/dashgate.py "
+                                                     "--port 8888")
+        self.assertIn("Installed: mail, dav, ftp, web, %stranslate, radio, dash, claude" %
                       ("pdf, " if os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")) else ""), self.out)
         # again, without --mail or --allow: everything kept as it is
         self.assertEqual(self.run_ag("install", "all", "--from", self.src), 0, self.err)
-        self.assertIn("--allow 192.168.1.50", self.execstart("ecalgate"))
+        self.assertIn("--allow 192.168.1.60", self.execstart("ecalgate"))
         self.assertIn("imap.mail.me.com", self.execstart("emailgate"))
-        self.assertIn("--allow 192.168.1.50", self.pi.read(self.conf))
+        self.assertIn("--allow 192.168.1.60", self.pi.read(self.conf))
 
     def test_install_all_small_pi(self):
         # install all leaves translate out on a Pi too small for its engine, and installs the others
         self.pi.write("/proc/meminfo", "MemTotal:        1948304 kB\n")
-        self.assertEqual(self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src), 0, self.err)
-        self.assertIn("Installed: dav, ftp, web, %sclaude" %
+        self.assertEqual(self.run_ag("install", "all", "--allow", "192.168.1.60", "--from", self.src), 0, self.err)
+        self.assertIn("Installed: dav, ftp, web, %sradio, dash, claude" %
                       ("pdf, " if os.path.isdir(os.path.join(ag.Pdf.PDF_SRC, "epdf")) else ""), self.out)
         self.assertIn("translate (its engine needs a Pi with 4 GB of memory or more; this one has 1902 MB)", self.out)
         self.assertIsNone(self.unit("translategate"))
 
-    def test_install_all_keeps_a_serial_cable(self):
-        self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--serial", "/dev/ttyUSB0"), 0)
-        self.assertEqual(self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src), 0, self.err)
+    def on_cable(self):
+        """a Gateway set up for ClaudeST's serial cable, before ClaudeST 2.3"""
+        self.pi.write(self.conf, "CLAUDE_ST_ARGS=--backend claudeai --serial /dev/ttyUSB0 --baud 19200\n"
+                      "CLAUDE_SESSION_KEY=sk-old\n", 0o640)
+        self.pi.write(ag.unit_path("claude-st"), "[Service]\nExecStart=/opt/claude-st/venv/bin/python old\n")
+        self.pi.write("/opt/claude-st/bridge/claude_bridge.py", "# the old bridge, with its serial link\n")
+
+    def test_a_serial_cable_left_as_it_is(self):
+        """the serial cable went with ClaudeST 2.3 (decided 9 Nov 2026): a
+        Gateway on one keeps its old bridge, working with the old ClaudeST,
+        and is told once how to move; nothing fails"""
+        self.on_cable()
+        self.assertEqual(self.run_ag("update"), 0, self.err)
+        self.assertIn("serial cable isn't supported any more", self.out)
+        self.assertIn("sudo aera-gateway install claude --network --atari ATARI_IP", self.out)
+        self.assertEqual(self.pi.read("/opt/claude-st/bridge/claude_bridge.py"),
+                         "# the old bridge, with its serial link\n")
         self.assertIn("--serial /dev/ttyUSB0", self.pi.read(self.conf))
+        self.assertEqual(self.run_ag("install", "all", "--allow", "192.168.1.60", "--from", self.src), 0, self.err)
+        self.assertIn("claude (left on its serial cable", self.out)
+        self.assertIn("--serial /dev/ttyUSB0", self.pi.read(self.conf))
+        # install without --network: the same words, nothing changed
+        self.assertEqual(self.run_ag("install", "claude", "--from", self.src), 1)
+        self.assertIn("serial cable isn't supported any more", self.err)
+        # and to the network: the new bridge, the key kept
+        self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--network", "--atari",
+                                     "192.168.1.60"), 0, self.err)
+        self.assertIn("CLAUDE_ST_ARGS=--backend claudeai --tcp 0.0.0.0:2323 --allow 192.168.1.60\n",
+                      self.pi.read(self.conf))
+        self.assertIn("CLAUDE_SESSION_KEY=sk-old\n", self.pi.read(self.conf))
+        self.assertEqual(self.pi.read("/opt/claude-st/bridge/claude_bridge.py"), "# claude_bridge.py\n")
+
+    def test_serial_refused(self):
+        for argv in (["--serial", "/dev/ttyUSB0"], ["--port", "auto"], ["--baud", "9600"]):
+            self.assertEqual(self.run_ag("install", "claude", "--from", self.src, *argv), 2, argv)
+            self.assertIn("serial cable isn't supported any more", self.err)
+        self.assertFalse(any(c[0] == "apt-get" for c in self.pi.cmds))
 
     def test_install_all_without_mail_and_a_failure(self):
         self.pi.busy.add("2121")             # ftp's port is taken
-        rc = self.run_ag("install", "all", "--allow", "192.168.1.50", "--from", self.src)
+        rc = self.run_ag("install", "all", "--allow", "192.168.1.60", "--from", self.src)
         self.assertEqual(rc, 1)
         self.assertIn("Not installed: mail (name your provider's servers", self.out)
         self.assertIn("Didn't install: ftp", self.err)
@@ -904,40 +1009,61 @@ class ClaudeTest(Base):
         self.assertEqual(self.run_ag("install", "all", "--mail", "imap.example"), 2)
 
     def test_network(self):
-        rc = self.run_ag("install", "claude", "--from", self.src, "--network", "--atari", "192.168.1.20",
+        rc = self.run_ag("install", "claude", "--from", self.src, "--network", "--atari", "192.168.1.60",
                          "--backend", "demo")
         self.assertEqual(rc, 0, self.err)
         # as pi/install.sh left it: the defaults, CLAUDE_ST_ARGS moved to the end
         self.assertEqual(self.pi.read(self.conf), ag.Claude.DEFAULT_CONF.replace(
-            "CLAUDE_ST_ARGS=--backend claudeai --serial auto --baud 19200\n", "") +
-            "CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2323 --allow 192.168.1.20\n")
+            "CLAUDE_ST_ARGS=--backend claudeai --tcp 0.0.0.0:2323\n", "") +
+            "CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2323 --allow 192.168.1.60\n")
         self.assertEqual(os.stat(self.pi.path(self.conf)).st_mode & 0o777, 0o640)
         self.assertIn(("chown", "root:claude-st", self.conf), self.pi.cmds)
         self.assertEqual(sorted(os.listdir(self.pi.path("/opt/claude-st/bridge"))),
                          ["atari_text.py", "backends.py", "claude_bridge.py", "requirements.txt"])
         self.assertEqual(self.unit("claude-st"), "[Service]\nExecStart=/opt/claude-st/venv/bin/python ...\n")
-        self.assertIn(("usermod", "-aG", "dialout", "claude-st"), self.pi.cmds)
+        self.assertNotIn(("usermod", "-aG", "dialout", "claude-st"), self.pi.cmds)
         self.assertIn(("useradd", "--system", "--home-dir", "/var/lib/claude-st", "--shell", "/usr/sbin/nologin",
                        "claude-st"), self.pi.cmds)
-        self.assertIn("Options > Settings > Network:  192.168.1.10, port 2323", self.out)
+        self.assertIn("Options > Settings > Network:  192.168.1.50, port 2323", self.out)
 
         # again: what isn't given stays
         self.run_ag("install", "claude", "--from", self.src, "--listen-port", "2424")
         self.assertTrue(self.pi.read(self.conf).endswith(
-            "CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2424 --allow 192.168.1.20\n"))
+            "CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2424 --allow 192.168.1.60\n"))
         self.run_ag("install", "claude", "--from", self.src, "--atari", "any")
         self.assertTrue(self.pi.read(self.conf).endswith("CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2424\n"))
         self.run_ag("install", "claude", "--from", self.src)
         self.assertTrue(self.pi.read(self.conf).endswith("CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2424\n"))
 
-    def test_serial_and_key(self):
+    def test_from_this_copy(self):
+        """without --from: the bridge that comes with AERA-Gateway (claude-st/,
+        moved from ClaudeST), never a download"""
+        rc = self.run_ag("install", "claude", "--network", "--atari", "192.168.1.60", "--backend", "demo")
+        self.assertEqual(rc, 0, self.err)
+        here = os.path.join(ag.HERE, "claude-st")
+        got = sorted(os.listdir(self.pi.path("/opt/claude-st/bridge")))
+        self.assertEqual(got, ["atari_text.py", "backends.py", "claude_bridge.py", "requirements.txt"])
+        for f in got:
+            with open(os.path.join(here, "bridge", f), "rb") as a, open(self.pi.path("/opt/claude-st/bridge/" + f),
+                                                                         "rb") as b:
+                self.assertEqual(a.read(), b.read(), f)
+        with open(os.path.join(here, "claude-st.service")) as fh:
+            self.assertEqual(self.unit("claude-st"), fh.read())
+        self.assertTrue(self.pi.read("/opt/claude-st/SOURCE").startswith("AERA-Gateway %s (ClaudeST " % ag.VERSION))
+        self.assertEqual(self.run_ag("update"), 0, self.err)
+        self.assertTrue(self.pi.read(self.conf).endswith(
+            "CLAUDE_ST_ARGS=--backend demo --tcp 0.0.0.0:2323 --allow 192.168.1.60\n"))
+        self.assertEqual(self.run_ag("install", "claude", "--tag", "v2.1"), 2)
+        self.assertIn("comes with AERA-Gateway now", self.err)
+
+    def test_key(self):
         self.pi.answers = ["sk-ant-sid01-test"]
-        self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--port", "/dev/ttyUSB0",
-                                     "--baud", "9600"), 0, self.err)
-        self.assertIn("CLAUDE_ST_ARGS=--backend claudeai --serial /dev/ttyUSB0 --baud 9600\n", self.pi.read(self.conf))
+        self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--atari", "192.168.1.60"), 0, self.err)
+        self.assertIn("CLAUDE_ST_ARGS=--backend claudeai --tcp 0.0.0.0:2323 --allow 192.168.1.60\n",
+                      self.pi.read(self.conf))
         self.assertIn("CLAUDE_SESSION_KEY=sk-ant-sid01-test\n", self.pi.read(self.conf))
         self.assertNotIn("sk-ant", self.out + self.err)
-        self.assertIn("(no USB serial adapters plugged in)", self.out)
+        self.assertNotIn(("usermod", "-aG", "dialout", "claude-st"), self.pi.cmds)     # no serial port to open
         self.pi.answers = ["sk-ant-sid01-new"]
         self.assertEqual(self.run_ag("set-key"), 0)
         self.assertEqual(self.pi.read(self.conf).count("CLAUDE_SESSION_KEY="), 1)
@@ -949,14 +1075,15 @@ class ClaudeTest(Base):
     def test_bad_settings(self):
         self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--network"), 2)
         self.assertIn("needs the Atari's IP address", self.err)
+        self.assertEqual(self.run_ag("install", "claude", "--from", self.src), 2)       # nothing typed either
         self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--atari", "atari.local"), 2)
         self.assertEqual(self.run_ag("install", "claude", "--from", self.src, "--backend", "gpt"), 2)
-        self.assertEqual(self.run_ag("install", "claude", "--from", self.root), 1)
+        self.assertEqual(self.run_ag("install", "claude", "--from", self.root, "--atari", "any"), 1)
         self.assertIn("isn't a ClaudeST copy", self.err)
         self.assertFalse(any(c[0] == "apt-get" for c in self.pi.cmds))
 
     def test_uninstall_keeps_settings(self):
-        self.run_ag("install", "claude", "--from", self.src, "--backend", "demo")
+        self.run_ag("install", "claude", "--from", self.src, "--backend", "demo", "--atari", "any")
         self.assertEqual(self.run_ag("install", "claude", "--uninstall"), 0)
         self.assertFalse(self.pi.exists("/opt/claude-st"))
         self.assertIsNone(self.unit("claude-st"))
