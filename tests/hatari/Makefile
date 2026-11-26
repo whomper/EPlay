@@ -117,3 +117,18 @@ $(B)/opld60.o: ../../src/opld.c | $(B)
 # (EPlay's own 64-bit helpers, the 68060's path: libgcc's use its 64-bit divu.l)
 $(B)/div6460.o: ../../atari/div64.c | $(B)
 	$(CC) $(P060O) -c -o $@ $<
+# GMSCPU.PRG (gmscpu.c): the internal synth's engine (src/gmsynth.c) as
+# EPLAY.PRG builds it (68020-60), timed with 1 to 16 voices
+# (python3 gmscpu.py WORK [CPULEVEL MHZ])
+.PHONY: gmscpu
+gmscpu: $(B)/GMSCPU.PRG
+P2060   := $(subst -m68060,-m68020-60,$(P060)) -I../../src
+$(B)/GMSCPU.elf: $(B)/crt0_64k.o $(B)/gmscpu.o $(B)/gmsynth20.o $(B)/gmset20.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) -m68020-60 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
+	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+$(B)/gmscpu.o: gmscpu.c ../../src/gmsynth.h | $(B)
+	$(CC) $(P2060) -c -o $@ $<
+$(B)/gmsynth20.o: ../../src/gmsynth.c ../../src/gmsynth.h | $(B)
+	$(CC) $(P2060) -c -o $@ $<
+$(B)/gmset20.o: ../../src/gmset.c ../../src/gmset.h | $(B)
+	$(CC) $(P2060) -c -o $@ $<

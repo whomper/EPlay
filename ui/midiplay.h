@@ -18,8 +18,10 @@ int mp_port(void);		/* the machine has the MIDI port (its ACIA) */
    (the first track's name), the bar's info and output, its length. 0
    with err set (no MIDI port, MIDI.OVL missing, no memory, damaged); the
    file isn't closed here */
-int mp_open(int fh, long size, long ms, const char *name, TAGS *t, char *info, int ni, char *out, int no,
-	    long *len_ms, char *err, int n);
+/* use_synth: played by the internal synth (mp_render) in place of the
+   MIDI port; then mp_start and the tick aren't used */
+int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t, char *info, int ni, char *out,
+	    int no, long *len_ms, char *err, int n);
 void mp_start(void);		/* the tick on: the reset, the file's state there, then its bytes */
 void mp_halt(void);		/* the tick off, every channel's notes off and controllers reset */
 void mp_stop(void);		/* the same; the file's bytes kept for its next open */
@@ -37,5 +39,16 @@ void mp_volume(int att, int mute);
    its length in ms, or -1 */
 long mp_probe(int fh, long size, TAGS *t);
 const char *mp_log(void);	/* the log's line at the end: bytes sent, the longest wait */
+
+#ifndef EPLAY_ST
+/* the internal synth (decided 26 Nov 2026): SYNTH.DAT's set, made into
+   16-bit stereo on the CPU */
+int mp_synth_can(void);		/* this edition has it */
+void mp_synth_rate(long rate);	/* the rate it makes its sound at (before the first mp_render) */
+/* n frames of 16-bit stereo, the host's order: fewer at the file's end
+   (its notes sounded out) */
+int mp_render(short *out, int n);
+const char *mp_synth_log(void);
+#endif
 
 #endif

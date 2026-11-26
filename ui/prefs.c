@@ -26,6 +26,7 @@
 #include "prefs.h"
 #include "rgain.h"
 #include "alert.h"
+#include "midiplay.h"
 
 static int output = OUT_AUTO;
 static int volume = VOL_FULL, volume_saved = VOL_FULL;	/* the bar's (0 to VOL_FULL), saved at the end */
@@ -57,6 +58,16 @@ static int gateway, gateway_saved;
 static int rgain = RG_AUTO;
 static const char *const rg_names[NRG] = { "OFF", "TRACK", "ALBUM", "AUTO" };
 static const char *const rg_labels[NRG] = { "Off", "Track", "Album", "Auto" };
+/* MIDI files (decided 26 Nov 2026): the internal synth or the MIDI
+   port; the synth by default where the edition has it */
+#define NMIDI 2
+#ifdef EPLAY_ST
+static int midi_out = MIDI_PORT;
+#else
+static int midi_out = MIDI_SYNTH;
+#endif
+static const char *const mid_names[NMIDI] = { "SYNTH", "PORT" };
+static const char *const mid_labels[NMIDI] = { "Synth", "MIDI port" };
 static char gate[64];
 static long gateport = 8580;	/* (the radio service's port: Erez, 8 Nov 2026) */
 static char urls[URL_RECENT][URL_MAX];
@@ -225,6 +236,10 @@ void settings_load(void)
 	inf_get(inf, inf_n, "FIND", find, sizeof(find));
 	if (inf_get(inf, inf_n, "SYSFSEL", v, sizeof(v)))
 		filepick_system = v[0] == '1';
+	if (inf_get(inf, inf_n, "MIDI", v, sizeof(v)))
+		for (i = 0; i < NMIDI; i++)
+			if (!strcmp(v, mid_names[i]))
+				midi_out = i;
 	if (inf_get(inf, inf_n, "REPLAYGAIN", v, sizeof(v))) {
 		int i;
 		for (i = 0; i < NRG; i++)
@@ -369,7 +384,12 @@ static void save_in(void)
 		n = inf_set(inf3, n, "LOG", log_on ? "1" : "0", lnote, inf2, INF_MAX);
 		if (n < 0)
 			return;
-		memcpy(inf3, inf2, (size_t)n);
+		{
+			static const char mnote[] = "; MIDI files: SYNTH for EPlay's own synth, PORT for the MIDI port (Settings)\r\n";
+			n = inf_set(inf2, n, "MIDI", mid_names[midi_out], mnote, inf3, INF_MAX);
+			if (n < 0)
+				return;
+		}
 	}
 	{
 		/* the stations' keys, a key at a time between the two buffers,
@@ -452,7 +472,25 @@ const char *settings_output_name(int out)
    Stations (the Gateway's address and port), Files (the system's file
    selector or EPlay's own) ---- */
 
-static short d_out, d_rg, d_fsel, d_log;
+static short d_out, d_rg, d_fsel, d_log, d_mid;
+
+/* the machine has it: the synth in every edition but the STE's, the port
+   where the MIDI ACIA is */
+static int has_midi(int m)
+{
+#ifdef EPLAY_ST
+	return m == MIDI_PORT && mp_port();
+#else
+	return m == MIDI_SYNTH ? mp_synth_can() : mp_port();
+#endif
+}
+
+int settings_midi(void)
+{
+	if (has_midi(midi_out))
+		return midi_out;
+	return has_midi(MIDI_SYNTH) ? MIDI_SYNTH : MIDI_PORT;
+}
 static char d_gate[sizeof(gate)], d_port[6];
 static short f_port;
 
@@ -469,6 +507,11 @@ static void page_playing(SETTINGS *s, short x, short y, void *user)
 			set_radio_enable(s, r, (short)i, 0);
 	set_text(s, x, set_y(s, 3), "ReplayGain:");
 	set_radio(s, x, set_y(s, 4), 8, rg_labels, NRG, &d_rg);
+	set_text(s, x, set_y(s, 6), "MIDI files:");
+	r = set_radio(s, x, set_y(s, 7), 11, mid_labels, NMIDI, &d_mid);
+	for (i = 0; i < NMIDI; i++)
+		if (r && !has_midi(i))
+			set_radio_enable(s, r, (short)i, 0);
 }
 
 static void page_stations(SETTINGS *s, short x, short y, void *user)
@@ -513,6 +556,7 @@ void prefs_dialog(void)
 	int eff = settings_output();
 	d_out = (short)eff;
 	d_rg = (short)rgain;
+	d_mid = (short)settings_midi();
 	d_fsel = filepick_system;
 	d_log = (short)log_on;
 	snprintf(d_gate, sizeof(d_gate), "%s", gate);
@@ -537,6 +581,11 @@ void prefs_dialog(void)
 		rgain = d_rg;
 		save();
 		elog("Settings: ReplayGain %s", rg_labels[rgain]);
+	}
+	if (d_mid != settings_midi()) {
+		midi_out = d_mid;
+		save();
+		elog("Settings: MIDI files to %s (from the next Play)", mid_labels[midi_out]);
 	}
 	if (d_fsel != filepick_system) {
 		filepick_system = d_fsel;

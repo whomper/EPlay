@@ -60,7 +60,7 @@ LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay midiplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
-           stream plat_tos
+           stream plat_tos gmsynth gmset
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
 CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn ovl
@@ -70,7 +70,7 @@ CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text of
 ifeq ($(CPU),68000)
 # the STE: no DSP, so its programs and their tables not carried (dspstub.c
 # answers for them, as on a Falcon whose DSP is missing)
-OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb,$(OWN)) dspstub
+OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb gmsynth gmset,$(OWN)) dspstub
 endif
 ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
@@ -119,7 +119,13 @@ HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
 all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl \
-     binary/midifb.ovl
+     binary/midifb.ovl binary/synth.dat
+
+# the internal synth's sound set (DESIGN.md, "The synth"): Sonivox's, a
+# separate work under the Apache License (NOTICES.TXT), 16-bit samples;
+# beside EPLAY.PRG in both packages (not the STE's edition's: it has no synth)
+binary/synth.dat: tools/mkgmset.py third_party/sonivox/wt_22khz.c | binary
+	python3 tools/mkgmset.py third_party/sonivox/wt_22khz.c $@ --bits 16
 
 # the STE's: the same sources for the 68000, in build/st
 st: binary/eplayst.prg
@@ -507,8 +513,8 @@ $(B)/midiovl/smffb.o: src/smf.c src/smf.h
 #   ColdFire (binary/eplayfb.prg as eplay.prg; its MP3 is in the program, so
 #   no mp3*.ovl), and fbprobe.prg for its testers.
 DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl
-DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref
+           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl binary/synth.dat
+DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref binary/synth.dat
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
 	rm -rf dist

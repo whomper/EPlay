@@ -18,6 +18,14 @@
  * pitch bend before it: a seek's or Play's after Pause), then its bytes.
  * At Stop and Pause, and at the file's end: All Notes Off and Reset All
  * Controllers on all 16 channels. The volume is the GM master volume.
+ *
+ * Or the internal synth (decided 26 Nov 2026; DESIGN.md, "The synth"):
+ * the same records made into sound by gmsynth.c from the sound set in
+ * SYNTH.DAT, in GEM's turns, into the queue as an MP3 on the CPU is
+ * (play.c's fill_cmp): each record applied at its sample, the start's
+ * state (chase) applied at once. The voices the CPU's time allows: fewer
+ * new notes taken where rendering takes more than its share. Not in the
+ * STE's edition.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +39,12 @@
 #include "snd.h"
 #include "elog.h"
 #include "xalloc.h"
+#ifndef EPLAY_ST
+#include "gmsynth.h"
+#include "gem.h"
+#include "cmp3.h"
+#define MP_SYNTH 1
+#endif
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
@@ -73,6 +87,21 @@ static long base_ms, len_ms;
 static long seen, frac;
 static long budget_us;
 static long sent, late_max;	/* (the log's: bytes sent, the latest a message went, ms) */
+
+#ifdef MP_SYNTH
+/* the internal synth: the set (SYNTH.DAT, read once, kept till a file of
+   another kind opens), the engine, where it is (samples from base_ms) */
+static unsigned char *gs_buf;
+static GMSET gs_set;
+static GMSYN *syn;
+static int syn_on;		/* this open plays on the synth */
+static int syn_pre;		/* the start's bytes applied */
+static long syn_rate;
+static unsigned long syn_smp;	/* samples made since base_ms */
+static unsigned long syn_busy, syn_made, syn_win_busy, syn_win_made;	/* (the CPU's time: ms; samples) */
+static int syn_least;		/* (the log's: the fewest voices it came down to) */
+static int syn_ended;
+#endif
 
 int mp_magic(const unsigned char *b, long n)
 {
@@ -180,6 +209,89 @@ static unsigned char *read_all(int fh, long size, char *err, int n)
 	}
 	return b;
 }
+
+
+#ifdef MP_SYNTH
+#define SYN_FILE "synth.dat"
+
+static void synth_give(void)
+{
+	if (syn)
+		Mfree(syn);
+	if (gs_buf)
+		Mfree(gs_buf);
+	syn = 0;
+	gs_buf = 0;
+}
+
+/* the voices a CPU starts with: the 68030 few (a stock Falcon's 16 MHz),
+   the 68060, the 68080 and the ColdFire all of them; gms_cap lowers them
+   while playing where the CPU's time runs short */
+static int syn_voices(void)
+{
+#ifdef EPLAY_FB
+	return GMS_VOICES;
+#else
+	return get_cookie(0x5F435055L) >= 40 ? GMS_VOICES : 16;	/* '_CPU' */
+#endif
+}
+
+/* the set read once and the engine made: 0 with err set */
+static int synth_load(char *err, int n)
+{
+	long fh, size;
+	const char *why;
+	if (gs_buf && syn)
+		return 1;
+	{
+		char path[200];
+		snprintf(path, sizeof(path), "%s%s", app_dir(), SYN_FILE);
+		fh = Fopen(path, 0);
+	}
+	if (fh < 0) {
+		snprintf(err, n, "The internal synth needs SYNTH.DAT beside EPlay.");
+		return 0;
+	}
+	size = Fseek(0, (short)fh, 2);
+	Fseek(0, (short)fh, 0);
+	if (size < 64 || size > 2L * 1024 * 1024) {
+		Fclose((short)fh);
+		snprintf(err, n, "SYNTH.DAT isn't this EPlay's: copy it from its release.");
+		return 0;
+	}
+	gs_buf = x_alloc(size + 16, 3);	/* (TT RAM where there is some; a point past the last wave read as 0) */
+	syn = gs_buf && (long)gs_buf > 0 ? x_alloc(sizeof(GMSYN), 3) : 0;
+	if ((long)gs_buf <= 0 || (long)syn <= 0) {
+		Fclose((short)fh);
+		if ((long)gs_buf > 0)
+			Mfree(gs_buf);
+		gs_buf = 0;
+		syn = 0;
+		snprintf(err, n, "There isn't the memory for the internal synth.");
+		return 0;
+	}
+	memset(gs_buf + size, 0, 16);
+	if (Fread((short)fh, size, gs_buf) != size) {
+		Fclose((short)fh);
+		synth_give();
+		snprintf(err, n, "SYNTH.DAT can't be read.");
+		return 0;
+	}
+	Fclose((short)fh);
+	if (!gm_open(&gs_set, gs_buf, size, &why) || gs_set.bits != 16) {
+		elog("SYNTH.DAT refused: %s", why);
+		synth_give();
+		snprintf(err, n, "SYNTH.DAT isn't this EPlay's: copy it from its release.");
+		return 0;
+	}
+	gms_prepare(&gs_set, gs_buf);
+	syn_rate = 24585;
+	gms_init(syn, &gs_set, syn_rate, syn_voices());
+	elog("the synth: SYNTH.DAT %ld bytes, %d-bit, %d programs' ranges %d, %d waves; %d voices", size, gs_set.bits,
+	     gs_set.nprog, gs_set.nreg, gs_set.nwave, syn->voices);
+	return 1;
+}
+#endif
 
 TICK_CODE("70mp_rec")
 static unsigned long rec_ms(long at)
@@ -291,9 +403,19 @@ static void chase(long ms)
 	}
 }
 
-int mp_open(int fh, long size, long ms, const char *name, TAGS *t, char *info, int ni, char *out, int no,
-	    long *len, char *err, int n)
+int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t, char *info, int ni, char *out,
+	    int no, long *len, char *err, int n)
 {
+#ifdef MP_SYNTH
+	syn_on = 0;
+	if (use_synth) {
+		if (!synth_load(err, n))
+			return 0;
+		syn_on = 1;
+	} else
+#else
+	(void)use_synth;
+#endif
 	if (!mp_port()) {
 		snprintf(err, n, "This machine has no MIDI port.");
 		return 0;
@@ -366,6 +488,18 @@ int mp_open(int fh, long size, long ms, const char *name, TAGS *t, char *info, i
 	*len = len_ms;
 	el = 0;
 	ended = 0;
+#ifdef MP_SYNTH
+	if (syn_on) {
+		snprintf(out, no, "Synth");
+		syn_pre = 0;
+		syn_smp = 0;
+		syn_ended = 0;
+		syn_busy = syn_made = syn_win_busy = syn_win_made = 0;
+		syn_least = syn->voices;
+		gms_reset(syn);
+		gms_cap(syn, syn->voices);
+	}
+#endif
 	return 1;
 }
 
@@ -514,6 +648,10 @@ void mp_forget(void)
 {
 	off();
 	give();
+#ifdef MP_SYNTH
+	synth_give();
+	syn_on = 0;
+#endif
 }
 
 int mp_step(int ms)
@@ -573,3 +711,146 @@ const char *mp_log(void)
 	snprintf(b, sizeof(b), "%ld bytes to the MIDI port, the latest %ld ms after its time", sent, late_max);
 	return b;
 }
+
+#ifdef MP_SYNTH
+int mp_synth_can(void)
+{
+	/* (on the CPU: a 68060, a 68080, the FireBee's ColdFire. A 68030
+	   makes some three voices at 16 MHz, eleven at 50 (26 Nov 2026,
+	   gmscpu.py): the Falcon's is the DSP's work, not yet) */
+#ifdef EPLAY_FB
+	return 1;
+#else
+	return cmp3_can();	/* (a 68060 or a 68080, as an MP3 on the CPU: not a 68040) */
+#endif
+}
+
+/* bytes as MIDI messages to the synth: a system exclusive message from
+   F0 to F7 whole, a channel message by its status (no running status:
+   MIDI.OVL writes each out), the pieces of a long one passed over */
+static void syn_feed(const unsigned char *b, int k)
+{
+	int j = 0;
+	while (j < k) {
+		int st = b[j], len;
+		if (st == 0xf0) {
+			int e = j + 1;
+			while (e < k && b[e] != 0xf7)
+				e++;
+			if (e < k)
+				gms_midi(syn, b + j, e - j + 1);
+			j = e + 1;
+			continue;
+		}
+		if (st < 0x80 || st > 0xef) {
+			j++;
+			continue;
+		}
+		len = (st & 0xe0) == 0xc0 ? 2 : 3;
+		if (j + len > k)
+			break;
+		gms_midi(syn, b + j, len);
+		j += len;
+	}
+}
+
+static unsigned long ms_smp(long ms)
+{
+	return (unsigned long)(ms / 1000) * (unsigned long)syn_rate + (unsigned long)((ms % 1000) * syn_rate / 1000);
+}
+
+void mp_synth_rate(long rate)
+{
+	if (syn && rate != syn_rate) {
+		int v = syn->voices;
+		syn_rate = rate;
+		gms_init(syn, &gs_set, rate, v);
+		syn_pre = 0;
+	}
+	syn_rate = rate;
+}
+
+/* (the CPU's share: past 70 % of the sound's time in a second of it, two
+   voices fewer for new notes; under 40 %, one more) */
+static void syn_budget(unsigned long busy, unsigned long made)
+{
+	syn_win_busy += busy;
+	syn_win_made += made;
+	if (syn_win_made < (unsigned long)syn_rate)
+		return;
+	{
+		unsigned long snd_ms = syn_win_made * 1000UL / (unsigned long)syn_rate;
+		int cap = syn->cap;
+		if (syn_win_busy * 10 > snd_ms * 7 && cap > 4)
+			cap -= 2;
+		else if (syn_win_busy * 10 < snd_ms * 4 && cap < syn->voices)
+			cap++;
+		if (cap != syn->cap) {
+			gms_cap(syn, cap);
+			if (cap < syn_least)
+				syn_least = cap;
+		}
+	}
+	syn_win_busy = syn_win_made = 0;
+}
+
+int mp_render(short *out, int n)
+{
+	int done = 0;
+	unsigned long t0 = tos_ms();
+	if (!syn_on || !syn || syn_ended)
+		return 0;
+	if (!syn_pre) {
+		syn_feed(pre, pre_n);	/* (the reset and the file's state there) */
+		syn_pre = 1;
+	}
+	/* its records to this piece's end */
+	if (making)
+		make((unsigned long)base_ms + (unsigned long)((syn_smp + (unsigned long)n) * 1000UL / (unsigned long)syn_rate) +
+			     1000, 0);
+	while (done < n) {
+		long m = n - done;
+		while (rp < mem_n) {
+			long at = (long)rec_ms(rp) - base_ms;
+			unsigned long due = at > 0 ? ms_smp(at) : 0;
+			int k = mem[rp + 4];
+			if (due > syn_smp) {
+				if ((long)(due - syn_smp) < m)
+					m = (long)(due - syn_smp);
+				break;
+			}
+			syn_feed(mem + rp + SMF_REC_HEAD, k);
+			rp += SMF_REC_HEAD + k;
+		}
+		if (rp >= mem_n && !making) {
+			/* its end: its length, then the notes let go sounding out (4 s at most) */
+			long now = base_ms + (long)(syn_smp * 1000UL / (unsigned long)syn_rate);
+			if (now >= len_ms && (!syn->live || now >= len_ms + 4000)) {
+				syn_ended = 1;
+				break;
+			}
+		}
+		gms_render(syn, out + 2 * done, (int)m);
+		done += (int)m;
+		syn_smp += (unsigned long)m;
+	}
+	syn_made += (unsigned long)done;
+	{
+		unsigned long b = tos_ms() - t0;
+		syn_busy += b;
+		syn_budget(b, (unsigned long)done);
+	}
+	return done;
+}
+
+const char *mp_synth_log(void)
+{
+	static char b[120];
+	if (!syn)
+		return "";
+	snprintf(b, sizeof(b), "the synth: %lu notes, %lu taken from others, %d to %d voices, %lu ms for %lu ms of sound",
+		 syn->notes, syn->stolen, syn_least, syn->voices, syn_busy,
+		 syn_rate ? syn_made * 1000UL / (unsigned long)syn_rate : 0UL);
+	return b;
+}
+#endif

@@ -12,7 +12,7 @@ does on the emulator's console (nf_debug), which the rig follows.
 
     make && python3 play_test.py WORK [CASE...] [MACHINE...]
 
-The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, wavlow (the TT and STE alone), stall, firstrun, quitlog, logasgo, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
+The cases: wav, wavvol, aiff, aiff24, wav22, mp3, mp3long, vbr, fsel, auto, aiff44, settings, keys, selall, list, m3u, tree, repeat, shuffle, save, mini, addplay, wavrg, wavrgup, mp3rg, vgm, vgz, vgmsn, vgmopn, vgmmd, vgmopl, vgmopl3, vgmopl3late, vgmlow, midsyn, wavlow (the TT and STE alone), stall, firstrun, quitlog, logasgo, quit (and many, manym3u, manytree); all but the many ones by default. The machines: Erez's configuration by default
 (machines.ERZ_MACHINE, Falcon-4:256 with NVDI; on EmuTOS without NVDI here, a
 stand-in: the hub's, 10 Nov 2026); Falcon (with the DFB1) when named, once a week (the
 hub's test matrix, 7 Nov 2026: it never found what Falcon-4 missed). Each case leaves
@@ -158,6 +158,11 @@ CASES["wavlow"] = ("LOW.WAV", ["-r", "44100", "-c", "2", "-b", "16"], None, 5006
 # held open s seconds 3 s in, then 20 keys (a big VGZ's unpacking kept
 # ahead with a dialog open and in busy turns: 1.46)
 CASES["vgmreal"] = ("REAL.VGZ", None, None, 0, (0, 0), 0)
+# the internal synth (26 Nov 2026): a MIDI file's note C6 (1,046.5 Hz) held
+# 3 s on the flute (General MIDI 73), made on the CPU from SYNTH.DAT: the
+# set's flute sample is some 9 cents sharp there (1,052 Hz), and its tail
+# after the note let go is the flute's release
+CASES["midsyn"] = ("SYN.MID", None, None, 0, (1052, 1052), 3)
 SQUARE = {"vgm", "vgz", "vgmsn", "vgmmd"}
 # the VGM cases of the DSP's chips (refused on a machine without one)
 DSP_VGM = {"vgmsn", "vgmopn", "vgmmd", "vgmopl", "vgmopl3", "vgmopl3late", "vgmlow"}
@@ -379,8 +384,27 @@ def make_vgm(path, secs, gz, sn=False, opn=False, md=False, opl=False, opl3=Fals
         fh.write(gzip.compress(data, mtime=0) if gz else data)
 
 
+def make_mid(path, secs):
+    """a type 0 MIDI file: 120 a minute (480 a quarter), the flute
+    (program 73), note 84 at velocity 100 for secs seconds"""
+    def vlq(n):
+        b = [n & 0x7f]
+        n >>= 7
+        while n:
+            b.insert(0, 0x80 | (n & 0x7f))
+            n >>= 7
+        return bytes(b)
+    ev = (vlq(0) + b"\xff\x51\x03\x07\xa1\x20" + vlq(0) + b"\xc0\x49" + vlq(0) + b"\x90\x54\x64" +
+          vlq(secs * 960) + b"\x80\x54\x40" + vlq(0) + b"\xff\x2f\x00")
+    with open(path, "wb") as fh:
+        fh.write(b"MThd" + struct.pack(">IHHH", 6, 0, 1, 480) + b"MTrk" + struct.pack(">I", len(ev)) + ev)
+
+
 def make_file(hd, case):
     f, fmt, lame, _, _, secs = CASES[case]
+    if f.endswith(".MID"):
+        make_mid(os.path.join(hd, f), secs)
+        return f
     if case == "vgmreal":
         shutil.copy(os.environ["EPLAY_RIG_VGM"], os.path.join(hd, f))
         return f
@@ -474,7 +498,7 @@ def tone(x, rate):
     return best, 2 * bp / n / total
 
 
-RESAMPLED = {"wav22", "aiff44", "settings", "vgmsn"}       # (and every MP3; the SN76489 the DSP's)
+RESAMPLED = {"wav22", "aiff44", "settings", "vgmsn", "midsyn"}       # (and every MP3; the SN76489 the DSP's)
 # wav's level when its own run recorded nothing (excused: Hatari's DMA on
 # a silent track) or didn't run: the tone's own, sox's sine at -6 dB
 # (0.501 of full scale, its RMS that over the square root of 2). Hatari
@@ -621,8 +645,10 @@ def analyse(rec, case, standin=False, no_boost=False):
     if not lame and case not in RESAMPLED:
         length = length * int(fmt[1]) / out  # (the DMA: at the Falcon's rate, if not the file's)
     pure = 0.75 if case in SQUARE else 0.9
-    ok = (vol_ok and abs(secs - length) < 0.1 and not gaps and pitch and ql > pure and qr > pure
-          and max(rms[b + (4 if case in SQUARE else 2):] or [0]) < 50)
+    # (the synth's note: its attack and the flute's release about it)
+    within, tail = (0.4, 25) if case == "midsyn" else (0.1, 4 if case in SQUARE else 2)
+    ok = (vol_ok and abs(secs - length) < within and not gaps and pitch and ql > pure and qr > pure
+          and max(rms[b + tail:] or [0]) < 50)
     # (silence after: past the block the end falls in; the YM2149's output
     # in Hatari dies away over a few ms more)
     return ok, ("%.2f s of sound, %d gaps; left %d Hz (%.0f %% of its power), right %d Hz (%.0f %%); "
@@ -661,7 +687,7 @@ def run(work, case, spec):
     shutil.copy(os.environ.get("EPLAY_RIG_PRG") or os.path.join(TOP, "binary", prg), os.path.join(hd, prg))
     # (MP3FPU.OVL and MP3INT.OVL beside it, as a release has them: a 68060
     # with no DSP decodes MP3 with the one its FPU, or none, takes)
-    for ovl in ("mp3fpu.ovl", "mp3int.ovl"):
+    for ovl in ("mp3fpu.ovl", "mp3int.ovl", "midi.ovl", "synth.dat"):
         if os.path.exists(os.path.join(TOP, "binary", ovl)):
             shutil.copy(os.path.join(TOP, "binary", ovl), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)
@@ -770,6 +796,10 @@ def run(work, case, spec):
         if no_dsp(spec) and played and CASES[case][0].endswith(".MP3"):
             # (no DSP: an MP3 refused, in Erez's words, 7 Nov 2026)
             return "MP3 needs a Falcon's DSP" in played, m.describe(), "refused without a DSP: " + played
+        if spec.startswith("STE") and case == "midsyn":
+            # (the STE's edition has no synth: its MIDI files go to the port)
+            SKIPS.append("midsyn: the STE's edition has no synth")
+            return True, m.describe(), "no synth in the STE's edition (skipped)"
         if no_dsp(spec) and played and case in DSP_VGM:
             # (no DSP: the DSP's chips' music refused, as their own words say)
             return "needs the Falcon's DSP" in played, m.describe(), "refused without a DSP: " + played

@@ -30,6 +30,7 @@ int gm_open(GMSET *g, const unsigned char *b, long n, const char **why)
 	long o;
 	int k;
 	*why = "not EPlay's sound set";
+	g->prepared = 0;
 	if (n < 32 || b[0] != 'E' || b[1] != 'P' || b[2] != 'G' || b[3] != 'M')
 		return 0;
 	*why = "a sound set of another version";

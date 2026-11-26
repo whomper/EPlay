@@ -74,6 +74,7 @@ static int mid;			/* a MIDI file plays out of the MIDI port (midiplay.c, decided
    resampled there to the output's rate (16-bit big-endian stereo) */
 static int cmp;
 static int cmp_vgm;		/* (phase 11) a VGM's chips made on the CPU (vp_render), not a file's frames */
+static int cmp_mid;		/* a MIDI file made into sound by the internal synth (mp_render, 26 Nov 2026) */
 /* (the info line's: where the sound is made) */
 #ifdef EPLAY_FB
 #define OUT_HW "FireBee"
@@ -1179,6 +1180,20 @@ static void fill_cmp_(unsigned long t0, int ms, int low)
 		if (room < need)
 			break;
 		must = 0;
+#ifndef EPLAY_ST
+		if (cmp_mid) {
+			/* (the synth's next samples, made here) */
+			ns = mp_render(cmp_pcm, 1152);
+			if (ns <= 0) {
+				src_done = 1;
+				break;
+			}
+			cmp_snd += (unsigned long)ns;
+			cmp_hz = cmp_rin;
+			cmp_put(0, ns, 2);
+			continue;
+		}
+#endif
 		if (cmp_vgm) {
 			/* (phase 11: the VGM's chips' next frames, made here) */
 			ns = vp_render(cmp_pcm, 1152);
@@ -1411,7 +1426,7 @@ int play_open(const char *path, char *err, int n)
 	snprintf(play_name, sizeof(play_name), "%s", base_name(path));
 	}
 	dsp = xs = 0;
-	cmp = cmp_vgm = 0;
+	cmp = cmp_vgm = cmp_mid = 0;
 #if defined(EPLAY_FB) || defined(SND_XB_ON)
 	cmp_wav = 0;
 #endif
@@ -1427,12 +1442,54 @@ int play_open(const char *path, char *err, int n)
 	if (!net && mp_magic(fbuf, fend)) {
 		/* a MIDI file (decided 25 Nov 2026): made into the port's bytes by
 		   MIDI.OVL, sent by the tick */
-		if (!mp_open(fh, file_size, seek_ms, play_name, &play_tags, play_info, sizeof(play_info), play_out,
+		int syn = 0;
+#ifndef EPLAY_ST
+		syn = settings_midi() == MIDI_SYNTH;
+#endif
+		if (!mp_open(fh, file_size, seek_ms, play_name, syn, &play_tags, play_info, sizeof(play_info), play_out,
 			     sizeof(play_out), &len_ms, err, n)) {
 			close_file();
 			return 0;
 		}
 		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
+#ifndef EPLAY_ST
+		if (syn) {
+			/* (the internal synth, 26 Nov 2026: made on the CPU, ahead,
+			   into the queue as a VGM's chips there are; its rate set
+			   once the output's is known, below) */
+			cmp = cmp_mid = 1;
+			cmp_busy_ms = cmp_snd = 0;
+			cmp_hz = 0;
+			memset(&fmt, 0, sizeof(fmt));
+			fmt.kind = kind = PCM_WAV;
+			fmt.bits = 16;
+			fmt.channels = 2;
+			fmt.bytes = 4;
+			fmt.big = 1;
+			/* (the rate asked of the output: a 68030 makes 24,585 Hz
+			   on the Falcon's clock, or half the FDI's; the rest 44.1
+			   kHz, or the nearest) */
+			fmt.rate = rate = get_cookie(0x5F435055L) < 40 && !snd_fdi && !snd_ext_rate ? 24585L : 44100L;
+			cmp_rin = rate;
+			cmp_at = cmp_n = 0;
+			cmp_pos = 65536UL;
+			cmp_prev[0] = cmp_prev[1] = 0;
+			CMP_RS_RESET();
+			cmp_skip = 0;
+			cmp_keep = -1;
+			data_left = 0;
+			play_hz = 0;
+			play_kbps = 0;
+			play_via = "";
+			if (!take_queue(4)) {
+				snprintf(err, n, "There isn't the memory to play.");
+				close_file();
+				return 0;
+			}
+			elog("MIDI: %s; the internal synth; %ld ms%s", play_info, len_ms, base_ms ? " (from a place in it)" : "");
+			goto made_ahead;
+		}
+#endif
 		mid = 1;
 		play_via = "";
 		rate = 44100;
@@ -1805,6 +1862,18 @@ made_ahead:
 				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 		}
 		if (cmp) {
+#ifndef EPLAY_ST
+			if (cmp_mid) {
+				/* (the synth at the output's rate; half of it on a
+				   68030 above 30 kHz, made up to it by cmp_put) */
+				long sr = out_rate;
+				if (get_cookie(0x5F435055L) < 40 && sr > 30000)
+					sr = out_rate / 2;
+				mp_synth_rate(sr);
+				cmp_rin = sr;
+				elog("the synth at %ld Hz to the output's %ld Hz", sr, out_rate);
+			}
+#endif
 			/* (an MP3 on the CPU: fill_cmp resamples to the output's
 			   rate, so the queue plays at it as it is) */
 			cmp_step = ((unsigned long)cmp_rin << 16) / (unsigned long)out_rate;
@@ -2289,6 +2358,7 @@ void play_stop(void)
 		vp_stop();		/* (phase 11: the CPU's chips, the file kept for its next open) */
 		cmp_vgm = 0;
 	}
+	cmp_mid = 0;			/* (the synth's: its records kept for the next open) */
 	if (vgm) {
 		vp_stop();		/* (silent: the chip as the machine had it) */
 		vgm = 0;
@@ -2540,6 +2610,15 @@ const char *play_keep_up(void)
 			 snd_ms > 0 ? (long)(cmp_busy_ms * 100UL / (unsigned long)snd_ms) : 0L, cmp_busy_ms, snd_ms);
 		return b;
 	}
+#ifndef EPLAY_ST
+	if (cmp && cmp_mid && cmp_hz > 0) {
+		long snd_ms = (long)(cmp_snd * 1000UL / (unsigned long)cmp_hz);
+		snprintf(b, sizeof(b), "%s; the %s's synth %ld%% of the time; %s", snd_underruns ? "underruns" : "no underrun",
+			 cmp3_cpu(), snd_ms > 0 ? (long)(cmp_busy_ms * 100UL / (unsigned long)snd_ms) : 0L,
+			 mp_synth_log());
+		return b;
+	}
+#endif
 	if (vgm) {
 		snprintf(b, sizeof(b), "its chips from the tick");
 		return b;

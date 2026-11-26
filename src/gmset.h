@@ -36,6 +36,7 @@ typedef struct {
 	const unsigned char *b;	/* the file, in memory */
 	long n;
 	int bits;		/* 8 or 16 */
+	int prepared;		/* its points made the synth's (gms_prepare) */
 	long rate;		/* its samples' rate (22050) */
 	int nbank, nprog, nreg, nart, nwave;
 	long points;		/* the pool's sample points */

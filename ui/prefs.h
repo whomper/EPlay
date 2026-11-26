@@ -35,6 +35,8 @@ int settings_dma8low(void);
 void settings_read(void);	/* EPLAY.INF read (once, the start's first thing): NATFEATS= */
 void settings_load(void);	/* EPLAY.INF, at the start */
 void prefs_dialog(void);	/* the dialog (Settings); saved on OK when it changed */
+enum { MIDI_SYNTH, MIDI_PORT };
+int settings_midi(void);	/* MIDI_...: as set, or the one the machine has */
 int settings_output(void);	/* OUT_...: as set, or Auto where the machine hasn't it */
 const char *settings_output_name(int out);	/* "Auto", "FDI", ... (the log) */
 

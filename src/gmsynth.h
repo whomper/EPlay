@@ -48,6 +48,7 @@ typedef struct {
 	const GMSET *g;
 	long rate;		/* the output's */
 	int voices;		/* the most at once (GMS_VOICES at most) */
+	int cap;		/* the most new notes take now (gms_cap: the CPU's time) */
 	long upd;		/* samples an update (128 of 22,050 Hz at this rate) */
 	long to_upd;		/* samples to the next update */
 	unsigned long ratio;	/* 22,050 / rate (Q16): the set's rate to the output's */
@@ -59,6 +60,10 @@ typedef struct {
 	GMS_VOICE v[GMS_VOICES];
 } GMSYN;
 
+/* the set's 16-bit points made the engine's (halved, the host's order),
+   in place, once before gms_init: pool is the set's file as gm_open read
+   it, writable */
+void gms_prepare(GMSET *g, unsigned char *pool);
 /* the synth over the set g, at rate Hz, with voices at once at most */
 void gms_init(GMSYN *s, const GMSET *g, long rate, int voices);
 /* a MIDI message (a channel's whole message, or a system exclusive one
@@ -66,6 +71,9 @@ void gms_init(GMSYN *s, const GMSET *g, long rate, int voices);
 void gms_midi(GMSYN *s, const unsigned char *m, int n);
 /* n frames of 16-bit stereo (interleaved, the host's byte order) */
 void gms_render(GMSYN *s, short *out, int n);
+/* new notes in the first n voices alone (1 to voices); those past them
+   ended, their gain ramped to 0 by the next update */
+void gms_cap(GMSYN *s, int n);
 /* every note silent at once, the controllers as GM's reset leaves them */
 void gms_reset(GMSYN *s);
 

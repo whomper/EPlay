@@ -212,12 +212,25 @@ void gms_reset(GMSYN *s)
 	s->master = FULL;
 }
 
+void gms_cap(GMSYN *s, int n)
+{
+	int k;
+	if (n < 1)
+		n = 1;
+	if (n > s->voices)
+		n = s->voices;
+	for (k = n; k < s->voices; k++)
+		v_quiet(&s->v[k]);
+	s->cap = n;
+}
+
 void gms_init(GMSYN *s, const GMSET *g, long rate, int voices)
 {
 	int k;
 	s->g = g;
 	s->rate = rate;
 	s->voices = voices < 1 ? 1 : voices > GMS_VOICES ? GMS_VOICES : voices;
+	s->cap = s->voices;
 	s->upd = (128L * rate + 11025) / 22050;
 	s->to_upd = s->upd;
 	s->ratio = (unsigned long)((g->rate * 65536L + rate / 2) / rate);
@@ -249,21 +262,21 @@ static void note_on(GMSYN *s, int ch, int note, int vel)
 			if (s->v[k].on && s->v[k].ch == ch && s->v[k].kgroup == GM_KEYGROUP(r.flags))
 				v_quiet(&s->v[k]);
 	/* a voice: a free one, else the quietest let go, else the oldest */
-	for (k = 0; k < s->voices; k++)
+	for (k = 0; k < s->cap; k++)
 		if (!s->v[k].on) {
 			v = &s->v[k];
 			break;
 		}
 	if (!v) {
 		long least = 0x7fffffffL;
-		for (k = 0; k < s->voices; k++)
+		for (k = 0; k < s->cap; k++)
 			if (s->v[k].eg1st == EG_RELEASE && s->v[k].eg1 < least) {
 				least = s->v[k].eg1;
 				v = &s->v[k];
 			}
 		if (!v) {
 			unsigned long oldest = 0;
-			for (k = 0; k < s->voices; k++)
+			for (k = 0; k < s->cap; k++)
 				if (s->age - s->v[k].age >= oldest) {
 					oldest = s->age - s->v[k].age;
 					v = &s->v[k];
@@ -421,42 +434,60 @@ void gms_midi(GMSYN *s, const unsigned char *m, int n)
 	}
 }
 
-/* a sample point of the set's (16-bit big-endian, or 8-bit) */
-#if defined(__m68k__) || defined(__mcoldfire__)
-#define PT16(w, i) (((const short *)(w))[i])
-#else
-#define PT16(w, i) ((short)((w)[2 * (i)] << 8 | (w)[2 * (i) + 1]))
-#endif
-#define PT8(w, i) ((short)((signed char)(w)[i] * 256))
+/* the set's points made the engine's, once, in place (gms_prepare): each
+   16-bit point halved, in the host's order, so that two points' difference
+   fits 16 bits and the interpolation is one 16 x 16 multiply */
+void gms_prepare(GMSET *g, unsigned char *pool)
+{
+	long k, n = g->points;
+	short *p = (short *)(void *)(pool + g->o_smp);
+	const unsigned char *b = pool + g->o_smp;
+	if (g->bits != 16 || g->prepared)
+		return;
+	for (k = 0; k < n; k++)
+		p[k] = (short)((short)(b[2 * k] << 8 | b[2 * k + 1]) >> 1);
+	g->prepared = 1;
+}
+
+#define CHUNK 16		/* the samples a gain holds for (its ramp's step) */
 
 /* a voice's n samples added into acc (stereo, Q0 a side): 1 when it
    ended (a sample without a loop played to its end) */
-static int v_run(GMS_VOICE *v, long *acc, int n, int bits)
+static int v_run(GMS_VOICE *v, long *acc, int n)
 {
-	const unsigned char *w = v->w;
+	const short *w = (const short *)(const void *)v->w;
 	long pos = v->pos, le = v->le, span = v->le - v->ls, gl = v->gl, gr = v->gr;
 	long dgl = v->dgl, dgr = v->dgr;
 	unsigned long frac = v->frac, inc = v->inc;
-	int looped = v->le > v->ls, k;
-	for (k = 0; k < n; k++) {
-		short s0, s1, d, x;
-		if (bits == 16) {
-			s0 = PT16(w, pos);
-			s1 = PT16(w, pos + 1);
-		} else {
-			s0 = PT8(w, pos);
-			s1 = PT8(w, pos + 1);
+	unsigned short fr = (unsigned short)frac, incf = (unsigned short)inc;
+	long inci = (long)(inc >> 16);
+	int looped = v->le > v->ls;
+	while (n > 0) {
+		/* the samples before the loop's end (or the wave's): no test a
+		   sample */
+		int m = n > CHUNK ? CHUNK : n, k;
+		short g0 = (short)(gl >> 15), g1 = (short)(gr >> 15);
+		if (le - pos <= (long)(m * (inci + 1)) + 1) {
+			unsigned long left = ((unsigned long)(le - pos) << 16) - fr;
+			long most = inc ? (long)((left + inc - 1) / inc) : m;
+			if (most < m)
+				m = (int)most;
 		}
-		d = (short)((s1 >> 1) - (s0 >> 1));
-		x = (short)(s0 + (((long)d * (short)(frac >> 2)) >> 13));
-		acc[0] += ((long)x * (short)(gl >> 15)) >> 15;
-		acc[1] += ((long)x * (short)(gr >> 15)) >> 15;
-		acc += 2;
-		gl += dgl;
-		gr += dgr;
-		frac += inc;
-		pos += (long)(frac >> 16);
-		frac &= 0xffffUL;
+		for (k = 0; k < m; k++) {
+			const short *q = w + pos;
+			short s0 = q[0], d = (short)(q[1] - s0), x;
+			unsigned short nf;
+			x = (short)(s0 + (((long)d * (short)(fr >> 1)) >> 15));
+			acc[0] += ((long)x * g0) >> 14;
+			acc[1] += ((long)x * g1) >> 14;
+			acc += 2;
+			nf = (unsigned short)(fr + incf);
+			pos += inci + (nf < fr);
+			fr = nf;
+		}
+		n -= m;
+		gl += dgl * m;
+		gr += dgr * m;
 		if (pos >= le) {
 			if (!looped) {
 				v->pos = pos;
@@ -467,7 +498,7 @@ static int v_run(GMS_VOICE *v, long *acc, int n, int bits)
 		}
 	}
 	v->pos = pos;
-	v->frac = frac;
+	v->frac = fr;
 	v->gl = gl;
 	v->gr = gr;
 	return 0;
@@ -476,7 +507,6 @@ static int v_run(GMS_VOICE *v, long *acc, int n, int bits)
 void gms_render(GMSYN *s, short *out, int n)
 {
 	static long acc[2 * 256];
-	int bits = s->g->bits;
 	while (n > 0) {
 		int m = n, k;
 		long *a;
@@ -490,7 +520,7 @@ void gms_render(GMSYN *s, short *out, int n)
 			GMS_VOICE *v = &s->v[k];
 			if (!v->on)
 				continue;
-			if (v_run(v, acc, m, bits))
+			if (v_run(v, acc, m))
 				v_off(s, v);
 		}
 		for (k = 0, a = acc; k < 2 * m; k++, a++) {

@@ -98,7 +98,7 @@ def session(work, spec, case):
         r.put(prg)
         r.put(os.path.join(TOP, "binary", "midi.ovl"))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
-        r.write("eplay.inf", "")
+        r.write("eplay.inf", "MIDI=PORT\r\n")  # (the port, not the internal synth)
         data, msgs = song(25 if case == "pause" else 3)
         with open(os.path.join(r.hd, "SONG.MID"), "wb") as f:
             f.write(data)

@@ -147,6 +147,7 @@ int main(int argc, char **argv)
 		printf("FAIL  the set: %s\n", why);
 		return 1;
 	}
+	gms_prepare(&g, b);
 	gms_init(&s, &g, RATE, 24);
 
 	/* every pitched program's note 69 at 440 Hz, 0.05 to 0.35 s in: its
@@ -244,6 +245,21 @@ int main(int argc, char **argv)
 			msg3(0x90 | (k % 9), 40 + k, 100);
 		gms_render(&s, buf, RATE / 10);
 		CHECK(s.live <= 24 && s.stolen >= 16, "40 notes: %d sounding, %lu taken", s.live, s.stolen);
+	}
+	/* the cap (the CPU's time short): 8 voices for new notes, those past
+	   them ended by the next update */
+	{
+		gms_reset(&s);
+		for (k = 0; k < 20; k++)
+			msg3(0x90, 40 + k, 100);
+		gms_cap(&s, 8);
+		gms_render(&s, buf, RATE / 10);
+		CHECK(s.live <= 8, "capped at 8: %d sounding", s.live);
+		for (k = 0; k < 20; k++)
+			msg3(0x91, 40 + k, 100);
+		gms_render(&s, buf, RATE / 10);
+		CHECK(s.live <= 8, "capped at 8, 20 more notes: %d sounding", s.live);
+		gms_cap(&s, 24);
 	}
 	/* GM System On: silent at once */
 	{
