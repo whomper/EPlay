@@ -49,6 +49,11 @@ These come from AERA-Atari's repo template and are the same in every app's CLAUD
   notes saying why. A fault a user reports is still fixed with its rig case, in the next release
   unless it is one of those. Docs and rig changes need no release; the hub's shared fixes ride the
   next one unless the hub names one the exception. For EPlay now: #100 and MIDI.OVL go out together.
+- **Nothing known is left in a queue behind a release** (26 Nov 2026; guidelines 1.2, AERA-Atari
+  bf0b8d5): before a candidate goes to the gate, fold in every known fault and pending item of EPlay's that
+  can be done within a few days. The candidate's message to the hub lists what was left out and why; the hub
+  checks that list before its go. A reported fault that is waiting goes into the release being prepared, not
+  the one after.
 - **Releases go out without asking Erez** (his decision, 23 Oct 2026; guidelines 1.2), once the
   candidate has passed **the regression gate** (Erez, 17 Nov 2026: extra care over regressions, as
   the software has users, so testing across all configurations and no loss of performance; guidelines
