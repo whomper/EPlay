@@ -20,7 +20,7 @@ FILES  := tones mix128 mix320 mono lsf22 mix48 mixvbr
 VGMS   := ay sn opn md opl opl3
 VGMSRC := $(addprefix $(TOP)/src/,vgm.c vgmcpu.c sncmd.c sncpu.c opnd.c egmath.c opncpu.c opld.c oplcpu.c aycpu.c)
 
-test: $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host $(B)/fbint $(B)/fbint_host $(B)/fbinte $(B)/fbmpfb $(B)/fbrs $(B)/fbrs_host
+test: $(B)/fbsyn $(B)/fbsyn_host $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host $(B)/fbint $(B)/fbint_host $(B)/fbinte $(B)/fbmpfb $(B)/fbrs $(B)/fbrs_host
 	for f in $(FILES); do $(QEMU) $(B)/fbmp3 $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.cf.raw && \
 		./$(B)/fbmp3_host $(TOP)/build/mp3files/$$f.mp3 > $(B)/$$f.host.raw && \
 		python3 compare.py $(B)/$$f.cf.raw $(B)/$$f.host.raw $$f || exit 1; done
@@ -38,9 +38,20 @@ test: $(B)/fbmp3 $(B)/fbmp3_host $(B)/fbvgm $(B)/fbvgm_host $(B)/fbint $(B)/fbin
 		python3 compare.py $$([ $$d = 0 ] || echo --near) $(B)/$$f.fb$$d.raw $(B)/$$f.host.raw "$$f, EPLAYFB's decoder $$d" || exit 1; done; done
 	cmp $(B)/tones.fb1.raw $(B)/tones.fb2.raw && echo "ok   the EMAC's, the integer's, bit for bit (EPLAYFB's)"
 	python3 -I mkvgms.py $(B) $(VGMS)
+	$(QEMU) $(B)/fbsyn $(TOP)/build/gm16.dat > $(B)/syn.cf.raw && ./$(B)/fbsyn_host $(TOP)/build/gm16.dat > $(B)/syn.host.raw && \
+		cmp $(B)/syn.cf.raw $(B)/syn.host.raw && test -s $(B)/syn.cf.raw && \
+		echo "ok   the internal synth (gmsynth.c) on the ColdFire, bit for bit with the host's"
 	for f in $(VGMS); do $(QEMU) $(B)/fbvgm $(B)/$$f.vgm > $(B)/$$f.vcf.raw && \
 		./$(B)/fbvgm_host $(B)/$$f.vgm > $(B)/$$f.vhost.raw && \
 		python3 compare.py --exact $(B)/$$f.vcf.raw $(B)/$$f.vhost.raw $$f.vgm || exit 1; done
+# (the internal synth as EPLAYFB.PRG builds it: integers alone)
+SYNSRC := $(TOP)/src/gmsynth.c $(TOP)/src/gmset.c
+$(B)/fbsyn: fbsyn.c $(SYNSRC) $(TOP)/src/gmsynth.h $(TOP)/src/gmset.h $(TOP)/common/atari/ll64.c $(RT)/rt.S $(RT)/libc.c Makefile | $(B)
+	$(CC) $(CF) -ffunction-sections -fdata-sections -o $(B)/fbsyn.elf -nostdlib -static -no-pie \
+		-Wl,-z,noexecstack -Wl,--gc-sections fbsyn.c $(SYNSRC) $(TOP)/common/atari/ll64.c $(RT)/libc.c $(RT)/rt.S
+	cp $(B)/fbsyn.elf $@
+$(B)/fbsyn_host: fbsyn.c $(SYNSRC) | $(B)
+	cc -O2 -Wall -DHOST -I$(TOP)/src -o $@ fbsyn.c $(SYNSRC)
 # (the models as EPlay's Makefile builds them for the FireBee; the tables
 # build/opntab.h's and opltab.h's, as dspstub.c takes them there)
 $(B)/fbvgm: fbvgm.c $(VGMSRC) $(TOP)/common/atari/ll64.c $(RT)/rt.S $(RT)/libc.c Makefile | $(B)

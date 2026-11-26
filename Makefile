@@ -400,7 +400,7 @@ dsptest: $(B)/mp3files/.made
 # the FireBee's edition's decoders on the ColdFire (qemu-m68k -cpu cfv4e,
 # the cross compiler): its MP3 (minimp3) within a step of the host's, its
 # VGM chips (Erez, 21 Nov 2026) bit for bit the host's
-fbtest: $(B)/mp3files/.made $(B)/opntab.h $(B)/opltab.h binary/eplayfb.prg binary/eplay.prg
+fbtest: $(B)/mp3files/.made $(B)/opntab.h $(B)/opltab.h $(B)/gm16.dat binary/eplayfb.prg binary/eplay.prg
 	$(MAKE) -C tests/fb
 	@# (the FireBee's package has TLS.OVL's ColdFire build as tls.ovl, the
 	@# guidelines 7.4: its EPLAY.PRG asks for tls.ovl as named, with no swap to
