@@ -88,8 +88,8 @@ def session(work, spec, case):
     inp = os.path.join(work, case + ".midiin")
     open(out, "wb").close()
     open(inp, "wb").close()
-    r = speed.Rig(os.path.join(work, case), spec, display=os.environ.get("EPLAY_SPEED_DISPLAY", ":91"),
-                  extra=["--midi-in", inp, "--midi-out", out])
+    r = speed.Rig(os.path.join(work, case), spec, nvdi=os.environ.get("AERA_WITH_NVDI") == "1",
+                  display=os.environ.get("EPLAY_SPEED_DISPLAY", ":91"), extra=["--midi-in", inp, "--midi-out", out])
     fails = []
     try:
         st = r.m.name.startswith("STE")
