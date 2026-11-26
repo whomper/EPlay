@@ -1453,6 +1453,7 @@ int play_open(const char *path, char *err, int n)
 		}
 		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
 #ifndef EPLAY_ST
+		syn = mp_on_synth();	/* (a 68030 too slow for it: the port) */
 		if (syn) {
 			/* (the internal synth, 26 Nov 2026: made on the CPU, ahead,
 			   into the queue as a VGM's chips there are; its rate set

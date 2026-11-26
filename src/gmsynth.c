@@ -8,6 +8,7 @@
  * it was made to. Left out at first: its filter, its reverb and chorus,
  * the LFO's tremolo, channel pressure.
  */
+#include <string.h>
 #include "gmsynth.h"
 
 enum { EG_ATTACK, EG_DECAY, EG_SUSTAIN, EG_RELEASE, EG_OFF };
@@ -547,4 +548,32 @@ void gms_render(GMSYN *s, short *out, int n)
 			}
 		}
 	}
+}
+
+/* (the CPU's speed: n samples of the voice loop with v voices sounding, on
+   a wave of silence, for the caller to time; nothing of a GMSYN touched) */
+long gms_bench(int v, int n)
+{
+	static short wave[1024];
+	static long acc[2 * 256];
+	GMS_VOICE t;
+	long sum = 0;
+	int k, m;
+	memset(&t, 0, sizeof(t));
+	t.w = (const unsigned char *)wave;
+	t.ls = 0;
+	t.le = 1000;
+	t.inc = 0x12345UL;
+	t.gl = t.gr = 1L << 29;
+	while (n > 0) {
+		m = n > 256 ? 256 : n;
+		for (k = 0; k < 2 * m; k++)
+			acc[k] = 0;
+		for (k = 0; k < v; k++)
+			v_run(&t, acc, m);
+		for (k = 0; k < 2 * m; k++)
+			sum += acc[k];
+		n -= m;
+	}
+	return sum;
 }

@@ -805,6 +805,13 @@ def run(work, case, spec):
             return "needs the Falcon's DSP" in played, m.describe(), "refused without a DSP: " + played
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
+        if case == "midsyn":
+            slow = wait_line(log, lambda l: "the synth too slow on this CPU" in l, 3)
+            if slow:
+                # (a 68030 timed too slow for it, a stock Falcon's: the MIDI
+                # port, as EPlay says; the Falcon's synth is the DSP's, later)
+                SKIPS.append("midsyn on %s: %s" % (spec, slow))
+                return True, m.describe(), "the synth too slow here, the MIDI port (skipped): " + slow
         time.sleep(1.5)
         cmd(fifo, "hatari-shortcut", "screenshot")
         if case == "mp3art":

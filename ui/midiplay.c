@@ -213,6 +213,8 @@ static unsigned char *read_all(int fh, long size, char *err, int n)
 
 #ifdef MP_SYNTH
 #define SYN_FILE "synth.dat"
+#define SYN_LEAST 4		/* the fewest voices it plays with */
+static int synth_voices(void);
 
 static void synth_give(void)
 {
@@ -222,18 +224,6 @@ static void synth_give(void)
 		Mfree(gs_buf);
 	syn = 0;
 	gs_buf = 0;
-}
-
-/* the voices a CPU starts with: the 68030 few (a stock Falcon's 16 MHz),
-   the 68060, the 68080 and the ColdFire all of them; gms_cap lowers them
-   while playing where the CPU's time runs short */
-static int syn_voices(void)
-{
-#ifdef EPLAY_FB
-	return GMS_VOICES;
-#else
-	return get_cookie(0x5F435055L) >= 40 ? GMS_VOICES : 16;	/* '_CPU' */
-#endif
 }
 
 /* the set read once and the engine made: 0 with err set */
@@ -286,7 +276,8 @@ static int synth_load(char *err, int n)
 	}
 	gms_prepare(&gs_set, gs_buf);
 	syn_rate = 24585;
-	gms_init(syn, &gs_set, syn_rate, syn_voices());
+	gms_init(syn, &gs_set, syn_rate, synth_voices() > 16 ? GMS_VOICES : 16);
+	gms_cap(syn, synth_voices() < 16 ? synth_voices() : syn->voices);
 	elog("the synth: SYNTH.DAT %ld bytes, %d-bit, %d programs' ranges %d, %d waves; %d voices", size, gs_set.bits,
 	     gs_set.nprog, gs_set.nreg, gs_set.nwave, syn->voices);
 	return 1;
@@ -408,6 +399,10 @@ int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t
 {
 #ifdef MP_SYNTH
 	syn_on = 0;
+	if (use_synth && synth_voices() < SYN_LEAST && mp_port()) {
+		elog("MIDI: the synth too slow on this CPU (%d voice%s): the MIDI port", synth_voices(), synth_voices() == 1 ? "" : "s");
+		use_synth = 0;
+	}
 	if (use_synth) {
 		if (!synth_load(err, n))
 			return 0;
@@ -495,9 +490,9 @@ int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t
 		syn_smp = 0;
 		syn_ended = 0;
 		syn_busy = syn_made = syn_win_busy = syn_win_made = 0;
-		syn_least = syn->voices;
 		gms_reset(syn);
-		gms_cap(syn, syn->voices);
+		gms_cap(syn, synth_voices() < syn->voices ? synth_voices() : syn->voices);
+		syn_least = syn->cap;
 	}
 #endif
 	return 1;
@@ -713,16 +708,51 @@ const char *mp_log(void)
 }
 
 #ifdef MP_SYNTH
+/* the voices this CPU carries at 24,585 Hz in half its time: a 68060, a
+   68080 and the ColdFire all; a 68030 or a 68040 timed once, at its first
+   MIDI file on the synth (gms_bench: 8 voices, 4,096 samples, 167 ms of
+   sound), not where Settings opens. 26 Nov 2026, gmscpu.py: a 16 MHz
+   68030 makes some three voices, so a stock Falcon's MIDI files go on to
+   the MIDI port; the Falcon's synth is the DSP's work, not yet */
+static int syn_cpu = -1;
+
+static int synth_voices(void)
+{
+	if (syn_cpu < 0) {
+#ifdef EPLAY_FB
+		syn_cpu = GMS_VOICES;
+#else
+		if (cmp3_can())
+			syn_cpu = GMS_VOICES;
+		else {
+			unsigned long t0 = tos_ms(), t;
+			long v;
+			gms_bench(8, 4096);
+			t = tos_ms() - t0;
+			v = t > 0 ? 668L / (long)t : GMS_VOICES;
+			syn_cpu = v > GMS_VOICES ? GMS_VOICES : (int)v;
+			elog("the synth on this CPU: 8 voices' 167 ms made in %lu ms: %d voices", t, syn_cpu);
+		}
+#endif
+	}
+	return syn_cpu;
+}
+
 int mp_synth_can(void)
 {
-	/* (on the CPU: a 68060, a 68080, the FireBee's ColdFire. A 68030
-	   makes some three voices at 16 MHz, eleven at 50 (26 Nov 2026,
-	   gmscpu.py): the Falcon's is the DSP's work, not yet) */
-#ifdef EPLAY_FB
-	return 1;
-#else
-	return cmp3_can();	/* (a 68060 or a 68080, as an MP3 on the CPU: not a 68040) */
-#endif
+	/* (not known yet on a 68030 or a 68040: offered, and timed at its
+	   first file) */
+	return syn_cpu < 0 || syn_cpu >= SYN_LEAST;
+}
+
+int mp_on_synth(void)
+{
+	return syn_on;
+}
+
+int mp_synth_known(void)
+{
+	return syn_cpu >= 0;
 }
 
 /* bytes as MIDI messages to the synth: a system exclusive message from

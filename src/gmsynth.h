@@ -74,6 +74,9 @@ void gms_render(GMSYN *s, short *out, int n);
 /* new notes in the first n voices alone (1 to voices); those past them
    ended, their gain ramped to 0 by the next update */
 void gms_cap(GMSYN *s, int n);
+/* (the CPU's speed: the voice loop run n samples with v voices on a wave
+   of silence, for the caller to time) */
+long gms_bench(int v, int n);
 /* every note silent at once, the controllers as GM's reset leaves them */
 void gms_reset(GMSYN *s);
 

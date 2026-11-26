@@ -43,7 +43,10 @@ const char *mp_log(void);	/* the log's line at the end: bytes sent, the longest 
 #ifndef EPLAY_ST
 /* the internal synth (decided 26 Nov 2026): SYNTH.DAT's set, made into
    16-bit stereo on the CPU */
-int mp_synth_can(void);		/* this edition has it */
+int mp_synth_can(void);		/* this machine has it (or, a 68030's, not timed yet) */
+int mp_synth_known(void);	/* its speed timed (a 68030's, at its first file) */
+/* 1 once mp_open plays on the synth (a 68030 too slow for it goes to the port) */
+int mp_on_synth(void);
 void mp_synth_rate(long rate);	/* the rate it makes its sound at (before the first mp_render) */
 /* n frames of 16-bit stereo, the host's order: fewer at the file's end
    (its notes sounded out) */
