@@ -3194,3 +3194,18 @@ The words (agreed 26 Nov 2026): the bar's info
 "MIDI  type 1  2 tracks" and output "MIDI port"; the list's title from the first track's name;
 "This machine has no MIDI port."; "MIDI files need MIDI.OVL beside EPlay."; the help's paragraph
 (docs/GUIDE.md, "MIDI files"). It goes out with #100 in one release (fewer releases, 26 Nov 2026).
+
+## #100: the 68060 and 68080 (measured 26 Nov 2026)
+
+On Hatari's 68060 at 32 MHz (a guide only: its 68060 isn't cycle-exact), a 44.1 kHz 128 kbit/s MP3:
+- **With an FPU** (a CT60; the Vampire V4's 68080 too): MP3FPU.OVL (minimp3), 46% of the time.
+- **Without one** (a 68LC060): MP3INT.OVL (libmad, FPM_68060's three 16-bit products a multiply),
+  71%: III_imdct_l 15%, dct32 14.5%, synth_full 10%, III_aliasreduce 6%, III_decode 5%, fastsdct 4%
+  of the whole run (TOS's idle 34%); EPlay's own resampling and copying 5%.
+- `-O3 -funroll-loops` for libmad: 2,185 to 2,140 ms of 3,060 (2%) for 8 KB more: not taken.
+- VGM made on the CPU: 12 to 20%.
+
+Nothing simple is left: what remains is libmad's transforms rewritten for the 68060 (some 15 to
+25%, with the accuracy kept to ISO 11172-4 to be shown again), or a 68080 build of MP3INT.OVL with
+its 64-bit `muls.l` (the 68060 traps on it), which can only be measured on a Vampire. Both are the
+owner's to weigh; neither is in the release that carries MIDI.OVL.
