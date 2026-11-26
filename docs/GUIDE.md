@@ -21,7 +21,7 @@ after another, and the music goes on while you work in other dialogs and menus.
 - **This guide:** copy `eplay.hyp` and `eplay.ref` into `C:\GUIDES\`, or beside `eplay.prg`.
   **Help** in EPlay opens it in EHypView or ST-Guide.
 - **Play something:** start EPlay and choose **File > Open...** (^O), or drop MP3, WAV or AIFF
-  (or VGM and VGZ) files, a folder or an `.M3U` playlist on EPlay's window or on `eplay.prg`. What you give goes
+  (or VGM, VGZ and MIDI) files, a folder or an `.M3U` playlist on EPlay's window or on `eplay.prg`. What you give goes
   into the list, and the first file plays.
 
 **Needs:** a Falcon030 with TOS 4.0x or EmuTOS, or a TT, and a screen 640 pixels wide or more.
@@ -82,6 +82,16 @@ own pitch.
   AIFF on the TT or the STE that the CPU can't keep up with, and an MP3 on the Falcon's DSP). While one plays, the
   keyboard's click and the bell are off. Music for another chip (an arcade board's) says so and isn't played
   yet.
+- **MIDI files.** A `.MID`, `.MIDI`, `.KAR` or `.SMF` file (a Standard MIDI File, type 0, 1 or 2)
+  plays out of the computer's MIDI port, to the synth or sound module you have connected there:
+  EPlay makes no sound of its own for it. It plays on the ST, STE, Mega STE, TT, Falcon and
+  FireBee; elsewhere EPlay says "This machine has no MIDI port." Each file starts with a General
+  MIDI reset, and Stop, Pause and a file's end turn every note off on all 16 channels, so nothing
+  of one song sounds on into the next; after a Pause or a move on the position bar, each channel
+  is given the program and controllers the file has at that place. The volume is sent as the
+  General MIDI master volume. The list shows the file's first track's name. EPlay sends nothing
+  to the MIDI port while no MIDI file plays, so another program using the port is left alone.
+  MIDI files need `midi.ovl` beside `eplay.prg` (it is in both packages).
 
 ## Windows and menus
 
