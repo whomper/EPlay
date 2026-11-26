@@ -90,7 +90,7 @@ int cmp3_load(char *err, int n)
 	}
 	ov = o;
 	o->init(st);
-	elog("%s %s: %s, %ld bytes", name, o->version, o->what, taken);
+	elog("%s %s: %s, %ld bytes at $%lX", name, o->version, o->what, taken, (unsigned long)o);
 	return 1;
 }
 
