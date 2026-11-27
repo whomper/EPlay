@@ -575,7 +575,10 @@ static void tick_pcm(void)
 		if (hb < fmt.bytes) {
 			if (src_done)
 				t_end = 1;
-			else if (snd_written() > 0) {	/* (not the start's, before any) */
+			else if (snd_written() > 0 && snd_written() - snd_played() < pcm_quiet_lead) {
+				/* (the ring's own lead short too: the queue merely empty
+				   while the ring still holds some isn't dry; nor the
+				   start's, before any) */
 				pcm_dry = 1;
 				if (!snd_underruns++)
 					snd_first_under = snd_played();
