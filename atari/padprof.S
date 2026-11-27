@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against this commit's build/atari/eplay.map (the profiling build at the shipped layout): do not edit.
-| 393 pads, 65984 bytes, each section at its place there, mod the 68030's
+| 393 pads, 65912 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -10,7 +10,7 @@ ep_pad_0:
 	.section ".text.0hot.12tick_quiet!","ax"
 	.globl ep_pad_1
 ep_pad_1:
-	.space 208
+	.space 192
 	.section ".text.0hot.40dspmp3_tick_status!","ax"
 	.globl ep_pad_2
 ep_pad_2:
@@ -638,7 +638,7 @@ ep_pad_157:
 	.section ".text.play_keep_up!","ax"
 	.globl ep_pad_158
 ep_pad_158:
-	.space 170
+	.space 134
 	.section ".text.play_log_stop.part.0!","ax"
 	.globl ep_pad_159
 ep_pad_159:
@@ -987,7 +987,7 @@ ep_pad_244:
 	.globl ep_pad_245
 ep_pad_245:
 	.space 168
-	.section ".rodata.CSWTCH.1502!","a"
+	.section ".rodata.CSWTCH.1505!","a"
 	.globl ep_pad_246
 ep_pad_246:
 	.space 56
@@ -1034,7 +1034,7 @@ ep_pad_256:
 	.section ".rodata.m3u_add.str1.1!","a"
 	.globl ep_pad_257
 ep_pad_257:
-	.space 105
+	.space 85
 	.section ".rodata.m3u_rel.str1.1!","a"
 	.globl ep_pad_258
 ep_pad_258:

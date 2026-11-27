@@ -593,10 +593,14 @@ static void tick_pcm(void)
 		if (hb < fmt.bytes) {
 			if (src_done)
 				t_end = 1;
-			else if (snd_written() > 0 && snd_written() - snd_played() < pcm_quiet_lead) {
+			else if (snd_played() > 0 && snd_written() - snd_played() < pcm_quiet_lead &&
+				 (net || data_left > 0)) {
 				/* (the ring's own lead short too: the queue merely empty
 				   while the ring still holds some isn't dry; nor the
-				   start's, before any) */
+				   start's, before the DMA has played any (a 68060's MP3
+				   counted one at 0 ms); nor a file read to its end, whose
+				   last turn says so after the tick has played what it
+				   made: the CPU's MP3s counted an underrun at each end) */
 				pcm_dry = 1;
 				if (!snd_underruns++)
 					snd_first_under = snd_played();
@@ -2946,8 +2950,10 @@ const char *play_keep_up(void)
 	if (cmp && !cmp_vgm && cmp_hz > 0) {
 #endif
 		long snd_ms = (long)(cmp_snd * 1000UL / (unsigned long)cmp_hz);
+		char u[32];
+		snprintf(u, sizeof(u), snd_underruns ? "the first at %ld ms" : "no underrun", f_ms(snd_first_under));
 		snprintf(b, sizeof(b), "%s; the %s decoding and resampling %ld%% of the time (%lu ms for %ld ms of "
-			 "sound, %s)", snd_underruns ? "underruns" : "no underrun", cmp3_cpu(),
+			 "sound, %s)", u, cmp3_cpu(),
 			 snd_ms > 0 ? (long)(cmp_busy_ms * 100UL / (unsigned long)snd_ms) : 0L, cmp_busy_ms, snd_ms,
 			 cmp3_what());
 		return b;
