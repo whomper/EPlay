@@ -526,6 +526,15 @@ static void page_playing(SETTINGS *s, short x, short y, void *user)
 			set_radio_enable(s, r, (short)i, 0);
 }
 
+void spotify_signin(const char *gate);	/* (main.c's) */
+
+static void sign_in(SETTINGS *s, void *user)
+{
+	(void)s;
+	(void)user;
+	spotify_signin(d_gate);
+}
+
 static void page_stations(SETTINGS *s, short x, short y, void *user)
 {
 	(void)y;
@@ -535,6 +544,10 @@ static void page_stations(SETTINGS *s, short x, short y, void *user)
 	set_long(s, (short)(x + 10), set_y(s, 1), d_gate, 30, (short)(sizeof(d_gate) - 1), 0);
 	set_text(s, x, set_y(s, 2), "Port:");
 	f_port = set_field(s, (short)(x + 10), set_y(s, 2), d_port, 5, '9');
+	/* (Spotify plays through the Gateway's player: signed in once, here,
+	   decided 27 Nov 2026) */
+	set_text(s, x, set_y(s, 4), "Spotify:");
+	set_button(s, (short)(x + 10), set_y(s, 4), 12, "Sign in...", sign_in, 0);
 }
 
 static void page_files(SETTINGS *s, short x, short y, void *user)

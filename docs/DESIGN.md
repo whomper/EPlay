@@ -3479,7 +3479,7 @@ choice, never by itself; each track's album art, title and artist shown while it
   EPlay's Next and Previous inside the line, the position bar, and Play after Pause (the stream
   closed at Pause, asked again where it was). The stream ends at the item's end; one at a time (a
   request waits 3 s for the last to close). `/tracks` lists an item for Expand; `/login` says
-  signed in, or gives Spotify's pairing link and code (`device_auth`: typed on any phone or
+  signed in, or gives Spotify's pairing link and code (Settings > Stations, Spotify: Sign in...) (`device_auth`: typed on any phone or
   computer, once; the credentials stay with the player, never in EPLAY.INF). It needs Spotify
   Premium, and it is unofficial: Spotify may change its protocol, and the Gateway's player is
   updated then. Tested against a stand-in of the player's API (radio/test_spotgate.py); the real
@@ -3493,6 +3493,6 @@ choice, never by itself; each track's album art, title and artist shown while it
   Gateway in Settings, spotgate with the stand-in player: both tracks shown as heard, no gap, the
   line's end, no connection again).
 - **Still to do before it goes out**: a rig case for Expand and for Next inside a line; the help
-  file's page; the owner's words for the sign-in (Options > Spotify sign-in..., an alert for now);
+  file's page;
   go-librespot on the Gateway (the hub and the Gateway's session, its package the owner's call,
   which he made with this plan).

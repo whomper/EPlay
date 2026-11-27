@@ -54,7 +54,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL, C_LOG, C_EXPAND, C_SPOTIFY };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL, C_LOG, C_EXPAND };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -98,7 +98,6 @@ static const MBAR_ITEM m_options[] = {
 	{ "-", 0, 0 },
 	{ "Direct connection", 0, C_DIRECT },	/* (how a station is reached: Erez, 8 Nov 2026) */
 	{ "Through the Gateway", 0, C_GATEWAY },
-	{ "Spotify sign-in...", 0, C_SPOTIFY },	/* (the Gateway's player, once: 27 Nov 2026) */
 	{ "-", 0, 0 },
 	{ "Write a log", 0, C_LOG },	/* (the guidelines' 6.5: no log without its switch; last, EFTP's words) */
 	{ 0, 0, 0 }
@@ -1667,20 +1666,21 @@ static char *utf8_atari(const char *s, char *out, int n)
 	return out;
 }
 
-/* Options > Spotify sign-in... : the Gateway's Spotify player signed in, or
-   its pairing code (spotify.com/pair on any device, once; the player keeps
-   its credentials on the Gateway, never in EPLAY.INF) */
-static void spotify_signin(void)
+/* Settings > Stations, Spotify's Sign in... (Erez, 27 Nov 2026: in
+   Settings): the Gateway's Spotify player signed in, or its pairing code
+   (spotify.com/pair on any device, once; the player keeps its credentials on
+   the Gateway, never in EPLAY.INF). gate: the address as the dialog has it */
+void spotify_signin(const char *gate)
 {
 	char url[200], why[160], t[400], *f[3];
 	unsigned char *d = 0;
 	long len = 0;
 	int k = 0, j;
-	if (!settings_gate()[0]) {
-		alert(1, "[1][Spotify plays through the AERA|Gateway: give its address in|Settings.][ OK ]");
+	if (!gate[0]) {
+		alert(1, "[1][Spotify plays through the AERA|Gateway: give its address above.][ OK ]");
 		return;
 	}
-	snprintf(url, sizeof(url), "http://%s:%ld/login", settings_gate(), settings_spotport());
+	snprintf(url, sizeof(url), "http://%s:%ld/login", gate, settings_spotport());
 	conn_stop = 0;
 	busy_bee(1);
 	j = sart_fetch(url, "text/plain", "", 4096, &d, &len, why, sizeof(why));
@@ -1869,9 +1869,6 @@ static void command(int c)
 		break;
 	case C_EXPAND:
 		expand(list_sel);
-		break;
-	case C_SPOTIFY:
-		spotify_signin();
 		break;
 	case C_SELALL:
 		list_select_all();
