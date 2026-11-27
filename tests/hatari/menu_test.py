@@ -147,7 +147,10 @@ def session(work, spec, case):
         under = int(end[-1].split()[2]) if end and end[-1].split()[2].isdigit() else -1
         # (a real disk's pace: the queue may run dry once while the menu is
         # held, as GEM reads the file; never again once it is closed)
-        if under < 0 or under > (1 if DISK else 0):
+        # (aiff24: the point is that the reads keep the lead, so none even
+        # at a disk's pace: the code before 64b897d ran dry there, a 4 s
+        # menu at DISKKBS=481, its least lead 61 ms)
+        if under < 0 or under > (1 if DISK and case != "aiff24" else 0):
             fails.append("%s: %s (the menu held %d s%s)" % (case, end[-1] if end else "no end", HOLD,
                                                             ", the disk at %d KB/s" % DISK if DISK else ""))
         if took > LONG + 15:
