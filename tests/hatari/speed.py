@@ -277,7 +277,12 @@ def session(work, spec, kind):
         else:
             r.start("C:\\LAUNCH.PRG", ready="EPLAY playing")
             r.results[-1] = ("started, %s playing" % what, "AESSTART", speed.START)
-        r.act("%s playing, 5 s" % what, speed.KEY, lambda: time.sleep(5))
+        # (the VGM, 51 s: the rig's Hatari runs ahead of these waits, and a
+        # build that keeps the VGM's clock (1.60) reached its end during "5 s
+        # more", so that Pause again timed a Play on a finished file: the
+        # waits shorter there, the rows' names kept)
+        lead, more = (2, 1) if kind == "vgm" else (5, 5)
+        r.act("%s playing, 5 s" % what, speed.KEY, lambda: time.sleep(lead))
         r.act("About box opened (playing)", speed.DIALOG, lambda: (r.click(*DESK), time.sleep(1),
                                                                    r.click(*ABOUT)))
         r.act("About box closed", speed.WINDOW, lambda: r.key("Return"))
@@ -296,7 +301,7 @@ def session(work, spec, kind):
         r.act("Play: pressed (drawn pressed)", speed.KEY, lambda: r.press(*PLAY))
         r.held_shown(PLAY[0], PLAY[1], "Play")
         r.act("Play: let go (goes on)", speed.KEY, r.let_go)
-        r.act("%s playing, 5 s more" % what, speed.KEY, lambda: time.sleep(5))
+        r.act("%s playing, 5 s more" % what, speed.KEY, lambda: time.sleep(more))
         # the position bar: the time follows the press, the music goes there
         # on the release (play_seek: the file opened again at its place)
         r.act("Position bar: pressed at its middle", speed.KEY, lambda: r.press(*POS_MID))
