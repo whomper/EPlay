@@ -3295,5 +3295,11 @@ int play_wait_ms(void)
 	   menu of the menu bar is down: a fault reported 27 Nov 2026. Its
 	   first 2 s to 4 s ahead, as before: the start's turns no longer,
 	   an STE's start with a list 1,950 to 1,970 ms otherwise) */
+#ifdef EPLAY_ST
+	/* (the STE's 68000: 4 s ahead, as 1.60's; reading on to 12 s cost
+	   its start with a list 150 ms and its keys while it read) */
+	return ahead >= 4 || q_size - (q_w - q_r) < PIECE ? 100 : 0;
+#else
 	return ahead >= (net || play_ms() < 2000 ? 4 : 12) || q_size - (q_w - q_r) < PIECE ? 100 : 0;
+#endif
 }
