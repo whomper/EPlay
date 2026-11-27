@@ -24,6 +24,7 @@ long settings_crashat(void);	/* CRASHAT=ms: the rigs' (EPlay ends there, playing
 int settings_log(void);
 void settings_set_log(int on);	/* STALLAT=ms: the rigs' (an MP3 on the DSP taken as stalled there, once) */	/* VGMCPU=1: the rigs' (a VGM's chips on a 68060's CPU, the DSP there or not) */
 int settings_qlate(void);
+long settings_diskkbs(void);	/* DISKKBS=, the rigs': a file read at most this many KB a second (0: as it comes) */
 /* a VGM on the DSP goes on at a lower rate when its ring's least lead is
    under 256 words, or VGMLOW= (the play rig's; never written) */
 int settings_vgmlow(void);

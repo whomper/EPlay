@@ -42,6 +42,7 @@ static int vgmcpu;			/* VGMCPU=: the rigs' (read, never written). 1: on a 68060,
 static int mp3cpu;			/* MP3CPU=: the rigs' (read, never written). 1: on a 68060 with its FPU, MP3 on the CPU (MP3FPU.OVL) though the DSP is there: Hatari's DSP can't be taken away under EmuTOS */
 static int dma8low = 1;		/* DMA8LOW=: the rigs' (read, never written): the TT's or STE's underruns at which a WAV goes on at a lower rate (0: at once) */
 static int vgmlow = 256;		/* VGMLOW=: the rigs' (read, never written): the DSP's ring's least lead (words) under which a VGM goes on at a lower rate */
+static long diskkbs;			/* DISKKBS=: the rigs' (read, never written). KB/s: a file read no faster than a real disk (Hatari's is at once) */
 static int qlate = 1;			/* QLATE=: the rigs' (read, never written). 1: Normal at the first granule late past the start (3 let a heavy file crackle six times first: Erez, 5 Nov 2026) */
 static int shuffle, shuffle_saved, repeat, repeat_saved;	/* the Play menu's, saved at the end */
 static const char *const rnames[3] = { "OFF", "ALL", "ONE" };
@@ -202,6 +203,8 @@ void settings_load(void)
 	}
 	if (inf_get(inf, inf_n, "QLATE", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		qlate = atoi(v);
+	if (inf_get(inf, inf_n, "DISKKBS", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
+		diskkbs = atoi(v);
 	if (inf_get(inf, inf_n, "VGMLOW", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
 		vgmlow = atoi(v);
 	if (inf_get(inf, inf_n, "DMA8LOW", v, sizeof(v)) && v[0] >= '0' && v[0] <= '9')
@@ -266,6 +269,11 @@ long settings_stallat(void)
 long settings_crashat(void)
 {
 	return crashat;
+}
+
+long settings_diskkbs(void)
+{
+	return diskkbs;
 }
 
 int settings_qlate(void)

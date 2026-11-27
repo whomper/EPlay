@@ -8,6 +8,7 @@ come: what the sound needs must not wait on them, and once the menu is
 closed the music goes on as before. The cases:
 
   wav    a WAV (16-bit stereo, 44.1 kHz)
+  mp3    an MP3 (320 kbit/s, 44.1 kHz stereo) on the DSP
   mid    a MIDI file on the internal synth (MIDI=SYNTH); a machine that
          sends it to the MIDI port (a stock Falcon: too slow for the
          synth) is said so, and the case passes over it
@@ -22,7 +23,11 @@ on Falcon-060 is no evidence: Hatari's 68060 (32 MHz; a CT60 runs 66 to
 Each plays 30 s; 4 s in, the View menu is opened and held 8 s, then
 closed. Passes when EPlay's own count (the console's "EPLAY ended"
 line) has no underrun: the sound went on all the while the menu was
-down, and after.
+down, and after. MENU_DISKKBS=250 reads the file at a real disk's pace
+(EPLAY.INF's DISKKBS=; Hatari's disk answers at once): GEM reads it, so
+the queue may run dry once while the menu is held (silence, not the
+ring's old sound round again, since 27 Nov 2026), and the music goes on
+a second after it is closed; one underrun then, no more.
 Screenshots in WORK/CASE/shots. Exits 1 when a case failed."""
 import os
 import shutil
@@ -40,9 +45,10 @@ import speed  # noqa: E402  (EPlay's Rig)
 import midi_test  # noqa: E402  (its MIDI file writer)
 import play_test  # noqa: E402  (its VGM file writer)
 
-CASES = ("wav", "mid", "vgm")
+CASES = ("wav", "mp3", "mid", "vgm")
 VIEW_X = 190            # the View menu's title (speed.py's VIEW)
 LONG = 30               # seconds of music
+DISK = int(os.environ.get("MENU_DISKKBS", "0"))  # KB/s: the file read at a real disk's pace (EPLAY.INF's DISKKBS=)
 HOLD = int(os.environ.get("MENU_HOLD", "8"))    # seconds the menu is held (0: none, the control)
 
 
@@ -89,7 +95,7 @@ def session(work, spec, case):
             r.put(os.path.join(os.path.dirname(os.environ.get("EPLAY_MENU_PRG") or os.path.join(TOP, "binary", "x")), f))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
         # (an INF as the other rigs have one: none is a first run)
-        r.write("eplay.inf", "MIDI=SYNTH\r\nLOG=1\r\n")
+        r.write("eplay.inf", "MIDI=SYNTH\r\nLOG=1\r\n" + ("DISKKBS=%d\r\n" % DISK if DISK else ""))
         if case == "mid":
             with open(os.path.join(r.hd, "SONG.MID"), "wb") as f:
                 f.write(chords(LONG))
@@ -97,6 +103,13 @@ def session(work, spec, case):
         elif case == "vgm":
             play_test.make_vgm(os.path.join(r.hd, "MD.VGM"), LONG, False, md=True)
             r.write("TAIL.TXT", "C:\\MD.VGM\n")
+        elif case == "mp3":
+            src = os.path.join(r.work, "a.wav")
+            subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(LONG), "sine", "440",
+                            "synth", str(LONG), "pinknoise", "mix", "gain", "-9"], check=True)
+            subprocess.run(["lame", "--quiet", "-t", "--noreplaygain", "-b", "320", src, os.path.join(r.hd, "A.MP3")],
+                           check=True)
+            r.write("TAIL.TXT", "C:\\A.MP3\n")
         else:
             subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", os.path.join(r.hd, "A.WAV"), "synth",
                             str(LONG), "sine", "440", "gain", "-6"], check=True)
@@ -126,8 +139,12 @@ def session(work, spec, case):
         if case == "vgm" and "nodsp" not in spec:
             print("%-4s on %s: not tried: the chips on the DSP there (%s)" % (case, r.describe(), playing), flush=True)
             return []
-        if not end or " 0 underruns" not in end[-1]:
-            fails.append("%s: %s (the menu held %d s)" % (case, end[-1] if end else "no end", HOLD))
+        under = int(end[-1].split()[2]) if end and end[-1].split()[2].isdigit() else -1
+        # (a real disk's pace: the queue may run dry once while the menu is
+        # held, as GEM reads the file; never again once it is closed)
+        if under < 0 or under > (1 if DISK else 0):
+            fails.append("%s: %s (the menu held %d s%s)" % (case, end[-1] if end else "no end", HOLD,
+                                                            ", the disk at %d KB/s" % DISK if DISK else ""))
         if took > LONG + 15:
             fails.append("%s: ended %.1f s after the start (%d s of music)" % (case, took, LONG))
         for d, _, fs in os.walk(r.hd):

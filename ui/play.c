@@ -520,18 +520,67 @@ static void adv(long n)
 /* (no division or modulo here: the tick runs a thousand times a second) */
 static int raw8;		/* the STE's way: snd_put8_raw (set at the play's start) */
 
+/* the queue run dry (the disk, or a station, held up: GEM's turns read
+   them, and the AES holds those while a menu of the menu bar is down):
+   silence a little ahead of the DMA, not its ring's old sound played
+   round again (a fault reported 27 Nov 2026: a WAV through the FDI, the
+   sound stuck while a menu was held, and broken up after it); and the
+   music again only once a second of it is in the queue (pcm_resume
+   bytes), so that it doesn't go straight back to running dry. Each such
+   stretch counts as an underrun; pcm_sil is the silence's frames, out of
+   the position (play_ms) */
+static volatile char pcm_dry;
+static volatile long pcm_sil;
+static long pcm_quiet_lead, pcm_quiet_n, pcm_resume;	/* (set at the start: no division here) */
+
+TICK_CODE("12tick_quiet")
+static void tick_quiet(void)
+{
+	long room, w0, k;
+	if (snd_written() - snd_played() >= pcm_quiet_lead)
+		return;
+	room = snd_room();
+	if (room > pcm_quiet_n)
+		room = pcm_quiet_n;
+	w0 = snd_written();
+	while (room > 0) {
+		short *p = snd_ptr(&k);
+		long i;
+		if (k > room)
+			k = room;
+		for (i = 0; i < k; i++, p += SND_STEP)
+			*(long *)(void *)p = 0;
+		snd_wrote(k);
+		room -= k;
+	}
+	pcm_sil += snd_written() - w0;
+}
+
 TICK_CODE("12tick_pcm")
 static void tick_pcm(void)
 {
 	/* (a tick short: GEM goes on between; 4 times what plays. The XBIOS's
 	   sound alone: feedfb.c's turn calls the tick until the room is filled) */
 	long room = snd_room(), cap = 1024;
+	if (pcm_dry) {
+		if (q_w - q_r < pcm_resume && !src_done) {
+			tick_quiet();
+			return;
+		}
+		pcm_dry = 0;		/* (a second of it there, or all of it: on) */
+	}
 	while (room > 0 && cap > 0) {
 		long hb = q_w - q_r, tail = q_size - q_roff, k, kb;
 		short *p;
 		if (hb < fmt.bytes) {
 			if (src_done)
 				t_end = 1;
+			else if (snd_written() > 0) {	/* (not the start's, before any) */
+				pcm_dry = 1;
+				if (!snd_underruns++)
+					snd_first_under = snd_played();
+				tick_quiet();
+			}
 			return;
 		}
 		if (chain_q >= 0 && q_r >= chain_q)
@@ -1091,6 +1140,8 @@ static int take_queue(int unit)
    the time the reads took (the 200 Hz clock's, summed), the queue's
    least lead once a second has played; -1 before */
 static long rd_bytes, rd_ms, rd_forced, q_least = -1;
+static unsigned long rd_t0;	/* (DISKKBS=: the reads' start) */
+static long disk_kbs;		/* DISKKBS=, the rigs': the file read at most this many KB a second (0: as it comes) */
 
 /* the file read into the queue, a piece at a time, for about ms */
 /* the queue's lead: ms of music it holds, at the rate it is played (a
@@ -1394,6 +1445,15 @@ static void fill(unsigned long t0, int ms, int low)
 			}
 		} else {
 			unsigned long a = ms_now();
+			if (disk_kbs > 0) {
+				/* (the rigs' DISKKBS=: a real disk's pace, Hatari's being
+				   at once; 64 KB first) */
+				long may = 65536L + (long)(a - rd_t0) * disk_kbs - rd_bytes;
+				if (may < 4096)
+					break;
+				if (n > may)
+					n = may;
+			}
 			r = Fread(fh, n, q + at);
 			rd_ms += (long)(ms_now() - a);
 		}
@@ -2055,9 +2115,18 @@ made_ahead:
 	t_gap = 0;
 	t_gap_at = m_changed_at = -1;
 	rd_bytes = rd_ms = rd_forced = 0;
+	rd_t0 = ms_now();
+	disk_kbs = settings_diskkbs();
 	q_least = -1;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
+	pcm_dry = 0;
+	pcm_sil = 0;
+	pcm_quiet_lead = out_rate / 20;		/* (50 ms of silence ahead of the DMA, 20 ms a time) */
+	pcm_quiet_n = out_rate / 50;
+	/* (a second of the queue's; a tenth for the synth or a VGM's chips on
+	   the CPU, which the tick makes itself 200 ms ahead) */
+	pcm_resume = !kind ? 0 : cmp_mid || cmp_vgm ? 4L * out_rate / 10 : (long)fmt.bytes * (rate > 0 ? rate : out_rate);
 	last_sec = -1;
 	chain_q = chain_frame = -1;
 	chain_cross = chain_asked = chain_heard = 0;
@@ -2568,7 +2637,7 @@ long play_ms(void)
 		f = fr > 1 ? (fr - 1) * s_spf : 0;
 		return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 	}
-	f = snd_played() - pcm_base;
+	f = snd_played() - pcm_base - pcm_sil;
 	return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 }
 
@@ -3041,5 +3110,10 @@ int play_wait_ms(void)
 		return 100;
 	ahead = q_w - q_r;		/* seconds of music, near enough */
 	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
-	return ahead >= 4 || q_size - (q_w - q_r) < PIECE ? 100 : 0;
+	/* (a file read on to 12 s ahead in turns that wait for nothing, a
+	   station's 4: GEM's turns read it, and the AES holds them while a
+	   menu of the menu bar is down; a WAV kept some 2 s ahead on a DFB1
+	   from its SD card, and a menu held that long stuttered it: a fault
+	   reported 27 Nov 2026) */
+	return ahead >= (net ? 4 : 12) || q_size - (q_w - q_r) < PIECE ? 100 : 0;
 }
