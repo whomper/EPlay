@@ -507,8 +507,9 @@ static void page_playing(SETTINGS *s, short x, short y, void *user)
 			set_radio_enable(s, r, (short)i, 0);
 	set_text(s, x, set_y(s, 3), "ReplayGain:");
 	set_radio(s, x, set_y(s, 4), 8, rg_labels, NRG, &d_rg);
+	/* (its two beside it, on its row: under it they met Cancel and OK) */
 	set_text(s, x, set_y(s, 6), "MIDI files:");
-	r = set_radio(s, x, set_y(s, 7), 11, mid_labels, NMIDI, &d_mid);
+	r = set_radio(s, (short)(x + 12), set_y(s, 6), 11, mid_labels, NMIDI, &d_mid);
 	for (i = 0; i < NMIDI; i++)
 		if (r && !has_midi(i))
 			set_radio_enable(s, r, (short)i, 0);
