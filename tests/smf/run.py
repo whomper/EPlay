@@ -98,7 +98,8 @@ def reference(data):
                 evs.append((tick, ti, seq, "m", bytes([st]) + bytes(x & 0x7f for x in d[i:i + n])))
                 i += n
             elif st in (0xf0, 0xf7):
-                rs = 0
+                # (the running status kept across system and meta events, as
+                # lenient players do: many files run on after them)
                 n = rv()
                 if n is None or n > len(d) - i:
                     break
@@ -106,7 +107,6 @@ def reference(data):
                 evs.append((tick, ti, seq, "x", (b"\xf0" + body) if st == 0xf0 else body))
                 i += n
             elif st == 0xff:
-                rs = 0
                 if i >= len(d):
                     break
                 t = d[i]
@@ -118,8 +118,7 @@ def reference(data):
                 i += n
                 if t == 0x2f:
                     break
-            else:
-                break
+            # (F1 to FE: no MIDI file event; passed over, the track read on)
             seq += 1
         ends.append((tick, ti))
     if typ == 2:
@@ -140,7 +139,10 @@ def reference(data):
     else:
         us_tick = lambda tempo_: Fraction(tempo_, div)
     cur_tick, cur_us, tp = 0, Fraction(0), 500000
-    recs, title, got_name, copy = [], "", False, ""
+    recs, title, got_name, got_text, copy = [], "", False, False, ""
+    # (track 0's name the song's unless a type 1's track 0 has notes in it:
+    # then it is an instrument's, and the list shows the file's name)
+    name_ok = typ != 1 or not any(e[1] == 0 and e[3] == "m" for e in evs)
 
     def at(tick):
         return cur_us + (tick - cur_tick) * us_tick(tp)
@@ -149,7 +151,7 @@ def reference(data):
         cur_tick, cur_us = tick, us
         if kind == "meta81" and len(payload) >= 3 and div > 0:
             tp = payload[0] << 16 | payload[1] << 8 | payload[2]
-        elif kind == "meta3" and ti == 0 and not got_name:
+        elif kind == "meta3" and ti == 0 and name_ok and not got_name:
             title = "".join(chr(c) for c in payload if 32 <= c < 127).rstrip()
             got_name = bool(title)
         elif kind == "meta2" and not copy:
@@ -239,6 +241,21 @@ cases.append(("long.mid", smf(0, 480, [track(ev)])))
 tr = track([(0, b"\x90\x3c\x40"), (100, b"\x80\x3c\x40"), (100, b"\x90\x3e\x40"), (100, b"\x80\x3e\x40"), (0, EOT)])
 cases.append(("chunks.mid", smf(1, 96, [b"XFIH\x00\x00\x00\x03abc", tr], ntrk=1)))
 cases.append(("cut.mid", smf(0, 96, [tr])[:-7]))
+# (a fault a tester reported, 27 Nov 2026: files silent or cut short where
+# they run on after a meta or system event, and a drum track's name shown
+# as the song's) running status after a meta event and after a system one;
+# a stray F4 byte passed over; a type 1 whose track 0 has notes: no title
+cases.append(("rsmeta.mid", smf(0, 96, [track([
+    (0, b"\x90\x3c\x40"), (10, meta(1, b"verse")), (10, b"\x3c\x00"), (0, b"\x3e\x40"),
+    (10, b"\xf0\x03\x7e\x01\xf7"), (10, b"\x3e\x00"), (0, EOT)])])))
+cases.append(("fbyte.mid", smf(0, 96, [track([
+    (0, b"\x90\x3c\x40"), (10, b"\xf4"), (10, b"\x80\x3c\x40"), (0, b"\x90\x40\x40"), (96, b"\x80\x40\x40"), (0, EOT)])])))
+cases.append(("t0notes.mid", smf(1, 96, [
+    track([(0, meta(3, b"Drums")), (0, b"\x99\x24\x64"), (96, b"\x89\x24\x00"), (0, EOT)]),
+    track([(0, meta(3, b"Bass")), (0, b"\x90\x30\x40"), (96, b"\x80\x30\x40"), (0, EOT)])])))
+cases.append(("t0text.mid", smf(1, 96, [
+    track([(0, meta(1, b"Created by a sequencer")), (0, meta(3, b"The Song")), (0, tempo(500000)), (0, EOT)]),
+    track([(0, meta(1, b"lead")), (0, b"\x90\x30\x40"), (96, b"\x80\x30\x40"), (0, EOT)])])))
 # data with no status to run on: the track stops there
 cases.append(("nostatus.mid", smf(0, 96, [track([(0, b"\x3c\x40"), (0, EOT)]), ], ntrk=1)))
 for name, data in cases:

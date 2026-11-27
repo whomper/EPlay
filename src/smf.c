@@ -220,7 +220,10 @@ struct SMF_ST {
 	TRK trk[MAXTRK];
 	CLK c;
 	OUT o;
-	int type, nt, cur, got_name, got_text, ended_;
+	int type, nt, cur, got_name, ended_;
+	int name_ok;		/* (track 0's name the song's: no notes in it, or a type 0 or 2;
+				   no name, no title: the list shows the file's name, not a
+				   text event's words, often a lyric's or a marker's) */
 	unsigned long o_tick, end_ms;
 	SMF_INFO *info;
 	char *err;
@@ -234,6 +237,38 @@ long smf_state_size(void)
 	return (long)sizeof(SMF_ST);
 }
 
+/* 1 when a track holds a channel message (a note or any other): a type 1
+   file's track 0 that does is an instrument's, its name not the song's (a
+   tester's file, 27 Nov 2026: its drums' name shown as the song's) */
+static int has_notes(const unsigned char *s, const unsigned char *end)
+{
+	int rs = 0;
+	while (s < end) {
+		long d = vlq(&s, end), len;
+		int st;
+		if (d < 0 || s >= end)
+			return 0;
+		st = *s;
+		if (st & 0x80)
+			s++;
+		else if (!(rs & 0x80) || rs >= 0xf0)
+			return 0;
+		else
+			st = rs;
+		if (st < 0xf0)
+			return 1;
+		if (st == 0xf0 || st == 0xf7 || st == 0xff) {
+			if (st == 0xff && s < end)
+				s++;
+			len = vlq(&s, end);
+			if (len < 0 || len > end - s)
+				return 0;
+			s += len;
+		}
+	}
+	return 0;
+}
+
 int smf_begin(SMF_ST *r, const unsigned char *b, long n, unsigned char *out, long max, SMF_INFO *info_, char *err_, int errlen_)
 {
 	const unsigned char *p = b, *end = b + n;
@@ -242,7 +277,7 @@ int smf_begin(SMF_ST *r, const unsigned char *b, long n, unsigned char *out, lon
 	r->info = info_;
 	r->err = err_;
 	r->errlen = errlen_;
-	r->nt = r->got_name = r->got_text = r->ended_ = 0;
+	r->nt = r->got_name = r->ended_ = 0;
 	r->end_ms = 0;
 	if (!smf_magic(b, n) || n < 14) {
 		put_s(r->err, r->errlen, "This isn't a MIDI file.");
@@ -308,6 +343,7 @@ int smf_begin(SMF_ST *r, const unsigned char *b, long n, unsigned char *out, lon
 		}
 	r->cur = -1;
 	r->o_tick = 0;
+	r->name_ok = r->type != 1 || !has_notes(r->trk[0].start, r->trk[0].end);
 	if (r->info) {
 		r->info->len_ms = 0;
 		r->info->events = r->info->bytes = 0;
@@ -405,7 +441,10 @@ int smf_more(SMF_ST *r, long most, long *made, unsigned long *made_ms)
 				r->info->channels |= 1 << (st & 15);
 		} else if (st == 0xf0 || st == 0xf7) {
 			long len;
-			t->status = 0;		/* (a system message ends the running status) */
+			/* (the running status kept: the standard ends it here, but
+			   many files run on after a system or meta event, and a
+			   track stopped there, a tester's files silent or cut short,
+			   27 Nov 2026) */
 			len = vlq(&s, t->end);
 			if (len < 0 || len > t->end - s) {
 				t->done = 1;
@@ -430,7 +469,6 @@ int smf_more(SMF_ST *r, long most, long *made, unsigned long *made_ms)
 		} else if (st == 0xff) {
 			int type_ = s < t->end ? *s++ : 0;
 			long len = vlq(&s, t->end);
-			t->status = 0;
 			if (len < 0 || len > t->end - s) {
 				t->done = 1;
 				continue;
@@ -439,20 +477,15 @@ int smf_more(SMF_ST *r, long most, long *made, unsigned long *made_ms)
 				clk_tempo(&r->c, (unsigned long)s[0] << 16 | (unsigned long)s[1] << 8 | s[2]);
 			else if (type_ == 0x2f) {
 				s = t->end;	/* the track's end */
-			} else if (r->info && ti == 0 && type_ == 0x03 && !r->got_name) {
+			} else if (r->info && ti == 0 && r->name_ok && type_ == 0x03 && !r->got_name) {
 				text(r->info->title, sizeof(r->info->title), s, len);
 				r->got_name = r->info->title[0] != 0;
-			} else if (r->info && type_ == 0x01 && !r->got_name && !r->got_text) {
-				text(r->info->title, sizeof(r->info->title), s, len);
-				r->got_text = r->info->title[0] != 0;
 			} else if (r->info && type_ == 0x02 && !r->info->copyright[0])
 				text(r->info->copyright, sizeof(r->info->copyright), s, len);
 			s += len;
-		} else {
-			/* (F1 to FE in a file: not MIDI file events; the track stops) */
-			t->done = 1;
-			continue;
 		}
+		/* (F1 to FE: no MIDI file event; the byte passed over, the track
+		   read on, as lenient players do) */
 		t->p = s;
 		if (s >= t->end) {
 			t->done = 1;
@@ -501,7 +534,7 @@ long smf_render(const unsigned char *b, long n, unsigned char *out, long max, SM
 long smf_length(SMF_ST *r, const unsigned char *b, long n, SMF_INFO *info_, char *err_, int errlen_)
 {
 	unsigned long end_tick = 0, off = 0;
-	int i, ntt = 0, got_name = 0, got_text = 0;
+	int i, ntt = 0, got_name = 0;
 	if (smf_begin(r, b, n, 0, 0, info_, err_, errlen_) < 0)
 		return -1;
 	for (i = 0; i < r->nt; i++) {
@@ -534,14 +567,12 @@ long smf_length(SMF_ST *r, const unsigned char *b, long n, SMF_INFO *info_, char
 					info_->events++;
 				}
 			} else if (st == 0xf0 || st == 0xf7) {
-				rs = 0;
 				len = vlq(&s, end);
 				if (len < 0 || len > end - s)
 					break;
 				s += len;
 			} else if (st == 0xff) {
 				int t = s < end ? *s++ : 0;
-				rs = 0;
 				len = vlq(&s, end);
 				if (len < 0 || len > end - s)
 					break;
@@ -550,19 +581,16 @@ long smf_length(SMF_ST *r, const unsigned char *b, long n, SMF_INFO *info_, char
 						return -2;	/* (more than it keeps: smf_render's count) */
 					r->tt_tick[ntt] = off + tick;
 					r->tt_tempo[ntt++] = (unsigned long)s[0] << 16 | (unsigned long)s[1] << 8 | s[2];
-				} else if (info_ && i == 0 && t == 0x03 && !got_name) {
+				} else if (info_ && i == 0 && r->name_ok && t == 0x03 && !got_name) {
 					text(info_->title, sizeof(info_->title), s, len);
 					got_name = info_->title[0] != 0;
-				} else if (info_ && t == 0x01 && !got_name && !got_text) {
-					text(info_->title, sizeof(info_->title), s, len);
-					got_text = info_->title[0] != 0;
 				} else if (info_ && t == 0x02 && !info_->copyright[0])
 					text(info_->copyright, sizeof(info_->copyright), s, len);
 				s += len;
 				if (t == 0x2f)
 					break;
-			} else
-				break;
+			}
+			/* (F1 to FE: passed over, as the stream does) */
 		}
 		if (r->type == 2)
 			off += tick;	/* (songs one after another) */

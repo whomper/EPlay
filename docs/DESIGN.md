@@ -3195,6 +3195,20 @@ The words (agreed 26 Nov 2026): the bar's info
 "This machine has no MIDI port."; "MIDI files need MIDI.OVL beside EPlay."; the help's paragraph
 (docs/GUIDE.md, "MIDI files"). It goes out with #100 in one release (fewer releases, 26 Nov 2026).
 
+**A tester's FireBee report (27 Nov 2026):**
+- Some files were silent or stopped early. src/smf.c ended a track at the standard's letter: the
+  running status ended at a system or meta event (many files run on after one), and F1 to FE in a
+  track stopped it. Now the running status is kept across them and F1 to FE are passed over, as
+  lenient players do; data with no status at all still ends its track. tests/smf: rsmeta.mid and
+  fbyte.mid.
+- A drum track's name showed as the song's. The title is track 0's Sequence/Track Name only where
+  track 0 is the song's: a type 0 or 2, or a type 1 whose track 0 has no notes. A text event no
+  longer stands in for it (often a lyric or a marker); with no name the list shows the file's
+  name. tests/smf: t0notes.mid, t0text.mid.
+- Output through the port pauses while a window is moved, on the FireBee: there the bytes are sent
+  from GEM's turns (no timer interrupt), which the AES holds while it moves a window. Left as it
+  is: a timer interrupt on the FireBee is what the tester advised against for now (its FPGA).
+
 ## #100: the 68060 and 68080 (measured 26 Nov 2026)
 
 On Hatari's 68060 at 32 MHz (a guide only: its 68060 isn't cycle-exact), a 44.1 kHz 128 kbit/s MP3:
