@@ -81,7 +81,7 @@ static int stream(int off)
 	long prev[2] = { 0, 0 }, lr[2 * GMSD_N], f;
 	double at = 0, per = (getenv("SIMMHZ") ? atof(getenv("SIMMHZ")) * 1e6 : 32000000.0) / (49170.0 * 4);
 	int k, sbad = 0;
-	unsigned long nb, late, skip;
+	unsigned long nb, late, skip, roe, tue;
 	gms_init(&syn, &g, RATE, GMSD_VOICES);
 	gmsd_dsp_reset(&model);
 	m3(0xc0, 0, 0);
@@ -123,8 +123,11 @@ static int stream(int off)
 	nb = (unsigned long)get();
 	late = (unsigned long)get();
 	skip = (unsigned long)get();
-	for (k = 0; k < 13; k++)
-		(void)get();	/* (the receive's place; the first block's first words) */
+	(void)get();		/* (the receive's place) */
+	roe = (unsigned long)get();
+	tue = (unsigned long)get();
+	for (k = 0; k < 12; k++)
+		(void)get();	/* (the first block's first words) */
 	/* the first frame the model's first matches, then all of them */
 	for (f = 0; f + 2L * 256 < nf && first < 0; f += 2) {
 		for (j = 0; j < 2L * 256; j++)
@@ -144,9 +147,9 @@ static int stream(int off)
 				printf("stream (%d off): frame %ld %s: DSP %04lx, model %04lx\n", off, j / 2, j & 1 ? "R" : "L",
 				       first + j < nf ? stx[first + j] : -1L, (sout[j] >> 8) & 0xffff);
 		}
-	printf("stream, %d words off: %lu blocks rendered, %lu late, %lu words passed over; the first frame %ld; "
-	       "%d frames differing\n", off, nb, late, skip, first / 2, sbad);
-	return sbad || late || nb < NSB;
+	printf("stream, %d words off: %lu blocks rendered, %lu late, %lu words passed over, %lu overruns; the first "
+	       "frame %ld; %d frames differing\n", off, nb, late, skip, roe, first / 2, sbad);
+	return sbad || late || roe || nb < NSB;
 }
 
 int main(int argc, char **argv)

@@ -62,20 +62,52 @@ int gmsd_write(GMSYN *s, const unsigned char *pool, const signed char *pts8, uns
 			h[5] = (unsigned short)(gr >> 15);
 			h[6] = (unsigned short)np;
 			/* (the points the block reaches, the loop unrolled; past a
-			   sample's end with no loop, silence) */
-			for (j = 0; j < np; j++, at += 1L << dec) {
-				long i = at;
-				signed char p;
+			   sample's end with no loop, silence; two a word, each
+			   word written once: w is the DMA's ring, in ST RAM, slow
+			   for a 68030 to read back) */
+			{
+				unsigned short *o = w + nw + GMSD_HEAD;
+				const signed char *q = pts8 + first;
+				long i = at, st = 1L << dec, le = v->le, len = looped ? le : v->len, todo = np;
 				if (looped)
-					while (i >= v->le)
+					while (i >= le)
 						i -= span;
-				p = looped || i < v->len ? pts8[first + i] : 0;
-				/* (the DMA's words big-endian: the first point high) */
-				if (j & 1)
-					w[nw + GMSD_HEAD + (j >> 1)] = (unsigned short)((w[nw + GMSD_HEAD + (j >> 1)] & 0xff00U) |
-											 (unsigned char)p);
-				else
-					w[nw + GMSD_HEAD + (j >> 1)] = (unsigned short)((unsigned)(unsigned char)p << 8);
+				if (st == 1 && i + np <= len) {
+					/* (most blocks: a point a step, no loop's end or
+					   sample's in it: the points as they are, a word
+					   at a time where they start on one) */
+					const unsigned char *u = (const unsigned char *)q + i;
+					long nh = np >> 1;
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+					if (!((unsigned long)u & 1)) {	/* (a 68k's words: the first byte high) */
+						const unsigned short *u2 = (const unsigned short *)(const void *)u;
+						for (j = 0; j < nh; j++)
+							*o++ = *u2++;
+					} else
+#endif
+						for (j = 0; j < nh; j++, u += 2)
+							*o++ = (unsigned short)((unsigned)u[0] << 8 | u[1]);
+					if (np & 1)
+						*o = (unsigned short)((unsigned)((const unsigned char *)q)[i + np - 1] << 8);
+					todo = 0;	/* (done: the loop below passed over) */
+				}
+				for (j = 0; j < todo; j += 2) {
+					unsigned hi, lo = 0;
+					/* (the DMA's words big-endian: the first point high) */
+					hi = i < len ? (unsigned char)q[i] : 0;
+					i += st;
+					if (looped)
+						while (i >= le)
+							i -= span;
+					if (j + 1 < np) {
+						lo = i < len ? (unsigned char)q[i] : 0;
+						i += st;
+						if (looped)
+							while (i >= le)
+								i -= span;
+					}
+					*o++ = (unsigned short)(hi << 8 | lo);
+				}
 			}
 			nw += GMSD_HEAD + (int)((np + 1) / 2);
 			nv++;

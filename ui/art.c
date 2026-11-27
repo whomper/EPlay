@@ -106,6 +106,11 @@ static long spin(void)
 	return k;
 }
 
+long art_cpu_turns(void)
+{
+	return cpu_turns;
+}
+
 void art_init(short size)
 {
 	long n;

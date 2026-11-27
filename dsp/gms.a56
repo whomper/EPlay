@@ -87,6 +87,9 @@ V_PR	equ	$1417		; and right
 V_JUNK	equ	$1418
 V_DBG	equ	$1420		; the first block's first 12 words (STOP sends them: the log's)
 V_DBGN	equ	$142c		; (kept: 1)
+V_ROE	equ	$142d		; the receive's overruns (a word lost)
+V_TUE	equ	$142e		; the transmit's underruns
+V_SV	equ	$142f		; (r1, kept by the two)
 
 	org	p:$0
 	jmp	start
@@ -141,9 +144,21 @@ cmd	jsr	rd
 
 rxe	movep	x:SSISR,x:V_JUNK
 	movep	x:RX,x:(r6)+
+	move	r1,x:V_SV		; (counted: r1 linear, m1 $ffff)
+	move	x:V_ROE,r1
+	nop
+	lua	(r1)+,r1
+	move	r1,x:V_ROE
+	move	x:V_SV,r1
 	rti
 tue	movep	x:SSISR,x:V_JUNK
 	movep	y:(r7)+,x:TX
+	move	r1,x:V_SV
+	move	x:V_TUE,r1
+	nop
+	lua	(r1)+,r1
+	move	r1,x:V_TUE
+	move	x:V_SV,r1
 	rti
 
 rd	jclr	#0,x:HSR,rd
@@ -420,6 +435,8 @@ pl2
 	move	a,x:V_PR
 	move	a,x:V_SEG
 	move	a,x:V_DBGN
+	move	a,x:V_ROE
+	move	a,x:V_TUE
 	move	#>-1,x0
 	move	x0,x:V_T
 	move	#RXB,r6
@@ -606,6 +623,10 @@ pstop	ori	#3,mr
 	move	x:V_SKIP,x1
 	jsr	wr
 	move	r6,x1			; (and the receive's place: a word came at all?)
+	jsr	wr
+	move	x:V_ROE,x1		; the receive's overruns, the transmit's underruns
+	jsr	wr
+	move	x:V_TUE,x1
 	jsr	wr
 	move	#V_DBG,r1		; and the first block's first 12 words
 	do	#12,ps1

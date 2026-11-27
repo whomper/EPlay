@@ -78,6 +78,13 @@ static int cmp;
 static int cmp_vgm;		/* (phase 11) a VGM's chips made on the CPU (vp_render), not a file's frames */
 static int cmp_mid;		/* a MIDI file made into sound by the internal synth (mp_render, 26 Nov 2026) */
 static int gsd;			/* a MIDI file on the internal synth on the Falcon's DSP (dsp/gms.a56; 0 in the STE's edition) */
+/* (the 68030's share of the synth on the DSP, its blocks written by the
+   tick, is the limit: a dense piece's 16 voices some 40 % of Hatari's
+   Falcon at 32 MHz with TT RAM, more than a 68030 as sold has. Under
+   art_cpu_turns' GSD_TURNS (Hatari: 1,171 at 16 MHz, 3,627 at 32 MHz) the
+   port, as 1.60 chose it for a 68030 too slow for the synth) */
+#define GSD_TURNS 2000L
+long art_cpu_turns(void);	/* (art.h's: its ui.h not wanted here) */
 /* (the info line's: where the sound is made) */
 #ifdef EPLAY_FB
 #define OUT_HW "FireBee"
@@ -1656,7 +1663,11 @@ int play_open(const char *path, char *err, int n)
 #ifndef EPLAY_ST
 		syn = settings_midi() == MIDI_SYNTH;
 		gsd = 0;
-		if (syn && get_cookie(0x5F435055L) < 40 && !SND_XB && (get_cookie(0x5F534E44L) & 8)) {
+		if (syn && get_cookie(0x5F435055L) < 40 && !SND_XB && (get_cookie(0x5F534E44L) & 8) &&
+		    art_cpu_turns() < GSD_TURNS)
+			elog("the synth on the DSP: the 68030 too slow to write its blocks (%ld turns, %ld wanted); "
+			     "the port", art_cpu_turns(), GSD_TURNS);
+		else if (syn && get_cookie(0x5F435055L) < 40 && !SND_XB && (get_cookie(0x5F534E44L) & 8)) {
 			/* (a 68030 with the Falcon's DSP: the synth there, the
 			   68030 writing its blocks; the DSP in use, on the CPU or
 			   to the port as before) */

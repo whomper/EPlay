@@ -12,6 +12,9 @@
 #include "ui.h"
 
 void art_init(short size);	/* at the start: its ST RAM; size: the art's side */
+/* the CPU's turns of a counting loop in 50 ms, as art_init measured them
+   (play.c: the synth on the DSP's voices on a slower 68030) */
+long art_cpu_turns(void);
 /* the file about to play: its picture made from now on, in art_step's.
    ART_FIRST: an MP3 whose picture the DSP unpacks first (its music waits
    for art_pending to end); ART_NOW: play it now (a WAV or AIFF, a picture

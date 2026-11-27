@@ -77,7 +77,7 @@ static long play(void)
 	return 0;
 }
 
-static long blocks_, late_, skipped_, rxat_, first_[12];
+static long blocks_, late_, skipped_, rxat_, roe_, tue_, first_[12];
 
 static long stop(void)
 {
@@ -86,6 +86,8 @@ static long stop(void)
 	late_ = get();
 	skipped_ = get();
 	rxat_ = get();
+	roe_ = get();
+	tue_ = get();
 	{
 		int i;
 		for (i = 0; i < 12; i++)
@@ -150,8 +152,9 @@ void dspgms_close(long *blocks, long *late, long *skipped)
 	if (skipped)
 		*skipped = skipped_;
 	if (playing_was)
-		elog("the DSP's stream: its receive at $%04lX; the first block as it came: %04lX %04lX %04lX %04lX %04lX "
-		     "%04lX %04lX %04lX %04lX %04lX %04lX %04lX", rxat_ & 0xffff, (first_[0] >> 8) & 0xffff,
+		elog("the DSP's stream: its receive at $%04lX, %ld words lost (overruns), %ld transmit underruns; the first "
+		     "block as it came: %04lX %04lX %04lX %04lX %04lX %04lX %04lX %04lX %04lX %04lX %04lX %04lX",
+		     rxat_ & 0xffff, roe_, tue_, (first_[0] >> 8) & 0xffff,
 		     (first_[1] >> 8) & 0xffff, (first_[2] >> 8) & 0xffff, (first_[3] >> 8) & 0xffff,
 		     (first_[4] >> 8) & 0xffff, (first_[5] >> 8) & 0xffff, (first_[6] >> 8) & 0xffff,
 		     (first_[7] >> 8) & 0xffff, (first_[8] >> 8) & 0xffff, (first_[9] >> 8) & 0xffff,

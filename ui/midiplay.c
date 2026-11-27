@@ -71,6 +71,10 @@ static long fsize;
 static SMF_ST *st, *pst;	/* the file playing's state; the list's (mp_probe) */
 static SMF_INFO inf, minf;	/* (the length's; the making's) */
 #define AHEAD 4000		/* ms of records made ahead of the music */
+/* (the synth on the DSP: 12 s, as a WAV's reads; the tick's blocks from
+   these records alone, a menu held open no longer stopping them, where a
+   68030 as sold hasn't made the file's records whole by then) */
+#define AHEAD_DSP 12000
 static char kept_name[64];
 static long kept_size = -1;
 
@@ -967,7 +971,7 @@ int mp_dsp_prepare(long rate, int voices, char *err, int n)
 void mp_dsp_step(int ms)
 {
 	if (making && syn_rate > 0)
-		make((unsigned long)base_ms + (unsigned long)(syn_smp / (unsigned long)syn_rate) * 1000UL + AHEAD,
+		make((unsigned long)base_ms + (unsigned long)(syn_smp / (unsigned long)syn_rate) * 1000UL + AHEAD_DSP,
 		     ms > 0 ? ms : 1);
 }
 

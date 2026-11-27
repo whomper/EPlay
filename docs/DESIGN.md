@@ -3344,6 +3344,38 @@ own random numbers (a multiply and a divide a voice a block) are some 60 ms of i
 a stock Falcon for 16 voices. The DSP's time, estimated: some 15 instructions a voice a synth
 sample, 16 voices at 24,585 Hz some 37 %, the SSI's 8 words a frame some 10 %.
 
+**As built (1.61):**
+- The DMA plays two stereo tracks a frame into the SSI's receive (4 words a frame), not four:
+  with four, Hatari lost words between the 68030's instructions. A block is 128 frames, 512 words:
+  its first word GMSD_MAGIC ($A55A), the voices' count, then each voice's 7 header words and its
+  8-bit points two a word; 20 voices at most, 16 used. The DSP finds each block by its first word,
+  so a damaged or missing block is passed over, never played as noise.
+- The DSP's receive ring holds four blocks, its transmit ring four segments of 128 frames; a
+  segment once played is cleared, so that silence follows where no block came. The stream's code
+  is in external P ($7000), loaded after the 512-word bootstrap (LOADP).
+- The 68030's tick writes up to three blocks a turn, a quarter of a second and a block ahead; its
+  records not made in time, an empty block (an underrun). GEM makes the records ahead.
+- STOP answers the blocks rendered, those late, the words passed over finding blocks, the
+  receive's overruns and the transmit's underruns: EPLAY.LOG shows them, so a real Falcon's log
+  says whether a word was lost.
+- Tests: tests/dspgms (the render bit for bit with its C model; the stream at 32, 24 and 16 MHz,
+  0, 3 and 1021 words off); play_test.py midsyn and menu_test.py mid on Falcon:16.
+- **Falcon-4 under Hatari 2.4 is no evidence for this path.** Hatari runs the DSP between the
+  68030's instructions and its SSI receive replaces a word not yet read without an overrun
+  (dsp_core.c). At 16 MHz a word comes every 81 of the 68030's cycles, and one instruction long
+  enough takes two words' time: one is lost and its block broken. Measured: the DSP mostly waiting
+  in its loop (Hatari's DSP profile: the render 1.6 %), 601 of 1,218 blocks rendered; the same
+  machine with only its clock at 32 MHz renders all 1,218, none late. A real Falcon's SSI runs
+  beside the 68030, so this doesn't apply there; the log's overrun count checks it.
+- The 68030's share is the limit, not the DSP's. gmsd_write writes each word of the ring once (it
+  read each back from ST RAM, a point at a time) and copies a block's points as words where they
+  run on with no loop's or sample's end in them, the blocks the same bit for bit: a dense piece's
+  tick 61 to 40 % of Hatari's Falcon at 32 MHz with TT RAM, 82 to 61 % at 16 MHz, where it still
+  underruns from 9 s in with 8 voices. So the DSP's synth is for a faster 68030 (art_cpu_turns at
+  least GSD_TURNS, 2,000: Hatari's 16 MHz Falcon 1,171, its 32 MHz 3,627); below that the port, as
+  1.60 chose it for a 68030 too slow for the synth, and the log says why.
+- GEM makes the records 12 s ahead on this path (AHEAD_DSP), as a WAV's reads.
+
 **Later, where it pays:** a sustained note's loop kept in the DSP once sent (no more of it copied:
 most GM programs hold on a loop); 16-bit points (one a word: half the voices the ring carries, the
 copying twice).
