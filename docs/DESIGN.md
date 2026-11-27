@@ -3267,7 +3267,15 @@ How it is made, in order (each step tested before the next):
   NVDI 20 ms slower (730 ms against 1.59's 710; 705 with the synth's code taken out again): so
   out, as MP3FPU.OVL and MIDI.OVL are, and 710 again. Not in the STE's edition. midiplay.c feeds
   it MIDI.OVL's records at their samples in GEM's turns, into the queue as an MP3 on the CPU
-  (play.c's `cmp_mid`). SYNTH.DAT is the set with 16-bit points (439 KB), read once;
+  (play.c's `cmp_mid`). GEM's turns don't come while a menu of the menu bar is down (the AES
+  holds them for as long as it is held), so the queue ran dry there and the DMA played its ring's
+  old sound round and round (a fault reported 27 Nov 2026): since then, once the queue's lead is
+  under 200 ms, the tick makes the next 256 samples itself (`tick_syn`; a VGM's chips on the CPU
+  the same), from MIDI.OVL's records already made (GEM's turns make them ahead, a millisecond a
+  piece, until all are), and only while GEM has left the synth as it plays (`cmp_tick_ok`, set at
+  a turn's end, cleared at the next's start and at Pause, Stop and an open).
+  tests/hatari/menu_test.py holds the View menu down 8 s while a MIDI file and a WAV play: no
+  underrun. SYNTH.DAT is the set with 16-bit points (439 KB), read once;
   `gms_prepare` halves its points in place so that the interpolation is one 16 x 16 multiply.
   The CPU's time is watched: past 70 % of the sound's in a second of it, two voices fewer for new
   notes (`gms_cap`); under 40 %, one more.
