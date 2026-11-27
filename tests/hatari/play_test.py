@@ -542,6 +542,8 @@ def analyse(rec, case, standin=False, no_boost=False):
         cpu_mp3 = "MP3CPU=1" in os.environ.get("EPLAY_RIG_INF", "") or os.environ.get("EPLAY_RIG_CPUMP3") == "1"
         # (phase 11: a VGM's chips made on the CPU play from the DMA too)
         cpu_mp3 = cpu_mp3 or ("VGMCPU=1" in os.environ.get("EPLAY_RIG_INF", "") and case in DSP_VGM)
+        # (the internal synth's sound is made on the CPU and plays from the DMA too)
+        cpu_mp3 = cpu_mp3 or case == "midsyn"
         if hatari_keeps_parity() and (cpu_mp3 or (not CASES[case][2] and case not in RESAMPLED)):
             # the sound DMA plays four tracks, the music in the first
             # (Erez's Analog 8: channels 3 to 8 silent). Hatari 2.4 keeps
@@ -687,7 +689,7 @@ def run(work, case, spec):
     shutil.copy(os.environ.get("EPLAY_RIG_PRG") or os.path.join(TOP, "binary", prg), os.path.join(hd, prg))
     # (MP3FPU.OVL and MP3INT.OVL beside it, as a release has them: a 68060
     # with no DSP decodes MP3 with the one its FPU, or none, takes)
-    for ovl in ("mp3fpu.ovl", "mp3int.ovl", "midi.ovl", "synth.dat"):
+    for ovl in ("mp3fpu.ovl", "mp3int.ovl", "midi.ovl", "synth.ovl", "synth.dat"):
         if os.path.exists(os.path.join(TOP, "binary", ovl)):
             shutil.copy(os.path.join(TOP, "binary", ovl), hd)
     shutil.copy(os.path.join(HERE, "build", "LAUNCH.PRG"), hd)

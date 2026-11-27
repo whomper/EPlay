@@ -3261,13 +3261,16 @@ How it is made, in order (each step tested before the next):
   random messages under ASan and UBSan). Its reference is the set's own numbers (Sonivox's units:
   EG steps every 128 samples at 22,050 Hz, the pitch in cents, the gains as Sonivox's), not
   Sonivox's engine built on the host: its filter and reverb are left out, as step 2 said.
-- **Step 3, on the CPU, done, in the program, not an overlay:** the engine is some 6 KB of
-  68020-60 code in EPLAY.PRG (an overlay of the 68000's MIDI.OVL would run it as 68000 code
-  everywhere), not in the STE's edition. midiplay.c feeds it MIDI.OVL's records at their samples
-  in GEM's turns, into the queue as an MP3 on the CPU (play.c's `cmp_mid`). SYNTH.DAT is the set
-  with 16-bit points (439 KB), read once; `gms_prepare` halves its points in place so that the
-  interpolation is one 16 x 16 multiply. The CPU's time is watched: past 70 % of the sound's in a
-  second of it, two voices fewer for new notes (`gms_cap`); under 40 %, one more.
+- **Step 3, on the CPU, done, as an overlay:** the engine is SYNTH.OVL (synthovl/, some 6.6 KB of
+  68020-60 code; the ColdFire's in the FireBee's package), loaded only when a MIDI file plays on
+  the synth. In the program it came first, and the gate's speed pairs found a WAV's start under
+  NVDI 20 ms slower (730 ms against 1.59's 710; 705 with the synth's code taken out again): so
+  out, as MP3FPU.OVL and MIDI.OVL are, and 710 again. Not in the STE's edition. midiplay.c feeds
+  it MIDI.OVL's records at their samples in GEM's turns, into the queue as an MP3 on the CPU
+  (play.c's `cmp_mid`). SYNTH.DAT is the set with 16-bit points (439 KB), read once;
+  `gms_prepare` halves its points in place so that the interpolation is one 16 x 16 multiply.
+  The CPU's time is watched: past 70 % of the sound's in a second of it, two voices fewer for new
+  notes (`gms_cap`); under 40 %, one more.
 - **Step 4, measured** (tests/hatari/gmscpu.py: a second at 24,585 Hz, 16 voices, an organ's held
   notes): Hatari's 68060 at 32 MHz 895 ms; a 68030 at 32 MHz with TT RAM 2,290 ms; at 16 MHz
   4,580 ms, some three voices in all. So a 68030 is timed at its first MIDI file on the synth
@@ -3291,7 +3294,8 @@ How it is made, in order (each step tested before the next):
   "MIDI files:" with **Synth** and **MIDI port**; the info line's output "Synth"; the file
   `synth.dat` (SYNTH.DAT); the alerts "The internal synth needs SYNTH.DAT beside EPlay.",
   "SYNTH.DAT isn't this EPlay's: copy it from its release.", "There isn't the memory for the
-  internal synth."; the default the synth where the machine has it.
+  internal synth.", "The internal synth needs SYNTH.OVL beside EPlay.", "SYNTH.OVL isn't this
+  EPlay's: copy it from its release."; the default the synth where the machine has it.
 
 ## 1.60: a dense Mega Drive file on a stock Falcon; channel 3's special mode (26 Nov 2026)
 

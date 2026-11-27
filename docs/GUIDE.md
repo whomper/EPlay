@@ -86,7 +86,7 @@ own pitch.
   plays on EPlay's own synth, or out of the computer's MIDI port to the synth or sound module you
   have connected there (**Settings, MIDI files**).
   - **The synth** plays the General MIDI instruments and drums from the Sonivox sound set in
-    `synth.dat`, beside `eplay.prg` (it is in both packages). It needs a fast CPU: a 68060, a
+    `synth.dat`, with `synth.ovl`, beside `eplay.prg` (both are in both packages). It needs a fast CPU: a 68060, a
     68080 or the FireBee's. On a 68030 EPlay times the CPU at the first MIDI file and uses the
     synth only if it can play four notes at once or more; a Falcon with a 16 or 32 MHz 68030
     can't, so its MIDI files go to the MIDI port, and the log says why. When a song asks for more

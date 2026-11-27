@@ -60,7 +60,7 @@ LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
 OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay midiplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
-           stream plat_tos gmsynth gmset
+           stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
 CSRC    := bidi charset pic png inflate jpegdc dirlist util futil conn ovl
@@ -70,7 +70,7 @@ CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text of
 ifeq ($(CPU),68000)
 # the STE: no DSP, so its programs and their tables not carried (dspstub.c
 # answers for them, as on a Falcon whose DSP is missing)
-OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb gmsynth gmset,$(OWN)) dspstub
+OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb,$(OWN)) dspstub
 endif
 ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
@@ -119,7 +119,7 @@ HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
 all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl \
-     binary/midifb.ovl binary/synth.dat
+     binary/midifb.ovl binary/synth.ovl binary/synthfb.ovl binary/synth.dat
 
 # the internal synth's sound set (DESIGN.md, "The synth"): Sonivox's, a
 # separate work under the Apache License (NOTICES.TXT), 16-bit samples;
@@ -504,6 +504,40 @@ $(B)/midiovl/smffb.o: src/smf.c src/smf.h
 	@mkdir -p $(dir $@)
 	$(CC) -mcpu=5475 $(OVLMID) -c -o $@ $<
 
+# SYNTH.OVL (synthovl/, src/synthovl.h, src/gmsynth.c, src/gmset.c): the
+# internal synth's engine, loaded only when a MIDI file plays on it (26 Nov
+# 2026: in the program, a WAV's start under NVDI came out 20 ms slower);
+# 68020-60 code for EPLAY.PRG (no 64-bit multiply or divide: the 68060's
+# rule), the ColdFire's for the FireBee's (synthfb.ovl, as synth.ovl there)
+OVLSYN  := -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
+           -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -Wall -Wextra -nostdinc \
+           -isystem $(GCCINC) -Icommon/atari/include -Isrc -DSYNTHOVL_VERSION=\"$(VERSION_STR)\"
+SYNO    := head gmsynth gmset
+binary/synth.ovl: $(B)/synthovl/synth.elf common/tools/elf2tos.py | binary
+	python3 common/tools/elf2tos.py $< $@
+binary/synthfb.ovl: $(B)/synthovl/synthfb.elf common/tools/elf2tos.py | binary
+	python3 common/tools/elf2tos.py $< $@
+$(B)/synthovl/synth.elf: $(addprefix $(B)/synthovl/,$(addsuffix .o,$(SYNO))) synthovl/ovl.ld
+	$(CC) -m68020-60 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,synthovl/ovl.ld -Wl,--build-id=none \
+	    -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $(addprefix $(B)/synthovl/,$(addsuffix .o,$(SYNO))) -lgcc
+	@! m68k-linux-gnu-objdump -d $@ | grep -qP '\t(mulu|muls|divu|divs)\.l\s+[^,]+,%d[0-7]:%d[0-7]' || \
+	    { echo "synth.elf: a 64-bit multiply or divide (the 68060 traps on them)"; rm -f $@; exit 1; }
+$(B)/synthovl/synthfb.elf: $(addprefix $(B)/synthovl/,$(addsuffix fb.o,$(SYNO))) synthovl/ovl.ld
+	$(CC) -mcpu=5475 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,synthovl/ovl.ld -Wl,--build-id=none \
+	    -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $(addprefix $(B)/synthovl/,$(addsuffix fb.o,$(SYNO))) -lgcc
+$(B)/synthovl/head.o: synthovl/head.c src/synthovl.h src/gmsynth.h src/gmset.h VERSION
+	@mkdir -p $(dir $@)
+	$(CC) -m68020-60 $(OVLSYN) -c -o $@ $<
+$(B)/synthovl/%.o: src/%.c src/gmsynth.h src/gmset.h
+	@mkdir -p $(dir $@)
+	$(CC) -m68020-60 $(OVLSYN) -c -o $@ $<
+$(B)/synthovl/headfb.o: synthovl/head.c src/synthovl.h src/gmsynth.h src/gmset.h VERSION
+	@mkdir -p $(dir $@)
+	$(CC) -mcpu=5475 $(OVLSYN) -c -o $@ $<
+$(B)/synthovl/%fb.o: src/%.c src/gmsynth.h src/gmset.h
+	@mkdir -p $(dir $@)
+	$(CC) -mcpu=5475 $(OVLSYN) -c -o $@ $<
+
 # a release's files, for the release workflow: two packages and nothing
 # else (the guidelines 7.4, decided 22 Nov 2026: no loose files, one zip
 # for each platform), every name in
@@ -513,7 +547,7 @@ $(B)/midiovl/smffb.o: src/smf.c src/smf.h
 #   ColdFire (binary/eplayfb.prg as eplay.prg; its MP3 is in the program, so
 #   no mp3*.ovl), and fbprobe.prg for its testers.
 DIST    := binary/eplay.prg binary/eplayst.prg binary/eplay.hyp binary/eplay.ref \
-           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl binary/synth.dat
+           common/tlsovl/tls.ovl binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl binary/synth.ovl binary/synth.dat
 DISTFB  := binary/fbprobe.prg binary/eplay.hyp binary/eplay.ref binary/synth.dat
 ICONS   := icons/eplay.rsc icons/eplaynv.rsc icons/eplay.icn icons/eplaymk.icn
 dist: all fbprobe help
@@ -523,6 +557,7 @@ dist: all fbprobe help
 	cp binary/eplayfb.prg dist/zipfb/eplay.prg
 	cp common/tlsovl/tlsfb.ovl dist/zipfb/tls.ovl
 	cp binary/midifb.ovl dist/zipfb/midi.ovl
+	cp binary/synthfb.ovl dist/zipfb/synth.ovl
 	cp $(DISTFB) dist/zipfb/
 	for z in zip zipfb; do \
 		cp NOTICES.TXT dist/$$z/notices.txt && \

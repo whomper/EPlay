@@ -40,7 +40,7 @@
 #include "elog.h"
 #include "xalloc.h"
 #ifndef EPLAY_ST
-#include "gmsynth.h"
+#include "synthovl.h"
 #include "gem.h"
 #include "cmp3.h"
 #define MP_SYNTH 1
@@ -216,6 +216,32 @@ static unsigned char *read_all(int fh, long size, char *err, int n)
 #define SYN_LEAST 4		/* the fewest voices it plays with */
 static int synth_voices(void);
 
+/* SYNTH.OVL, loaded at the first MIDI file on the synth and kept: 0 with err set */
+static const SYNTHOVL *so;
+
+static int synth_ovl(char *err, int n)
+{
+	long taken;
+	const SYNTHOVL *o;
+	if (so)
+		return 1;
+	o = ovl_load("synth.ovl", &taken, err, n);
+	if (!o) {
+		snprintf(err, n, "The internal synth needs SYNTH.OVL beside EPlay.");
+		return 0;
+	}
+	ovl_flush();
+	if (o->magic != SYNTHOVL_MAGIC || o->major != SYNTHOVL_MAJOR || o->size < (short)sizeof(SYNTHOVL) ||
+	    o->state_size != (long)sizeof(GMSYN)) {
+		free((void *)o);
+		snprintf(err, n, "SYNTH.OVL isn't this EPlay's: copy it from its release.");
+		return 0;
+	}
+	so = o;
+	elog("SYNTH.OVL %s: %s, %ld bytes at $%lX", o->version, o->what, taken, (unsigned long)o);
+	return 1;
+}
+
 static void synth_give(void)
 {
 	if (syn)
@@ -268,16 +294,16 @@ static int synth_load(char *err, int n)
 		return 0;
 	}
 	Fclose((short)fh);
-	if (!gm_open(&gs_set, gs_buf, size, &why) || gs_set.bits != 16) {
+	if (!so->open(&gs_set, gs_buf, size, &why) || gs_set.bits != 16) {
 		elog("SYNTH.DAT refused: %s", why);
 		synth_give();
 		snprintf(err, n, "SYNTH.DAT isn't this EPlay's: copy it from its release.");
 		return 0;
 	}
-	gms_prepare(&gs_set, gs_buf);
+	so->prepare(&gs_set, gs_buf);
 	syn_rate = 24585;
-	gms_init(syn, &gs_set, syn_rate, synth_voices() > 16 ? GMS_VOICES : 16);
-	gms_cap(syn, synth_voices() < 16 ? synth_voices() : syn->voices);
+	so->init(syn, &gs_set, syn_rate, synth_voices() > 16 ? GMS_VOICES : 16);
+	so->cap(syn, synth_voices() < 16 ? synth_voices() : syn->voices);
 	elog("the synth: SYNTH.DAT %ld bytes, %d-bit, %d programs' ranges %d, %d waves; %d voices", size, gs_set.bits,
 	     gs_set.nprog, gs_set.nreg, gs_set.nwave, syn->voices);
 	return 1;
@@ -399,6 +425,8 @@ int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t
 {
 #ifdef MP_SYNTH
 	syn_on = 0;
+	if (use_synth && !synth_ovl(err, n))
+		return 0;
 	if (use_synth && synth_voices() < SYN_LEAST && mp_port()) {
 		elog("MIDI: the synth too slow on this CPU (%d voice%s): the MIDI port", synth_voices(), synth_voices() == 1 ? "" : "s");
 		use_synth = 0;
@@ -490,8 +518,8 @@ int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t
 		syn_smp = 0;
 		syn_ended = 0;
 		syn_busy = syn_made = syn_win_busy = syn_win_made = 0;
-		gms_reset(syn);
-		gms_cap(syn, synth_voices() < syn->voices ? synth_voices() : syn->voices);
+		so->reset(syn);
+		so->cap(syn, synth_voices() < syn->voices ? synth_voices() : syn->voices);
 		syn_least = syn->cap;
 	}
 #endif
@@ -727,7 +755,7 @@ static int synth_voices(void)
 		else {
 			unsigned long t0 = tos_ms(), t;
 			long v;
-			gms_bench(8, 4096);
+			so->bench(8, 4096);
 			t = tos_ms() - t0;
 			v = t > 0 ? 668L / (long)t : GMS_VOICES;
 			syn_cpu = v > GMS_VOICES ? GMS_VOICES : (int)v;
@@ -768,7 +796,7 @@ static void syn_feed(const unsigned char *b, int k)
 			while (e < k && b[e] != 0xf7)
 				e++;
 			if (e < k)
-				gms_midi(syn, b + j, e - j + 1);
+				so->midi(syn, b + j, e - j + 1);
 			j = e + 1;
 			continue;
 		}
@@ -779,7 +807,7 @@ static void syn_feed(const unsigned char *b, int k)
 		len = (st & 0xe0) == 0xc0 ? 2 : 3;
 		if (j + len > k)
 			break;
-		gms_midi(syn, b + j, len);
+		so->midi(syn, b + j, len);
 		j += len;
 	}
 }
@@ -794,7 +822,7 @@ void mp_synth_rate(long rate)
 	if (syn && rate != syn_rate) {
 		int v = syn->voices;
 		syn_rate = rate;
-		gms_init(syn, &gs_set, rate, v);
+		so->init(syn, &gs_set, rate, v);
 		syn_pre = 0;
 	}
 	syn_rate = rate;
@@ -816,7 +844,7 @@ static void syn_budget(unsigned long busy, unsigned long made)
 		else if (syn_win_busy * 10 < snd_ms * 4 && cap < syn->voices)
 			cap++;
 		if (cap != syn->cap) {
-			gms_cap(syn, cap);
+			so->cap(syn, cap);
 			if (cap < syn_least)
 				syn_least = cap;
 		}
@@ -860,7 +888,7 @@ int mp_render(short *out, int n)
 				break;
 			}
 		}
-		gms_render(syn, out + 2 * done, (int)m);
+		so->render(syn, out + 2 * done, (int)m);
 		done += (int)m;
 		syn_smp += (unsigned long)m;
 	}
