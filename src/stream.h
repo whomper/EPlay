@@ -82,6 +82,8 @@ typedef struct {
 	char track[40];			/* "" before the first, or from a station */
 	long tlen, tpos;		/* its length, and where it started in it, in ms */
 	int new_track;			/* set when it changed; the caller clears it */
+	long audio;			/* the audio bytes given out so far */
+	long track_at;			/* the audio byte the track starts at (its block came there) */
 } ICY;
 
 void icy_init(ICY *s, long metaint);

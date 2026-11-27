@@ -257,6 +257,7 @@ static void icy_track(void)
 		if (!i) {
 			CHECK(!strcmp(s.track, "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"));
 			CHECK(s.tlen == 215000 && s.tpos == 1500 && s.new_track == 1);
+			CHECK(s.track_at == 4 && s.audio == 8);
 			CHECK(!strcmp(s.title, "A - B") && !strcmp(s.url, "http://i.scdn.co/image/ab67"));
 		} else
 			CHECK(!s.track[0] && !s.new_track);

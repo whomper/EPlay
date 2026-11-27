@@ -798,7 +798,7 @@ static int skip_drawn = -1;
 
 static int skip_can_now(void)
 {
-	return play_is_open() && play_len_ms() > 0 && !play_is_net();
+	return play_is_open() && play_len_ms() > 0 && (!play_is_net() || play_is_spot());
 }
 
 int bar_skip_stale(void)
@@ -885,7 +885,7 @@ static void draw_buttons(int parts)
 static void draw_time(void)
 {
 	char a[12], b[12];
-	long len = play_len_ms(), at = play_name[0] ? play_ms() : 0, fillw;
+	long len = play_len_ms(), at = !play_name[0] ? 0 : play_is_spot() ? play_spot_ms() : play_ms(), fillw;
 	gbox(&w_pos, p_bar);
 	if (!play_name[0])
 		len = 0;
@@ -893,7 +893,7 @@ static void draw_time(void)
 		at = len * bar_drag / 1000;
 	if (at > len)
 		at = len;
-	if (play_is_net() && play_name[0]) {
+	if (play_is_net() && !play_is_spot() && play_name[0]) {
 		/* a station: the time since it started, "Live" for the length,
 		   the position bar greyed (nothing to go to) */
 		fmt_time(a, sizeof(a), play_ms());

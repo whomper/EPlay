@@ -14,6 +14,7 @@
 #include "busy.h"
 #include "stream.h"
 #include "urldlg.h"
+#include "netsrc.h"
 #include "ui.h"
 #include "iconify.h"
 #include "term.h"
@@ -563,6 +564,29 @@ static void playing_drawn(int whole)
 	PART("play and times");
 }
 
+/* Next and Previous inside a Spotify line (decided 27 Nov 2026: the line is
+   one row, its tracks Spotify's): the track after or before the one playing,
+   asked of spotgate; past its ends play_now goes on (spot_dir) */
+static int spot_dir;
+static void play_index(int i);
+static int playable_from(int cur, int ended, int back);
+
+static int spot_step(int step)
+{
+	const char *t = play_spot_track();
+	if (!play_is_spot() || !t[0] || list_cur < 0)
+		return 0;
+	if (step < 0 && play_spot_ms() > 3000) {
+		ns_spot_at(t, 0, 0);	/* (Previous 3 s in: this track from its start, as a file's) */
+		spot_dir = 0;
+	} else {
+		ns_spot_at(t, step, 0);
+		spot_dir = step;
+	}
+	play_index(list_cur);
+	return 1;
+}
+
 /* the file played: opened (play.c), started; its art the step's (play_file) */
 static void play_now(const char *f)
 {
@@ -595,6 +619,20 @@ static void play_now(const char *f)
 			redraw(0, BP_LIST);
 		}
 	}
+	if (!opened && spot_dir && surl_spotify(f) && ns_status() == 404 && list_cur >= 0) {
+		/* Next past a Spotify line's last track: the next line; Previous
+		   before its first: the line from its start */
+		int d = spot_dir, j;
+		spot_dir = 0;
+		if (d > 0 && (j = playable_from(list_cur, 0, 0)) >= 0 && j != list_cur) {
+			play_index(j);
+			return;
+		}
+		ns_spot_at(0, 0, 0);
+		play_index(list_cur);
+		return;
+	}
+	spot_dir = 0;
 	if (!opened) {
 		char line[200];
 		snprintf(line, sizeof(line), "EPLAY refused: %s\n", err);
@@ -1259,9 +1297,9 @@ static long seek_to = -1;		/* the position bar let go: where, for the next turn 
 static void skip_by(long ms)
 {
 	long len = play_len_ms(), at;
-	if (!play_is_open() || len <= 0 || play_is_net())
+	if (!play_is_open() || len <= 0 || (play_is_net() && !play_is_spot()))
 		return;
-	at = (seek_to >= 0 ? seek_to : play_ms()) + ms;
+	at = (seek_to >= 0 ? seek_to : play_is_spot() ? play_spot_ms() : play_ms()) + ms;
 	if (at < 0)
 		at = 0;
 	if (at > len - 1)
@@ -1685,13 +1723,19 @@ static void command(int c)
 		mini_switch();
 		break;
 	case C_PREV: {
-		int i = playable_from(list_cur, 0, 1);
+		int i;
+		if (spot_step(-1))
+			break;
+		i = playable_from(list_cur, 0, 1);
 		if (i >= 0)
 			play_index(i);
 		break;
 	}
 	case C_NEXT: {
-		int i = playable_from(list_cur, 0, 0);
+		int i;
+		if (spot_step(1))
+			break;
+		i = playable_from(list_cur, 0, 0);
 		if (i >= 0)
 			play_index(i);
 		break;
@@ -1931,7 +1975,7 @@ static void drag_pos(short mx, short my)
 	AEVENT ev;
 	long len = play_len_ms();
 	int at;
-	if (play_is_net())
+	if (play_is_net() && (!play_is_spot() || len <= 0))
 		return;			/* (a station: nowhere to go) */
 	bar_drag = bar_pos_at(mx);
 	press_draw = 1;

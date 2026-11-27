@@ -361,6 +361,24 @@ const char *play_path(void)
 static int q_normal;
 int play_note_new;		/* what plays changed by itself (Normal): the bar and info line again */
 static long seek_ms, base_ms;	/* play_seek's place for play_open; where this play began */
+static int spot;
+static char spot_track[40], spot_title[ICY_TITLE], spot_cover[ICY_URL];
+static long spot_len, spot_t0;		/* its length; play_ms() at its 0 */
+static int spot_cover_new;
+static struct {
+	int due;
+	char track[40], title[ICY_TITLE], cover[ICY_URL];
+	long len, pos, at;		/* at: play_ms() where it starts */
+} spot_next;
+static long spot_base;			/* play_ms() at this connection's first byte */
+
+static void spot_reset(void)
+{
+	spot_track[0] = spot_title[0] = spot_cover[0] = 0;
+	spot_len = spot_t0 = 0;
+	spot_next.due = 0;
+}
+
 static long seek_byte;		/* MP3: Pause's frame, where Play takes it up (0: by seek_ms) */
 static long q_base;		/* MP3: where the queue's first byte is in the file */
 #define FR_RING 32
@@ -1612,7 +1630,7 @@ int play_open(const char *path, char *err, int n)
 {
 	const char *why;
 	char kr[20];
-	int ext;
+	int ext, again = path == cur_path;	/* (Play after Pause, a seek: the same one again) */
 
 	play_log_stop();		/* (another file while one plays: what the first did) */
 	play_stop();
@@ -1644,6 +1662,10 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 		play_net_lost = 0;
+		if (!again || !surl_spotify(path))
+			spot_reset();	/* (the same line again keeps its track until the next comes) */
+		spot = surl_spotify(path);
+		spot_base = base_ms;
 		file_size = 0x7fffffffL;
 		memset(&play_tags, 0, sizeof(play_tags));
 		seek_ms = seek_byte = 0;
@@ -2569,6 +2591,24 @@ int play_seek(long ms, char *err, int n)
 	unsigned long t0 = tos_ms(), t1;
 	if (!cur_path[0])
 		return 0;
+	if (play_is_spot()) {
+		/* a Spotify line: ms is in its track; spotgate asked to start
+		   there (Pause, then Play, the same way) */
+		if (!spot_track[0])
+			return 1;
+		ns_spot_at(spot_track, 0, ms);
+		if (!was) {
+			paused = 1;
+			pause_ms = spot_t0 + (ms > 0 ? ms : 0);
+			return 1;
+		}
+		paused = 0;
+		ok = play_open(cur_path, err, n);
+		if (ok)
+			play_start();
+		elog("the seek: Spotify, %ld ms into the track, in %lu ms", ms, tos_ms() - t0);
+		return ok;
+	}
 	if (!was) {
 		/* paused or stopped: the place kept for Play, nothing opened (the
 		   DSP is taken only to play) */
@@ -2627,6 +2667,8 @@ int play_resume(char *err, int n)
 	paused = 0;
 	seek_ms = pause_ms;
 	seek_byte = pause_byte;
+	if (spot && surl_spotify(cur_path) && spot_track[0])
+		ns_spot_at(spot_track, 0, pause_ms - spot_t0);	/* (Spotify: this track, where it was) */
 	ok = play_open(cur_path, err, n);
 	seek_ms = seek_byte = 0;
 	if (ok)
@@ -2784,7 +2826,76 @@ const char *play_net_picture(int *changed)
 			*changed = 0;
 		return "";
 	}
+	if (spot) {
+		/* (the track's album cover, as its title: when it is heard) */
+		if (changed) {
+			*changed = spot_cover_new;
+			spot_cover_new = 0;
+		}
+		return spot_cover;
+	}
 	return ns_picture(changed);
+}
+
+/* a Spotify line (spotgate, decided 27 Nov 2026): the track playing, and the
+   next one's details held until the music gets to where its block came in
+   the stream (the queue is seconds ahead of what is heard) */
+static void spot_take(void)
+{
+	int changed, pc;
+	long len, pos, kbps = ns_kbps() > 0 ? ns_kbps() : 192;
+	const char *t = ns_track(&changed, &len, &pos), *pic;
+	if (!changed || !t[0])
+		return;
+	snprintf(spot_next.track, sizeof(spot_next.track), "%s", t);
+	snprintf(spot_next.title, sizeof(spot_next.title), "%s", ns_title(&pc));
+	pic = ns_picture(&pc);
+	snprintf(spot_next.cover, sizeof(spot_next.cover), "%s", pic);
+	spot_next.len = len;
+	spot_next.pos = pos;
+	spot_next.at = spot_base + (long)((long long)ns_track_at() * 8 / kbps);
+	spot_next.due = 1;
+}
+
+/* the held track, once the music is there */
+static void spot_apply(void)
+{
+	char l[200];
+	if (!spot_next.due || play_ms() < spot_next.at)
+		return;
+	spot_next.due = 0;
+	memcpy(spot_track, spot_next.track, sizeof(spot_track));
+	memcpy(spot_title, spot_next.title, sizeof(spot_title));
+	if (strcmp(spot_cover, spot_next.cover)) {
+		memcpy(spot_cover, spot_next.cover, sizeof(spot_cover));
+		spot_cover_new = 1;
+	}
+	spot_len = spot_next.len;
+	spot_t0 = spot_next.at - spot_next.pos;
+	ns_spot_at(spot_track, 0, 0);	/* (a dropped connection: this track again) */
+	elog("Spotify: the track %s, %ld ms, from %ld ms", spot_track, spot_len, spot_next.pos);
+	snprintf(l, sizeof(l), "EPLAY track: %s %ld %ld %s\n", spot_track, spot_len, spot_next.pos, spot_title);
+	nf_debug(l);
+	play_note_new = 1;	/* (the bar and info line again) */
+}
+
+int play_is_spot(void)
+{
+	return spot && cur_path[0] && surl_spotify(cur_path);	/* (paused too) */
+}
+
+const char *play_spot_track(void)
+{
+	return play_is_spot() ? spot_track : "";
+}
+
+/* where in its track a Spotify line is, in ms */
+long play_spot_ms(void)
+{
+	long t = (paused ? pause_ms : play_ms()) - spot_t0;
+	if (!play_is_spot() || !spot_track[0])
+		return 0;
+	return t < 0 ? 0 : spot_len > 0 && t > spot_len ? spot_len : t;
 }
 
 /* a station's new title: to the log, the rigs' console, the bar */
@@ -2794,6 +2905,11 @@ static void net_titles(void)
 	const char *t;
 	if (!net)
 		return;
+	if (spot) {
+		spot_take();
+		spot_apply();
+		return;
+	}
 	t = ns_title(&changed);
 	if (changed) {
 		char l[200];
@@ -2817,7 +2933,7 @@ void play_feed(void)
 
 const char *play_net_title(void)
 {
-	return net ? ns_title_peek() : "";
+	return !net ? "" : spot ? spot_title : ns_title_peek();
 }
 
 long play_read_at(long at, void *buf, long n)
@@ -3007,6 +3123,8 @@ const char *play_keep_up(void)
 
 long play_len_ms(void)
 {
+	if (play_is_spot())
+		return spot_track[0] ? spot_len : 0;
 	return len_ms;
 }
 
@@ -3205,6 +3323,21 @@ int play_step(int ms)
 		   in the queue (the tick finds its first frame by itself) */
 		static unsigned long last_try;
 		static int tries;
+		if (play_net_lost == 1 && spot) {
+			/* a Spotify line: spotgate ends the stream at the item's end;
+			   the last track's sound all come (within 5 s), it is that */
+			long kbps = ns_kbps() > 0 ? ns_kbps() : 192;
+			long got = spot_base + (long)((long long)ns_audio() * 8 / kbps);
+			const char *tr = spot_next.due ? spot_next.track : spot_track;
+			long t0 = spot_next.due ? spot_next.at - spot_next.pos : spot_t0;
+			long ln = spot_next.due ? spot_next.len : spot_len;
+			if (tr[0] && ln > 0 && got - t0 >= ln - 5000) {
+				elog("Spotify: the line's end after %ld ms played", play_ms());
+				play_net_lost = 0;
+				src_done = 1;	/* (what the queue holds plays, then the next line) */
+			} else if (tr[0])
+				ns_spot_at(tr, 0, got - t0);	/* (connected again: where the sound stopped) */
+		}
 		if (play_net_lost == 1) {
 			elog("the station's connection ended after %ld ms played; connecting again", play_ms());
 			play_net_lost = 2;

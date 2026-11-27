@@ -39,6 +39,9 @@ int play_state(void);
 int play_is_open(void);
 int play_net_low(void);		/* a station's queue under 2 s: read it whatever the turn drew */
 int play_is_net(void);		/* a station or stream plays or is paused (phase 7) */
+int play_is_spot(void);		/* a Spotify line plays or is paused (its tracks have lengths) */
+const char *play_spot_track(void);	/* its track now (spotify:track:ID), "" none yet */
+long play_spot_ms(void);	/* where in that track, in ms */
 const char *play_net_title(void);	/* its song now, "" before the first */
 const char *play_net_picture(int *changed);	/* its picture's address (StreamUrl), "" none */
 void play_feed(void);

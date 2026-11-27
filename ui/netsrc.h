@@ -47,8 +47,12 @@ const char *ns_url(void);	/* the station's URL, after any redirect */
    line starts, track ("spotify:track:ID", 0 the line's start), step 1 the
    track after it, -1 the one before, pos ms into it; another line resets it */
 void ns_spot_at(const char *track, int step, long pos);
+/* the last answer's HTTP status (404 from spotgate: no track there) */
+int ns_status(void);
 /* its track now ("" none: a station), its length and where it started, in
    ms, and whether it changed since the last ns_track */
 const char *ns_track(int *changed, long *len, long *pos);
+long ns_track_at(void);		/* the audio byte its block came at */
+long ns_audio(void);		/* the audio bytes come so far on this connection */
 
 #endif

@@ -119,6 +119,8 @@ static int ends_with(const char *s, const char *e)
 
 /* one request to u: 1 with the head read (hd), 2 when it was a redirect or
    a station list and u now holds where to go, 0 with err */
+static int last_status;		/* the last answer's status (0: none) */
+
 static int ask(char *u, char *err, int n)
 {
 	SURL s;
@@ -201,11 +203,20 @@ static int ask(char *u, char *err, int n)
 		return 2;
 	}
 	if (hd.status != 200) {
-		snprintf(err, (size_t)n, hd.status == 404 ? "The station isn't there (404)." :
-			 "The station answered %d.", hd.status);
+		last_status = hd.status;
+		if (surl_spotify(url_given))
+			/* (spotgate's: 404 no track after or before, 503 busy or no player) */
+			snprintf(err, (size_t)n, hd.status == 404 ? "That was the line's last track." :
+				 hd.status == 503 ? "The Gateway's Spotify player is busy or not running." :
+				 hd.status == 400 ? "The Gateway didn't take that Spotify line." :
+				 "The Gateway's Spotify player refused it (%d).", hd.status);
+		else
+			snprintf(err, (size_t)n, hd.status == 404 ? "The station isn't there (404)." :
+				 "The station answered %d.", hd.status);
 		ns_close();
 		return 0;
 	}
+	last_status = 200;
 	chunks_init(&chk);
 	if (stype(hd.type) == STYPE_PLAYLIST || ends_with(u, ".pls") || ends_with(u, ".m3u") ||
 	    ends_with(u, ".m3u8")) {
@@ -305,6 +316,11 @@ static int via_gateway(const char *url, char *out, int omax, char *err, int n)
    Falcon can't play Spotify by itself), its port SPOTPORT= (8581); where in
    the line to start: ns_spot_at's */
 static char spot_from[40];
+int ns_status(void)
+{
+	return last_status;
+}
+
 static int spot_step;
 static long spot_pos;
 
@@ -491,6 +507,11 @@ const char *ns_title(int *changed)
 	return icy.title;
 }
 
+long ns_audio(void)
+{
+	return icy.audio;
+}
+
 const char *ns_track(int *changed, long *len, long *pos)
 {
 	if (changed) {
@@ -502,6 +523,11 @@ const char *ns_track(int *changed, long *len, long *pos)
 	if (pos)
 		*pos = icy.tpos;
 	return icy.track;
+}
+
+long ns_track_at(void)
+{
+	return icy.track_at;
 }
 
 const char *ns_picture(int *changed)

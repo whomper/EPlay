@@ -299,6 +299,7 @@ static void take_track(ICY *s)
 		s->track[n] = 0;
 		s->tlen = len;
 		s->tpos = pos;
+		s->track_at = s->audio;
 		s->new_track = 1;
 	}
 }
@@ -350,6 +351,7 @@ long icy_feed(ICY *s, unsigned char *b, long n)
 			w += k;
 			r += k;
 			s->left -= k;
+			s->audio += k;
 			continue;
 		}
 		if (s->mlen < 0) {		/* the length byte */
