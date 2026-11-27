@@ -3297,6 +3297,41 @@ How it is made, in order (each step tested before the next):
   internal synth.", "The internal synth needs SYNTH.OVL beside EPlay.", "SYNTH.OVL isn't this
   EPlay's: copy it from its release."; the default the synth where the machine has it.
 
+### The synth on the DSP: through the DMA (decided 27 Nov 2026)
+
+Decided by the owner, 27 Nov 2026: this route, 8-bit samples first, 16-bit to be looked at once it
+works. In place of the wave memory above (the set, or a song's part of
+it, in the DSP's 32K words, and a fallback for the songs that don't fit): the samples brought to
+the DSP by the sound DMA, as a multitrack recorder on the Falcon plays its tracks. EPlay has the
+transport already: 0.23's XSTREAM, a WAV's DMA ring into the DSP's SSI receive to be resampled.
+
+**The synth through it:**
+- The DMA plays four stereo tracks a frame into the DSP: 8 words a frame, about 390,000 a second
+  at 49,170 Hz, two 8-bit points a word, some 780,000 points a second. A voice takes 22,050 x its
+  pitch ratio a second, whatever the output's rate: 16 voices about 440,000. The set stays in the
+  68030's memory, whole.
+- The 68030 runs gmsynth.c's control (the notes, the envelopes, the pitch) and, for each block of
+  128 frames, writes into the ring each sounding voice's header (its pitch step, its gains) and the
+  stretch of points its pitch reaches in the block, its loop unrolled where it wraps. The ring's
+  other words are left as they are (the DSP reads a block's count, not all 8 words a frame).
+- The DSP takes the 8 words a frame and renders a block once it has come, while the next comes:
+  each voice's points stepped through at its pitch, interpolated, its gains ramped across the
+  block, panned and mixed, at half the output's rate (the set is 22,050 Hz), made up to the
+  output's rate as it plays. Two blocks behind the ring: some 5 ms.
+- Its C model (the DSP's arithmetic, 24 bits) and the .a56 bit for bit on Hatari's DSP core, as
+  the decoder's are; then the 68030's side and the play path.
+
+**Measured first** (tests/hatari/ringcpy.c, RINGCPY.PRG: a second at 49,170 Hz, the copying alone,
+a header of 4 words a voice, one stretch in eight in two pieces, the ring in ST RAM): Hatari's
+Falcon-4:16 8 voices 170 ms, 16 voices 345 ms, 24 520, 32 690; at 32 MHz half that. The bench's
+own random numbers (a multiply and a divide a voice a block) are some 60 ms of it: some 20-30 % of
+a stock Falcon for 16 voices. The DSP's time, estimated: some 15 instructions a voice a synth
+sample, 16 voices at 24,585 Hz some 37 %, the SSI's 8 words a frame some 10 %.
+
+**Later, where it pays:** a sustained note's loop kept in the DSP once sent (no more of it copied:
+most GM programs hold on a loop); 16-bit points (one a word: half the voices the ring carries, the
+copying twice).
+
 ## 1.60: a dense Mega Drive file on a stock Falcon; channel 3's special mode (26 Nov 2026)
 
 A tester's game file (YM2612 alone, channel 3 in its special mode, its drums in it with feedback 6

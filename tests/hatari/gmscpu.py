@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 AERA | Erez Yaary
-"""gmscpu.py WORK [CPULEVEL [MHZ [TTRAM_MB]]]: GMSCPU.PRG (make gmscpu) on
+"""gmscpu.py WORK [CPULEVEL [MHZ [TTRAM_MB [PRG]]]]: GMSCPU.PRG (make gmscpu) on
 Hatari's Falcon, under EmuTOS, no DSP: the internal synth's engine timed
 with 1 to 16 voices (DESIGN.md, "The synth"). CPULEVEL 3 at 16 MHz with no
 TT RAM is a stock Falcon; 3 at 50 with TT RAM a DFB1's; 6 a 68060 (not
@@ -23,11 +23,12 @@ def main():
     level = sys.argv[2] if len(sys.argv) > 2 else "3"
     mhz = sys.argv[3] if len(sys.argv) > 3 else "16"
     tt = sys.argv[4] if len(sys.argv) > 4 else "0"
+    prg = sys.argv[5] if len(sys.argv) > 5 else "GMSCPU.PRG"	# (or RINGCPY.PRG: the DSP synth's copying)
     w = os.path.join(work, "gmscpu-%s-%s-%s" % (level, mhz, tt))
     shutil.rmtree(w, ignore_errors=True)
     hd = os.path.join(w, "hd")
     os.makedirs(hd)
-    shutil.copy(os.path.join(HERE, "build", "GMSCPU.PRG"), os.path.join(hd, "GMSCPU.PRG"))
+    shutil.copy(os.path.join(HERE, "build", prg), os.path.join(hd, "GMSCPU.PRG"))
     shutil.copy(os.path.join(TOP, "binary", "synth.dat"), os.path.join(hd, "SYNTH.DAT"))
     log = os.path.join(w, "hatari.log")
     args = ["hatari", "--tos", machines.emutos(), "--machine", "falcon", "--cpulevel", level,
@@ -44,7 +45,7 @@ def main():
         while time.time() < end and not got and p.poll() is None:
             time.sleep(2)
             for line in open(log, errors="replace"):
-                if line.startswith("GMSCPU"):
+                if line.startswith(("GMSCPU", "RINGCPY")):
                     got = line.strip()
     finally:
         p.kill()

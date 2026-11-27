@@ -132,3 +132,12 @@ $(B)/gmsynth20.o: ../../src/gmsynth.c ../../src/gmsynth.h | $(B)
 	$(CC) $(P2060) -c -o $@ $<
 $(B)/gmset20.o: ../../src/gmset.c ../../src/gmset.h | $(B)
 	$(CC) $(P2060) -c -o $@ $<
+# RINGCPY.PRG (ringcpy.c): the DSP synth's 68030 side, its copying timed
+# (python3 gmscpu.py WORK 3 16 0 RINGCPY.PRG)
+.PHONY: ringcpy
+ringcpy: $(B)/RINGCPY.PRG
+$(B)/RINGCPY.elf: $(B)/crt0_64k.o $(B)/ringcpy.o $(B)/tos.o $(B)/libc.o $(B)/nf.o
+	$(CC) -m68020-60 -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,$(A)/link.ld \
+	    -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments -o $@ $^ -lgcc
+$(B)/ringcpy.o: ringcpy.c | $(B)
+	$(CC) $(P2060) -c -o $@ $<
