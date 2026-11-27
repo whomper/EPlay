@@ -53,6 +53,14 @@ void mp_synth_rate(long rate);	/* the rate it makes its sound at (before the fir
 int mp_render(short *out, int n);
 int mp_render_tick(short *out, int n);	/* (the tick's: -1 when it can't now) */
 const char *mp_synth_log(void);
+/* the synth on the Falcon's DSP: prepared at rate (half the output's) with
+   voices at most (0 with err set); GEM's turns make its records ahead
+   (mp_dsp_step); the tick writes each block (mp_dsp_block: -1 not now,
+   0 the end, else 1) */
+int mp_dsp_prepare(long rate, int voices, char *err, int n);
+void mp_dsp_step(int ms);
+int mp_dsp_block(unsigned short *w);
+int mp_dsp_cap(void);
 #endif
 
 #endif

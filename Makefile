@@ -59,7 +59,7 @@ LDFLAGS := $(MCPU) -nostdlib -static -no-pie -Wl,--emit-relocs -Wl,-T,common/ata
            -Wl,--sort-section=name \
            -Wl,--gc-sections -Wl,--build-id=none -Wl,-z,noexecstack -Wl,--no-warn-rwx-segments
 
-OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay midiplay ym dspsn sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
+OWN     := main bar art sart draw about play cmp3 prefs snd feed hostirq term div64 stsearch finddlg vgm vgmfile vgmplay midiplay ym dspsn dspgms sncmd sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb dspopn opnd egmath dspopl opld dspmp3 elog pcm mp3frame inf tags rgain probe list order m3u netsrc urldlg \
            stream plat_tos
 # (util, conn, net_tos, sting: phase 7's streams; ovl and tls_ovl: https on a
 # Direct connection through TLS.OVL, beside the program with CACERT.PEM)
@@ -70,13 +70,13 @@ CUI     := mbar iconify fsel aboutbox aboutline alert dialog av cpucheck text of
 ifeq ($(CPU),68000)
 # the STE: no DSP, so its programs and their tables not carried (dspstub.c
 # answers for them, as on a Falcon whose DSP is missing)
-OWN     := $(filter-out dspmp3 dspsn dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb,$(OWN)) dspstub
+OWN     := $(filter-out dspmp3 dspsn dspgms dspopn dspopl sncpu vgmcpu opncpu oplcpu aycpu sndxb feedxb,$(OWN)) dspstub
 endif
 ifeq ($(CPU),5475)
 # the FireBee: no DSP, no Falcon sound hardware, no YM2149 (fbstub.c answers
 # for them), the sound through the XBIOS (sndfb.c), the tick from GEM's
 # turns with no interrupt (feedfb.c), the 64-bit helpers common's (ll64.c)
-OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspopn dspopl ym cmp3 sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb mp3dsp
+OWN     := $(filter-out snd feed hostirq div64 dspmp3 dspsn dspgms dspopn dspopl ym cmp3 sndxb feedxb,$(OWN)) sndfb feedfb fbstub dspstub cmp3fb mp3dsp
 CATARI  += ll64
 CUI     := $(filter-out cpucheck,$(CUI))
 OBJS    := $(OBJDIR)/crt0.o $(OBJDIR)/nf.o $(OBJDIR)/crash_s.o $(OBJDIR)/inflate_fast_s.o \
@@ -115,7 +115,7 @@ endif
 PIN     := $(if $(filter 68000,$(CPU)),,tags probe list inflate dspopn dspopl dspsn)
 PINOBJ   = $(if $(filter $*,$(PIN)),python3 tools/pinobj.py $(CROSS)objcopy $(CROSS)objdump $@ $*)
 HDRS    := $(wildcard src/*.h src/mp3/*.h atari/*.h ui/*.h common/src/*.h common/atari/*.h \
-           common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h \
+           common/atari/include/*.h common/ui/*.h) $(B)/mp3tab.h $(B)/mp3_prog.h $(B)/sn_prog.h $(B)/gms_prog.h \
            $(B)/opn_prog.h $(B)/opntab.h $(B)/opl_prog.h $(B)/opltab.h
 
 all: binary/eplay.prg binary/eplayst.prg binary/eplayfb.prg binary/mp3fpu.ovl binary/mp3int.ovl binary/midi.ovl \
@@ -184,6 +184,9 @@ $(B)/mp3tab.h: tools/mkmp3tab.py data/mp3huff.txt data/mp3window.txt | $(B)
 $(B)/sn_prog.h: dsp/sn.a56 common/dsp/mkh.py | $(B)
 	mkdir -p $(B)/sn && cd $(B)/sn && a56 ../../dsp/sn.a56 > sn.lst && ! grep -q 'warning:\|error:' sn.lst && \
 		python3 ../../common/dsp/mkh.py a56.out ../sn_prog.h dsp_sn_prog sn.a56
+$(B)/gms_prog.h: dsp/gms.a56 common/dsp/mkh.py | $(B)
+	mkdir -p $(B)/gms && cd $(B)/gms && a56 ../../dsp/gms.a56 > gms.lst && ! grep -q 'warning:\|error:' gms.lst && \
+		python3 ../../common/dsp/mkh.py a56.out ../gms_prog.h dsp_gms_prog gms.a56
 $(B)/opn_prog.h: dsp/opn.a56 common/dsp/mkh.py | $(B)
 	mkdir -p $(B)/opn && cd $(B)/opn && a56 ../../dsp/opn.a56 > opn.lst && ! grep -q 'warning:\|error:' opn.lst && \
 		python3 ../../common/dsp/mkh.py a56.out ../opn_prog.h dsp_opn_prog opn.a56
@@ -508,7 +511,8 @@ $(B)/midiovl/smffb.o: src/smf.c src/smf.h
 	@mkdir -p $(dir $@)
 	$(CC) -mcpu=5475 $(OVLMID) -c -o $@ $<
 
-# SYNTH.OVL (synthovl/, src/synthovl.h, src/gmsynth.c, src/gmset.c): the
+# SYNTH.OVL (synthovl/, src/synthovl.h, src/gmsynth.c, src/gmset.c,
+# src/gmsdsp.c: the DSP's blocks): the
 # internal synth's engine, loaded only when a MIDI file plays on it (26 Nov
 # 2026: in the program, a WAV's start under NVDI came out 20 ms slower);
 # 68020-60 code for EPLAY.PRG (no 64-bit multiply or divide: the 68060's
@@ -516,7 +520,7 @@ $(B)/midiovl/smffb.o: src/smf.c src/smf.h
 OVLSYN  := -O2 -fomit-frame-pointer -ffreestanding -fno-builtin -fno-pic -fno-pie \
            -fno-tree-loop-distribute-patterns -fno-asynchronous-unwind-tables -Wall -Wextra -nostdinc \
            -isystem $(GCCINC) -Icommon/atari/include -Isrc -DSYNTHOVL_VERSION=\"$(VERSION_STR)\"
-SYNO    := head gmsynth gmset
+SYNO    := head gmsynth gmset gmsdsp
 binary/synth.ovl: $(B)/synthovl/synth.elf common/tools/elf2tos.py | binary
 	python3 common/tools/elf2tos.py $< $@
 binary/synthfb.ovl: $(B)/synthovl/synthfb.elf common/tools/elf2tos.py | binary

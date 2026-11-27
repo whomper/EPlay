@@ -101,6 +101,7 @@ static unsigned long syn_smp;	/* samples made since base_ms */
 static unsigned long syn_busy, syn_made, syn_win_busy, syn_win_made;	/* (the CPU's time: ms; samples) */
 static int syn_least;		/* (the log's: the fewest voices it came down to) */
 static int syn_ended;
+static int syn_dsp;		/* this open's synth on the DSP (mp_dsp_*) */
 #endif
 
 int mp_magic(const unsigned char *b, long n)
@@ -242,8 +243,12 @@ static int synth_ovl(char *err, int n)
 	return 1;
 }
 
+static signed char *pts8;
 static void synth_give(void)
 {
+	if (pts8)
+		Mfree(pts8);
+	pts8 = 0;
 	if (syn)
 		Mfree(syn);
 	if (gs_buf)
@@ -302,8 +307,8 @@ static int synth_load(char *err, int n)
 	}
 	so->prepare(&gs_set, gs_buf);
 	syn_rate = 24585;
-	so->init(syn, &gs_set, syn_rate, synth_voices() > 16 ? GMS_VOICES : 16);
-	so->cap(syn, synth_voices() < 16 ? synth_voices() : syn->voices);
+	so->init(syn, &gs_set, syn_rate, syn_dsp || synth_voices() > 16 ? GMS_VOICES : 16);
+	so->cap(syn, !syn_dsp && synth_voices() < 16 ? synth_voices() : syn->voices);
 	elog("the synth: SYNTH.DAT %ld bytes, %d-bit, %d programs' ranges %d, %d waves; %d voices", size, gs_set.bits,
 	     gs_set.nprog, gs_set.nreg, gs_set.nwave, syn->voices);
 	return 1;
@@ -427,7 +432,8 @@ int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t
 	syn_on = 0;
 	if (use_synth && !synth_ovl(err, n))
 		return 0;
-	if (use_synth && synth_voices() < SYN_LEAST && mp_port()) {
+	syn_dsp = use_synth == 2;	/* (the DSP renders it: the 68030 writes its blocks, whatever its speed) */
+	if (use_synth && !syn_dsp && synth_voices() < SYN_LEAST && mp_port()) {
 		elog("MIDI: the synth too slow on this CPU (%d voice%s): the MIDI port", synth_voices(), synth_voices() == 1 ? "" : "s");
 		use_synth = 0;
 	}
@@ -519,7 +525,7 @@ int mp_open(int fh, long size, long ms, const char *name, int use_synth, TAGS *t
 		syn_ended = 0;
 		syn_busy = syn_made = syn_win_busy = syn_win_made = 0;
 		so->reset(syn);
-		so->cap(syn, synth_voices() < syn->voices ? synth_voices() : syn->voices);
+		so->cap(syn, !syn_dsp && synth_voices() < syn->voices ? synth_voices() : syn->voices);
 		syn_least = syn->cap;
 	}
 #endif
@@ -927,6 +933,87 @@ int mp_render_tick(short *out, int n)
 			      (unsigned long)((syn_smp + (unsigned long)n) * 1000UL / (unsigned long)syn_rate) + 1)
 		return -1;	/* (its records not all made to the piece's end) */
 	return syn_run(out, n);
+}
+
+/* ---- the synth on the Falcon's DSP (gmsdsp.h, dsp/gms.a56): the 68030
+   writes each block's voices and points (pts8: the set's points made
+   8-bit, once, kept with the set); the DSP renders them */
+
+int mp_dsp_prepare(long rate, int voices, char *err, int n)
+{
+	if (!syn_on || !syn || !so) {
+		snprintf(err, n, "The internal synth isn't loaded.");
+		return 0;
+	}
+	if (!pts8) {
+		pts8 = x_alloc(gs_set.points + 16, 3);	/* (TT RAM where there is some) */
+		if ((long)pts8 <= 0) {
+			pts8 = 0;
+			snprintf(err, n, "There isn't the memory for the synth on the DSP.");
+			return 0;
+		}
+		so->dsp_points(&gs_set, gs_buf, pts8);
+	}
+	mp_synth_rate(rate);
+	so->cap(syn, voices < syn->voices ? voices : syn->voices);
+	syn_least = syn->cap;
+	syn_feed(pre, pre_n);	/* (the reset and the file's state there) */
+	syn_pre = 1;
+	elog("the synth on the DSP: %ld Hz, %d voices, %ld points (8-bit)", rate, syn->cap, gs_set.points);
+	return 1;
+}
+
+/* GEM's turn: the records made ahead of the blocks (the tick's) */
+void mp_dsp_step(int ms)
+{
+	if (making && syn_rate > 0)
+		make((unsigned long)base_ms + (unsigned long)(syn_smp / (unsigned long)syn_rate) * 1000UL + AHEAD,
+		     ms > 0 ? ms : 1);
+}
+
+/* the tick's: the records due fed, then the next block's words into w
+   (GMSD_WORDS); -1 when it can't now (its records not yet made), 0 at
+   the file's end (its notes sounded out), else 1 */
+int mp_dsp_block(unsigned short *w)
+{
+	unsigned long half;
+	if (!syn_on || !syn || !pts8 || !syn_pre)
+		return -1;
+	if (syn_ended)
+		return 0;
+	half = syn_smp + GMSD_N / 2;	/* (the block's control at its start: its records to its middle) */
+	if (making && made_ms < (unsigned long)base_ms + half * 1000UL / (unsigned long)syn_rate + 1)
+		return -1;
+	if (vol_due >= 0) {
+		unsigned char v[8] = { 0xf0, 0x7f, 0x7f, 0x04, 0x01, 0, 0, 0xf7 };
+		v[5] = (unsigned char)(vol_due & 0x7f);
+		v[6] = (unsigned char)(vol_due >> 7);
+		so->midi(syn, v, 8);
+		vol_due = -1;
+	}
+	while (rp < mem_n) {
+		long at = (long)rec_ms(rp) - base_ms;
+		if (at > 0 && ms_smp(at) > half)
+			break;
+		syn_feed(mem + rp + SMF_REC_HEAD, mem[rp + 4]);
+		rp += SMF_REC_HEAD + mem[rp + 4];
+	}
+	if (rp >= mem_n && !making) {
+		long now = base_ms + (long)(syn_smp * 1000UL / (unsigned long)syn_rate);
+		if (now >= len_ms && (!syn->live || now >= len_ms + 4000)) {
+			syn_ended = 1;
+			return 0;
+		}
+	}
+	so->dsp_block(syn, gs_buf, pts8, w);
+	syn_smp += GMSD_N;
+	syn_made += GMSD_N;
+	return 1;
+}
+
+int mp_dsp_cap(void)
+{
+	return syn ? syn->cap : 0;
 }
 
 const char *mp_synth_log(void)

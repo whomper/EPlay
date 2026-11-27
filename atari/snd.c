@@ -1084,6 +1084,15 @@ int snd_open_feed(long rate, int ext)
 	return open_to(rate, ext, 1);
 }
 
+/* the ring to the DSP's receive as four stereo tracks (8 words a frame),
+   at the output's rate, for the synth on the DSP (dsp/gms.a56): its
+   transmit set to the DAC and the port first (snd_dsp_out) */
+int snd_open_gms(long rate, int ext)
+{
+	XB(sx_open_gms(rate, ext));
+	return open_to(rate, ext, 3);
+}
+
 long snd_in_rate;		/* the file's rate, for the 8-bit DMA's resampling (play.c sets it) */
 long snd_dma8_max;		/* the 8-bit DMA's highest rate for this track (0: its own) */
 
@@ -1162,7 +1171,22 @@ static int open_to(long rate, int ext, int feed)
 	ring_n = rate / 2;
 	if (ring_n > RING_MAX)
 		ring_n = RING_MAX;
-	if (feed) {
+	if (feed == 3) {
+		/* the synth's blocks to the DSP (snd_open_gms): four stereo
+		   tracks, 8 words a frame, into its receive; the ring a whole
+		   number of blocks (128 frames), so that none is split */
+		snd_fw = FW;
+		fw_shift = 4;
+		ring_n -= ring_n % 128;
+		if (dirty) {
+			memset(ring, 0, (size_t)dirty);
+			dirty = 0;
+		}
+		Settracks(TRACKS - 1, 0);
+		Setmontracks(0);
+		Setmode(STEREO16);
+		Devconnect(DMAPLAY, DSPRECV, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+	} else if (feed) {
 		snd_fw = 2;
 		fw_shift = 2;
 		if (dirty < ring_n * 4)

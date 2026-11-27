@@ -100,6 +100,9 @@ int gmsd_write(GMSYN *s, const unsigned char *pool, const signed char *pts8, uns
 	return nw;
 }
 
+/* (the DSP's model: the tests' and the host's alone, not SYNTH.OVL's,
+   whose 68060 code has no 64-bit multiply) */
+#ifndef SYNTHOVL_VERSION
 void gmsd_dsp_reset(GMSD_DSP *d)
 {
 	int k;
@@ -189,3 +192,4 @@ void gmsd_up(long *prev, const long *lr, long *out)
 			prev[c] = a;
 		}
 }
+#endif

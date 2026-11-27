@@ -14,6 +14,7 @@
 #define SYNTHOVL_H
 
 #include "gmsynth.h"
+#include "gmsdsp.h"
 
 #define SYNTHOVL_MAGIC 0x53594E54L	/* 'SYNT' */
 #define SYNTHOVL_MAJOR 1
@@ -33,6 +34,10 @@ typedef struct {
 	void (*reset)(GMSYN *s);
 	void (*cap)(GMSYN *s, int n);
 	long (*bench)(int v, int n);
+	/* (since 1.61: the synth on the Falcon's DSP, gmsdsp.h; a table
+	   shorter than these is an older SYNTH.OVL's, the CPU's alone) */
+	void (*dsp_points)(const GMSET *g, const unsigned char *pool, signed char *pts8);
+	int (*dsp_block)(GMSYN *s, const unsigned char *pool, const signed char *pts8, unsigned short *w);
 } SYNTHOVL;
 
 #endif

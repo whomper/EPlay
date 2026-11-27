@@ -34,6 +34,8 @@
 #include "snd.h"
 #include "feed.h"
 #include "dspmp3.h"
+#include "dspgms.h"
+#include "gmsdsp.h"
 #include "cmp3.h"
 #include "hostirq.h"
 #include "../src/pcm.h"
@@ -75,6 +77,7 @@ static int mid;			/* a MIDI file plays out of the MIDI port (midiplay.c, decided
 static int cmp;
 static int cmp_vgm;		/* (phase 11) a VGM's chips made on the CPU (vp_render), not a file's frames */
 static int cmp_mid;		/* a MIDI file made into sound by the internal synth (mp_render, 26 Nov 2026) */
+static int gsd;			/* a MIDI file on the internal synth on the Falcon's DSP (dsp/gms.a56; 0 in the STE's edition) */
 /* (the info line's: where the sound is made) */
 #ifdef EPLAY_FB
 #define OUT_HW "FireBee"
@@ -221,8 +224,16 @@ static void apply_volume(void)
 		vp_volume(a, !vol);	/* (vgmplay.c: the chips' ways) */
 		return;
 	}
-	if (mid) {
+	if (mid
+#ifndef EPLAY_ST
+	    || gsd
+#endif
+	    ) {
 		mp_volume(a, !vol);	/* (the GM master volume) */
+#ifndef EPLAY_ST
+		if (gsd)
+			snd_dac_volume(0, 0);	/* (the synth's own level; the FDI's way too) */
+#endif
 		return;
 	}
 	/* (the Falcon's own clock too: the matrix sends the sound to the FDI
@@ -984,6 +995,60 @@ static void tick_xs(void)
 
 static void tick_body(void);
 #ifndef EPLAY_ST
+/* (the synth on the Falcon's DSP, dsp/gms.a56: a 68030's, 27 Nov 2026) the
+   tick writes each block of 128 frames (the voices' headers and 8-bit
+   points, gmsdsp.h) into the four-track ring the DMA plays into the DSP's
+   receive, gsd_lead frames ahead, three a tick at most; its records not
+   made in time, an empty block (silence, an underrun), never the ring's
+   old blocks again; after the end, frames of zeros (no block in them) */
+static long gsd_lead;
+
+static void gsd_zero(short *p)
+{
+	long *l = (long *)(void *)p;
+	int i;
+	for (i = 0; i < GMSD_WORDS / 2; i++)
+		l[i] = 0;
+}
+
+static void tick_gms(void)
+{
+	int k;
+	for (k = 0; k < 3; k++) {
+		long n, lead = snd_written() - snd_played();
+		short *p;
+		int r;
+		if (lead >= gsd_lead || snd_room() < GMSD_FRAMES)
+			return;
+		p = snd_ptr(&n);
+		if (n < GMSD_FRAMES)
+			return;		/* (the ring a whole number of blocks: never) */
+		if (t_end) {
+			gsd_zero(p);
+			snd_wrote(GMSD_FRAMES);
+			continue;
+		}
+		r = mp_dsp_block((unsigned short *)p);
+		if (r < 0) {
+			if (lead >= 2 * GMSD_FRAMES)
+				return;		/* (its records next tick) */
+			gsd_zero(p);
+			p[0] = (short)GMSD_MAGIC;	/* (an empty block: no voice) */
+			if (!snd_underruns++)
+				snd_first_under = snd_played();
+			snd_wrote(GMSD_FRAMES);
+			continue;
+		}
+		if (r == 0) {
+			t_end = 1;
+			t_ended_at = snd_written();
+			gsd_zero(p);
+		}
+		snd_wrote(GMSD_FRAMES);
+	}
+}
+#endif
+#ifndef EPLAY_ST
 static volatile char cmp_tick_ok;	/* (tick_syn's) */
 static long cmp_tick_low;
 static void tick_syn(void);
@@ -1069,6 +1134,12 @@ static void tick_body(void)
 			loading = 0;
 		return;
 	}
+#ifndef EPLAY_ST
+	if (gsd) {
+		if (!t_failed)
+			tick_gms();
+	} else
+#endif
 	if (!t_end && !t_failed && !dsp) {
 		tick_pcm();
 #ifndef EPLAY_ST
@@ -1087,7 +1158,7 @@ static void tick_body(void)
 	}
 	if (dsp && dspmp3_failed())
 		t_failed = 1;
-	if (t_end && !dsp) {
+	if (t_end && !dsp && !gsd) {
 		/* silence after the end, so that the ring isn't played again */
 		long room = snd_room(), k;
 		if (t_ended_at < 0)
@@ -1414,6 +1485,12 @@ static void fill(unsigned long t0, int ms, int low)
 	int must = low;
 	long owe = 0, got = 0;
 	unsigned long now = ms_now();
+#ifndef EPLAY_ST
+	if (gsd) {
+		mp_dsp_step(ms);	/* (the records made ahead; the tick writes the blocks) */
+		return;
+	}
+#endif
 	if (cmp) {
 		fill_cmp(t0, ms, low);
 		return;
@@ -1578,15 +1655,51 @@ int play_open(const char *path, char *err, int n)
 		int syn = 0;
 #ifndef EPLAY_ST
 		syn = settings_midi() == MIDI_SYNTH;
+		gsd = 0;
+		if (syn && get_cookie(0x5F435055L) < 40 && !SND_XB && (get_cookie(0x5F534E44L) & 8)) {
+			/* (a 68030 with the Falcon's DSP: the synth there, the
+			   68030 writing its blocks; the DSP in use, on the CPU or
+			   to the port as before) */
+			const char *why;
+			if (dspgms_open(&why)) {
+				gsd = 1;
+				syn = 2;
+			} else
+				elog("the synth on the DSP: %s; the CPU's or the port", why);
+		}
 #endif
 		if (!mp_open(fh, file_size, seek_ms, play_name, syn, &play_tags, play_info, sizeof(play_info), play_out,
 			     sizeof(play_out), &len_ms, err, n)) {
+#ifndef EPLAY_ST
+			if (gsd)
+				dspgms_close(0, 0, 0);
+			gsd = 0;
+#endif
 			close_file();
 			return 0;
 		}
 		base_ms = seek_ms < len_ms ? seek_ms : len_ms;
 #ifndef EPLAY_ST
 		syn = mp_on_synth();	/* (a 68030 too slow for it: the port) */
+		if (syn && gsd) {
+			/* the synth on the DSP: no queue; the output as a WAV's,
+			   44.1 kHz (the FDI there) or the nearest */
+			memset(&fmt, 0, sizeof(fmt));
+			fmt.kind = kind = PCM_WAV;
+			fmt.bits = 16;
+			fmt.channels = 2;
+			fmt.bytes = 4;
+			fmt.big = 1;
+			fmt.rate = rate = 44100L;
+			data_left = 0;
+			src_done = 1;		/* (no file read: the tick ends it) */
+			play_hz = 0;
+			play_kbps = 0;
+			play_via = "";
+			elog("MIDI: %s; the internal synth on the DSP; %ld ms%s", play_info, len_ms,
+			     base_ms ? " (from a place in it)" : "");
+			goto made_ahead;
+		}
 		if (syn) {
 			/* (the internal synth, 26 Nov 2026: made on the CPU, ahead,
 			   into the queue as a VGM's chips there are; its rate set
@@ -1995,6 +2108,19 @@ made_ahead:
 			if (snd_fdi_note[0])
 				elog("the FDI to %ld Hz: %s", rate, snd_fdi_note);
 		}
+#ifndef EPLAY_ST
+		if (gsd) {
+			char e2[80];
+			rate = fmt.rate = out_rate;	/* (no resampling: the DSP's rate is the output's) */
+			if (!mp_dsp_prepare(out_rate / 2, 16, e2, sizeof(e2))) {
+				snprintf(err, n, "%s", e2);
+				play_stop();
+				return 0;
+			}
+			gsd_lead = (out_rate / 8) / GMSD_FRAMES * GMSD_FRAMES + GMSD_FRAMES;	/* (some 125 ms) */
+			dspgms_out(out_rate, ext);
+		}
+#endif
 		if (cmp) {
 #ifndef EPLAY_ST
 			if (cmp_mid) {
@@ -2072,14 +2198,15 @@ made_ahead:
 				elog("the DSP %s: the DMA at the nearest rate", r == DSPMP3_BUSY ? "in use" :
 				     r == DSPMP3_NONE ? "not there" : "didn't answer");
 		}
-		if (xs ? !snd_open_feed(out_rate, ext) : !dsp && !snd_open(out_rate, ext)) {
+		if (gsd ? !snd_open_gms(out_rate, ext) : xs ? !snd_open_feed(out_rate, ext) :
+			  !dsp && !snd_open(out_rate, ext)) {
 			snprintf(err, n, "There isn't the ST RAM to play.");
 			play_stop();
 			return 0;
 		}
 	}
 	khz(kr, sizeof(kr), out_rate);
-	play_via = ext ? "FDI" : dsp ? "DSP" : "DMA";
+	play_via = ext ? "FDI" : dsp || gsd ? "DSP" : "DMA";
 	s_ext = ext;
 	rg_take(&rgv_now, &play_tags, open_has_lt ? &open_lt : 0);
 	rgv_next = rgv_now;
@@ -2164,7 +2291,7 @@ made_ahead:
 int play_wants_next(void)
 {
 	if (chain_asked || !src_done || net || paused || state != PS_PLAYING || chain_q >= 0 || t_end ||
-	    (dsp && xs))
+	    (dsp && xs) || gsd)
 		return 0;
 	if (q_w - q_r < 32768L)
 		return 0;		/* (too near the end to begin anything) */
@@ -2489,6 +2616,10 @@ void play_start(void)
 			     snd_matrix[3]);
 		}
 		loading = dsp ? 2 : 0;	/* (the tick loads the DSP first: not waiting for GEM) */
+#ifndef EPLAY_ST
+		if (gsd)
+			dspgms_play();	/* (it hunts for the first block; the DMA starts once some are written) */
+#endif
 		/* (the DMA: 1024 frames a tick, 4 times what plays, XSTREAM too;
 		   the DSP: its next packet at once. The STE's 125 a second: its
 		   tick's own work, some 1,750 cycles each whatever it moves, was
@@ -2522,6 +2653,15 @@ void play_stop(void)
 	}
 	feed_off();			/* first: the tick and the DSP's interrupt no longer run */
 	hostirq_off();
+#ifndef EPLAY_ST
+	if (gsd) {
+		long nb, late, skip;
+		dspgms_close(&nb, &late, &skip);
+		elog("the synth on the DSP: %ld blocks rendered, %ld late, %ld words passed over finding them; %s", nb,
+		     late, skip, mp_synth_log());
+		gsd = 0;
+	}
+#endif
 	if (hirq_spur)
 		elog("spurious interrupts while playing: %lu", (unsigned long)hirq_spur);
 	spurious_off();
@@ -3128,7 +3268,7 @@ int play_wait_ms(void)
 	if (mid)
 		return SND_XB ? 0 : 100;	/* (the GEM turns are the port's tick there) */
 	if (src_done || vgm)
-		return 100;
+		return 100;	/* (the synth on the DSP too: src_done) */
 	ahead = q_w - q_r;		/* seconds of music, near enough */
 	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
 	/* (a file read on to 12 s ahead in turns that wait for nothing, a

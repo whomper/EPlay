@@ -23,6 +23,7 @@ void sx_mfp_note(char *b, int n);
 long sx_put8_raw(const unsigned char *src, long nin, int bpf, int ol, int orr, unsigned char x);
 int sx_open(long rate, int ext);
 int sx_open_feed(long rate, int ext);
+int sx_open_gms(long rate, int ext);
 void sx_dac_volume(int att, int mute);
 void sx_close(void);
 long sx_ring_frames(void);

@@ -50,6 +50,7 @@
 #define snd_put8_raw sx_put8_raw
 #define snd_open sx_open
 #define snd_open_feed sx_open_feed
+#define snd_open_gms sx_open_gms
 #define snd_dac_volume sx_dac_volume
 #define snd_close sx_close
 #define snd_ring_frames sx_ring_frames
@@ -291,6 +292,13 @@ int snd_open(long rate, int ext)
 	snd_underruns = 0;
 	snd_first_under = snd_least_lead = -1;
 	return 1;
+}
+
+int snd_open_gms(long rate, int ext)
+{
+	(void)rate;
+	(void)ext;
+	return 0;
 }
 
 int snd_open_feed(long rate, int ext)

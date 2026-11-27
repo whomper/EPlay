@@ -12,6 +12,7 @@
 #include "dspsn.h"
 #include "dspopn.h"
 #include "dspopl.h"
+#include "dspgms.h"
 
 static const char no_dsp[] = "needs the Falcon's DSP";
 
@@ -120,3 +121,18 @@ const OPLC_TABS *dspopl_tabs(void) { return NULL; }
 long dspopl_rate(void) { return 0; }
 long dspopl_synth(void) { return 0; }
 void dspopl_term(void) { }
+
+/* ---- the synth on the DSP: not there (the CPU's synth or the MIDI port) */
+int dspgms_open(const char **why) { *why = no_dsp; return 0; }
+void dspgms_out(long rate, int ext) { (void)rate; (void)ext; }
+void dspgms_play(void) { }
+void dspgms_close(long *blocks, long *late, long *skipped)
+{
+	if (blocks)
+		*blocks = -1;
+	if (late)
+		*late = -1;
+	if (skipped)
+		*skipped = -1;
+}
+void dspgms_term(void) { }
