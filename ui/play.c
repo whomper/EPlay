@@ -1508,7 +1508,7 @@ static void fill(unsigned long t0, int ms, int low)
 	   the turns are long, though the disk is faster than the music: the
 	   queue drained as it played and never caught up; a fault reported
 	   27 Nov 2026) */
-	if (low && q_bps > 0 && !net && fill_last) {
+	if (low && q_bps > 0 && !net && fill_last && play_ms() >= 2000) {	/* (not the start's turns: 1.60's) */
 		unsigned long d = now - fill_last;
 		if (d > 1000)
 			d = 1000;

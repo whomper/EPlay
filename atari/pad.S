@@ -1,7 +1,7 @@
 | SPDX-License-Identifier: GPL-2.0-or-later
 | Copyright (C) 2026 AERA | Erez Yaary
 | pad.S - written by tools/mkpad.py against 1.60's build/atari/eplay.map: do not edit.
-| 389 pads, 65124 bytes, each section at its place there, mod the 68030's
+| 389 pads, 65316 bytes, each section at its place there, mod the 68030's
 | 256-byte caches (the 68030's build alone; the Makefile keeps each one)
 	.section ".text.!","ax"
 	.globl ep_pad_0
@@ -366,7 +366,7 @@ ep_pad_89:
 	.section ".text.fill!","ax"
 	.globl ep_pad_90
 ep_pad_90:
-	.space 44
+	.space 236
 	.section ".text.find_dialog!","ax"
 	.globl ep_pad_91
 ep_pad_91:
