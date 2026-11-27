@@ -394,11 +394,12 @@ $(B) $(OBJDIR):
 	mkdir -p $@
 clean:
 	rm -rf $(B) binary dist
-dsptest: $(B)/mp3files/.made
+dsptest: $(B)/mp3files/.made $(B)/gm16.dat
 	$(MAKE) -C tests/dspmp3
 	$(MAKE) -C tests/dspsn
 	$(MAKE) -C tests/dspopn
 	$(MAKE) -C tests/dspopl
+	$(MAKE) -C tests/dspgms
 
 # the FireBee's edition's decoders on the ColdFire (qemu-m68k -cpu cfv4e,
 # the cross compiler): its MP3 (minimp3) within a step of the host's, its

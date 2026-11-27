@@ -15,7 +15,8 @@
  *   then each voice's:
  *     0     its number (0 to GMSD_VOICES - 1)
  *     1     its place's fraction at the block's start (Q16, of its first point)
- *     2, 3  its step a sample (Q16: its whole part, its fraction)
+ *     2, 3  its step a sample (Q16: its whole part, its fraction), through
+ *           the points sent (where every second one is sent, half the voice's)
  *     4, 5  its left and right gain at the block's end (Q15), ramped to from
  *           where the last block left it (0 where the voice wasn't in it)
  *     6     the points that follow (2 to GMSD_PTS)
@@ -32,7 +33,9 @@
 #define GMSD_WORDS (8 * GMSD_FRAMES)	/* its words: 4 stereo tracks */
 #define GMSD_VOICES 32
 #define GMSD_HEAD 7
-#define GMSD_PTS 512		/* a voice's points in a block at most (a step of 8) */
+#define GMSD_PTS 128		/* a voice's points in a block at most (the DSP's internal memory): a
+				   higher voice's sent every second one, its step halved */
+#define GMSD_CHUNK 16		/* the samples a gain holds for (4 steps a block) */
 
 /* the set's 16-bit points (gms_prepare's, halved) made 8-bit into pts8
    (g->points bytes), once */

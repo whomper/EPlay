@@ -29,41 +29,53 @@ int gmsd_write(GMSYN *s, const unsigned char *pool, const signed char *pts8, uns
 	gms_block_ctl(s, GMSD_N);
 	for (k = 0; k < s->voices; k++) {
 		GMS_VOICE *v = &s->v[k];
-		unsigned long end;
-		long np, gl, gr, first, j;
-		int looped;
+		unsigned long end, sfrac, sinc;
+		long np, gl, gr, first, j, span;
+		int looped, dec = 0;
 		if (!v->on)
 			continue;
 		looped = v->le > v->ls;
+		span = v->le - v->ls;
 		end = (v->frac & 0xffffUL) + v->inc * GMSD_N;
-		np = (long)(end >> 16) + 2;
 		gl = clamp_gain(v->gl + v->dgl * GMSD_N);
 		gr = clamp_gain(v->gr + v->dgr * GMSD_N);
 		first = (long)((const short *)(const void *)v->w - base);
+		/* the points the block reaches; where more than the DSP holds,
+		   every 2^dec-th of them, the step and the place in those */
+		sfrac = v->frac & 0xffffUL;
+		sinc = v->inc;
+		np = (long)(end >> 16) + 2;
+		while (np > GMSD_PTS && dec < 3) {
+			dec++;
+			sinc = v->inc >> dec;
+			sfrac = (((unsigned long)(v->pos & ((1L << dec) - 1)) << 16) | (v->frac & 0xffffUL)) >> dec;
+			np = (long)((sfrac + sinc * GMSD_N) >> 16) + 2;
+		}
 		if (np <= GMSD_PTS && nv < GMSD_VOICES && nw + GMSD_HEAD + (np + 1) / 2 <= GMSD_WORDS) {
 			unsigned short *h = w + nw;
-			long at = v->pos, span = v->le - v->ls;
+			long at = v->pos & ~((1L << dec) - 1);
 			h[0] = (unsigned short)k;
-			h[1] = (unsigned short)(v->frac & 0xffffUL);
-			h[2] = (unsigned short)(v->inc >> 16);
-			h[3] = (unsigned short)(v->inc & 0xffffUL);
+			h[1] = (unsigned short)(sfrac & 0xffffUL);
+			h[2] = (unsigned short)(sinc >> 16);
+			h[3] = (unsigned short)(sinc & 0xffffUL);
 			h[4] = (unsigned short)(gl >> 15);
 			h[5] = (unsigned short)(gr >> 15);
 			h[6] = (unsigned short)np;
 			/* (the points the block reaches, the loop unrolled; past a
 			   sample's end with no loop, silence) */
-			for (j = 0; j < np; j++, at++) {
+			for (j = 0; j < np; j++, at += 1L << dec) {
 				long i = at;
 				signed char p;
 				if (looped)
 					while (i >= v->le)
 						i -= span;
 				p = looped || i < v->len ? pts8[first + i] : 0;
-				/* (a byte at a time: the DMA's word big-endian, the
-				   first point high) */
-				w[nw + GMSD_HEAD + (j >> 1)] = (unsigned short)((j & 1) ? (w[nw + GMSD_HEAD + (j >> 1)] & 0xff00U) |
-											 (unsigned char)p
-										       : (unsigned)(unsigned char)p << 8);
+				/* (the DMA's words big-endian: the first point high) */
+				if (j & 1)
+					w[nw + GMSD_HEAD + (j >> 1)] = (unsigned short)((w[nw + GMSD_HEAD + (j >> 1)] & 0xff00U) |
+											 (unsigned char)p);
+				else
+					w[nw + GMSD_HEAD + (j >> 1)] = (unsigned short)((unsigned)(unsigned char)p << 8);
 			}
 			nw += GMSD_HEAD + (int)((np + 1) / 2);
 			nv++;
@@ -79,7 +91,7 @@ int gmsd_write(GMSYN *s, const unsigned char *pool, const signed char *pts8, uns
 				continue;
 			}
 			while (v->pos >= v->le)
-				v->pos -= v->le - v->ls;
+				v->pos -= span;
 		}
 	}
 	w[0] = (unsigned short)nv;
@@ -130,8 +142,10 @@ void gmsd_dsp(GMSD_DSP *d, const unsigned short *w, long *lr)
 			signed char b = (signed char)((j & 1) ? ww & 0xff : ww >> 8);
 			P[j] = (long)b * 32768L;	/* (Q23, halved: two points' difference fits) */
 		}
-		sl = (long)fl((long long)tl - gl, 6);
-		sr = (long)fl((long long)tr - gr, 6);
+		/* the gains: a step each GMSD_CHUNK samples, from where the last
+		   block left them to its end (the CPU's engine's way too) */
+		sl = (long)fl((long long)tl - gl, 2);
+		sr = (long)fl((long long)tr - gr, 2);
 		for (k = 0; k < GMSD_N; k++) {
 			long idx = (long)(ph >> 24), f = (long)((ph & 0xffffff) >> 1), s0, s1, x;
 			if (idx + 1 >= np)
@@ -141,8 +155,10 @@ void gmsd_dsp(GMSD_DSP *d, const unsigned short *w, long *lr)
 			x = s0 + (long)fl((long long)(s1 - s0) * f, 23);
 			L[k] = sat24((long long)L[k] + fl((long long)x * gl, 23));
 			R[k] = sat24((long long)R[k] + fl((long long)x * gr, 23));
-			gl += sl;
-			gr += sr;
+			if (k % GMSD_CHUNK == GMSD_CHUNK - 1) {
+				gl += sl;
+				gr += sr;
+			}
 			ph += inc;
 		}
 		d->gl[id] = tl;

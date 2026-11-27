@@ -1,0 +1,306 @@
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Copyright (C) 2026 AERA | Erez Yaary
+;
+; gms.a56 - the internal synth on the Falcon's DSP (DESIGN.md, "The synth
+; on the DSP: through the DMA"): a block of src/gmsdsp.h's (its voices'
+; headers and 8-bit points, the 68030's) rendered into GMSD_N synth samples,
+; left and right, as src/gmsdsp.c's gmsd_dsp computes them, bit for bit.
+; Small enough for the bootstrap's 512 words. This step: the render, a
+; block loaded by the host (LOADY) and its samples sent back (RENDER), for
+; tests/dspgms; the SSI's receive and transmit come next.
+;
+; The host's commands (each word waited for):
+;	1 LOADX addr n w...	n words to X:addr
+;	4 LOADY addr n w...	n words to Y:addr
+;	7 RENDER addr		the block at Y:addr (16-bit words, each in its top
+;				16 bits, as the SSI takes the DMA's): 1, the
+;				render, 2, then the 2 x 64 samples (left, right)
+
+HCR	equ	$ffe8
+HSR	equ	$ffe9
+HRX	equ	$ffeb
+
+N	equ	64		; synth samples a block (GMSD_N)
+NV	equ	32		; voices (GMSD_VOICES)
+
+; ---- internal Y
+PB	equ	$00		; a voice's points, unpacked (Q23, halved), 128
+RB	equ	$80		; the block's right, N
+; ---- internal X (the render's loops: no external memory's wait)
+LB	equ	$00		; the block's left, N
+XS	equ	$40		; a voice's samples, interpolated, N
+PD	equ	$80		; each point's difference from the next, 128
+; ---- external X
+GL	equ	$1380		; each voice's gains now (Q23)
+GR	equ	$13a0
+SEEN	equ	$13c0		; in the last block
+NOW	equ	$13e0		; in this one
+
+; ---- external X (the voice's own, read a few times a voice)
+V_NV	equ	$1400		; the block's voices still to do
+V_ID	equ	$1401
+V_NP	equ	$1402		; its points
+V_NW	equ	$1403		; their words
+V_PH1	equ	$1404		; its place: the point
+V_PH0	equ	$1405		; and the fraction (Q24)
+V_GLC	equ	$1406		; its gains now, the sample's
+V_GRC	equ	$1407
+V_SL	equ	$1408		; and their steps a sample
+V_SR	equ	$1409
+V_TL	equ	$140a		; at the block's end
+V_TR	equ	$140b
+V_INCF	equ	$140c		; its step's fraction (Q24)
+
+	org	p:$0
+	jmp	start
+
+	org	p:$40
+start	movep	#1,x:$ffe0		; port B is the host port
+	movep	#0,x:$fffe		; no wait states
+	ori	#3,mr			; no interrupts
+	movec	#$ffff,m0
+	movec	#$ffff,m1
+	movec	#$ffff,m3
+	movec	#$ffff,m4
+	movec	#$ffff,m5
+	movec	#$ffff,m6
+	clr	a
+	move	#GL,r1			; the gains and the voices seen: none
+	rep	#4*NV
+	move	a,x:(r1)+
+cmd	jsr	rd
+	move	x0,a
+	move	#>1,x1
+	cmp	x1,a
+	jeq	ldx
+	move	#>4,x1
+	cmp	x1,a
+	jeq	ldy
+	move	#>7,x1
+	cmp	x1,a
+	jeq	rendc
+	jmp	cmd
+
+rd	jclr	#0,x:HSR,rd
+	movep	x:HRX,x0
+	rts
+wr	jclr	#1,x:HSR,wr
+	movep	x1,x:HRX
+	rts
+
+ldx	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ldx1
+	jsr	rd
+	move	x0,x:(r0)+
+ldx1
+	jmp	cmd
+ldy	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ldy1
+	jsr	rd
+	move	x0,y:(r0)+
+ldy1
+	jmp	cmd
+
+rendc	jsr	rd
+	move	x0,r0
+	move	#>1,x1
+	jsr	wr
+	jsr	render
+	move	#>2,x1
+	jsr	wr
+	move	#LB,r1
+	move	#RB,r3
+	do	#N,rnd1
+	move	x:(r1)+,x1
+	jsr	wr
+	move	y:(r3)+,x1
+	jsr	wr
+rnd1
+	jmp	cmd
+
+; a 16-bit word (Y:(r0)+, in its top 16 bits) as an integer into a1
+w16	move	y:(r0)+,a
+	rep	#8
+	asr	a
+	rts
+
+; ---- the block at Y:r0 into LB and RB
+render	clr	a
+	move	#LB,r1
+	rep	#N
+	move	a,x:(r1)+
+	move	#RB,r1
+	rep	#N
+	move	a,y:(r1)+
+	move	#NOW,r1
+	rep	#NV
+	move	a,x:(r1)+
+	jsr	w16			; the voices
+	move	a1,x:V_NV
+	tst	a
+	jeq	rnfin
+vlp	jsr	w16			; its number
+	move	#>NV-1,x1
+	and	x1,a
+	move	a1,x:V_ID
+	move	y:(r0)+,x0		; its place's fraction: Q16 << 8, Q24
+	move	x0,x:V_PH0
+	clr	a
+	move	a,x:V_PH1
+	jsr	w16			; its step's whole part
+	move	a1,y1
+	move	y:(r0)+,x0		; and its fraction (Q24)
+	move	x0,x:V_INCF
+	move	y:(r0)+,x0		; the gains at the block's end: Q15 << 8, Q23
+	move	x0,x:V_TL
+	move	y:(r0)+,x0
+	move	x0,x:V_TR
+	jsr	w16			; the points
+	move	a1,x:V_NP
+	move	#>1,x0
+	add	x0,a
+	asr	a			; their words
+	move	a1,x:V_NW
+	; the points unpacked: each word's high byte, then its low, Q23 halved
+	move	#PB,r4
+	move	#>$ff0000,x1
+	move	#>$000080,y0		; (y0 the step's again after)
+	move	x:V_PH0,x0		; (the fraction kept too)
+	move	x0,x:V_SR
+	move	x:V_NW,x0
+	do	x0,unp
+	move	y:(r0)+,x0
+	move	x0,a
+	and	x1,a			; the high byte, in A1's top (A2 its sign)
+	asr	a
+	move	a1,y:(r4)+
+	mpy	x0,y0,a			; the word x 2^8: the low byte in A0's top
+	move	a0,x0
+	move	x0,a			; (its sign extended)
+	asr	a
+	move	a1,y:(r4)+
+unp
+	; each point's difference from the next (the last's: 0)
+	move	#PB,r4
+	move	#PD,r1
+	move	x:V_NP,a
+	move	#>1,x0
+	sub	x0,a
+	move	a1,x:V_NW
+	move	x:V_NW,x0
+	do	x0,dif
+	move	y:(r4)+,x0
+	move	y:(r4),a
+	sub	x0,a
+	move	a,x:(r1)+
+dif
+	clr	a
+	move	a,x:(r1)
+	move	x:V_INCF,y0		; (the step's fraction: y0 was the unpacking's)
+	; the gains: where the last block left the voice (0 if it wasn't in it)
+	move	x:V_ID,n2
+	move	#SEEN,r2
+	clr	a
+	move	a,x:V_GLC
+	move	a,x:V_GRC
+	move	x:(r2+n2),b
+	tst	b
+	jeq	gn1
+	move	#GL,r2
+	nop
+	move	x:(r2+n2),x0
+	move	x0,x:V_GLC
+	move	#GR,r2
+	nop
+	move	x:(r2+n2),x0
+	move	x0,x:V_GRC
+gn1	move	x:V_TL,b		; the steps: (end - now) / 64, floor
+	move	x:V_GLC,x0
+	sub	x0,b
+	rep	#2
+	asr	b
+	move	b1,x:V_SL
+	move	x:V_TR,b
+	move	x:V_GRC,x0
+	sub	x0,b
+	rep	#2
+	asr	b
+	move	b1,x:V_SR
+	; the samples: first each interpolated, into XS (a the place, y its step)
+	move	#PB,r4
+	move	#PD,r1
+	move	#XS,r2
+	move	x:V_PH1,a
+	move	x:V_PH0,a0
+	do	#N,slp
+	move	a1,n4			; the point
+	move	a1,n1
+	move	a0,b
+	lsr	b			; the fraction, Q23
+	move	b1,x1
+	move	y:(r4+n4),b		; s0
+	move	x:(r1+n1),x0		; s1 - s0
+	mac	x0,x1,b			; s0 + (s1 - s0) f
+	add	y,a	b,x:(r2)+	; the next place
+slp
+	; then mixed, left and right together, a gain held GMSD_CHUNK samples
+	move	#XS,r2
+	move	#LB,r1
+	move	#RB,r5
+	do	#N/16,mxc
+	move	x:V_GLC,x1
+	move	x:V_GRC,y1
+	do	#16,mx
+	move	x:(r2)+,x0
+	move	x:(r1),a	y:(r5),b
+	mac	x0,x1,a
+	mac	x0,y1,b
+	move	a,x:(r1)+	b,y:(r5)+
+mx
+	move	x:V_GLC,a		; the gains a step on
+	move	x:V_SL,x0
+	add	x0,a
+	move	a1,x:V_GLC
+	move	x:V_GRC,a
+	move	x:V_SR,x0
+	add	x0,a
+	move	a1,x:V_GRC
+mxc
+	; the gains as the block leaves them: its ends
+	move	x:V_ID,n2
+	move	#GL,r2
+	move	x:V_TL,x0
+	move	x0,x:(r2+n2)
+	move	#GR,r2
+	move	x:V_TR,x0
+	move	x0,x:(r2+n2)
+	move	#NOW,r2
+	move	#>1,x0
+	move	x0,x:(r2+n2)
+	move	x:V_NV,a
+	move	#>1,x0
+	sub	x0,a
+	move	a1,x:V_NV
+	jne	vlp
+rnfin	; the voices not in this block: their gains 0
+	move	#NOW,r1
+	move	#SEEN,r2
+	move	#GL,r3
+	move	#GR,r4
+	clr	b
+	do	#NV,rf1
+	move	x:(r1)+,a
+	move	a,x:(r2)+
+	tst	a
+	jne	rf2
+	move	b,x:(r3)
+	move	b,x:(r4)
+rf2	move	(r3)+
+	move	(r4)+
+	nop
+rf1
+	rts
