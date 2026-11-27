@@ -3447,3 +3447,52 @@ and 7, some 650 writes a second, nearly every write between two short waits):
   checked against Nuked's and is the same; the six possible maps tried, the present one the
   closest. Not changed: the feedback operator at the chip's rate would take the DSP past its
   worst case's 82 %.
+
+## Links in the list, and Spotify through the Gateway (decided 27 Nov 2026, after 1.61)
+
+The owner's decisions: a line of the list, or of a saved playlist, may be a file, a web address or
+a Spotify item, and one playlist may mix them; no Apple Music (copy-protected, nothing on Linux plays
+it without an Apple device in control); no web page on the Gateway to send links (many people have
+no Gateway); Spotify right after 1.61; a Spotify album or playlist is **one line**, a pointer to
+what Spotify keeps, played as it is in Spotify then, as a station's line is played live, so Shuffle
+moves the line and never orders inside it; **Expand** makes it one row a track, by the user's
+choice, never by itself; each track's album art, title and artist shown while it plays.
+
+- **The lines** (src/m3u.c `m3u_link`, host-tested): a path as before; `http://` and `https://`
+  as they are (EPlay's own TLS.OVL for https on a Direct connection, the Falcon alone); Spotify's
+  own form `spotify:track:ID`, `spotify:album:ID`, `spotify:playlist:ID` (an
+  `https://open.spotify.com/...` link or the old `spotify:user:NAME:playlist:ID` taken as that,
+  its `?si=` and `intl-xx/` dropped; an artist, a show or a bad id passed over); `file:///C:/...`
+  as its path. A saved .M3U writes the line as it is: other players read the lines they know.
+- **Spotify needs the Gateway.** No Atari plays it alone: Spotify's sign-in is a web login, its
+  connection Spotify's own protocol and cipher, its sound encrypted Ogg Vorbis at 160 or 320
+  kbit/s, which no stock 68030 decodes in time. A strong machine without a Gateway (FireBee, V4,
+  a fast CT60) is a measurement for later (Tremor on each), then the owner's call. EPlay asks the
+  Gateway named in Settings for a Spotify line whether it connects Direct or not; without one,
+  "Spotify needs the AERA Gateway: give its address in Settings."
+- **radio/spotgate.py** (port 8581, EPlay's `SPOTPORT=`), beside radiogate: go-librespot (GPL-3.0)
+  plays the item on the Gateway, its API on 127.0.0.1 only, its sound to a FIFO (the pipe backend,
+  s16le); ffmpeg makes MP3 at 192 kbit/s; sent as an ICY stream, as a station. Each track's block:
+  `StreamTitle='artists - title';StreamUrl='its cover';EPlayTrack='spotify:track:ID';EPlayLen='ms';EPlayPos='ms';`
+  (the details asked of the player every second, and before a stream's first sound). `from`,
+  `step` and `pos` start the item at a track, the one after or before it, or a place in it:
+  EPlay's Next and Previous inside the line, the position bar, and Play after Pause (the stream
+  closed at Pause, asked again where it was). The stream ends at the item's end; one at a time (a
+  request waits 3 s for the last to close). `/tracks` lists an item for Expand; `/login` says
+  signed in, or gives Spotify's pairing link and code (`device_auth`: typed on any phone or
+  computer, once; the credentials stay with the player, never in EPLAY.INF). It needs Spotify
+  Premium, and it is unofficial: Spotify may change its protocol, and the Gateway's player is
+  updated then. Tested against a stand-in of the player's API (radio/test_spotgate.py); the real
+  player's `/auth/code` answer's field names are taken loosely, to be checked on the Gateway.
+- **EPlay** holds a track's block until the music reaches the byte it came at (the ICY reader
+  counts the audio), then shows its title, artist, cover, length and place (the queue is seconds
+  ahead of what is heard). A stream ending within 5 s of the last track's end is the line's end:
+  the next line follows; one cut short connects again at its place. Next past the last track
+  goes to the next line; Previous 3 s into a track starts it again, else the one before.
+- **The rig**: tests/hatari/stream_test.py `spotify` (a playlist line on a Direct connection, the
+  Gateway in Settings, spotgate with the stand-in player: both tracks shown as heard, no gap, the
+  line's end, no connection again).
+- **Still to do before it goes out**: a rig case for Expand and for Next inside a line; the help
+  file's page; the owner's words for the sign-in (Options > Spotify sign-in..., an alert for now);
+  go-librespot on the Gateway (the hub and the Gateway's session, its package the owner's call,
+  which he made with this plan).
