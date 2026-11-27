@@ -318,6 +318,8 @@ $(B)/test_gmset: tests/gmset/test_gmset.c src/gmset.c src/gmset.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/gmset/test_gmset.c src/gmset.c
 $(B)/test_gmsynth: tests/gmsynth/test_gmsynth.c src/gmsynth.c src/gmsynth.h src/gmset.c src/gmset.h
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/gmsynth/test_gmsynth.c src/gmsynth.c src/gmset.c -lm
+$(B)/test_gmsdsp: tests/gmsynth/test_gmsdsp.c src/gmsdsp.c src/gmsdsp.h src/gmsynth.c src/gmsynth.h src/gmset.c src/gmset.h
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -o $@ tests/gmsynth/test_gmsdsp.c src/gmsdsp.c src/gmsynth.c src/gmset.c -lm
 $(B)/gm8.dat: tools/mkgmset.py third_party/sonivox/wt_22khz.c | $(B)
 	python3 tools/mkgmset.py third_party/sonivox/wt_22khz.c $@
 $(B)/gm16.dat: tools/mkgmset.py third_party/sonivox/wt_22khz.c | $(B)
@@ -367,7 +369,7 @@ $(B)/test_mp3int: tests/mp3/test_mp3int.c mp3ovl/madhead.c $(HMADO)
 	$(HOSTCC) $(HMADF) -Wall -Wextra -Wno-unused-function -o $@ tests/mp3/test_mp3int.c $(HMADO) -lm
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
 		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay $(B)/test_smf \
-		$(B)/test_gmset $(B)/gm8.dat $(B)/gm16.dat $(B)/test_gmsynth
+		$(B)/test_gmset $(B)/gm8.dat $(B)/gm16.dat $(B)/test_gmsynth $(B)/test_gmsdsp
 	./$(B)/test_inf
 	mkdir -p $(B)/vgmfiles && ./$(B)/test_vgm $(B)/vgmfiles
 	./$(B)/test_stream
@@ -378,6 +380,7 @@ test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test
 	python3 tests/smf/run.py $(B)/test_smf $(B)/smffiles
 	./$(B)/test_gmset $(B)/gm8.dat $(B)/gm16.dat
 	./$(B)/test_gmsynth $(B)/gm16.dat
+	./$(B)/test_gmsdsp $(B)/gm16.dat
 	./$(B)/test_order
 	./$(B)/test_tags
 	TEST=$(B)/test_tags D=$(B)/tagfiles sh tests/tags/run.sh

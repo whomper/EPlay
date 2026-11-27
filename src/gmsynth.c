@@ -577,3 +577,32 @@ long gms_bench(int v, int n)
 	}
 	return sum;
 }
+
+/* (the DSP's, gmsdsp.c: the control a block of n samples at a time, at its
+   start: the envelopes' and the vibrato's update once its period has
+   passed, its ramps across the blocks to the next one, so that a block
+   holds one pitch and one ramp a voice) */
+void gms_block_ctl(GMSYN *s, int n)
+{
+	int k;
+	if (s->to_upd > 0)
+		return;
+	s->to_upd += s->upd;
+	{
+		long over = (s->to_upd + n - 1) / n * n;
+		for (k = 0; k < s->voices; k++) {
+			GMS_VOICE *v = &s->v[k];
+			if (!v->on)
+				continue;
+			if (v->eg1st == EG_OFF)
+				v_off(s, v);
+			else
+				v_update(s, v, over);
+		}
+	}
+}
+
+void gms_voice_off(GMSYN *s, GMS_VOICE *v)
+{
+	v_off(s, v);
+}

@@ -77,6 +77,10 @@ void gms_cap(GMSYN *s, int n);
 /* (the CPU's speed: the voice loop run n samples with v voices on a wave
    of silence, for the caller to time) */
 long gms_bench(int v, int n);
+/* (the DSP's, gmsdsp.c) the control at a block's start (n samples: the
+   caller takes n from to_upd after it), and a voice ended */
+void gms_block_ctl(GMSYN *s, int n);
+void gms_voice_off(GMSYN *s, GMS_VOICE *v);
 /* every note silent at once, the controllers as GM's reset leaves them */
 void gms_reset(GMSYN *s);
 
