@@ -3286,6 +3286,8 @@ int play_wait_ms(void)
 	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
 	/* (a file read on to 12 s ahead in turns that wait for nothing, a
 	   station's 4: GEM's turns read it, and the AES holds them while a
-	   menu of the menu bar is down: a fault reported 27 Nov 2026) */
-	return ahead >= (net ? 4 : 12) || q_size - (q_w - q_r) < PIECE ? 100 : 0;
+	   menu of the menu bar is down: a fault reported 27 Nov 2026. Its
+	   first 2 s to 4 s ahead, as before: the start's turns no longer,
+	   an STE's start with a list 1,950 to 1,970 ms otherwise) */
+	return ahead >= (net || play_ms() < 2000 ? 4 : 12) || q_size - (q_w - q_r) < PIECE ? 100 : 0;
 }
