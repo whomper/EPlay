@@ -998,7 +998,7 @@ static void tick_body(void);
 /* (the synth on the Falcon's DSP, dsp/gms.a56: a 68030's, 27 Nov 2026) the
    tick writes each block of 128 frames (the voices' headers and 8-bit
    points, gmsdsp.h) into the four-track ring the DMA plays into the DSP's
-   receive, gsd_lead frames ahead, three a tick at most; its records not
+   receive, gsd_lead frames ahead (some 250 ms), three a tick at most; its records not
    made in time, an empty block (silence, an underrun), never the ring's
    old blocks again; after the end, frames of zeros (no block in them) */
 static long gsd_lead;
@@ -2117,7 +2117,9 @@ made_ahead:
 				play_stop();
 				return 0;
 			}
-			gsd_lead = (out_rate / 8) / GMSD_FRAMES * GMSD_FRAMES + GMSD_FRAMES;	/* (some 125 ms) */
+			/* (a quarter of a second and a block: the DMA starts once a
+			   quarter is written, play_step; 125 ms never started it) */
+			gsd_lead = (out_rate / 4) / GMSD_FRAMES * GMSD_FRAMES + GMSD_FRAMES;
 			dspgms_out(out_rate, ext);
 		}
 #endif
