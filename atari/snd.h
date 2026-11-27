@@ -74,7 +74,7 @@ long snd_rate_dsp(long rate, int *ext);	/* an MP3 from the DSP: the clock it res
 /* the ring ready at that rate, silent, the DMA stopped: 0 if no ST RAM */
 int snd_open(long rate, int ext);
 int snd_open_feed(long rate, int ext);	/* the ring to the DSP's receive (one track): XSTREAM */
-int snd_open_gms(long rate, int ext);	/* the ring to the DSP's receive, four tracks: the synth's blocks */
+int snd_open_gms(long rate, int ext);	/* the ring to the DSP's receive, two tracks: the synth's blocks */
 void snd_close(void);		/* stopped, the ring given back */
 
 long snd_room(void);		/* frames that can be written now */

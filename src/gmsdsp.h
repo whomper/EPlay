@@ -4,7 +4,7 @@
  * gmsdsp.h - the internal synth on the Falcon's DSP (DESIGN.md, "The synth
  * on the DSP: through the DMA"). The 68030 runs gmsynth.c's control and
  * writes, for each block of GMSD_N synth samples (2 x GMSD_N frames of the
- * DMA's, 8 words a frame), each sounding voice's header and the 8-bit
+ * DMA's, 4 words a frame), each sounding voice's header and the 8-bit
  * points its pitch reaches in the block into the sound DMA's ring, which
  * plays them into the DSP's SSI receive; the DSP (dsp/gms.a56) renders the
  * block. Here: the block's words (gmsd_write, the 68030's) and the DSP's
@@ -32,7 +32,8 @@
 
 #define GMSD_N 64		/* synth samples a block */
 #define GMSD_FRAMES (2 * GMSD_N)	/* the DMA's frames a block (the output twice the synth's rate) */
-#define GMSD_WORDS (8 * GMSD_FRAMES)	/* its words: 4 stereo tracks */
+#define GMSD_WORDS (4 * GMSD_FRAMES)	/* its words: 2 stereo tracks (4 had the DSP's SSI take 8 words a
+					   frame each way, too many interrupts for it: 27 Nov 2026) */
 #define GMSD_VOICES 32
 #define GMSD_HEAD 7
 #define GMSD_PTS 128		/* a voice's points in a block at most (the DSP's internal memory): a

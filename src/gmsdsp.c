@@ -141,6 +141,8 @@ void gmsd_dsp(GMSD_DSP *d, const unsigned short *w, long *lr)
 		long long ph = (long long)w[p + 1] << 8, inc = ((long long)w[p + 2] << 24) | ((long long)w[p + 3] << 8);
 		if (np > GMSD_PTS)
 			np = GMSD_PTS;
+		if (np < 2)
+			np = 2;		/* (a damaged block's: the DSP's the same) */
 		for (j = 0; j < np; j++) {
 			unsigned short ww = w[p + GMSD_HEAD + (j >> 1)];
 			signed char b = (signed char)((j & 1) ? ww & 0xff : ww >> 8);

@@ -11,13 +11,16 @@
 #include "snd.h"
 #include "dspgms.h"
 #include "gms_prog.h"
+#include "elog.h"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"	/* fixed hardware addresses */
 
 #define HZ200 (*(volatile unsigned long *)0x4baL)
 #define HISR (*(volatile unsigned char *)0xffffa202L)
 #define HTX32 (*(volatile unsigned long *)0xffffa204L)	/* 0, then the word's 3 bytes */
-#define HRX32 (*(volatile unsigned long *)0xffffa204L)
+#define HRXH (*(volatile unsigned char *)0xffffa205L)	/* the word's bytes: the low last (it frees the port) */
+#define HRXM (*(volatile unsigned char *)0xffffa206L)
+#define HRXL (*(volatile unsigned char *)0xffffa207L)
 
 #define Ongibit(b) trap14_ww(30, (b))
 #define Offgibit(b) trap14_ww(29, (b))
@@ -49,7 +52,9 @@ static long get(void)
 			failed = 1;
 			return -1;
 		}
-	w = HRX32 & 0xffffff;
+	w = (unsigned long)HRXH << 16;
+	w |= (unsigned long)HRXM << 8;
+	w |= HRXL;
 	return (long)w;
 }
 
@@ -72,7 +77,7 @@ static long play(void)
 	return 0;
 }
 
-static long blocks_, late_, skipped_;
+static long blocks_, late_, skipped_, rxat_, first_[12];
 
 static long stop(void)
 {
@@ -80,6 +85,12 @@ static long stop(void)
 	blocks_ = get();
 	late_ = get();
 	skipped_ = get();
+	rxat_ = get();
+	{
+		int i;
+		for (i = 0; i < 12; i++)
+			first_[i] = get();
+	}
 	return 0;
 }
 
@@ -127,8 +138,9 @@ void dspgms_play(void)
 
 void dspgms_close(long *blocks, long *late, long *skipped)
 {
-	blocks_ = late_ = skipped_ = -1;
-	if (playing && !failed)
+	int playing_was = playing && !failed;
+	blocks_ = late_ = skipped_ = rxat_ = -1;
+	if (playing_was)
 		Supexec(stop);
 	playing = 0;
 	if (blocks)
@@ -137,6 +149,13 @@ void dspgms_close(long *blocks, long *late, long *skipped)
 		*late = late_;
 	if (skipped)
 		*skipped = skipped_;
+	if (playing_was)
+		elog("the DSP's stream: its receive at $%04lX; the first block as it came: %04lX %04lX %04lX %04lX %04lX "
+		     "%04lX %04lX %04lX %04lX %04lX %04lX %04lX", rxat_ & 0xffff, (first_[0] >> 8) & 0xffff,
+		     (first_[1] >> 8) & 0xffff, (first_[2] >> 8) & 0xffff, (first_[3] >> 8) & 0xffff,
+		     (first_[4] >> 8) & 0xffff, (first_[5] >> 8) & 0xffff, (first_[6] >> 8) & 0xffff,
+		     (first_[7] >> 8) & 0xffff, (first_[8] >> 8) & 0xffff, (first_[9] >> 8) & 0xffff,
+		     (first_[10] >> 8) & 0xffff, (first_[11] >> 8) & 0xffff);
 	if (locked) {
 		snd_dsp_off();
 		dsp_unlock();

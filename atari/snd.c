@@ -1084,7 +1084,7 @@ int snd_open_feed(long rate, int ext)
 	return open_to(rate, ext, 1);
 }
 
-/* the ring to the DSP's receive as four stereo tracks (8 words a frame),
+/* the ring to the DSP's receive as two stereo tracks (4 words a frame),
    at the output's rate, for the synth on the DSP (dsp/gms.a56): its
    transmit set to the DAC and the port first (snd_dsp_out) */
 int snd_open_gms(long rate, int ext)
@@ -1172,17 +1172,16 @@ static int open_to(long rate, int ext, int feed)
 	if (ring_n > RING_MAX)
 		ring_n = RING_MAX;
 	if (feed == 3) {
-		/* the synth's blocks to the DSP (snd_open_gms): four stereo
-		   tracks, 8 words a frame, into its receive; the ring a whole
-		   number of blocks (128 frames), so that none is split */
-		snd_fw = FW;
-		fw_shift = 4;
+		/* the synth's blocks to the DSP (snd_open_gms): two stereo
+		   tracks, 4 words a frame, into its receive (four, 8 words, were
+		   too many interrupts for its SSI); the ring a whole number of
+		   blocks (128 frames), so that none is split */
+		snd_fw = 4;
+		fw_shift = 3;
 		ring_n -= ring_n % 128;
-		if (dirty) {
-			memset(ring, 0, (size_t)dirty);
-			dirty = 0;
-		}
-		Settracks(TRACKS - 1, 0);
+		if (dirty < ring_n * 8)
+			dirty = ring_n * 8;	/* (the DAC's silent tracks to clear before it plays four again) */
+		Settracks(1, 0);
 		Setmontracks(0);
 		Setmode(STEREO16);
 		Devconnect(DMAPLAY, DSPRECV, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);

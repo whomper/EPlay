@@ -8,7 +8,7 @@
  * into its X memory and rendered (RENDER), each sample against
  * gmsd_dsp's, the C model, bit for bit; and the cycles a block takes for
  * its voices. Then the stream (PLAY): the SSI driven a word a slot as
- * Hatari's crossbar does (four stereo tracks, 8 words a frame, at 49,170
+ * Hatari's crossbar does (two stereo tracks, 4 words a frame, at 49,170
  * Hz on a 32 MHz DSP), the blocks played into its receive some words
  * off the frame, as a DMA that started late gives them; every frame it
  * sends (slots 0 and 1) against the model's (gmsd_dsp, gmsd_up), bit for
@@ -79,7 +79,7 @@ static int stream(int off)
 {
 	long nw = 8192L + off + (long)NSB * GMSD_WORDS + 6L * GMSD_WORDS, i, nf = 0, first = -1, j;
 	long prev[2] = { 0, 0 }, lr[2 * GMSD_N], f;
-	double at = 0, per = 32000000.0 / (49170.0 * 8);
+	double at = 0, per = (getenv("SIMMHZ") ? atof(getenv("SIMMHZ")) * 1e6 : 32000000.0) / (49170.0 * 4);
 	int k, sbad = 0;
 	unsigned long nb, late, skip;
 	gms_init(&syn, &g, RATE, GMSD_VOICES);
@@ -99,10 +99,11 @@ static int stream(int off)
 	}
 	put(8);
 	at = (double)cycles;	/* (the slots' clock from now: the cycles count on from the tests before) */
+	profiling = getenv("SIMPROF_STREAM") != NULL;
 	for (i = 0; i < nw; i++) {
 		long b = i - 8192 - off;
 		unsigned long w = b >= 0 && b < (long)NSB * GMSD_WORDS ? sblk[b / GMSD_WORDS][b % GMSD_WORDS] : 0;
-		int slot = (int)(i & 7);
+		int slot = (int)(i & 3);
 		at += per;
 		while (cycles < (unsigned long long)at) {
 			if (!step())
@@ -117,10 +118,13 @@ static int stream(int off)
 		dsp_core_ssi_Receive_SC1(slot == 0);
 		dsp_core_ssi_Receive_SC0();
 	}
+	profiling = 0;
 	put(9);
 	nb = (unsigned long)get();
 	late = (unsigned long)get();
 	skip = (unsigned long)get();
+	for (k = 0; k < 13; k++)
+		(void)get();	/* (the receive's place; the first block's first words) */
 	/* the first frame the model's first matches, then all of them */
 	for (f = 0; f + 2L * 256 < nf && first < 0; f += 2) {
 		for (j = 0; j < 2L * 256; j++)

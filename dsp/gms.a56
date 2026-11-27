@@ -7,13 +7,13 @@
 ; left and right, as src/gmsdsp.c's gmsd_dsp computes them, bit for bit.
 ; Small enough for the bootstrap's 512 words.
 ;
-; PLAY streams: the sound DMA plays four stereo tracks (8 words a frame)
+; PLAY streams: the sound DMA plays two stereo tracks (4 words a frame)
 ; into the SSI's receive, a fast interrupt putting each word in RXB's
-; ring; the DSP finds each block by its first word (GMSD_MAGIC, however
+; ring (4 blocks); the DSP finds each block by its first word (GMSD_MAGIC, however
 ; many words on the DMA started), renders it, makes its 64 samples the
 ; output's 128 frames (each pair's mean, then the pair; doubled,
 ; saturated: gmsd_up) and puts them in slots 0 and 1 of TXB's ring, 4
-; segments of 128 frames, which a fast interrupt sends to the matrix a
+; segments of 128 frames (4 words each), which a fast interrupt sends to the matrix a
 ; word a slot (the DAC takes the first track). A segment once played is
 ; cleared, so that silence follows where no block came (the 68030 stopped
 ; writing): never the ring's old sound again.
@@ -28,7 +28,7 @@
 ;	8 PLAY			the stream, until the host's next word (any: STOP),
 ;				then its counts: the blocks rendered, those late
 ;				(their segment already playing), the words passed
-;				over finding a block
+;				over finding a block, the receive's place in RXB
 
 HCR	equ	$ffe8
 HSR	equ	$ffe9
@@ -42,8 +42,9 @@ TX	equ	$ffef
 IPR	equ	$ffff
 
 MAGIC	equ	$a55a00		; a block's first word (GMSD_MAGIC, in the top 16 bits)
-RXB	equ	$2000		; X: the receive's ring, 2 blocks (modulo 2048: r6)
-TXB	equ	$2000		; Y: the transmit's ring, 4 segments of 128 frames (modulo 4096: r7)
+BW	equ	512		; a block's words (GMSD_WORDS: 128 frames of 4)
+RXB	equ	$2000		; X: the receive's ring, 4 blocks (modulo 2048: r6)
+TXB	equ	$2000		; Y: the transmit's ring, 4 segments of 128 frames (modulo 2048: r7)
 
 N	equ	64		; synth samples a block (GMSD_N)
 NV	equ	32		; voices (GMSD_VOICES)
@@ -84,6 +85,8 @@ V_SKIP	equ	$1415		; the words passed over finding a block
 V_PL	equ	$1416		; the last block's last sample, left
 V_PR	equ	$1417		; and right
 V_JUNK	equ	$1418
+V_DBG	equ	$1420		; the first block's first 12 words (STOP sends them: the log's)
+V_DBGN	equ	$142c		; (kept: 1)
 
 	org	p:$0
 	jmp	start
@@ -96,7 +99,7 @@ V_JUNK	equ	$1418
 	org	p:$0e
 	jsr	rxe
 ; the SSI's transmit, a fast interrupt: TXB's ring a word a slot (r7, m7
-; 4095); with an underrun, the status read first
+; 2047); with an underrun, the status read first
 	org	p:$10
 	movep	y:(r7)+,x:TX
 	nop
@@ -215,8 +218,12 @@ rc1
 	move	a,x:(r1)+
 rc2
 	jsr	w16			; its first word: GMSD_MAGIC (the stream found it)
-	jsr	w16			; the voices
-	move	a1,x:V_NV
+	jsr	w16			; the voices (more than NV: none, as the model)
+	move	#>NV,x1
+	cmp	x1,a
+	jle	rn0
+	clr	a
+rn0	move	a1,x:V_NV
 	tst	a
 	jeq	rnfin
 vlp	jsr	w16			; its number
@@ -235,8 +242,16 @@ vlp	jsr	w16			; its number
 	move	x0,x:V_TL
 	move	x:(r0)+,x0
 	move	x0,x:V_TR
-	jsr	w16			; the points
-	move	a1,x:V_NP
+	jsr	w16			; the points: 2 to 128 (a damaged block's held there, as the model)
+	move	#>128,x1
+	cmp	x1,a
+	jle	rn1
+	move	x1,a
+rn1	move	#>2,x1
+	cmp	x1,a
+	jge	rn2
+	move	x1,a
+rn2	move	a1,x:V_NP
 	move	#>1,x0
 	add	x0,a
 	asr	a			; their words
@@ -391,8 +406,7 @@ play	clr	a
 	rep	#4*NV
 	move	a,x:(r1)+
 	move	#TXB,r1			; the output's ring silent
-	move	#>4096,x0		; (do's count: 12 bits at most as an immediate)
-	do	x0,pl1
+	do	#2048,pl1
 	move	a,y:(r1)+
 pl1
 	move	#RXB,r1			; and the input's
@@ -405,16 +419,17 @@ pl2
 	move	a,x:V_PL
 	move	a,x:V_PR
 	move	a,x:V_SEG
+	move	a,x:V_DBGN
 	move	#>-1,x0
 	move	x0,x:V_T
 	move	#RXB,r6
 	movec	#2047,m6
 	move	r6,x:V_RR
 	move	#TXB+1,r7		; (slot 0's word goes out as the first interrupt comes)
-	movec	#4095,m7
+	movec	#2047,m7
 	movec	#2047,m0
 	movep	#$1f8,x:PCC		; port C: the SSI
-	movep	#$4700,x:CRA		; 16 bits, 8 words a frame
+	movep	#$4300,x:CRA		; 16 bits, 4 words a frame
 	movep	#$f800,x:CRB		; receive, transmit, their interrupts; network mode
 	movep	#$3400,x:IPR		; the SSI at level 2
 	movep	#0,x:TX
@@ -462,12 +477,23 @@ pl6	move	x:V_RR,x1		; the words passed over: (r0 - rr) modulo 2048
 	move	b1,x:V_SKIP
 	move	r0,x:V_RR
 	jmp	loop
-pl4	move	#>1024,x0		; the whole block in?
+pl4	move	#>BW,x0			; the whole block in?
 	cmp	x0,a
 	jlt	loop
-	jsr	render
+	move	x:V_DBGN,b		; (the first block's first words kept, for the log)
+	tst	b
+	jne	pl7
+	move	#V_DBG,r1
+	do	#12,pl8
+	move	x:(r0)+,x0
+	move	x0,x:(r1)+
+pl8
+	move	#>1,x0
+	move	x0,x:V_DBGN
+	move	x:V_RR,r0
+pl7	jsr	render
 	move	x:V_RR,r0		; the next block's place
-	move	#>1024,n0
+	move	#>BW,n0
 	nop
 	move	(r0)+n0
 	move	r0,x:V_RR
@@ -480,11 +506,11 @@ pl4	move	#>1024,x0		; the whole block in?
 	jmp	loop
 
 ; the segment playing (r7's) into a; once it has moved on, the one it
-; left cleared (slots 2 to 7 too: the next block's writes 0 and 1)
+; left cleared (slots 2 and 3 too: the next block's writes 0 and 1)
 seg	move	r7,a
 	move	#>TXB,x0
 	sub	x0,a
-	rep	#10
+	rep	#9
 	asr	a
 	move	#>3,x0
 	and	x0,a
@@ -493,13 +519,13 @@ seg	move	r7,a
 	cmp	a,b
 	jeq	sg9
 	move	a1,x:V_SEG
-	rep	#10			; the one left (b's): cleared
+	rep	#9			; the one left (b's): cleared
 	asl	b
 	move	#>TXB,x0
 	add	x0,b
 	move	b1,r1
 	clr	b
-	do	#1024,sg1
+	do	#BW,sg1
 	move	b,y:(r1)+
 sg1
 sg9	rts
@@ -523,12 +549,12 @@ ot1	move	#>2,x0
 	and	x0,a
 	move	a1,b
 ot2	move	b1,x:V_T
-	rep	#10
+	rep	#9
 	asl	b
 	move	#>TXB,x0
 	add	x0,b
 	move	b1,r1			; slot 0 of the segment's first frame
-	move	#>7,n1
+	move	#>3,n1
 	move	#LB,r2
 	move	#RB,r3
 	do	#N,ot3
@@ -579,4 +605,12 @@ pstop	ori	#3,mr
 	jsr	wr
 	move	x:V_SKIP,x1
 	jsr	wr
+	move	r6,x1			; (and the receive's place: a word came at all?)
+	jsr	wr
+	move	#V_DBG,r1		; and the first block's first 12 words
+	do	#12,ps1
+	move	x:(r1)+,x1
+	jsr	wr
+	nop
+ps1
 	jmp	cmd

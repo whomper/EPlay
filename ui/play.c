@@ -997,7 +997,7 @@ static void tick_body(void);
 #ifndef EPLAY_ST
 /* (the synth on the Falcon's DSP, dsp/gms.a56: a 68030's, 27 Nov 2026) the
    tick writes each block of 128 frames (the voices' headers and 8-bit
-   points, gmsdsp.h) into the four-track ring the DMA plays into the DSP's
+   points, gmsdsp.h) into the two-track ring the DMA plays into the DSP's
    receive, gsd_lead frames ahead (some 250 ms), three a tick at most; its records not
    made in time, an empty block (silence, an underrun), never the ring's
    old blocks again; after the end, frames of zeros (no block in them) */

@@ -3,7 +3,7 @@
 /*
  * dspgms.h - the internal synth on the Falcon's DSP (dsp/gms.a56): its
  * program loaded and the stream started, the DSP's transmit to the DAC
- * and the port at the output's rate, the sound DMA's four tracks into its
+ * and the port at the output's rate, the sound DMA's two tracks into its
  * receive (snd_open_gms: the 68030 writes the blocks, gmsdsp.h); stopped,
  * its counts for the log.
  */
