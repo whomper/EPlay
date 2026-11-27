@@ -3114,6 +3114,27 @@ a millisecond: the bar's white is pen 0, the only white in NVDI's palette, so th
 Falcon-4:16's Mega Drive VGM start read 2265 against 2200; 1.56 itself has read 2200 and 2280 in
 different gates, and 1.57's earlier candidates 2250 and 2200.
 
+## A menu held down, the rest (27 Nov 2026, folded into 1.61 at the owner's word)
+
+- **An MP3 the CPU decodes** (a 68060 with the DSP in use or no DSP, the FireBee, a V4, a Milan):
+  its queue holds the output's frames (4 bytes each at the output's rate), but play_wait_ms and
+  q_lead_ms took it at the MP3's bitrate, so "12 s ahead" was some 1 s of a 128 kbit/s MP3 and a
+  menu held down emptied it. Both now take the frames (cmp_mp3; the synth's and the chips' short
+  leads as before: the tick makes theirs). On Hatari's 68060 (some 32 MHz) a 320 kbit/s MP3 takes
+  74 % of the CPU and builds little lead by a menu 4 s in, so one underrun stays there, as before
+  the change; a real CT60 decodes well ahead.
+- **The XBIOS's sound** (FireBee, V4 on SNDXBIOS, Milan's GSXB) has no interrupt: GEM's turns fill
+  its looping ring, which played its old two seconds round again from 1.5 s into a held menu.
+  The ring is 12 s (sndfb.c RING_S, 2.4 MB of ST RAM); the volume is the codec's attenuation, so
+  nothing waits on it. A file's end is taken only once the ring's lead too is under half a second,
+  and the next file may follow on, gapless, while the ring holds the last one's end. menu_test.py
+  wav on Falcon-v4 with SNDXBIOS=1: 0 underruns (1, and the old sound, with 2 s);
+  play060.py wav, gapless, quit: pass.
+- **The sound system after a Pause or Stop** the user makes goes back at the next turn
+  (play_give_soon), so that another program's sound (EMail's bell, guidelines 5.13) isn't held off
+  2 s; from one file to the next the 2 s as before.
+- menu_test.py: MENU_INF= adds EPLAY.INF lines, the CPU's MP3 overlays are copied, Falcon-v4 known.
+
 ## An external clock without the FDI (27 Nov 2026)
 
 A tester with a CT63 Falcon and Cubase Audio's clock (CAC: a 44.1 kHz clock on the DSP port, no

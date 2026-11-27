@@ -1763,11 +1763,13 @@ static void command(int c)
 		if (play_state() == PS_PLAYING) {
 			play_log_stop();
 			play_stop();
+			play_give_soon();
 			elog_save();
 			status("Stopped.");
 			redraw(0, BP_PLAY | BP_TIME);
 		} else if (play_paused()) {
 			play_stop();		/* (paused: the place forgotten, Play from the start) */
+			play_give_soon();
 			status("Stopped.");
 			redraw(0, BP_PLAY | BP_TIME);
 		}

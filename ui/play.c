@@ -591,8 +591,13 @@ static void tick_pcm(void)
 		long hb = q_w - q_r, tail = q_size - q_roff, k, kb;
 		short *p;
 		if (hb < fmt.bytes) {
-			if (src_done)
-				t_end = 1;
+			if (src_done) {
+				/* (the end once the ring too is short: until then GEM
+				   may still put the next file on, gapless, where a long
+				   ring, the XBIOS's 12 s, took the queue in early) */
+				if (snd_written() - snd_played() < out_rate / 2)
+					t_end = 1;
+			}
 			else if (snd_played() > 0 && snd_written() - snd_played() < pcm_quiet_lead &&
 				 (net || data_left > 0)) {
 				/* (the ring's own lead short too: the queue merely empty
@@ -1230,9 +1235,29 @@ static long disk_kbs;		/* DISKKBS=, the rigs': the file read at most this many K
 /* the file read into the queue, a piece at a time, for about ms */
 /* the queue's lead: ms of music it holds, at the rate it is played (a
    WAV the DMA plays at another rate: at that one) */
+/* 1 for an MP3 (or a station's) the CPU decodes: its queue holds the
+   output's frames (a synth's and chips' too, but those keep short leads
+   of their own, the tick making theirs while GEM is held) */
+static int cmp_mp3(void)
+{
+#ifndef EPLAY_ST
+	if (cmp_mid)
+		return 0;
+#endif
+	return cmp && !cmp_vgm;
+}
+
 static long q_lead_ms(void)
 {
 	long ahead = q_w - q_r, r = kind && !dsp ? out_rate : rate;
+	if (cmp_mp3() && out_rate > 0) {
+		/* (an MP3 the CPU decodes: the queue
+		   holds the output's 16-bit stereo, 4 bytes a frame, not the
+		   file's bytes; taken at the file's bitrate, 12 s ahead was some
+		   1 s of a 128 kbit/s MP3, and a menu held down emptied it) */
+		ahead /= 4;
+		return ahead / out_rate * 1000 + ahead % out_rate * 1000 / out_rate;
+	}
 	if (kind)
 		return r > 0 ? ahead / fmt.bytes / r * 1000 + ahead / fmt.bytes % r * 1000 / r : 0;
 	return bitrate ? ahead / bitrate * 8 : 0;
@@ -2310,8 +2335,10 @@ int play_wants_next(void)
 	if (chain_asked || !src_done || net || paused || state != PS_PLAYING || chain_q >= 0 || t_end ||
 	    (dsp && xs) || gsd)
 		return 0;
-	if (q_w - q_r < 32768L)
-		return 0;		/* (too near the end to begin anything) */
+	if (q_w - q_r < 32768L && snd_written() - snd_played() < out_rate / 2)
+		return 0;		/* (too near the end to begin anything: the queue and
+				   the ring both short; the XBIOS's ring of 12 s holds
+				   the file's end long after the queue has gone) */
 	chain_asked = 1;
 	return 1;
 }
@@ -2589,6 +2616,7 @@ void play_pause(void)
 	elog("paused at %ld ms%s", pause_ms, pause_byte ? "" : " (Play takes it up by the time)");
 	play_stop();			/* (and the DSP given back: the DSP rule) */
 	paused = 1;
+	play_give_soon();
 }
 
 int play_resume(char *err, int n)
@@ -2702,6 +2730,16 @@ void play_stop(void)
    nothing has played for 2 s; kept from one file to the next (the next
    opens a turn or two after the last stopped: Return held 175 ms when it
    was given back and taken again between) */
+/* (a Pause or a Stop the user made: the sound system for others at the
+   next turn, not 2 s on; the 2 s are for one file to the next, guidelines
+   5.13: another program's bell may ring while EPlay is paused, the hub,
+   27 Nov 2026) */
+void play_give_soon(void)
+{
+	if (give_due)
+		give_at = ms_now();
+}
+
 void play_idle_give(void)
 {
 	if (give_due && state != PS_PLAYING && !play_is_open() && (long)(ms_now() - give_at) >= 0) {
@@ -3289,7 +3327,7 @@ int play_wait_ms(void)
 	if (src_done || vgm)
 		return 100;	/* (the synth on the DSP too: src_done) */
 	ahead = q_w - q_r;		/* seconds of music, near enough */
-	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
+	ahead = cmp_mp3() ? q_lead_ms() / 1000 : kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
 	/* (a file read on to 12 s ahead in turns that wait for nothing, a
 	   station's 4: GEM's turns read it, and the AES holds them while a
 	   menu of the menu bar is down: a fault reported 27 Nov 2026. Its

@@ -9,12 +9,12 @@
  * of the Falcon's sound is there (they read $FF00 and $FFFF), so nothing is
  * read or written but through the calls.
  *
- * A ring of 16-bit stereo frames in ST RAM (Mxalloc mode 0), two seconds
- * long, played looping (Buffoper's repeat), as mxPlay's on the FireBee.
+ * A ring of 16-bit stereo frames in ST RAM (Mxalloc mode 0), 12 seconds
+ * long (two until 1.61), played looping (Buffoper's repeat), as mxPlay's on the FireBee.
  * The tick has no interrupt here (feedfb.c): GEM's turns run it, and fill
  * the ring's room each time (all but the quarter behind where it plays,
- * snd_room), so that a second and a half passes before a turn held up (a
- * menu held down, the system's file selector) is heard. Where
+ * snd_room), so that nine seconds pass before a turn held up (a menu held
+ * down, the system's file selector) is heard. Where
  * it plays: the tick (in supervisor mode, by Supexec) calls no XBIOS (in
  * 1.31 to 1.34 its Buffptr from Timer A's interrupt rebooted the FireBee
  * at a GEM action, the tester, 13 Nov 2026), so it counts the frames by
@@ -68,7 +68,13 @@
 
 #define OUT_RATE 49170L
 #define PRESCALE 1		/* (Devconnect's: 49,170 Hz at the 25 MHz clock) */
-#define RING_MAX (49170L * 2)
+/* (12 s, not 2: GEM's turns fill it, and a menu held down holds them, the
+   ring then played round again, its old sound heard from 1.5 s on; 12 s,
+   as a file is read ahead, a fault reported 27 Nov 2026. 2.4 MB of ST
+   RAM; the volume is the codec's attenuation, so nothing waits on what is
+   written ahead but a level past its 22.5 dB) */
+#define RING_S 12
+#define RING_MAX (49170L * RING_S)
 
 #ifndef SND_XB_IN
 int snd_adder_adc;
@@ -269,7 +275,7 @@ int snd_open(long rate, int ext)
 			return 0;
 		ring = p;
 	}
-	ring_n = rate * 2;
+	ring_n = rate * RING_S;
 	if (ring_n > RING_MAX)
 		ring_n = RING_MAX;
 	memset(ring, 0, (size_t)ring_n * 4);

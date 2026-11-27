@@ -40,7 +40,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOP = os.path.join(HERE, "..", "..")
 sys.path.insert(0, HERE)
-if any(a.startswith("Falcon-0") for a in sys.argv):
+if any(a.startswith(("Falcon-0", "Falcon-v4")) for a in sys.argv):
     import play060  # noqa: E402,F401  (its machines)
 import speed  # noqa: E402  (EPlay's Rig)
 import midi_test  # noqa: E402  (its MIDI file writer)
@@ -51,6 +51,7 @@ VIEW_X = 190            # the View menu's title (speed.py's VIEW)
 LONG = 30               # seconds of music
 DISK = int(os.environ.get("MENU_DISKKBS", "0"))  # KB/s: the file read at a real disk's pace (EPLAY.INF's DISKKBS=)
 HOLD = int(os.environ.get("MENU_HOLD", "8"))    # seconds the menu is held (0: none, the control)
+# (MENU_INF="SNDXBIOS=1;...": lines added to EPLAY.INF, the XBIOS's sound on the 68060 stand-ins)
 
 
 def chords(seconds):
@@ -92,11 +93,12 @@ def session(work, spec, case):
         shutil.copy(os.environ.get("EPLAY_MENU_PRG") or os.path.join(TOP, "binary", "eplayst.prg" if st else "eplay.prg"),
                     prg)
         r.put(prg)
-        for f in ("synth.ovl", "synth.dat", "midi.ovl"):
+        for f in ("synth.ovl", "synth.dat", "midi.ovl", "mp3fpu.ovl", "mp3int.ovl"):
             r.put(os.path.join(os.path.dirname(os.environ.get("EPLAY_MENU_PRG") or os.path.join(TOP, "binary", "x")), f))
         r.put(os.path.join(HERE, "build", "LAUNCH.PRG"))
         # (an INF as the other rigs have one: none is a first run)
-        r.write("eplay.inf", "MIDI=SYNTH\r\nLOG=1\r\n" + ("DISKKBS=%d\r\n" % DISK if DISK else ""))
+        r.write("eplay.inf", "MIDI=SYNTH\r\nLOG=1\r\n" + ("DISKKBS=%d\r\n" % DISK if DISK else "") +
+                "".join(l + "\r\n" for l in os.environ.get("MENU_INF", "").split(";") if l))
         if case == "mid":
             with open(os.path.join(r.hd, "SONG.MID"), "wb") as f:
                 f.write(chords(LONG))
