@@ -3114,6 +3114,16 @@ a millisecond: the bar's white is pen 0, the only white in NVDI's palette, so th
 Falcon-4:16's Mega Drive VGM start read 2265 against 2200; 1.56 itself has read 2200 and 2280 in
 different gates, and 1.57's earlier candidates 2250 and 2200.
 
+## An external clock without the FDI (27 Nov 2026)
+
+A tester with a CT63 Falcon and Cubase Audio's clock (CAC: a 44.1 kHz clock on the DSP port, no
+digital out) heard nothing with the external clock: snd_dsp_out sent the DSP's transmit to the
+port alone (EXTOUT) on the external clock, as the FDI takes it, and left the DAC out (on the FDI's
+clock it played white noise on the owner's Falcon, 0.9). With an external clock and no FDI's driver
+(Sndstatus $DD02 doesn't answer $4711) the DAC is on the matrix too, on that clock, as Cubase Audio
+plays with a CAC; with the FDI, the port alone as before. The DMA's own paths had the DAC already.
+Hatari has no external clock: the tester's log is the check.
+
 ## The FireBee's "ALERT killed: Bus ERROR" (open, 24 Nov 2026)
 
 A FireBee tester (MyAES 0.99 under FreeMiNT) saw EPlay's error alerts for a VGZ of chips it doesn't

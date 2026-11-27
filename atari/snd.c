@@ -894,7 +894,12 @@ void snd_dsp_out(long rate, int ext)
 	   heard as a third channel at full scale on Erez's SoundPool Analog 8 */
 	Settracks(0, 0);
 	Setmontracks(0);
-	Devconnect(DSPXMIT, ext ? EXTOUT : DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
+	/* (an external clock with no FDI's driver, a clock alone such as
+	   Cubase Audio's CAC: no digital out to take the port's sound, so the
+	   DAC too, on that clock, as Cubase Audio plays there; silent before,
+	   a tester's CT63 with a CAC, 27 Nov 2026. With the FDI the port
+	   alone, as before) */
+	Devconnect(DSPXMIT, ext && snd_fdi ? EXTOUT : DAC | EXTOUT, ext ? CLKEXT : CLK25M, pre, NO_SHAKE);
 	Dsptristate(1, 1);
 	Supexec(read_matrix);
 }
