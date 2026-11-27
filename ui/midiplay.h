@@ -51,6 +51,7 @@ void mp_synth_rate(long rate);	/* the rate it makes its sound at (before the fir
 /* n frames of 16-bit stereo, the host's order: fewer at the file's end
    (its notes sounded out) */
 int mp_render(short *out, int n);
+int mp_render_tick(short *out, int n);	/* (the tick's: -1 when it can't now) */
 const char *mp_synth_log(void);
 #endif
 

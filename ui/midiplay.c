@@ -852,20 +852,11 @@ static void syn_budget(unsigned long busy, unsigned long made)
 	syn_win_busy = syn_win_made = 0;
 }
 
-int mp_render(short *out, int n)
+/* the records due, then the sound, to n samples: the number made (fewer
+   at the file's end) */
+static int syn_run(short *out, int n)
 {
 	int done = 0;
-	unsigned long t0 = tos_ms();
-	if (!syn_on || !syn || syn_ended)
-		return 0;
-	if (!syn_pre) {
-		syn_feed(pre, pre_n);	/* (the reset and the file's state there) */
-		syn_pre = 1;
-	}
-	/* its records to this piece's end */
-	if (making)
-		make((unsigned long)base_ms + (unsigned long)((syn_smp + (unsigned long)n) * 1000UL / (unsigned long)syn_rate) +
-			     1000, 0);
 	while (done < n) {
 		long m = n - done;
 		while (rp < mem_n) {
@@ -893,12 +884,49 @@ int mp_render(short *out, int n)
 		syn_smp += (unsigned long)m;
 	}
 	syn_made += (unsigned long)done;
+	return done;
+}
+
+int mp_render(short *out, int n)
+{
+	int done;
+	unsigned long t0 = tos_ms();
+	if (!syn_on || !syn || syn_ended)
+		return 0;
+	if (!syn_pre) {
+		syn_feed(pre, pre_n);	/* (the reset and the file's state there) */
+		syn_pre = 1;
+	}
+	/* its records to this piece's end, and on (a millisecond or so a
+	   piece, until all are made: the tick makes pieces only from records
+	   made, while GEM's turns don't come) */
+	if (making)
+		make((unsigned long)base_ms + (unsigned long)((syn_smp + (unsigned long)n) * 1000UL / (unsigned long)syn_rate) +
+			     1000, 1);
+	done = syn_run(out, n);
 	{
 		unsigned long b = tos_ms() - t0;
 		syn_busy += b;
 		syn_budget(b, (unsigned long)done);
 	}
 	return done;
+}
+
+/* the sound's tick, while GEM's turns don't come (the AES holds them while
+   a menu of the menu bar is down): only from records made (make() is
+   GEM's: it gives memory back) and once the reset has gone, and none of
+   the clock's or the voices' bookkeeping (a trap each, GEM's): -1 when
+   it can't, else as mp_render */
+int mp_render_tick(short *out, int n)
+{
+	if (!syn_on || !syn || !syn_pre)
+		return -1;
+	if (syn_ended)
+		return 0;
+	if (making && made_ms < (unsigned long)base_ms +
+			      (unsigned long)((syn_smp + (unsigned long)n) * 1000UL / (unsigned long)syn_rate) + 1)
+		return -1;	/* (its records not all made to the piece's end) */
+	return syn_run(out, n);
 }
 
 const char *mp_synth_log(void)

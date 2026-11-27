@@ -520,18 +520,70 @@ static void adv(long n)
 /* (no division or modulo here: the tick runs a thousand times a second) */
 static int raw8;		/* the STE's way: snd_put8_raw (set at the play's start) */
 
+/* the queue run dry (the disk, or a station, held up: GEM's turns read
+   them, and the AES holds those while a menu of the menu bar is down):
+   silence a little ahead of the DMA, not its ring's old sound played
+   round again (a fault reported 27 Nov 2026: a WAV through the FDI, the
+   sound stuck while a menu was held, and broken up after it); and the
+   music again only once a second of it is in the queue (pcm_resume
+   bytes), so that it doesn't go straight back to running dry. Each such
+   stretch counts as an underrun; pcm_sil is the silence's frames, out of
+   the position (play_ms) */
+static volatile char pcm_dry;
+static volatile long pcm_sil;
+static long pcm_quiet_lead, pcm_quiet_n, pcm_resume;	/* (set at the start: no division here) */
+
+TICK_CODE("12tick_quiet")
+static void tick_quiet(void)
+{
+	long room, w0, k;
+	if (snd_written() - snd_played() >= pcm_quiet_lead)
+		return;
+	room = snd_room();
+	if (room > pcm_quiet_n)
+		room = pcm_quiet_n;
+	w0 = snd_written();
+	while (room > 0) {
+		short *p = snd_ptr(&k);
+		long i;
+		if (k > room)
+			k = room;
+		for (i = 0; i < k; i++, p += SND_STEP)
+			*(long *)(void *)p = 0;
+		snd_wrote(k);
+		room -= k;
+	}
+	pcm_sil += snd_written() - w0;
+}
+
 TICK_CODE("12tick_pcm")
 static void tick_pcm(void)
 {
 	/* (a tick short: GEM goes on between; 4 times what plays. The XBIOS's
 	   sound alone: feedfb.c's turn calls the tick until the room is filled) */
 	long room = snd_room(), cap = 1024;
+	if (pcm_dry) {
+		if (q_w - q_r < pcm_resume && !src_done) {
+			tick_quiet();
+			return;
+		}
+		pcm_dry = 0;		/* (a second of it there, or all of it: on) */
+	}
 	while (room > 0 && cap > 0) {
 		long hb = q_w - q_r, tail = q_size - q_roff, k, kb;
 		short *p;
 		if (hb < fmt.bytes) {
 			if (src_done)
 				t_end = 1;
+			else if (snd_written() > 0 && snd_written() - snd_played() < pcm_quiet_lead) {
+				/* (the ring's own lead short too: the queue merely empty
+				   while the ring still holds some isn't dry; nor the
+				   start's, before any) */
+				pcm_dry = 1;
+				if (!snd_underruns++)
+					snd_first_under = snd_played();
+				tick_quiet();
+			}
 			return;
 		}
 		if (chain_q >= 0 && q_r >= chain_q)
@@ -931,6 +983,11 @@ static void tick_xs(void)
 }
 
 static void tick_body(void);
+#ifndef EPLAY_ST
+static volatile char cmp_tick_ok;	/* (tick_syn's) */
+static long cmp_tick_low;
+static void tick_syn(void);
+#endif
 
 /* MP3, once the DSP is loaded: the tick feeds it, polling the host port
    (its words read, a packet's sent as there is room). 0.4 to 0.6 had the
@@ -1012,8 +1069,13 @@ static void tick_body(void)
 			loading = 0;
 		return;
 	}
-	if (!t_end && !t_failed && !dsp)
+	if (!t_end && !t_failed && !dsp) {
 		tick_pcm();
+#ifndef EPLAY_ST
+		if (cmp_tick_ok)
+			tick_syn();
+#endif
+	}
 	if (dsp && s_started) {
 		dspmp3_tick_status();	/* (its words read even at the end) */
 		if (!t_end && !t_failed) {
@@ -1081,6 +1143,7 @@ static int take_queue(int unit)
    the time the reads took (the 200 Hz clock's, summed), the queue's
    least lead once a second has played; -1 before */
 static long rd_bytes, rd_ms, rd_forced, q_least = -1;
+static long disk_kbs;		/* DISKKBS=, the rigs': the file read at most this many KB a second (0: as it comes) */
 
 /* the file read into the queue, a piece at a time, for about ms */
 /* the queue's lead: ms of music it holds, at the rate it is played (a
@@ -1156,12 +1219,55 @@ static unsigned long cmp_busy_ms, cmp_snd;
 static long cmp_hz;
 static void fill_cmp_(unsigned long t0, int ms, int low);
 
+#ifndef EPLAY_ST
+/* (the synth, and a VGM's chips on the CPU) GEM's leave for the tick to
+   make the next piece itself (cmp_tick_ok): set at the end of a turn that
+   made some, while it plays, and cleared at the next turn's start and
+   wherever GEM changes the synth or the chips (Pause, Stop, an open). The AES holds GEM's turns while a menu of the menu bar
+   is down, for as long as it is held: then the queue ran dry, and the DMA
+   played its ring's old sound round and round (a fault reported 27 Nov
+   2026). The tick makes a piece only when the queue's lead is under
+   cmp_tick_low bytes (200 ms), so GEM's turns make the rest as before */
+#define CMP_TICK_N 256		/* (5 to 10 ms: more than a tick's 4 ms) */
+
+/* (not among the tick's pinned code: it runs only while GEM is held) */
+static void tick_syn(void)
+{
+	long lead = q_w - q_r, need;
+	int ns;
+	if (lead >= cmp_tick_low || src_done)
+		return;
+	need = (long)((unsigned long)CMP_TICK_N * 65536UL / cmp_step + 8) * 4 + 64;
+	if (q_size - lead < need)
+		return;
+	if (cmp_vgm)
+		ns = vp_render(cmp_pcm, CMP_TICK_N);	/* (the chips on the CPU: memory alone) */
+	else
+		ns = mp_render_tick(cmp_pcm, CMP_TICK_N);
+	if (ns < 0)
+		return;
+	if (!ns) {
+		src_done = 1;	/* (its end, its notes sounded out: tick_pcm ends it) */
+		cmp_tick_ok = 0;
+		return;
+	}
+	cmp_snd += (unsigned long)ns;
+	cmp_put(0, ns, 2);
+}
+#endif
+
 static void fill_cmp(unsigned long t0, int ms, int low)
 {
 	unsigned long a = ms_now();
 	long r0 = rd_ms;
+#ifndef EPLAY_ST
+	cmp_tick_ok = 0;	/* (the synth GEM's alone while its turn makes some) */
+#endif
 	fill_cmp_(t0, ms, low);
 	cmp_busy_ms += ms_now() - a - (unsigned long)(rd_ms - r0);
+#ifndef EPLAY_ST
+	cmp_tick_ok = (cmp_mid || cmp_vgm) && state == PS_PLAYING && !src_done;
+#endif
 }
 
 /* (cmp) the queue filled for ms by decoding the file's frames on the CPU */
@@ -1299,15 +1405,35 @@ static void fill_cmp_(unsigned long t0, int ms, int low)
 	}
 }
 
+static unsigned long fill_last;	/* (fill's: when the last turn read) */
+static long q_bps;			/* the queue's bytes a second of music (a file's PCM; 0: none) */
+
 static void fill(unsigned long t0, int ms, int low)
 {
 	long piece = low ? PIECE / 2 : PIECE;
 	int must = low;
+	long owe = 0, got = 0;
+	unsigned long now = ms_now();
 	if (cmp) {
 		fill_cmp(t0, ms, low);
 		return;
 	}
-	while (!src_done && (must || ms_now() - t0 < (unsigned long)ms)) {
+	/* (the lead short, a file's PCM: what the music took since the last
+	   turn and a quarter more, whatever the turn's time, three pieces at
+	   most. Half a piece a turn read less than a heavy file takes where
+	   the turns are long, though the disk is faster than the music: the
+	   queue drained as it played and never caught up; a fault reported
+	   27 Nov 2026) */
+	if (low && q_bps > 0 && !net && fill_last) {
+		unsigned long d = now - fill_last;
+		if (d > 1000)
+			d = 1000;
+		owe = (long)d * (q_bps / 800);
+		if (owe > 3 * PIECE)
+			owe = 3 * PIECE;
+	}
+	fill_last = now;
+	while (!src_done && (must || got < owe || ms_now() - t0 < (unsigned long)ms)) {
 		long free = q_size - (q_w - q_r), at = q_woff, n = q_size - at, r;
 		if (n > free)
 			n = free;
@@ -1342,10 +1468,17 @@ static void fill(unsigned long t0, int ms, int low)
 		} else {
 			unsigned long a = ms_now();
 			r = Fread(fh, n, q + at);
+			if (disk_kbs > 0 && r > 0)
+				/* (the rigs' DISKKBS=: each read takes a real disk's
+				   time, as GEM's; Hatari's answers at once) */
+				while ((long)(ms_now() - a) < r / disk_kbs)
+					;
 			rd_ms += (long)(ms_now() - a);
 		}
-		if (r > 0)
+		if (r > 0) {
 			rd_bytes += r;
+			got += r;
+		}
 		if (r <= 0) {
 			src_done = 1;
 			break;
@@ -1878,6 +2011,9 @@ made_ahead:
 			/* (an MP3 on the CPU: fill_cmp resamples to the output's
 			   rate, so the queue plays at it as it is) */
 			cmp_step = ((unsigned long)cmp_rin << 16) / (unsigned long)out_rate;
+#ifndef EPLAY_ST
+			cmp_tick_low = out_rate * 4 / 5;	/* (200 ms of the queue's 4-byte frames) */
+#endif
 #ifdef EPLAY_FB
 			cmp_rs_out = out_rate;
 			cmp_rs_ok = 0;
@@ -1999,9 +2135,19 @@ made_ahead:
 	t_gap = 0;
 	t_gap_at = m_changed_at = -1;
 	rd_bytes = rd_ms = rd_forced = 0;
+	disk_kbs = settings_diskkbs();
+	fill_last = 0;
+	q_bps = kind && !cmp && !net ? (long)fmt.bytes * rate : 0;
 	q_least = -1;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
+	pcm_dry = 0;
+	pcm_sil = 0;
+	pcm_quiet_lead = out_rate / 20;		/* (50 ms of silence ahead of the DMA, 20 ms a time) */
+	pcm_quiet_n = out_rate / 50;
+	/* (a second of the queue's; a tenth for the synth or a VGM's chips on
+	   the CPU, which the tick makes itself 200 ms ahead) */
+	pcm_resume = !kind ? 0 : cmp_mid || cmp_vgm ? 4L * out_rate / 10 : (long)fmt.bytes * (rate > 0 ? rate : out_rate);
 	last_sec = -1;
 	chain_q = chain_frame = -1;
 	chain_cross = chain_asked = chain_heard = 0;
@@ -2274,6 +2420,9 @@ int play_seek(long ms, char *err, int n)
 void play_pause(void)
 {
 	long fr, late, wmin, wavg, k;
+#ifndef EPLAY_ST
+	cmp_tick_ok = 0;	/* (first: the synth GEM's again) */
+#endif
 	if (state != PS_PLAYING)
 		return;
 	if (mid)
@@ -2355,6 +2504,9 @@ static unsigned long give_at;
 void play_stop(void)
 {
 	paused = 0;
+#ifndef EPLAY_ST
+	cmp_tick_ok = 0;	/* (first: the synth GEM's again) */
+#endif
 	if (cmp_vgm) {
 		vp_stop();		/* (phase 11: the CPU's chips, the file kept for its next open) */
 		cmp_vgm = 0;
@@ -2506,7 +2658,7 @@ long play_ms(void)
 		f = fr > 1 ? (fr - 1) * s_spf : 0;
 		return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 	}
-	f = snd_played() - pcm_base;
+	f = snd_played() - pcm_base - pcm_sil;
 	return base_ms + (rate ? (f / rate) * 1000 + (f % rate) * 1000 / rate : 0);
 }
 
@@ -2979,5 +3131,8 @@ int play_wait_ms(void)
 		return 100;
 	ahead = q_w - q_r;		/* seconds of music, near enough */
 	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
-	return ahead >= 4 || q_size - (q_w - q_r) < PIECE ? 100 : 0;
+	/* (a file read on to 12 s ahead in turns that wait for nothing, a
+	   station's 4: GEM's turns read it, and the AES holds them while a
+	   menu of the menu bar is down: a fault reported 27 Nov 2026) */
+	return ahead >= (net ? 4 : 12) || q_size - (q_w - q_r) < PIECE ? 100 : 0;
 }
