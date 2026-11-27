@@ -156,6 +156,17 @@ void list_set_title(int i, const char *t)
 		e->title = keep(t);
 }
 
+void list_set_info(int i, const char *title, const char *artist, long len_ms)
+{
+	ENTRY *e = list_at(i);
+	if (!e)
+		return;
+	e->title = keep(title);
+	e->artist = keep(artist);
+	e->len_ms = len_ms;
+	e->read = 1;		/* (as told: nothing more to read for it) */
+}
+
 void list_remove(int i)
 {
 	int k;

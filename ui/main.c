@@ -54,7 +54,7 @@ short vdi_h, cw, ch, scr_w, scr_h, desk_x, desk_y, desk_w, desk_h, planes;
 short gl_wchar, gl_hchar, ap_id;
 
 enum { C_ABOUT = 1, C_OPEN, C_QUIT, C_PLAY, C_STOP, C_SETTINGS, C_SHUFFLE, C_REPEAT, C_CLEAR, C_PREV, C_NEXT,
-       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL, C_LOG };
+       C_REMOVE, C_MINI, C_SAVE, C_GUIDE, C_URL, C_DIRECT, C_GATEWAY, C_KEYS, C_FIND, C_SELALL, C_LOG, C_EXPAND, C_SPOTIFY };
 
 static const MBAR_ITEM m_desk[] = {
 	{ "About EPlay...", 0, C_ABOUT },
@@ -72,6 +72,7 @@ static const MBAR_ITEM m_file[] = {
 static const MBAR_ITEM m_edit[] = {
 	{ "Remove from the list", "Del", C_REMOVE },	/* (MENUS 1.2: Del; MD14) */
 	{ "Clear the list", 0, C_CLEAR },
+	{ "Expand", 0, C_EXPAND },	/* (a Spotify album or playlist into its tracks: Erez, 27 Nov 2026) */
 	{ "-", 0, 0 },
 	{ "Select all", "^A", C_SELALL },	/* (D21: several rows) */
 	{ 0, 0, 0 }
@@ -97,6 +98,7 @@ static const MBAR_ITEM m_options[] = {
 	{ "-", 0, 0 },
 	{ "Direct connection", 0, C_DIRECT },	/* (how a station is reached: Erez, 8 Nov 2026) */
 	{ "Through the Gateway", 0, C_GATEWAY },
+	{ "Spotify sign-in...", 0, C_SPOTIFY },	/* (the Gateway's player, once: 27 Nov 2026) */
 	{ "-", 0, 0 },
 	{ "Write a log", 0, C_LOG },	/* (the guidelines' 6.5: no log without its switch; last, EFTP's words) */
 	{ 0, 0, 0 }
@@ -153,6 +155,13 @@ static int list_has_sel(void)
 }
 static char file[320];		/* the file playing */
 
+/* row i a Spotify album or playlist (Edit > Expand: one row a track) */
+static int expandable(int i)
+{
+	ENTRY *e = i >= 0 ? list_at(i) : 0;
+	return e && (!strncmp(e->path, "spotify:album:", 14) || !strncmp(e->path, "spotify:playlist:", 17));
+}
+
 /* what can apply now (MENUS 1.3): greyed in the menu, and its key does
    nothing (command() asks the same) */
 static int can(int c)
@@ -165,6 +174,8 @@ static int can(int c)
 		return list_has_sel();
 	case C_SELALL:
 		return list_count() > 0 && !bar_mini;
+	case C_EXPAND:
+		return expandable(list_sel);
 	case C_PLAY:
 		return play_is_open() || play_paused() || play_name[0] || list_count() > 0;
 	case C_STOP:
@@ -183,7 +194,8 @@ static int can(int c)
    (MENUS 1.3: EMail measured 40 calls at 40 ms on an 8 MHz ST) */
 static void menu_update(void)
 {
-	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_SELALL, C_PLAY, C_STOP, C_PREV, C_NEXT, C_MINI };
+	static const int grey[] = { C_SAVE, C_CLEAR, C_REMOVE, C_SELALL, C_EXPAND, C_PLAY, C_STOP, C_PREV, C_NEXT,
+				    C_MINI };
 	static signed char was[sizeof(grey) / sizeof(grey[0])];
 	unsigned i;
 	for (i = 0; i < sizeof(grey) / sizeof(grey[0]); i++) {
@@ -1236,8 +1248,8 @@ static void row_menu(short x, short y)
 {
 	/* (popup_m: the words alone, the box adds the margin: D15) */
 	static const char *const lab[] = { "Play                  Return", "-",
-					   "Remove from the list  Del   ", "Clear the list" };
-	switch (popup_m(x, y, lab, 4)) {
+					   "Remove from the list  Del   ", "Clear the list", "Expand" };
+	switch (popup_m(x, y, lab, expandable(list_sel) ? 5 : 4)) {
 	case 0:
 		play_index(list_sel);
 		break;
@@ -1246,6 +1258,9 @@ static void row_menu(short x, short y)
 		break;
 	case 3:
 		command(C_CLEAR);
+		break;
+	case 4:
+		command(C_EXPAND);
 		break;
 	}
 }
@@ -1639,6 +1654,146 @@ static void find_add(const char *url, const char *name)
 		list_set_title(i, name);
 }
 
+/* Edit > Expand (Erez, 27 Nov 2026: by the user's choice, never by itself):
+   a Spotify album or playlist line made into its tracks as they are now,
+   one row each, in its place, asked of the Gateway's spotgate (/tracks);
+   the rows don't follow Spotify from then on */
+static char *utf8_atari(const char *s, char *out, int n)
+{
+	long ol;
+	char *a = has_8bit(s, (long)strlen(s)) ? cs_to_atari(s, (long)strlen(s), cs_id("utf-8"), &ol) : 0;
+	snprintf(out, (size_t)n, "%s", a ? a : s);
+	free(a);
+	return out;
+}
+
+/* Options > Spotify sign-in... : the Gateway's Spotify player signed in, or
+   its pairing code (spotify.com/pair on any device, once; the player keeps
+   its credentials on the Gateway, never in EPLAY.INF) */
+static void spotify_signin(void)
+{
+	char url[200], why[160], t[400], *f[3];
+	unsigned char *d = 0;
+	long len = 0;
+	int k = 0, j;
+	if (!settings_gate()[0]) {
+		alert(1, "[1][Spotify plays through the AERA|Gateway: give its address in|Settings.][ OK ]");
+		return;
+	}
+	snprintf(url, sizeof(url), "http://%s:%ld/login", settings_gate(), settings_spotport());
+	conn_stop = 0;
+	busy_bee(1);
+	j = sart_fetch(url, "text/plain", "", 4096, &d, &len, why, sizeof(why));
+	busy_bee(0);
+	conn_stop = 0;
+	if (!j) {
+		alert(1, "[3][The Gateway's Spotify service|didn't answer: %.30s][ OK ]", why);
+		return;
+	}
+	if (len >= (long)sizeof(t))
+		len = sizeof(t) - 1;
+	memcpy(t, d, (size_t)len);
+	t[len] = 0;
+	free(d);
+	f[0] = t;
+	for (j = 0; t[j] && k < 2; j++)
+		if (t[j] == '\t' || t[j] == '\n') {
+			char c = t[j];
+			t[j] = 0;
+			if (c == '\n')
+				break;
+			f[++k] = t + j + 1;
+		}
+	elog("Spotify sign-in: %s", f[0]);
+	if (!strcmp(f[0], "ready"))
+		alert(1, "[1][The Gateway's Spotify player is|signed in%s%.24s.][ OK ]", k >= 1 && f[1][0] ? " as " : "",
+		      k >= 1 ? f[1] : "");
+	else if (!strcmp(f[0], "code") && k == 2)
+		alert(1, "[1][On any phone or computer open|%.30s|and type the code %.12s.|EPlay plays Spotify after that.][ OK ]",
+		      f[1], f[2]);
+	else
+		alert(1, "[3][The Gateway's Spotify service|answered in a way EPlay doesn't read.][ OK ]");
+}
+
+static void expand(int i)
+{
+	ENTRY *e = list_at(i);
+	char url[300], why[160], uri[48];
+	unsigned char *d = 0;
+	long len = 0, p = 0;
+	int ok, at = i + 1, added = 0;
+	if (!expandable(i))
+		return;
+	if (!settings_gate()[0]) {
+		alert(1, "[1][Expand asks the AERA Gateway for the|tracks: give its address in Settings.][ OK ]");
+		return;
+	}
+	snprintf(uri, sizeof(uri), "%s", e->path);
+	snprintf(url, sizeof(url), "http://%s:%ld/tracks?uri=%s", settings_gate(), settings_spotport(), uri);
+	status("Asking the Gateway for the tracks...   (Esc stops)");
+	conn_stop = 0;
+	busy_bee(1);
+	ok = sart_fetch(url, "text/plain", "", 1024L * 1024, &d, &len, why, sizeof(why));
+	busy_bee(0);
+	conn_stop = 0;
+	if (!ok) {
+		elog("Expand: %s: %s", uri, why);
+		alert(1, "[3][The Gateway didn't give the tracks:|%.40s][ OK ]", why);
+		status("");
+		return;
+	}
+	while (p < len) {
+		/* "ms<TAB>artists<TAB>title<TAB>spotify:track:ID" a line */
+		char line[600], *f[4], ta[200], tt[200];
+		long q = p;
+		int k = 0, j;
+		while (q < len && d[q] != '\n')
+			q++;
+		if (q - p < (long)sizeof(line)) {
+			memcpy(line, d + p, (size_t)(q - p));
+			line[q - p] = 0;
+			f[0] = line;
+			for (j = 0; line[j] && k < 3; j++)
+				if (line[j] == '\t') {
+					line[j] = 0;
+					f[++k] = line + j + 1;
+				}
+			if (k == 3 && !strncmp(f[3], "spotify:track:", 14) && strlen(f[3]) == 36) {
+				int r = list_add(f[3]);
+				if (r >= 0) {
+					list_set_info(r, utf8_atari(f[2], tt, sizeof(tt)), utf8_atari(f[1], ta, sizeof(ta)),
+						      atol(f[0]));
+					if (r >= at) {
+						list_move(r, at);
+						at++;
+						added++;
+					}
+				}
+			}
+		}
+		p = q + 1;
+	}
+	free(d);
+	elog("Expand: %s into %d tracks", uri, added);
+	{
+		char l[100];
+		snprintf(l, sizeof(l), "EPLAY expanded: %d tracks\n", added);
+		nf_debug(l);
+	}
+	if (!added) {
+		alert(1, "[1][The Gateway gave no tracks for it.][ OK ]");
+		status("");
+		return;
+	}
+	list_remove(i);		/* (the line: its tracks in its place) */
+	list_select_none();
+	list_select(i, 1);
+	list_sel = i;
+	redraw(0, BP_LIST);
+	sliders();
+	status("");
+}
+
 static void command(int c)
 {
 	if (!can(c))
@@ -1711,6 +1866,12 @@ static void command(int c)
 		break;
 	case C_REMOVE:
 		list_remove_sel();
+		break;
+	case C_EXPAND:
+		expand(list_sel);
+		break;
+	case C_SPOTIFY:
+		spotify_signin();
 		break;
 	case C_SELALL:
 		list_select_all();

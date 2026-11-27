@@ -35,6 +35,7 @@ ENTRY *list_at(int i);
    memory); a file already in it isn't added again (its index) */
 int list_add(const char *path);
 void list_set_title(int i, const char *t);	/* a station's name for its row (phase 7) */
+void list_set_info(int i, const char *title, const char *artist, long len_ms);	/* a Spotify track's, as told */
 void list_remove(int i);
 int list_remove_selected(void);	/* the selected rows out: the first of them, -1 none */
 void list_move(int from, int to);	/* row from to row to, the rows between closing up */
