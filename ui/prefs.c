@@ -70,6 +70,7 @@ static int midi_out = MIDI_SYNTH;
 static const char *const mid_names[NMIDI] = { "SYNTH", "PORT" };
 static const char *const mid_labels[NMIDI] = { "Synth", "MIDI port" };
 static char gate[64];
+static long spotport = 8581;	/* SPOTPORT=: the Gateway's Spotify service (spotgate, 27 Nov 2026) */
 static long gateport = 8580;	/* (the radio service's port: Erez, 8 Nov 2026) */
 static char urls[URL_RECENT][URL_MAX];
 static char url_typed[URL_MAX];	/* Open URL's field as last typed (URLTYPED=) */
@@ -228,6 +229,8 @@ void settings_load(void)
 	if (inf_get(inf, inf_n, "FALCON", v, sizeof(v)))
 		gateway = gateway_saved = v[0] == '0';
 	inf_get(inf, inf_n, "GATE", gate, sizeof(gate));
+	if (inf_get(inf, inf_n, "SPOTPORT", v, sizeof(v)) && atol(v) > 0 && atol(v) < 65536)
+		spotport = atol(v);
 	if (inf_get(inf, inf_n, "GATEPORT", v, sizeof(v)) && atol(v) > 0 && atol(v) < 65536)
 		gateport = atol(v);
 	for (i = 0; i < URL_RECENT; i++) {
@@ -754,6 +757,11 @@ const char *settings_gate(void)
 long settings_gateport(void)
 {
 	return gateport;
+}
+
+long settings_spotport(void)
+{
+	return spotport;
 }
 
 char (*settings_urls(void))[URL_MAX]

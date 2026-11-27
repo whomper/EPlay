@@ -72,6 +72,104 @@ static int web(const char *t, int k)
 	return 0;
 }
 
+/* a Spotify item's kind at t (m bytes): "track", "album" or "playlist" */
+static const char *sp_kind(const char *t, int m)
+{
+	static const char *const k[3] = { "track", "album", "playlist" };
+	int j;
+	for (j = 0; j < 3; j++)
+		if ((int)strlen(k[j]) == m && !memcmp(t, k[j], (size_t)m))
+			return k[j];
+	return 0;
+}
+
+/* a Spotify id: 22 letters and digits (base 62), ending at t[m] */
+static int sp_id(const char *t, int k, int *m)
+{
+	int c = 0;
+	while (c < k && ((t[c] >= '0' && t[c] <= '9') || (t[c] >= 'a' && t[c] <= 'z') || (t[c] >= 'A' && t[c] <= 'Z')))
+		c++;
+	*m = c;
+	return c == 22 && (c == k || t[c] == '?' || t[c] == '#' || t[c] == '/');
+}
+
+static int pre(const char *t, int k, const char *s)
+{
+	int m = (int)strlen(s), c;
+	if (k < m)
+		return 0;
+	for (c = 0; c < m && (t[c] | (t[c] >= 'A' && t[c] <= 'Z' ? 0x20 : 0)) == s[c]; c++)
+		;
+	return c == m ? m : 0;
+}
+
+int m3u_link(const char *t, int k, char *out, int omax)
+{
+	int a, m, n;
+	const char *kind = 0;
+	if ((a = pre(t, k, "spotify:")) != 0) {
+		/* spotify:KIND:ID, or the old spotify:user:NAME:playlist:ID */
+		if ((n = pre(t + a, k - a, "user:")) != 0) {
+			a += n;
+			while (a < k && t[a] != ':')
+				a++;
+			a++;
+		}
+		for (n = 0; a + n < k && t[a + n] != ':'; n++)
+			;
+		kind = a + n < k ? sp_kind(t + a, n) : 0;
+		a += n + 1;
+	} else if ((a = pre(t, k, "https://open.spotify.com/")) != 0 || (a = pre(t, k, "http://open.spotify.com/")) != 0) {
+		/* https://open.spotify.com/[intl-xx/]KIND/ID[?si=...] */
+		if (pre(t + a, k - a, "intl-")) {
+			while (a < k && t[a] != '/')
+				a++;
+			a++;
+		}
+		for (n = 0; a + n < k && t[a + n] != '/'; n++)
+			;
+		kind = a + n < k ? sp_kind(t + a, n) : 0;
+		a += n + 1;
+	} else if ((a = pre(t, k, "file://")) != 0) {
+		/* file:///C:/MUSIC/A%20B.MP3 or file://C:/...: the path */
+		char raw[M3U_PATH];
+		int r = 0;
+		if (a < k && t[a] == '/')
+			a++;
+		for (; a < k && r < M3U_PATH - 1; a++) {
+			char c = t[a];
+			if (c == '%' && a + 2 < k) {
+				int h = 0, d;
+				for (d = 1; d <= 2; d++) {
+					char x = t[a + d];
+					h = h * 16 + (x >= '0' && x <= '9' ? x - '0' : x >= 'a' && x <= 'f' ? x - 'a' + 10 :
+						      x >= 'A' && x <= 'F' ? x - 'A' + 10 : 0);
+				}
+				c = (char)h;
+				a += 2;
+			}
+			raw[r++] = c == '/' ? '\\' : c;
+		}
+		if (r < 3 || raw[1] != ':' || a < k)
+			return 0;
+		raw[r] = 0;
+		return join(out, omax, "", raw, r) ? M3U_FILE : 0;
+	} else if (web(t, k)) {
+		if (k >= omax)
+			return 0;
+		memcpy(out, t, (size_t)k);
+		out[k] = 0;
+		return M3U_WEB;
+	} else
+		return 0;
+	if (!kind || a > k || !sp_id(t + a, k - a, &m))
+		return 0;
+	if ((int)(8 + strlen(kind) + 1 + 22) >= omax)
+		return 0;
+	snprintf(out, (size_t)omax, "spotify:%s:%.22s", kind, t + a);
+	return M3U_SPOTIFY;
+}
+
 int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *path, void *ctx), void *ctx)
 {
 	long i = 0;
@@ -113,15 +211,15 @@ int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *pat
 			}
 			continue;
 		}
-		if (web(t + a, k)) {
-			/* a station (phase 7): its address as it is */
-			if (k < M3U_PATH) {
-				memcpy(path, t + a, (size_t)k);
-				path[k] = 0;
-				add(path, ctx);
-				files++;
-			}
+		if (m3u_link(t + a, k, path, (int)sizeof(path))) {
+			/* a station or file on the web (phase 7), a Spotify item, a file:// path */
+			add(path, ctx);
+			files++;
 			m3u_extinf[0] = 0;
+			continue;
+		}
+		if (web(t + a, k) || pre(t + a, k, "spotify:") || pre(t + a, k, "file://")) {
+			m3u_extinf[0] = 0;	/* (too long, or not an item EPlay knows) */
 			continue;
 		}
 		{

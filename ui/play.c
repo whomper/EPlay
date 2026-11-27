@@ -1634,7 +1634,7 @@ int play_open(const char *path, char *err, int n)
 			return 0;
 		}
 	}
-	net = surl_is(path);
+	net = surl_net(path);
 	if (net) {
 		/* a station: connected and its answer read (Esc stops it), the
 		   first few KB of its audio for the probe; no tags, no length,
@@ -2772,7 +2772,7 @@ int play_net_low(void)
 
 int play_is_net(void)
 {
-	return net || (cur_path[0] && surl_is(cur_path));
+	return net || (cur_path[0] && surl_net(cur_path));
 }
 
 /* the bar's for a station: the song now ("" before its first title) */

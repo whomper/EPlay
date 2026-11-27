@@ -27,6 +27,16 @@ int surl_is(const char *s)
 	return starts(s, "http://") || starts(s, "https://");
 }
 
+int surl_spotify(const char *s)
+{
+	return starts(s, "spotify:");
+}
+
+int surl_net(const char *s)
+{
+	return surl_is(s) || surl_spotify(s);
+}
+
 int surl_parse(const char *u, SURL *o)
 {
 	const char *p, *h;
@@ -254,6 +264,45 @@ static void take_title(ICY *s)
 	}
 }
 
+/* name='digits'; in the block: its number, -1 when not there */
+static long field_num(const char *m, const char *name)
+{
+	const char *p = strstr(m, name);
+	long v = 0;
+	int k = 0;
+	if (!p)
+		return -1;
+	p += strlen(name);
+	while (*p >= '0' && *p <= '9' && k < 10) {
+		v = v * 10 + (*p++ - '0');
+		k++;
+	}
+	return k && *p == '\'' ? v : -1;
+}
+
+/* EPlayTrack='spotify:track:ID';EPlayLen='ms';EPlayPos='ms'; (spotgate's,
+   a Spotify line's track): taken whole or not at all */
+static void take_track(ICY *s)
+{
+	const char *p = strstr(s->meta, "EPlayTrack='spotify:track:");
+	long len = field_num(s->meta, "EPlayLen='"), pos = field_num(s->meta, "EPlayPos='");
+	int n = 0;
+	if (!p || len < 0 || pos < 0)
+		return;
+	p += 12;
+	while (n < 36 && p[n] && p[n] != '\'')
+		n++;
+	if (p[n] != '\'' || n != 36)
+		return;			/* (spotify:track: and 22 letters or digits) */
+	if (memcmp(s->track, p, (size_t)n) || s->track[n] || len != s->tlen || pos != s->tpos) {
+		memcpy(s->track, p, (size_t)n);
+		s->track[n] = 0;
+		s->tlen = len;
+		s->tpos = pos;
+		s->new_track = 1;
+	}
+}
+
 /* StreamUrl='...'; the same way: a picture's address on some stations (a
    song's cover at Radio Paradise, the station's logo at SomaFM), a site's
    or "0" or nothing on others. Kept only when it is an http(s) address
@@ -321,6 +370,7 @@ long icy_feed(ICY *s, unsigned char *b, long n)
 				s->meta[s->mlen] = 0;
 				take_title(s);
 				take_url(s);
+				take_track(s);
 				s->mlen = -1;
 				s->left = s->metaint;
 			}

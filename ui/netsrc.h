@@ -43,4 +43,12 @@ const char *ns_picture(int *changed);	/* StreamUrl: a picture's address, or "" *
 const char *ns_title_peek(void);	/* the title now, its change left for ns_title */
 const char *ns_url(void);	/* the station's URL, after any redirect */
 
+/* a Spotify line (spotgate): where the next ns_open/ns_reopen of the same
+   line starts, track ("spotify:track:ID", 0 the line's start), step 1 the
+   track after it, -1 the one before, pos ms into it; another line resets it */
+void ns_spot_at(const char *track, int step, long pos);
+/* its track now ("" none: a station), its length and where it started, in
+   ms, and whether it changed since the last ns_track */
+const char *ns_track(int *changed, long *len, long *pos);
+
 #endif

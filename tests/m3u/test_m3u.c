@@ -75,5 +75,25 @@ int main(void)
 		strcat(pl, out);
 		check(!strcmp(read(pl, "C:\\MUSIC\\"), "C:\\MUSIC\\01.MP3|D:\\X\\02.WAV"), "written and read back");
 	}
+	/* links: Spotify (its forms to one), file:///, mixed with paths and stations */
+	check(!strcmp(read("#EXTM3U\r\n#EXTINF:-1,Night Mix\r\nspotify:playlist:37i9dQZF1DXcBWIGoYBM5M\r\n"
+			   "https://open.spotify.com/intl-de/album/4aawyAB9vmqN3uQ7FjRGTy?si=abc123\r\n"
+			   "http://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b\r\n"
+			   "spotify:user:someone:playlist:37i9dQZF1DXcBWIGoYBM5M\r\n"
+			   "SPOTIFY:track:0VjIjW4GlUZAMYd2vXMi3b\r\n"
+			   "file:///C:/MUSIC/A%20B.MP3\r\nfile://D:/X/Y.WAV\r\nA.MP3\r\nhttps://radio.example/live\r\n", "C:\\M\\"),
+		      "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M|spotify:album:4aawyAB9vmqN3uQ7FjRGTy|"
+		      "spotify:track:0VjIjW4GlUZAMYd2vXMi3b|spotify:playlist:37i9dQZF1DXcBWIGoYBM5M|"
+		      "spotify:track:0VjIjW4GlUZAMYd2vXMi3b|C:\\MUSIC\\A B.MP3|D:\\X\\Y.WAV|C:\\M\\A.MP3|https://radio.example/live"),
+	      "links: Spotify's forms, file:///, paths and a station in one list");
+	check(!strcmp(names, "[Night Mix][][][][][][][][]"), "links: #EXTINF names the Spotify line");
+	check(!strcmp(read("spotify:artist:0OdUWJ0sBjDrqHygGUXeCF\nspotify:track:short\n"
+			   "https://open.spotify.com/show/0VjIjW4GlUZAMYd2vXMi3b\nfile:///MUSIC/A.MP3\nftp://x/y\nB.MP3\n", "C:\\"),
+		      "C:\\B.MP3"),
+	      "links: an artist, a bad id, another Spotify page (a web page, not sound), file:/// with no drive passed over");
+	{
+		char o[40];
+		check(!m3u_link("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", 39, o, 30), "links: too long for out: 0");
+	}
 	return bad != 0;
 }

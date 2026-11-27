@@ -6,7 +6,8 @@
  * on the playlist's drive) or one relative to the playlist's folder
  * (A.MP3, LIVE\A.MP3, ..\B.MP3), with '\' or '/'. Lines starting '#' are
  * notes (#EXTM3U, #EXTINF:seconds,artist - title); a station's address
- * (http:// or https://, phase 7) is taken as it is, other URLs passed over; CR/LF, LF and a UTF-8 BOM are taken. Written:
+ * (http:// or https://, phase 7) is taken as it is, a Spotify item as
+ * spotify:KIND:ID and a file:/// URL as its path (m3u_link), other URLs passed over; CR/LF, LF and a UTF-8 BOM are taken. Written:
  * #EXTM3U, then each file's #EXTINF and its path, relative to the
  * playlist's folder where it is in it, CR/LF ends.
  */
@@ -21,6 +22,17 @@ int m3u_read(const char *t, long n, const char *dir, void (*add)(const char *pat
 /* while add() runs: the name of the #EXTINF line before it ("" none; as
    the file has it), a station's row's name */
 extern char m3u_extinf[M3U_PATH];
+
+/* a line that is a link, not a plain path (t, k bytes), at out as EPlay
+   keeps it: M3U_WEB an http:// or https:// address as it is; M3U_SPOTIFY a
+   Spotify track, album or playlist as "spotify:KIND:ID" (from that form,
+   the old spotify:user:NAME:playlist:ID, or an open.spotify.com link, its
+   ?si= and intl- part dropped); M3U_FILE a file:/// URL as its path
+   (C:\MUSIC\A B.MP3, %XX taken). 0: not one, or it doesn't fit */
+#define M3U_WEB 1
+#define M3U_SPOTIFY 2
+#define M3U_FILE 3
+int m3u_link(const char *t, int k, char *out, int omax);
 
 /* path as a playlist in dir would hold it: relative where it is in dir
    (its case aside), else whole */

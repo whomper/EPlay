@@ -128,7 +128,7 @@ int list_add(const char *path)
 		const char *d = strrchr(p, '.');
 		static int dsp = -1;	/* _SND bit 3: the DSP (asked once: a Supexec) */
 		/* (a station, phase 7: its MP3 the DSP's too) */
-		if (surl_is(p) || (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4])) {
+		if (surl_net(p) || (d && (d[1] | 0x20) == 'm' && (d[2] | 0x20) == 'p' && d[3] == '3' && !d[4])) {
 #ifdef EPLAY_FB
 			/* (the FireBee: its ColdFire decodes it, cmp3fb.c, a
 			   station's too: task 83) */
@@ -362,8 +362,8 @@ int list_step(int *row)
 		return 0;
 	e->read = 1;
 	*row = i;
-	if (surl_is(e->path))
-		return 1;		/* (a station: no tags nor length to read; it plays as it comes) */
+	if (surl_net(e->path))
+		return 1;		/* (a station or a Spotify line: no tags nor length to read; it plays as it comes) */
 	fh_ = Fopen(e->path, 0);
 	if (fh_ < 0) {
 		e->bad = 1;

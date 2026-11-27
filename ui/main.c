@@ -570,11 +570,12 @@ static void play_now(const char *f)
 	int opened;
 	PART_T0();
 	sart_reset();		/* (a station's picture: the new one's from now) */
-	if (surl_is(f)) {
+	if (surl_net(f)) {
 		/* a station: the bee while it connects, Esc or Undo stops it
 		   (the guidelines, 7.1) */
 		conn_stop = 0;
-		status("Connecting to the station...   (Esc stops)");
+		status(surl_spotify(f) ? "Connecting to Spotify through the Gateway...   (Esc stops)" :
+					 "Connecting to the station...   (Esc stops)");
 		busy_bee(1);
 		opened = play_open(f, err, sizeof(err));
 		busy_bee(0);
@@ -584,10 +585,11 @@ static void play_now(const char *f)
 	} else
 		opened = play_open(f, err, sizeof(err));
 	PART("the file opened");
-	if (opened && surl_is(f)) {
+	if (opened && surl_net(f)) {
 		int i = list_find(f);
 		settings_url_used(f);	/* (Open URL's last stations) */
-		sart_station(f, play_name);	/* (its logo, through a Gateway, if it names no picture) */
+		if (!surl_spotify(f))
+			sart_station(f, play_name);	/* (its logo, through a Gateway, if it names no picture) */
 		if (i >= 0) {
 			list_set_title(i, play_name);	/* (the row: the station's name) */
 			redraw(0, BP_LIST);
@@ -870,7 +872,7 @@ static void m3u_add(const char *path, void *ctx)
 	int i;
 	(void)ctx;
 	i = list_add(path);
-	if (i >= 0 && surl_is(path) && m3u_extinf[0]) {
+	if (i >= 0 && surl_net(path) && m3u_extinf[0]) {
 		/* a station: its row named as the playlist names it (UTF-8
 		   where it is, as stations' lists are written) */
 		long ol;

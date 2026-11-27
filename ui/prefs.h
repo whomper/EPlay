@@ -85,6 +85,7 @@ int settings_gateway(void);
 void settings_set_gateway(int on);
 const char *settings_gate(void);
 long settings_gateport(void);
+long settings_spotport(void);	/* SPOTPORT= (8581): the Gateway's Spotify service */
 char (*settings_urls(void))[URL_MAX];
 void settings_url_used(const char *url);
 const char *settings_url_typed(void);

@@ -19,6 +19,7 @@
 #include "netsrc.h"
 #include "prefs.h"
 #include "elog.h"
+#include "m3u.h"
 
 extern const char app_version[];
 
@@ -299,6 +300,48 @@ static int via_gateway(const char *url, char *out, int omax, char *err, int n)
 	return 1;
 }
 
+/* a Spotify line through the Gateway's spotgate (decided 27 Nov 2026): the
+   Gateway's address from Settings whether EPlay connects Direct or not (the
+   Falcon can't play Spotify by itself), its port SPOTPORT= (8581); where in
+   the line to start: ns_spot_at's */
+static char spot_from[40];
+static int spot_step;
+static long spot_pos;
+
+void ns_spot_at(const char *track, int step, long pos)
+{
+	snprintf(spot_from, sizeof(spot_from), "%s", track ? track : "");
+	spot_step = step;
+	spot_pos = pos > 0 ? pos : 0;
+}
+
+static int via_spotify(const char *uri, char *out, int omax, char *err, int n)
+{
+	const char *g = settings_gate();
+	char t[200], u[48];
+	int k;
+	if (!g[0]) {
+		snprintf(err, (size_t)n, "Spotify needs the AERA Gateway: give its address in Settings.");
+		return 0;
+	}
+	if (m3u_link(uri, (int)strlen(uri), u, sizeof(u)) != M3U_SPOTIFY) {
+		snprintf(err, (size_t)n, "That isn't a Spotify track, album or playlist.");
+		return 0;
+	}
+	k = snprintf(t, sizeof(t), "/stream?uri=%s", u);
+	if (spot_from[0])
+		k += snprintf(t + k, sizeof(t) - (size_t)k, "&from=%s", spot_from);
+	if (spot_step)
+		k += snprintf(t + k, sizeof(t) - (size_t)k, "&step=%d", spot_step > 0 ? 1 : -1);
+	if (spot_pos)
+		snprintf(t + k, sizeof(t) - (size_t)k, "&pos=%ld", spot_pos);
+	if (snprintf(out, (size_t)omax, "http://%s:%ld%s", g, settings_spotport(), t) >= omax) {
+		snprintf(err, (size_t)n, "The Gateway's address is too long.");
+		return 0;
+	}
+	return 1;
+}
+
 /* a Direct https station: TLS.OVL, CACERT.PEM and what TLS keeps between
    sessions (ROOTS.DAT, SEED.DAT, SIGS.DAT), all beside EPlay. The
    handshake's curves and RSA on the DSP when it is free (TLS.OVL locks it
@@ -355,6 +398,17 @@ static int open_url(const char *url, char *err, int n)
 	err[0] = 0;
 	if (!ns_net(err, n))
 		return 0;
+	if (surl_spotify(url)) {
+		int r;
+		if (!via_spotify(url, url_now, sizeof(url_now), err, n))
+			return 0;
+		r = ask(url_now, err, n);
+		if (!r && !conn_stop && !strcmp(err, "The station doesn't answer."))
+			snprintf(err, (size_t)n, "The Gateway's Spotify service doesn't answer: is it set up?");
+		if (r == 1 && !hd.name[0])
+			snprintf(name, sizeof(name), "Spotify");
+		return r == 1;
+	}
 	if (gw) {
 		if (!via_gateway(url, url_now, sizeof(url_now), err, n))
 			return 0;
@@ -379,6 +433,8 @@ static int open_url(const char *url, char *err, int n)
 
 int ns_open(const char *url, char *err, int n)
 {
+	if (strcmp(url, url_given))
+		ns_spot_at(0, 0, 0);	/* (another line: from its start) */
 	snprintf(url_given, sizeof(url_given), "%s", url);
 	return open_url(url, err, n);
 }
@@ -433,6 +489,19 @@ const char *ns_title(int *changed)
 		*changed = icy.new_title;
 	icy.new_title = 0;
 	return icy.title;
+}
+
+const char *ns_track(int *changed, long *len, long *pos)
+{
+	if (changed) {
+		*changed = icy.new_track;
+		icy.new_track = 0;
+	}
+	if (len)
+		*len = icy.tlen;
+	if (pos)
+		*pos = icy.tpos;
+	return icy.track;
 }
 
 const char *ns_picture(int *changed)

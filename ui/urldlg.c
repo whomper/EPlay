@@ -14,6 +14,7 @@
 #include "prefs.h"
 #include "stream.h"
 #include "urldlg.h"
+#include "m3u.h"
 
 #define NOBJ 20
 #define SHOW 50			/* the field's and the lines' width */
@@ -133,7 +134,9 @@ int url_dialog(char *out, int omax)
 		settings_set_url_typed(s);
 		if (!*s)
 			return 0;
-		if (surl_is(s))
+		if (m3u_link(s, (int)strlen(s), out, omax) == M3U_SPOTIFY)
+			;		/* (a Spotify link, its open.spotify.com form too: spotify:KIND:ID) */
+		else if (surl_is(s) || surl_spotify(s))
 			snprintf(out, (size_t)omax, "%s", s);
 		else
 			snprintf(out, (size_t)omax, "http://%s", s);

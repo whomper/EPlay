@@ -230,9 +230,43 @@ static void icy_url(void)
 	}
 }
 
+/* spotgate's track fields (a Spotify line through the Gateway): taken whole
+   or not at all; a station's block has none */
+static void icy_track(void)
+{
+	static const char *in[] = {
+		"StreamTitle='A - B';StreamUrl='http://i.scdn.co/image/ab67';"
+		"EPlayTrack='spotify:track:0VjIjW4GlUZAMYd2vXMi3b';EPlayLen='215000';EPlayPos='1500';",
+		"StreamTitle='x';EPlayTrack='spotify:track:short';EPlayLen='1';EPlayPos='0';",
+		"StreamTitle='x';EPlayTrack='spotify:track:0VjIjW4GlUZAMYd2vXMi3b';EPlayLen='';EPlayPos='0';",
+		"StreamTitle='x';EPlayTrack='spotify:album:0VjIjW4GlUZAMYd2vXMi3b';EPlayLen='1';EPlayPos='0';",
+		"StreamTitle='x';"};
+	int i;
+	for (i = 0; i < 5; i++) {
+		ICY s;
+		unsigned char b[600];
+		long n = (long)strlen(in[i]), blocks = (n + 15) / 16, k;
+		icy_init(&s, 4);
+		memcpy(b, "abcd", 4);
+		b[4] = (unsigned char)blocks;
+		memset(b + 5, 0, (size_t)(blocks * 16));
+		memcpy(b + 5, in[i], (size_t)n);
+		k = 5 + blocks * 16;
+		memcpy(b + k, "efgh", 4);
+		CHECK(icy_feed(&s, b, k + 4) == 8 && !memcmp(b, "abcdefgh", 8));
+		if (!i) {
+			CHECK(!strcmp(s.track, "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"));
+			CHECK(s.tlen == 215000 && s.tpos == 1500 && s.new_track == 1);
+			CHECK(!strcmp(s.title, "A - B") && !strcmp(s.url, "http://i.scdn.co/image/ab67"));
+		} else
+			CHECK(!s.track[0] && !s.new_track);
+	}
+}
+
 int main(void)
 {
 	icy_url();
+	icy_track();
 	chunks();
 	long_lines();
 	urls();

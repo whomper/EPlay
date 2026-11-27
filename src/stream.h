@@ -32,6 +32,11 @@ int surl_parse(const char *u, SURL *o);
 
 /* 1 if s looks like a stream's URL (http:// or https://, case ignored) */
 int surl_is(const char *s);
+/* a Spotify line ("spotify:...", as m3u_link keeps it): played through the
+   Gateway's spotgate, never directly */
+int surl_spotify(const char *s);
+/* a line that plays from the network: a station (surl_is) or a Spotify line */
+int surl_net(const char *s);
 
 #define SHEAD_NAME 80
 #define SHEAD_TYPE 48
@@ -72,6 +77,11 @@ typedef struct {
 	int new_title;			/* set when the title changed; the caller clears it */
 	char url[ICY_URL];		/* StreamUrl, when an http(s) address: a picture's on some stations */
 	int new_url;			/* set when it changed; the caller clears it */
+	/* a Spotify line through the Gateway (spotgate): EPlayTrack='spotify:track:ID';
+	   EPlayLen='ms';EPlayPos='ms'; in the block of each track's start */
+	char track[40];			/* "" before the first, or from a station */
+	long tlen, tpos;		/* its length, and where it started in it, in ms */
+	int new_track;			/* set when it changed; the caller clears it */
 } ICY;
 
 void icy_init(ICY *s, long metaint);
