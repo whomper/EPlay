@@ -5,20 +5,45 @@
 ; on the DSP: through the DMA"): a block of src/gmsdsp.h's (its voices'
 ; headers and 8-bit points, the 68030's) rendered into GMSD_N synth samples,
 ; left and right, as src/gmsdsp.c's gmsd_dsp computes them, bit for bit.
-; Small enough for the bootstrap's 512 words. This step: the render, a
-; block loaded by the host (LOADY) and its samples sent back (RENDER), for
-; tests/dspgms; the SSI's receive and transmit come next.
+; Small enough for the bootstrap's 512 words.
+;
+; PLAY streams: the sound DMA plays four stereo tracks (8 words a frame)
+; into the SSI's receive, a fast interrupt putting each word in RXB's
+; ring; the DSP finds each block by its first word (GMSD_MAGIC, however
+; many words on the DMA started), renders it, makes its 64 samples the
+; output's 128 frames (each pair's mean, then the pair; doubled,
+; saturated: gmsd_up) and puts them in slots 0 and 1 of TXB's ring, 4
+; segments of 128 frames, which a fast interrupt sends to the matrix a
+; word a slot (the DAC takes the first track). A segment once played is
+; cleared, so that silence follows where no block came (the 68030 stopped
+; writing): never the ring's old sound again.
 ;
 ; The host's commands (each word waited for):
 ;	1 LOADX addr n w...	n words to X:addr
 ;	4 LOADY addr n w...	n words to Y:addr
-;	7 RENDER addr		the block at Y:addr (16-bit words, each in its top
+;	6 LOADP addr n w...	n words to P:addr (the stream's part, from P:$7000)
+;	7 RENDER addr		the block at X:addr (16-bit words, each in its top
 ;				16 bits, as the SSI takes the DMA's): 1, the
 ;				render, 2, then the 2 x 64 samples (left, right)
+;	8 PLAY			the stream, until the host's next word (any: STOP),
+;				then its counts: the blocks rendered, those late
+;				(their segment already playing), the words passed
+;				over finding a block
 
 HCR	equ	$ffe8
 HSR	equ	$ffe9
 HRX	equ	$ffeb
+PCC	equ	$ffe1
+CRA	equ	$ffec
+CRB	equ	$ffed
+SSISR	equ	$ffee
+RX	equ	$ffef
+TX	equ	$ffef
+IPR	equ	$ffff
+
+MAGIC	equ	$a55a00		; a block's first word (GMSD_MAGIC, in the top 16 bits)
+RXB	equ	$2000		; X: the receive's ring, 2 blocks (modulo 2048: r6)
+TXB	equ	$2000		; Y: the transmit's ring, 4 segments of 128 frames (modulo 4096: r7)
 
 N	equ	64		; synth samples a block (GMSD_N)
 NV	equ	32		; voices (GMSD_VOICES)
@@ -50,9 +75,33 @@ V_SR	equ	$1409
 V_TL	equ	$140a		; at the block's end
 V_TR	equ	$140b
 V_INCF	equ	$140c		; its step's fraction (Q24)
+V_RR	equ	$1410		; PLAY: the next block's place in RXB
+V_T	equ	$1411		; the segment it goes to (-1: none yet)
+V_SEG	equ	$1412		; the segment playing when last looked at
+V_NB	equ	$1413		; the blocks rendered
+V_LATE	equ	$1414		; those whose segment was already playing
+V_SKIP	equ	$1415		; the words passed over finding a block
+V_PL	equ	$1416		; the last block's last sample, left
+V_PR	equ	$1417		; and right
+V_JUNK	equ	$1418
 
 	org	p:$0
 	jmp	start
+
+; the SSI's receive, a fast interrupt: each word into RXB's ring (r6, m6
+; 2047: the stream's alone); with an overrun, the status read first
+	org	p:$0c
+	movep	x:RX,x:(r6)+
+	nop
+	org	p:$0e
+	jsr	rxe
+; the SSI's transmit, a fast interrupt: TXB's ring a word a slot (r7, m7
+; 4095); with an underrun, the status read first
+	org	p:$10
+	movep	y:(r7)+,x:TX
+	nop
+	org	p:$12
+	jsr	tue
 
 	org	p:$40
 start	movep	#1,x:$ffe0		; port B is the host port
@@ -76,10 +125,23 @@ cmd	jsr	rd
 	move	#>4,x1
 	cmp	x1,a
 	jeq	ldy
+	move	#>6,x1
+	cmp	x1,a
+	jeq	ldp
 	move	#>7,x1
 	cmp	x1,a
 	jeq	rendc
+	move	#>8,x1
+	cmp	x1,a
+	jeq	play
 	jmp	cmd
+
+rxe	movep	x:SSISR,x:V_JUNK
+	movep	x:RX,x:(r6)+
+	rti
+tue	movep	x:SSISR,x:V_JUNK
+	movep	y:(r7)+,x:TX
+	rti
 
 rd	jclr	#0,x:HSR,rd
 	movep	x:HRX,x0
@@ -96,6 +158,14 @@ ldx	jsr	rd
 	move	x0,x:(r0)+
 ldx1
 	jmp	cmd
+ldp	jsr	rd
+	move	x0,r0
+	jsr	rd
+	do	x0,ldp1
+	jsr	rd
+	movem	x0,p:(r0)+
+ldp1
+	jmp	cmd
 ldy	jsr	rd
 	move	x0,r0
 	jsr	rd
@@ -107,9 +177,11 @@ ldy1
 
 rendc	jsr	rd
 	move	x0,r0
+	movec	#2047,m0		; (as the stream's ring: an address in RXB)
 	move	#>1,x1
 	jsr	wr
 	jsr	render
+	movec	#$ffff,m0
 	move	#>2,x1
 	jsr	wr
 	move	#LB,r1
@@ -122,23 +194,27 @@ rendc	jsr	rd
 rnd1
 	jmp	cmd
 
-; a 16-bit word (Y:(r0)+, in its top 16 bits) as an integer into a1
-w16	move	y:(r0)+,a
+; a 16-bit word (X:(r0)+, in its top 16 bits) as an integer into a1
+w16	move	x:(r0)+,a
 	rep	#8
 	asr	a
 	rts
 
-; ---- the block at Y:r0 into LB and RB
+; ---- the block at X:r0 (m0 as its ring) into LB and RB
+; (do loops, not rep: a rep holds interrupts off, and the stream's receive
+; takes a word each 81 cycles; a 64-word rep lost words)
 render	clr	a
 	move	#LB,r1
-	rep	#N
+	move	#RB,r2
+	do	#N,rc1
 	move	a,x:(r1)+
-	move	#RB,r1
-	rep	#N
-	move	a,y:(r1)+
+	move	a,y:(r2)+
+rc1
 	move	#NOW,r1
-	rep	#NV
+	do	#NV,rc2
 	move	a,x:(r1)+
+rc2
+	jsr	w16			; its first word: GMSD_MAGIC (the stream found it)
 	jsr	w16			; the voices
 	move	a1,x:V_NV
 	tst	a
@@ -147,17 +223,17 @@ vlp	jsr	w16			; its number
 	move	#>NV-1,x1
 	and	x1,a
 	move	a1,x:V_ID
-	move	y:(r0)+,x0		; its place's fraction: Q16 << 8, Q24
+	move	x:(r0)+,x0		; its place's fraction: Q16 << 8, Q24
 	move	x0,x:V_PH0
 	clr	a
 	move	a,x:V_PH1
 	jsr	w16			; its step's whole part
 	move	a1,y1
-	move	y:(r0)+,x0		; and its fraction (Q24)
+	move	x:(r0)+,x0		; and its fraction (Q24)
 	move	x0,x:V_INCF
-	move	y:(r0)+,x0		; the gains at the block's end: Q15 << 8, Q23
+	move	x:(r0)+,x0		; the gains at the block's end: Q15 << 8, Q23
 	move	x0,x:V_TL
-	move	y:(r0)+,x0
+	move	x:(r0)+,x0
 	move	x0,x:V_TR
 	jsr	w16			; the points
 	move	a1,x:V_NP
@@ -173,7 +249,7 @@ vlp	jsr	w16			; its number
 	move	x0,x:V_SR
 	move	x:V_NW,x0
 	do	x0,unp
-	move	y:(r0)+,x0
+	move	x:(r0)+,x0
 	move	x0,a
 	and	x1,a			; the high byte, in A1's top (A2 its sign)
 	asr	a
@@ -304,3 +380,203 @@ rf2	move	(r3)+
 	nop
 rf1
 	rts
+
+; ---- what the stream needs alone: in external P (P:$7000 is X:$3000,
+; which nothing else here uses), loaded with LOADP after the bootstrap
+	org	p:$7000
+
+; ---- PLAY: the stream (the header's), until the host's next word
+play	clr	a
+	move	#GL,r1			; the voices' gains and those seen: none (a new piece)
+	rep	#4*NV
+	move	a,x:(r1)+
+	move	#TXB,r1			; the output's ring silent
+	move	#>4096,x0		; (do's count: 12 bits at most as an immediate)
+	do	x0,pl1
+	move	a,y:(r1)+
+pl1
+	move	#RXB,r1			; and the input's
+	do	#2048,pl2
+	move	a,x:(r1)+
+pl2
+	move	a,x:V_NB
+	move	a,x:V_LATE
+	move	a,x:V_SKIP
+	move	a,x:V_PL
+	move	a,x:V_PR
+	move	a,x:V_SEG
+	move	#>-1,x0
+	move	x0,x:V_T
+	move	#RXB,r6
+	movec	#2047,m6
+	move	r6,x:V_RR
+	move	#TXB+1,r7		; (slot 0's word goes out as the first interrupt comes)
+	movec	#4095,m7
+	movec	#2047,m0
+	movep	#$1f8,x:PCC		; port C: the SSI
+	movep	#$4700,x:CRA		; 16 bits, 8 words a frame
+	movep	#$f800,x:CRB		; receive, transmit, their interrupts; network mode
+	movep	#$3400,x:IPR		; the SSI at level 2
+	movep	#0,x:TX
+pl3	jclr	#6,x:SSISR,pl3		; slot 0 going: the ring's next word is slot 1's
+	jclr	#2,x:SSISR,pl3
+	movep	y:(r7)+,x:TX
+	andi	#$fc,mr			; interrupts on
+; the loop: the segment that played cleared, the next block found and
+; rendered, the host's word (STOP) looked for
+loop	jsr	seg
+	jset	#0,x:HSR,pstop
+	move	x:V_RR,r0
+	move	r6,a			; the words in: (r6 - rr) modulo 2048
+	move	r0,x0
+	sub	x0,a
+	move	#>2047,x0
+	and	x0,a
+	move	a1,a
+	move	#>2,x0
+	cmp	x0,a
+	jlt	loop
+	move	x:(r0),b		; a block's start?
+	move	#>MAGIC,x0
+	cmp	x0,b
+	jeq	pl4
+	; no: the words in looked at in a tight loop (some 16 cycles a word:
+	; a word comes each 81, and the loop's way, a word a pass, fell a
+	; ring behind through a long silence)
+	move	#>1,y1
+	sub	y1,a			; (the first is looked at)
+pl5	move	(r0)+
+	move	x:(r0),b
+	cmp	x0,b
+	jeq	pl6
+	sub	y1,a
+	jgt	pl5
+pl6	move	x:V_RR,x1		; the words passed over: (r0 - rr) modulo 2048
+	move	r0,b
+	sub	x1,b
+	move	#>2047,x1
+	and	x1,b
+	move	b1,b
+	move	x:V_SKIP,x1
+	add	x1,b
+	move	b1,x:V_SKIP
+	move	r0,x:V_RR
+	jmp	loop
+pl4	move	#>1024,x0		; the whole block in?
+	cmp	x0,a
+	jlt	loop
+	jsr	render
+	move	x:V_RR,r0		; the next block's place
+	move	#>1024,n0
+	nop
+	move	(r0)+n0
+	move	r0,x:V_RR
+	jsr	seg
+	jsr	out
+	move	x:V_NB,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_NB
+	jmp	loop
+
+; the segment playing (r7's) into a; once it has moved on, the one it
+; left cleared (slots 2 to 7 too: the next block's writes 0 and 1)
+seg	move	r7,a
+	move	#>TXB,x0
+	sub	x0,a
+	rep	#10
+	asr	a
+	move	#>3,x0
+	and	x0,a
+	move	a1,a
+	move	x:V_SEG,b
+	cmp	a,b
+	jeq	sg9
+	move	a1,x:V_SEG
+	rep	#10			; the one left (b's): cleared
+	asl	b
+	move	#>TXB,x0
+	add	x0,b
+	move	b1,r1
+	clr	b
+	do	#1024,sg1
+	move	b,y:(r1)+
+sg1
+sg9	rts
+
+; the block's samples (LB, RB) as the output's 128 frames into segment
+; V_T, then V_T on; the first block, or one whose segment is already
+; playing (late), two segments ahead of the one playing
+out	move	x:V_SEG,a
+	move	x:V_T,b
+	tst	b
+	jlt	ot1
+	cmp	a,b
+	jne	ot2
+	move	x:V_LATE,b
+	move	#>1,x0
+	add	x0,b
+	move	b1,x:V_LATE
+ot1	move	#>2,x0
+	add	x0,a
+	move	#>3,x0
+	and	x0,a
+	move	a1,b
+ot2	move	b1,x:V_T
+	rep	#10
+	asl	b
+	move	#>TXB,x0
+	add	x0,b
+	move	b1,r1			; slot 0 of the segment's first frame
+	move	#>7,n1
+	move	#LB,r2
+	move	#RB,r3
+	do	#N,ot3
+	; (frame 2j: the mean of the last sample and this, doubled; 2j + 1:
+	; this, doubled; each through the limiter: saturated)
+	move	x:V_PL,b
+	move	x:(r2),x0
+	add	x0,b
+	asr	b
+	move	b1,b
+	asl	b
+	move	b,y:(r1)+
+	move	x:V_PR,b
+	move	y:(r3),x0
+	add	x0,b
+	asr	b
+	move	b1,b
+	asl	b
+	move	b,y:(r1)+n1
+	move	x:(r2)+,a
+	move	a,x:V_PL
+	asl	a
+	move	a,y:(r1)+
+	move	y:(r3)+,a
+	move	a,x:V_PR
+	asl	a
+	move	a,y:(r1)+n1
+ot3
+	move	x:V_T,a
+	move	#>1,x0
+	add	x0,a
+	move	#>3,x0
+	and	x0,a
+	move	a1,x:V_T
+	rts
+
+; STOP: the SSI off, the word read, the counts sent
+pstop	ori	#3,mr
+	movep	#0,x:CRB
+	movep	#0,x:IPR
+	movep	x:HRX,x0
+	movec	#$ffff,m0
+	movec	#$ffff,m6
+	movec	#$ffff,m7
+	move	x:V_NB,x1
+	jsr	wr
+	move	x:V_LATE,x1
+	jsr	wr
+	move	x:V_SKIP,x1
+	jsr	wr
+	jmp	cmd

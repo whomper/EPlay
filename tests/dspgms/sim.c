@@ -5,9 +5,14 @@
  * Hatari's DSP core: blocks the 68030's side writes (src/gmsdsp.c's
  * gmsd_write, from a piece played on gmsynth.c's control: a chord, a
  * melody, the drums, bends, pan, volume, then random messages) loaded
- * into its Y memory and rendered (RENDER), each sample against
+ * into its X memory and rendered (RENDER), each sample against
  * gmsd_dsp's, the C model, bit for bit; and the cycles a block takes for
- * its voices.
+ * its voices. Then the stream (PLAY): the SSI driven a word a slot as
+ * Hatari's crossbar does (four stereo tracks, 8 words a frame, at 49,170
+ * Hz on a 32 MHz DSP), the blocks played into its receive some words
+ * off the frame, as a DMA that started late gives them; every frame it
+ * sends (slots 0 and 1) against the model's (gmsd_dsp, gmsd_up), bit for
+ * bit, and none late.
  */
 #include <string.h>
 #include "gms_prog.h"
@@ -15,7 +20,8 @@
 #include "gmsdsp.h"
 
 #define RATE 24585
-#define BLKY 0x2000
+#define BLKX 0x2000		/* (RXB, the stream's ring) */
+#define NSB 60			/* the stream's blocks */
 
 static GMSET g;
 static GMSYN syn;
@@ -44,23 +50,99 @@ static void one(void)
 	for (k = 0; k < nw; k++)
 		w24[k] = (unsigned long)blk[k] << 8;
 	gmsd_dsp(&model, blk, lr);
-	load(4, BLKY, w24, nw);
+	load(1, BLKX, w24, nw);
 	put(7);
-	put(BLKY);
+	put(BLKX);
 	t = sim_job();
 	if (t > worst_cyc) {
 		worst_cyc = t;
-		worst_v_cyc = blk[0];
+		worst_v_cyc = blk[1];
 	}
-	if (blk[0] > most_v)
-		most_v = blk[0];
+	if (blk[1] > most_v)
+		most_v = blk[1];
 	for (k = 0; k < 2 * GMSD_N; k++) {
 		long got = get();
 		if (got != lr[k] && bad++ < 8)
 			printf("block %ld word %d: DSP %06lx, model %06lx (%d voices)\n", blocks, k, got & 0xffffff,
-			       lr[k] & 0xffffff, blk[0]);
+			       lr[k] & 0xffffff, blk[1]);
 	}
 	blocks++;
+}
+
+/* the stream: NSB blocks of a piece as the DMA plays them, off by off
+   words; the frames sent against the model's */
+static unsigned short sblk[NSB][GMSD_WORDS];
+static long sout[NSB * GMSD_FRAMES * 2];
+static long stx[(NSB + 12) * GMSD_FRAMES * 2 + 8192];
+
+static int stream(int off)
+{
+	long nw = 8192L + off + (long)NSB * GMSD_WORDS + 6L * GMSD_WORDS, i, nf = 0, first = -1, j;
+	long prev[2] = { 0, 0 }, lr[2 * GMSD_N], f;
+	double at = 0, per = 32000000.0 / (49170.0 * 8);
+	int k, sbad = 0;
+	unsigned long nb, late, skip;
+	gms_init(&syn, &g, RATE, GMSD_VOICES);
+	gmsd_dsp_reset(&model);
+	m3(0xc0, 0, 0);
+	for (k = 0; k < 4; k++)
+		m3(0x90, 48 + 4 * k, 100);
+	for (k = 0; k < NSB; k++) {
+		if (k == 20)
+			m3(0x90, 72, 120);
+		if (k == 40)
+			m3(0x80, 48, 0);
+		memset(sblk[k], 0, sizeof(sblk[k]));
+		gmsd_write(&syn, pool, pts8, sblk[k]);
+		gmsd_dsp(&model, sblk[k], lr);
+		gmsd_up(prev, lr, sout + (long)k * GMSD_FRAMES * 2);
+	}
+	put(8);
+	at = (double)cycles;	/* (the slots' clock from now: the cycles count on from the tests before) */
+	for (i = 0; i < nw; i++) {
+		long b = i - 8192 - off;
+		unsigned long w = b >= 0 && b < (long)NSB * GMSD_WORDS ? sblk[b / GMSD_WORDS][b % GMSD_WORDS] : 0;
+		int slot = (int)(i & 7);
+		at += per;
+		while (cycles < (unsigned long long)at) {
+			if (!step())
+				break;
+		}
+		/* the transmit's slot, then the receive's, as the crossbar */
+		dsp_core_ssi_Receive_SC2(slot == 0);
+		dsp_core_ssi_Receive_SCK();
+		if (slot < 2 && nf < (long)(sizeof(stx) / sizeof(stx[0])))
+			stx[nf++] = (long)(dsp_core.ssi.transmit_value & 0xffff);
+		dsp_core.ssi.received_value = w;
+		dsp_core_ssi_Receive_SC1(slot == 0);
+		dsp_core_ssi_Receive_SC0();
+	}
+	put(9);
+	nb = (unsigned long)get();
+	late = (unsigned long)get();
+	skip = (unsigned long)get();
+	/* the first frame the model's first matches, then all of them */
+	for (f = 0; f + 2L * 256 < nf && first < 0; f += 2) {
+		for (j = 0; j < 2L * 256; j++)
+			if (stx[f + j] != ((sout[j] >> 8) & 0xffff))
+				break;
+		if (j == 2L * 256)
+			first = f;
+	}
+	if (first < 0) {
+		printf("stream (%d words off): the model's frames never found in what the DSP sent (%lu blocks, %lu late, "
+		       "%lu passed over)\n", off, nb, late, skip);
+		return 1;
+	}
+	for (j = 0; j < (long)NSB * GMSD_FRAMES * 2; j++)
+		if (first + j >= nf || stx[first + j] != ((sout[j] >> 8) & 0xffff)) {
+			if (sbad++ < 6)
+				printf("stream (%d off): frame %ld %s: DSP %04lx, model %04lx\n", off, j / 2, j & 1 ? "R" : "L",
+				       first + j < nf ? stx[first + j] : -1L, (sout[j] >> 8) & 0xffff);
+		}
+	printf("stream, %d words off: %lu blocks rendered, %lu late, %lu words passed over; the first frame %ld; "
+	       "%d frames differing\n", off, nb, late, skip, first / 2, sbad);
+	return sbad || late || nb < NSB;
 }
 
 int main(int argc, char **argv)
@@ -84,6 +166,7 @@ int main(int argc, char **argv)
 	gms_init(&syn, &g, RATE, GMSD_VOICES);
 	gmsd_dsp_reset(&model);
 	sim_start(dsp_gms_prog);
+	load(6, DSP_GMS_PROG_EXT_AT, dsp_gms_prog_ext, DSP_GMS_PROG_EXT_N);
 	/* a piece */
 	m3(0xc0, 0, 0);
 	for (k = 0; k < 4; k++)
@@ -118,8 +201,13 @@ int main(int argc, char **argv)
 	printf("%ld blocks, %ld samples differing; the most voices in a block %ld; the longest render %llu cycles "
 	       "(%llu voices: %.1f %% of a 32 MHz DSP at %d Hz)\n", blocks, bad, most_v, worst_cyc, worst_v_cyc,
 	       100.0 * worst_cyc / (32000000.0 * GMSD_N / RATE), RATE);
-	if (sim_done())
-		return 1;
+	{
+		int sb = stream(0) | stream(3) | stream(1021);
+		if (sim_done())
+			return 1;
+		if (sb)
+			bad++;
+	}
 	printf(bad ? "dspgms: FAILED\n" : "dspgms: all passed\n");
 	return bad != 0;
 }

@@ -11,7 +11,9 @@
  * arithmetic (gmsd_dsp, its C model: the .a56 is held to it bit for bit).
  *
  * A block, 16-bit words (the DMA's; the DSP takes each as its top 16 bits):
- *   0       the voices in it (0 to GMSD_VOICES)
+ *   0       GMSD_MAGIC: where a block starts (the DSP finds blocks by it,
+ *           however many words on the DMA started)
+ *   1       the voices in it (0 to GMSD_VOICES)
  *   then each voice's:
  *     0     its number (0 to GMSD_VOICES - 1)
  *     1     its place's fraction at the block's start (Q16, of its first point)
@@ -36,6 +38,7 @@
 #define GMSD_PTS 128		/* a voice's points in a block at most (the DSP's internal memory): a
 				   higher voice's sent every second one, its step halved */
 #define GMSD_CHUNK 16		/* the samples a gain holds for (4 steps a block) */
+#define GMSD_MAGIC 0xA55AU	/* a block's first word */
 
 /* the set's 16-bit points (gms_prepare's, halved) made 8-bit into pts8
    (g->points bytes), once */
@@ -56,5 +59,11 @@ typedef struct {
 } GMSD_DSP;
 void gmsd_dsp_reset(GMSD_DSP *d);
 void gmsd_dsp(GMSD_DSP *d, const unsigned short *w, long *lr);
+
+/* a block's samples (lr, gmsd_dsp's) to the output's GMSD_FRAMES frames,
+   left and right, 24-bit as the DSP sends them (the DAC takes the top 16):
+   frame 2j the mean of sample j - 1 (*prev, the last block's last pair,
+   kept) and j, frame 2j + 1 sample j; each doubled, saturated */
+void gmsd_up(long *prev, const long *lr, long *out);
 
 #endif

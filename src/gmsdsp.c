@@ -25,7 +25,7 @@ static long clamp_gain(long g)
 int gmsd_write(GMSYN *s, const unsigned char *pool, const signed char *pts8, unsigned short *w)
 {
 	const short *base = (const short *)(const void *)(pool + s->g->o_smp);
-	int nw = 1, nv = 0, k;
+	int nw = 2, nv = 0, k;
 	gms_block_ctl(s, GMSD_N);
 	for (k = 0; k < s->voices; k++) {
 		GMS_VOICE *v = &s->v[k];
@@ -94,7 +94,8 @@ int gmsd_write(GMSYN *s, const unsigned char *pool, const signed char *pts8, uns
 				v->pos -= span;
 		}
 	}
-	w[0] = (unsigned short)nv;
+	w[0] = GMSD_MAGIC;
+	w[1] = (unsigned short)nv;
 	s->to_upd -= GMSD_N;
 	return nw;
 }
@@ -123,7 +124,7 @@ void gmsd_dsp(GMSD_DSP *d, const unsigned short *w, long *lr)
 {
 	long L[GMSD_N], R[GMSD_N], P[GMSD_PTS];
 	unsigned char now[GMSD_VOICES];
-	int nv = w[0], p = 1, v, k;
+	int nv = w[0] == GMSD_MAGIC ? w[1] : 0, p = 2, v, k;
 	for (k = 0; k < GMSD_N; k++)
 		L[k] = R[k] = 0;
 	for (k = 0; k < GMSD_VOICES; k++)
@@ -175,4 +176,16 @@ void gmsd_dsp(GMSD_DSP *d, const unsigned short *w, long *lr)
 		lr[2 * k] = L[k];
 		lr[2 * k + 1] = R[k];
 	}
+}
+
+void gmsd_up(long *prev, const long *lr, long *out)
+{
+	int j, c;
+	for (j = 0; j < GMSD_N; j++)
+		for (c = 0; c < 2; c++) {
+			long a = lr[2 * j + c], m = (long)fl((long long)prev[c] + a, 1);
+			out[4 * j + c] = sat24(2LL * m);
+			out[4 * j + 2 + c] = sat24(2LL * a);
+			prev[c] = a;
+		}
 }
