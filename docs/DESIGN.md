@@ -3275,12 +3275,15 @@ How it is made, in order (each step tested before the next):
   piece, until all are), and only while GEM has left the synth as it plays (`cmp_tick_ok`, set at
   a turn's end, cleared at the next's start and at Pause, Stop and an open).
   tests/hatari/menu_test.py holds the View menu down 8 s while a MIDI file and a WAV play: no
-  underrun. A file's own reads are GEM's too, so a WAV whose reads kept only some 2 s ahead (a
-  DFB1 from its SD card) ran dry behind a menu held that long, and stuttered (the same day's
-  report): a dry queue now plays silence 50 ms ahead of the DMA, not the ring's old sound, once
-  the ring itself is that short, and the music goes on only once a second of it is queued again;
-  a file is read on to 12 s ahead (4 before) in turns that wait for nothing. DISKKBS= (EPLAY.INF,
-  the rigs') reads a file at a real disk's pace, Hatari's being at once. SYNTH.DAT is the set with 16-bit points (439 KB), read once;
+  underrun. A file's own reads are GEM's too, and with the lead under 3 s fill read only half a
+  piece a turn: where the turns are long that is less than a heavy file (a 24-bit AIFF) takes,
+  though the disk is faster, so the queue drained as it played, a held menu emptied it, and the
+  sound stuttered and never caught up (the same day's report). Now a short lead reads what the
+  music took since the last turn and a quarter more (three pieces at most); a dry queue plays
+  silence 50 ms ahead of the DMA, not the ring's old sound, once the ring itself is that short,
+  and the music goes on only once a second of it is queued again; a file is read on to 12 s ahead
+  (4 before). DISKKBS= (EPLAY.INF, the rigs') makes each read take a real disk's time, Hatari's
+  being at once; menu_test.py's aiff24 case reads at such a pace. SYNTH.DAT is the set with 16-bit points (439 KB), read once;
   `gms_prepare` halves its points in place so that the interpolation is one 16 x 16 multiply.
   The CPU's time is watched: past 70 % of the sound's in a second of it, two voices fewer for new
   notes (`gms_cap`); under 40 %, one more.

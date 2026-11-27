@@ -9,6 +9,7 @@ closed the music goes on as before. The cases:
 
   wav    a WAV (16-bit stereo, 44.1 kHz)
   mp3    an MP3 (320 kbit/s, 44.1 kHz stereo) on the DSP
+  aiff24 a 24-bit AIFF (44.1 kHz stereo: 258 KB/s), the heaviest file to read
   mid    a MIDI file on the internal synth (MIDI=SYNTH); a machine that
          sends it to the MIDI port (a stock Falcon: too slow for the
          synth) is said so, and the case passes over it
@@ -23,8 +24,8 @@ on Falcon-060 is no evidence: Hatari's 68060 (32 MHz; a CT60 runs 66 to
 Each plays 30 s; 4 s in, the View menu is opened and held 8 s, then
 closed. Passes when EPlay's own count (the console's "EPLAY ended"
 line) has no underrun: the sound went on all the while the menu was
-down, and after. MENU_DISKKBS=250 reads the file at a real disk's pace
-(EPLAY.INF's DISKKBS=; Hatari's disk answers at once): GEM reads it, so
+down, and after. MENU_DISKKBS=481 makes each read of the file take a
+real disk's time (EPLAY.INF's DISKKBS=; Hatari's disk answers at once): GEM reads it, so
 the queue may run dry once while the menu is held (silence, not the
 ring's old sound round again, since 27 Nov 2026), and the music goes on
 a second after it is closed; one underrun then, no more.
@@ -45,7 +46,7 @@ import speed  # noqa: E402  (EPlay's Rig)
 import midi_test  # noqa: E402  (its MIDI file writer)
 import play_test  # noqa: E402  (its VGM file writer)
 
-CASES = ("wav", "mp3", "mid", "vgm")
+CASES = ("wav", "aiff24", "mp3", "mid", "vgm")
 VIEW_X = 190            # the View menu's title (speed.py's VIEW)
 LONG = 30               # seconds of music
 DISK = int(os.environ.get("MENU_DISKKBS", "0"))  # KB/s: the file read at a real disk's pace (EPLAY.INF's DISKKBS=)
@@ -103,6 +104,10 @@ def session(work, spec, case):
         elif case == "vgm":
             play_test.make_vgm(os.path.join(r.hd, "MD.VGM"), LONG, False, md=True)
             r.write("TAIL.TXT", "C:\\MD.VGM\n")
+        elif case == "aiff24":
+            subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "24", os.path.join(r.hd, "A.AIF"), "synth",
+                            str(LONG), "sine", "440", "gain", "-6"], check=True)
+            r.write("TAIL.TXT", "C:\\A.AIF\n")
         elif case == "mp3":
             src = os.path.join(r.work, "a.wav")
             subprocess.run(["sox", "-n", "-r", "44100", "-c", "2", "-b", "16", src, "synth", str(LONG), "sine", "440",

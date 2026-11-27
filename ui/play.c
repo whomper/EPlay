@@ -1143,7 +1143,6 @@ static int take_queue(int unit)
    the time the reads took (the 200 Hz clock's, summed), the queue's
    least lead once a second has played; -1 before */
 static long rd_bytes, rd_ms, rd_forced, q_least = -1;
-static unsigned long rd_t0;	/* (DISKKBS=: the reads' start) */
 static long disk_kbs;		/* DISKKBS=, the rigs': the file read at most this many KB a second (0: as it comes) */
 
 /* the file read into the queue, a piece at a time, for about ms */
@@ -1406,15 +1405,35 @@ static void fill_cmp_(unsigned long t0, int ms, int low)
 	}
 }
 
+static unsigned long fill_last;	/* (fill's: when the last turn read) */
+static long q_bps;			/* the queue's bytes a second of music (a file's PCM; 0: none) */
+
 static void fill(unsigned long t0, int ms, int low)
 {
 	long piece = low ? PIECE / 2 : PIECE;
 	int must = low;
+	long owe = 0, got = 0;
+	unsigned long now = ms_now();
 	if (cmp) {
 		fill_cmp(t0, ms, low);
 		return;
 	}
-	while (!src_done && (must || ms_now() - t0 < (unsigned long)ms)) {
+	/* (the lead short, a file's PCM: what the music took since the last
+	   turn and a quarter more, whatever the turn's time, three pieces at
+	   most. Half a piece a turn read less than a heavy file takes where
+	   the turns are long, though the disk is faster than the music: the
+	   queue drained as it played and never caught up; a fault reported
+	   27 Nov 2026) */
+	if (low && q_bps > 0 && !net && fill_last) {
+		unsigned long d = now - fill_last;
+		if (d > 1000)
+			d = 1000;
+		owe = (long)d * (q_bps / 800);
+		if (owe > 3 * PIECE)
+			owe = 3 * PIECE;
+	}
+	fill_last = now;
+	while (!src_done && (must || got < owe || ms_now() - t0 < (unsigned long)ms)) {
 		long free = q_size - (q_w - q_r), at = q_woff, n = q_size - at, r;
 		if (n > free)
 			n = free;
@@ -1448,20 +1467,18 @@ static void fill(unsigned long t0, int ms, int low)
 			}
 		} else {
 			unsigned long a = ms_now();
-			if (disk_kbs > 0) {
-				/* (the rigs' DISKKBS=: a real disk's pace, Hatari's being
-				   at once; 64 KB first) */
-				long may = 65536L + (long)(a - rd_t0) * disk_kbs - rd_bytes;
-				if (may < 4096)
-					break;
-				if (n > may)
-					n = may;
-			}
 			r = Fread(fh, n, q + at);
+			if (disk_kbs > 0 && r > 0)
+				/* (the rigs' DISKKBS=: each read takes a real disk's
+				   time, as GEM's; Hatari's answers at once) */
+				while ((long)(ms_now() - a) < r / disk_kbs)
+					;
 			rd_ms += (long)(ms_now() - a);
 		}
-		if (r > 0)
+		if (r > 0) {
 			rd_bytes += r;
+			got += r;
+		}
 		if (r <= 0) {
 			src_done = 1;
 			break;
@@ -2118,8 +2135,9 @@ made_ahead:
 	t_gap = 0;
 	t_gap_at = m_changed_at = -1;
 	rd_bytes = rd_ms = rd_forced = 0;
-	rd_t0 = ms_now();
 	disk_kbs = settings_diskkbs();
+	fill_last = 0;
+	q_bps = kind && !cmp && !net ? (long)fmt.bytes * rate : 0;
 	q_least = -1;
 	pk_n = src_out = 0;
 	t_ended_at = -1;
@@ -3115,8 +3133,6 @@ int play_wait_ms(void)
 	ahead = kind ? ahead / fmt.bytes / rate : bitrate ? ahead / (bitrate * 125) : 9;
 	/* (a file read on to 12 s ahead in turns that wait for nothing, a
 	   station's 4: GEM's turns read it, and the AES holds them while a
-	   menu of the menu bar is down; a WAV kept some 2 s ahead on a DFB1
-	   from its SD card, and a menu held that long stuttered it: a fault
-	   reported 27 Nov 2026) */
+	   menu of the menu bar is down: a fault reported 27 Nov 2026) */
 	return ahead >= (net ? 4 : 12) || q_size - (q_w - q_r) < PIECE ? 100 : 0;
 }
