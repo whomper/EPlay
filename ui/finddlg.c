@@ -213,9 +213,25 @@ static void search(void)
 	if (!ok) {
 		elog("Find station: %s (%s)", gw ? "the Gateway" : "radio-browser.info", why);
 		nfound = 0;
-		say(conn_stop ? "Searching was stopped." :
-			gw ? "The Gateway doesn't answer: is its radio service on?" :
-			     "The station directory doesn't answer.");
+		if (!conn_stop && gw && !strncmp(why, "answered ", 9)) {
+			/* (the Gateway there, its answer a refusal or its own
+			   trouble: its words, not "doesn't answer") */
+			char s[64];
+			int st = atoi(why + 9);
+			const char *r = strchr(why, ':');
+			r = r ? r + 2 : why;
+			if (st == 404)
+				snprintf(s, sizeof(s), "The Gateway has no station search: update it.");
+			else if (st >= 500)
+				snprintf(s, sizeof(s), "The Gateway: %.46s.", r);
+			else
+				snprintf(s, sizeof(s), "The Gateway refused the search: %.27s.", r);
+			say(s);
+			elog("Find station: said: %s", s);
+		} else
+			say(conn_stop ? "Searching was stopped." :
+				gw ? "The Gateway doesn't answer: is its radio service on?" :
+				     "The station directory doesn't answer.");
 	} else {
 		char s[64];
 		elog("Find station: %d stations (%s)", nfound, gw ? "through the Gateway" : "directly");

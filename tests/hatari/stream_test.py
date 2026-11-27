@@ -65,6 +65,10 @@ Cases:
             address typed and Return: it plays, the row and the bar show
             the station, EPLAY.INF keeps it as the first of the last
             stations, the Options menu ticks Direct connection
+  findrefused  File > Find station... through a Gateway whose search refuses
+            (400, its words): EPlay's note gives its words, "The Gateway
+            refused the search: ...", not "doesn't answer" (a fault
+            reported 27 Nov 2026)
 
 RADIOGATE=DIR takes radiogate.py (and aeragate.py) from DIR in place of
 radio/: the Gateway's own copy, as its release will carry it.
@@ -90,7 +94,7 @@ from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
 CASES = ["live", "drop", "stall", "startfail", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
-         "find", "m3u"]
+         "find", "findrefused", "m3u"]
 METAINT = 8192
 KBPS = 128
 
@@ -490,7 +494,7 @@ def run(work, case, spec):
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=0x00c000:s=128x128",
                         "-frames:v", "1", png], check=True)
         st.logo = open(png, "rb").read()
-    if case in ("gateway", "gwcover", "logo", "find"):
+    if case in ("gateway", "gwcover", "logo", "find", "findrefused"):
         # the Gateway's radio service, EPlay's own (radio/), on this computer
         sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
         import radiogate
@@ -500,8 +504,16 @@ def run(work, case, spec):
         threading.Thread(target=gate.serve_forever, daemon=True).start()
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
             fh.write("FALCON=%d\r\nGATE=127.0.0.1\r\nGATEPORT=%d\r\n\r\n" % (case == "logo", gate.server_address[1]))
-        if case in ("logo", "find"):
+        if case in ("logo", "find", "findrefused"):
             radiogate.Config.rb_api = ["http://127.0.0.1:%d" % st.port]
+        # (findrefused: a Gateway there that refuses the search, as one that
+        # wanted a station's name did: a fault reported 27 Nov 2026. EPlay
+        # says what it answered, not that it doesn't answer; the other cases
+        # the real search)
+        if not hasattr(radiogate, "search0"):
+            radiogate.search0 = radiogate.Handler.search
+        radiogate.Handler.search = (lambda self, q: self.reply(400, "a station's name wanted")) \
+            if case == "findrefused" else radiogate.search0
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
     ngx = None
@@ -534,7 +546,7 @@ def run(work, case, spec):
         with open(inf, "w", newline="") as fh:
             fh.write(old_inf + "WINDOW=87,89,472,251\r\n\r\n")
     with open(os.path.join(hd, "TAIL.TXT"), "w") as fh:
-        fh.write(("" if case in ("url", "urledit", "find") else "C:\\RADIO.M3U" if case == "m3u" else url) + "\r\n")
+        fh.write(("" if case in ("url", "urledit", "find", "findrefused") else "C:\\RADIO.M3U" if case == "m3u" else url) + "\r\n")
     natfeats(hd)		# (EPlay's console lines: NATFEATS=1, the rigs' alone)
     m = machines.Machine(spec, hd)
     net = m.network(40000)
@@ -550,7 +562,7 @@ def run(work, case, spec):
                                           "--statusbar", "no", "--auto", "C:\\LAUNCH.PRG"]
     env = m.env()
     x = None
-    if case in ("url", "urledit", "find"):
+    if case in ("url", "urledit", "find", "findrefused"):
         # (a screen to type into: xdotool, as common's speed rig)
         disp = ":%d" % (60 + os.getpid() % 30)
         x = machines.xvfb(disp)
@@ -562,7 +574,7 @@ def run(work, case, spec):
         if case == "aac":
             got = wait_line(log, said, 90)
             return bool(got) and "AAC" in got and "Gateway" in got, m.describe(), got or "nothing said"
-        if case == "find":
+        if case in ("find", "findrefused"):
             # File > Find station... by the mouse (no key), Return searches, the
             # first station (selected) played with Play
             def xdo(*a):
@@ -591,6 +603,14 @@ def run(work, case, spec):
             wait_line(log, lambda l: "Find station:" in l, 60)
             time.sleep(2)
             cmd(fifo, "hatari-shortcut", "screenshot")
+            if case == "findrefused":
+                time.sleep(1)
+                text = open(log, errors="replace").read()
+                lines = [l[4:] for l in text.split("\n") if "Find station:" in l]
+                ok = any("answered 400: a station's name wanted" in l for l in lines) and \
+                    any("said: The Gateway refused the search" in l for l in lines) and \
+                    not any("doesn't answer" in l for l in lines)
+                return ok, m.describe(), " | ".join(lines) or "no search logged"
             px, py = [int(v) for v in os.environ.get("FIND_PLAY", "512,408").split(",")]
             if os.environ.get("FIND_DBL"):
                 # (FIND_DBL=70: a double click, 70 ms apart, on the first station plays it, the

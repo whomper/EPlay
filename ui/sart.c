@@ -159,7 +159,23 @@ static int get_as(char *u, unsigned char **data, long *len, char *why, int wn, c
 		return 2;
 	}
 	if (hd.status != 200) {
-		snprintf(why, (size_t)wn, "answered %d", hd.status);
+		/* (the answer's first line with it: a service's own words, the
+		   Gateway's "radiogate: why", so that a refusal isn't taken for
+		   no answer; a fault reported 27 Nov 2026) */
+		char line[72];
+		int k = 0;
+		long p = h;
+		if (got - h < 2) {
+			long r = conn_read(c, head + got, (long)sizeof(head) - 1 - got);
+			if (r > 0)
+				got += r;
+		}
+		if (got - p > 11 && !strncmp(head + p, "radiogate: ", 11))
+			p += 11;
+		for (; p < got && k < (int)sizeof(line) - 1 && head[p] != '\r' && head[p] != '\n'; p++)
+			line[k++] = head[p] >= ' ' && head[p] < 127 ? head[p] : ' ';
+		line[k] = 0;
+		snprintf(why, (size_t)wn, k ? "answered %d: %s" : "answered %d", hd.status, line);
 		conn_close(c);
 		return 0;
 	}
