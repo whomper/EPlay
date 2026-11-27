@@ -3344,7 +3344,7 @@ int play_step(int ms)
 			tries = 0;
 			last_try = ms_now() - 2000;
 		}
-		if (ms_now() - last_try >= 2000) {
+		if (play_net_lost && ms_now() - last_try >= 2000) {	/* (0: a Spotify line's end) */
 			char err[160];
 			int ok;
 			last_try = ms_now();

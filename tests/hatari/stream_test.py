@@ -65,6 +65,15 @@ Cases:
             address typed and Return: it plays, the row and the bar show
             the station, EPLAY.INF keeps it as the first of the last
             stations, the Options menu ticks Direct connection
+  spotify   a Spotify playlist line (spotify:playlist:...) on a Direct
+            connection, a Gateway given in Settings: EPlay asks the
+            Gateway's Spotify service (radio/spotgate.py here, its player a
+            stand-in of radio/test_spotgate.py's: two 8 s tracks of the rig's
+            tone)
+            for it: the first track's title, length and place shown when it
+            is heard (EPLAY track), then the second's, the tone with no gap,
+            and the line's end at the second's end, no connection again
+            (decided 27 Nov 2026)
   findrefused  File > Find station... through a Gateway whose search refuses
             (400, its words): EPlay's note gives its words, "The Gateway
             refused the search: ...", not "doesn't answer" (a fault
@@ -94,7 +103,7 @@ from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
 CASES = ["live", "drop", "stall", "startfail", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
-         "find", "findrefused", "m3u"]
+         "find", "findrefused", "m3u", "spotify"]
 METAINT = 8192
 KBPS = 128
 
@@ -514,8 +523,29 @@ def run(work, case, spec):
             radiogate.search0 = radiogate.Handler.search
         radiogate.Handler.search = (lambda self, q: self.reply(400, "a station's name wanted")) \
             if case == "findrefused" else radiogate.search0
+    spot = None
+    if case == "spotify":
+        # the Gateway's Spotify service, EPlay's own (radio/), its player a
+        # stand-in: two 8 s tracks
+        sys.path.insert(0, os.path.join(TOP, "radio"))
+        import test_spotgate
+        import spotgate
+        test_spotgate.TRACK_S = 8.0
+        test_spotgate.TONES = (1000, 1500)     # (the rig's tone, analyse's)
+        spot = test_spotgate.Player()
+        spotgate.Config.api = "http://127.0.0.1:%d" % spot.port
+        spotgate.Config.fifo = spot.fifo
+        spotgate.Config.poll = 0.2
+        spotgate.Config.start_s = 1
+        gate = spotgate.ThreadingHTTPServer(("127.0.0.1", 0), spotgate.Handler)
+        gate.daemon_threads = True
+        threading.Thread(target=gate.serve_forever, daemon=True).start()
+        with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
+            fh.write("FALCON=1\r\nGATE=127.0.0.1\r\nSPOTPORT=%d\r\n\r\n" % gate.server_address[1])
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
+    if case == "spotify":
+        url = test_spotgate.PL
     ngx = None
     if case == "nginx" or (case == "https" and os.environ.get("HTTPS_NGINX")):
         if case == "nginx":
@@ -736,6 +766,16 @@ def run(work, case, spec):
             ok = ok and gaps == 0 and st.conns <= 2
         elif case == "pls":
             ok = ok and gaps == 0 and any("/live" in l for l in st.log)
+        elif case == "spotify":
+            got = wait_line(log, lambda l: l.startswith("EPLAY track: " + test_spotgate.T2), 60)
+            end = wait_line(log, lambda l: "the line's end" in l, 60)
+            text = open(log, errors="replace").read()
+            tracks = [l[len("EPLAY track: "):] for l in text.split("\n") if l.startswith("EPLAY track: ")]
+            note += "; tracks %s; %s; the player asked %s" % (tracks, end[4:] if end else "no end", spot.plays)
+            ok = ok and gaps == 0 and bool(got) and bool(end) and len(tracks) == 2 and \
+                tracks[0] == "%s 8000 0 A Band - One" % test_spotgate.T1 and \
+                tracks[1].startswith(test_spotgate.T2 + " 8000 0 A Band, A Guest - Two") and \
+                spot.plays == [{"uri": test_spotgate.PL}] and "connecting again" not in text
         elif case == "m3u":
             ok = ok and gaps == 0 and "playlist C:\\RADIO.M3U: 1 files" in open(log, errors="replace").read()
         elif case in ("url", "urledit"):
@@ -758,6 +798,8 @@ def run(work, case, spec):
         st.stop()
         if gate:
             gate.shutdown()
+        if spot:
+            spot.stop()
         if ngx:
             ngx.terminate()
         if x:

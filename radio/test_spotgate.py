@@ -35,6 +35,7 @@ PL = "spotify:playlist:1AbCdEfGhIjKlMnOpQrStU"
 T1 = "spotify:track:0000000000000000000001"
 T2 = "spotify:track:0000000000000000000002"
 TRACK_S = 2.0                       # each stand-in track: 2 s of a tone
+TONES = None                        # (left Hz, right Hz) for every track; None: 440 Hz times its number
 
 
 class Player:
@@ -107,14 +108,14 @@ class Player:
             with open(self.fifo, "wb") as f:        # (as wait_for_reader: until spotgate reads)
                 for i, t in enumerate(order[start:]):
                     self.state["track"] = self.obj(t, pos)
-                    hz = 440 * (i + start + 1)
+                    hl, hr = TONES or (440 * (i + start + 1),) * 2
                     n = int(44100 * (TRACK_S - pos / 1000))
                     for k in range(0, n, 4410):
                         if self.paused.is_set():
                             return
-                        f.write(b"".join(struct.pack("<hh", v, v) for v in
-                                         (int(8000 * math.sin(2 * math.pi * hz * j / 44100))
-                                          for j in range(k, min(n, k + 4410)))))
+                        f.write(b"".join(struct.pack("<hh", int(8000 * math.sin(2 * math.pi * hl * j / 44100)),
+                                                     int(8000 * math.sin(2 * math.pi * hr * j / 44100)))
+                                         for j in range(k, min(n, k + 4410))))
                         time.sleep(0.05)    # (faster than real time, as a player that is ahead)
                     pos = 0
         except (BrokenPipeError, OSError):
@@ -234,6 +235,8 @@ class Tests(unittest.TestCase):
         self.assertIn("400", st)
 
     def test_one_at_a_time(self):
+        spotgate.Config.busy_s = 0.2
+        self.addCleanup(setattr, spotgate.Config, "busy_s", 3.0)
         first = threading.Thread(target=self.g.ask, args=("/stream?uri=" + PL,))
         first.start()
         time.sleep(0.6)

@@ -31,7 +31,8 @@ phone or other device controls it: EPlay does.
   the track, its length and where it starts in it, so the bar shows the
   track's place. The stream ends where the item ends (EPlay goes on to the
   next line); one stream at a time (the Gateway has one Spotify player):
-  503 while another Atari listens.
+  a request waits up to 3 s for the last one to end (EPlay's Next asks as
+  it closes it), else 503 while another Atari listens.
 
     GET /tracks?uri=<spotify:album:ID or spotify:playlist:ID>
 
@@ -110,6 +111,7 @@ class Config:
     poll = 1.0                      # the player's state asked every second
     ready_s = 20                    # /tracks: how long the player may take to list an item
     start_s = 15                    # /stream: how long its first sound may take
+    busy_s = 3.0                    # /stream: how long it waits for the last stream to end
     verbose = False
 
 
@@ -317,7 +319,9 @@ class Handler(BaseHTTPRequestHandler):
         meta = self.headers.get("Icy-MetaData", "") == "1"
         if not radiogate.ffmpeg_version():
             raise Refused(502, "Spotify needs ffmpeg on the Gateway")
-        if not ONE.acquire(blocking=False):
+        # (Next, Previous, a seek: EPlay closes the last stream and asks at
+        # once; its relay sees the close at its next write, so up to 3 s)
+        if not ONE.acquire(timeout=Config.busy_s):
             raise Refused(503, "Spotify is playing to another Atari")
         t0, sent = time.time(), [0]
         why = "ended"
@@ -409,6 +413,11 @@ class Handler(BaseHTTPRequestHandler):
             first = p.stdout.read1(16384)
             if not first:
                 raise Refused(502, fault[0] if fault else "the Spotify player sent no sound")
+            # (the track's details before its sound: its block then comes
+            # at the first 8 KB, where EPlay shows it as it is heard)
+            t0 = time.time()
+            while meta and not st["key"] and time.time() - t0 < 3 and not stop.is_set():
+                time.sleep(0.05)
             self.begun = True
             self.send_response(200)
             self.send_header("Content-Type", "audio/mpeg")
