@@ -31,7 +31,7 @@ phone or other device controls it: EPlay does.
   the track, its length and where it starts in it, so the bar shows the
   track's place. No sound within 15 s of the start, or for 30 s once
   begun: the stream ends (502 before its first byte), the player paused,
-  so no stuck player holds the one stream. Two tracks passed over with no
+  so no stuck player holds the one stream. Three tracks begun with no
   sound (Spotify giving the player no key for them): 502 "Spotify refused
   to play it", the player paused, before it runs through the rest. The stream ends where the item ends (EPlay goes on to the
   next line); one stream at a time (the Gateway has one Spotify player):
@@ -399,7 +399,7 @@ class Handler(BaseHTTPRequestHandler):
                     pass
 
         def refused():
-            # (two tracks passed over with no sound between: Spotify gave
+            # (three tracks begun with no sound between: Spotify gave
             # the player no key for them, go-librespot's "aes key code 1",
             # on some Premium accounts, 28 Nov 2026; it would go on through
             # 50 more in seconds, which Spotify answers with 429s: the item
