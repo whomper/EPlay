@@ -135,7 +135,8 @@ place (it stays as small as it is).
   to save as, the folders and the playlists there; it asks before replacing a file, and the music
   goes on while it is open); Quit (^Q).
 - **Edit:** Remove from the list (Del), the selected rows; Clear the list keeps only the file that
-  plays; Select all (^A).
+  plays; Expand makes a Spotify album or playlist row into its tracks (see **Spotify**); Select
+  all (^A).
 - **View:** Mini player: the window becomes the bar alone, and back. `EPLAY.INF` keeps it.
 - **Play:** Play/Pause (Space), Stop (Clr Home), Previous (Shift+Left), Next (Shift+Right);
   **Shuffle** plays the list in a random order, each file once a round, the list itself left as
@@ -167,7 +168,9 @@ whole (`C:\MUSIC\A.MP3`) or relative to the playlist's folder (`LIVE\A.MP3`, `..
 saves each file's length and tags with it, and its path relative to the playlist's folder where it
 is in it, so the playlist and its music can move together. A line can be a station's address
 (`http://` or `https://`) too: it goes into the list as a station, named by the `#EXTINF` line
-before it, and Save playlist keeps it.
+before it, and Save playlist keeps it. So can a Spotify track, album or playlist
+(`spotify:playlist:...`, or its `https://open.spotify.com/...` link), and a `file:///C:/MUSIC/A.MP3`
+address, read as its path. One playlist can hold files, stations and Spotify lines together.
 
 ## Web radio
 
@@ -211,6 +214,34 @@ The **Options** menu chooses how a station is reached:
 Web radio needs a network: STinG or MiNTnet with a network card. With STinG, set the **Delay** in
 `STING.CPX` to 10 on a Falcon or TT; it polls the card that often. Web radio needs the Falcon's
 DSP: on a TT or an STE a station's row shows dim and is passed over.
+
+## Spotify
+
+A Spotify track, album or playlist plays in EPlay through the AERA Gateway's **Spotify Streamer**
+(AERA-Gateway 1.61 or later: `sudo aera-gateway install spotify`). Spotify itself plays on the
+Gateway and comes to the Falcon as a stream, and EPlay controls it: no phone or other device is
+needed. It needs a Spotify Premium account, and the Gateway's address in **Settings** (it is used
+on a Direct connection too).
+
+- **Sign in** once: **Settings > Stations, Spotify: Sign in...** shows a link and a code. Open the
+  link on any phone or computer and type the code. The Streamer keeps the sign-in on the Gateway
+  (never in `EPLAY.INF`); the same button later says it is signed in.
+- **Add one**: in Spotify, **Share > Copy link**, then **File > Open URL...** and paste or type it
+  (`https://open.spotify.com/playlist/...` or `spotify:playlist:...`). It goes into the list as
+  one row, and plays. A playlist file can hold such lines too (see **Playlists**).
+- **One row** for an album or a playlist: it points to what Spotify keeps, so it plays the
+  playlist as it is in Spotify at that moment, changes included. **Shuffle** moves the row among
+  the others but never changes the order inside it, as with a station.
+- **While it plays**, the bar shows each track's title, artist, album art and length as you hear
+  it. **Next** and **Previous** step through its tracks (Previous more than 3 s into a track
+  starts it again); Next after its last track goes on to the next row. The position bar and the
+  10 s buttons move within the track, and **Play** after **Pause** goes on where it was.
+- **Edit > Expand** (also on the row's menu) makes an album or playlist row into one row a track,
+  as they are now, with their titles and lengths. You choose it; EPlay never does it by itself.
+  The new rows no longer follow changes made in Spotify.
+
+Without a Gateway, a Spotify row says so and is passed over. Spotify's own apps list the Gateway
+as **Spotify Streamer**.
 
 ## Keyboard
 
@@ -257,7 +288,8 @@ the port on a machine without one.
 
 **Stations: Through the Gateway, Address and Port** are the AERA Gateway's, for stations reached through it
 (the Options menu). The port is a number from 1 to 65535 (the Gateway's radio service: 8580);
-left empty it is 8580.
+left empty it is 8580. **Spotify: Sign in...** signs the Gateway's Spotify Streamer in, once (see
+**Spotify**); it asks the address above, before OK.
 
 **ReplayGain** (on the Playing page too) evens out the loudness of the files from the gain their tags give (ReplayGain's
 values, or LAME's own): **Off**; **Track**, each file evened out on its own; **Album**, an album's
