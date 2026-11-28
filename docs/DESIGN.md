@@ -3492,6 +3492,7 @@ choice, never by itself; each track's album art, title and artist shown while it
 - **The rig**: tests/hatari/stream_test.py `spotify` (a playlist line on a Direct connection, the
   Gateway in Settings, spotgate with the stand-in player: both tracks shown as heard, no gap, the
   line's end, no connection again).
+- **Its name** (the owner, 28 Nov 2026): the **Spotify Streamer**, in EPlay's words and as the device Spotify's apps list (go-librespot's device_name).
 - **The Gateway**: AERA-Gateway 1.61 carries spotgate (`sudo aera-gateway install spotify --allow ATARI_IP`, not part of `install all`), go-librespot v0.10.7 pinned and checked, `log_level: warn` (at info it logs every track); EPlay's Spotify release names Gateway 1.61 as the one it needs.
 - **Still to do before it goes out**: a rig case for Expand and for Next inside a line; the help
   file's page;

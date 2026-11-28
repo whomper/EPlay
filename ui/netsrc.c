@@ -207,9 +207,9 @@ static int ask(char *u, char *err, int n)
 		if (surl_spotify(url_given))
 			/* (spotgate's: 404 no track after or before, 503 busy or no player) */
 			snprintf(err, (size_t)n, hd.status == 404 ? "That was the line's last track." :
-				 hd.status == 503 ? "The Gateway's Spotify player is busy or not running." :
+				 hd.status == 503 ? "The Spotify Streamer is busy or not running." :
 				 hd.status == 400 ? "The Gateway didn't take that Spotify line." :
-				 "The Gateway's Spotify player refused it (%d).", hd.status);
+				 "The Spotify Streamer refused it (%d).", hd.status);
 		else
 			snprintf(err, (size_t)n, hd.status == 404 ? "The station isn't there (404)." :
 				 "The station answered %d.", hd.status);
@@ -420,7 +420,7 @@ static int open_url(const char *url, char *err, int n)
 			return 0;
 		r = ask(url_now, err, n);
 		if (!r && !conn_stop && !strcmp(err, "The station doesn't answer."))
-			snprintf(err, (size_t)n, "The Gateway's Spotify service doesn't answer: is it set up?");
+			snprintf(err, (size_t)n, "The Spotify Streamer doesn't answer: is it installed on the Gateway?");
 		if (r == 1 && !hd.name[0])
 			snprintf(name, sizeof(name), "Spotify");
 		return r == 1;

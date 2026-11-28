@@ -1667,7 +1667,7 @@ static char *utf8_atari(const char *s, char *out, int n)
 }
 
 /* Settings > Stations, Spotify's Sign in... (Erez, 27 Nov 2026: in
-   Settings): the Gateway's Spotify player signed in, or its pairing code
+   Settings): the Gateway's Spotify Streamer (Erez's name, 28 Nov 2026) signed in, or its pairing code
    (spotify.com/pair on any device, once; the player keeps its credentials on
    the Gateway, never in EPLAY.INF). gate: the address as the dialog has it */
 void spotify_signin(const char *gate)
@@ -1687,7 +1687,7 @@ void spotify_signin(const char *gate)
 	busy_bee(0);
 	conn_stop = 0;
 	if (!j) {
-		alert(1, "[3][The Gateway's Spotify service|didn't answer: %.30s][ OK ]", why);
+		alert(1, "[3][The Spotify Streamer on the|Gateway didn't answer: %.30s][ OK ]", why);
 		return;
 	}
 	if (len >= (long)sizeof(t))
@@ -1706,13 +1706,13 @@ void spotify_signin(const char *gate)
 		}
 	elog("Spotify sign-in: %s", f[0]);
 	if (!strcmp(f[0], "ready"))
-		alert(1, "[1][The Gateway's Spotify player is|signed in%s%.24s.][ OK ]", k >= 1 && f[1][0] ? " as " : "",
+		alert(1, "[1][The Spotify Streamer is|signed in%s%.24s.][ OK ]", k >= 1 && f[1][0] ? " as " : "",
 		      k >= 1 ? f[1] : "");
 	else if (!strcmp(f[0], "code") && k == 2)
 		alert(1, "[1][On any phone or computer open|%.30s|and type the code %.12s.|EPlay plays Spotify after that.][ OK ]",
 		      f[1], f[2]);
 	else
-		alert(1, "[3][The Gateway's Spotify service|answered in a way EPlay doesn't read.][ OK ]");
+		alert(1, "[3][The Spotify Streamer answered|in a way EPlay doesn't read.][ OK ]");
 }
 
 static void expand(int i)
