@@ -18,6 +18,9 @@ enum { OUT_AUTO, OUT_FDI, OUT_DSP };
 int settings_mp3cpu(void);	/* MP3CPU=1: the rigs' */
 int settings_vgmcpu(void);
 long settings_stallat(void);
+int settings_gsd_slow(void);	/* GSDSLOW=: this version's synth on the DSP measured too slow on this 68030 */
+void settings_set_gsd_slow(void);	/* so measured: remembered (EPLAY.INF) */
+long settings_gsdbusy(long dflt);	/* GSDBUSY=%: the rigs' limit for the synth on the DSP (dflt: EPlay's) */
 long settings_crashat(void);	/* CRASHAT=ms: the rigs' (EPlay ends there, playing, by an illegal instruction) */
 /* Options > Write a log (LOG= in EPLAY.INF, off until ticked: the
    guidelines' 6.5); its setting at once */

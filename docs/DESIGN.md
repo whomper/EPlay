@@ -3447,3 +3447,28 @@ and 7, some 650 writes a second, nearly every write between two short waits):
   checked against Nuked's and is the same; the six possible maps tried, the present one the
   closest. Not changed: the feedback operator at the chip's rate would take the DSP past its
   worst case's 82 %.
+## Spotify: built, then taken out (27-28 Nov 2026)
+
+Spotify lines through the Gateway (go-librespot behind a "Spotify Streamer", EPlay's list, Expand,
+the sign-in in Settings) were built and passed the rigs against a stand-in player; on the owner's
+Pi with his Premium account Spotify refused the player every track's key ("aes key code 1"). The
+upstream reports (go-librespot #279, closed as Spotify's side; librespot #1649) and a statement
+attributed to Spotify say such players are being phased out: only accounts that played on one within
+the last year keep working, new ones can't be enabled. The owner's decision (28 Nov 2026): Spotify
+out of EPlay and the Gateway altogether. The work stays on the branch `links` for the record.
+
+## The synth on the DSP: measured as it plays, not guessed (28 Nov 2026)
+
+1.61 chose the synth on the DSP only where art_cpu_turns reached 2,000: a loop reading TOS's 200 Hz
+count, which lives in ST RAM. On a real Falcon that loop measures the ST RAM bus more than the
+68030, and Hatari doesn't slow ST RAM as a Falcon does: the owner's DFB1 (50 MHz) gave 519 where
+Hatari's 16 MHz Falcon gives 1,171, and his MIDI files went to the port (reported 28 Nov 2026).
+Now the synth on the DSP starts on any 68030 with the DSP when Settings says Synth, and its own
+work decides: the tick writing its blocks (play_tick_share) and the turns making its records,
+over its first 2 s, above 50 % of the 68030, or 3 underruns in its first 30 s, and it goes on from
+that place the slower way (the 68030's synth where 1.60's timing keeps it, else the port), the log
+saying so and EPLAY.INF keeping GSDSLOW=version, so the next file decides at once (a new version
+measures again). In Hatari: Falcon:16 with TT RAM 12 % (kept), Falcon-4:16 23 % (kept; Hatari's
+DSP then reports late blocks, its DSP run between the 68030's instructions, which a real Falcon's
+isn't); EPLAY_RIG_INF=GSDBUSY=0 (the rigs' limit) moves it to the port 2 s in, play_test.py midsyn
+checks that and GSDSLOW. A real stock Falcon with a dense piece is the open measurement.
