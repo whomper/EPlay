@@ -338,6 +338,10 @@ $(B)/test_pcm: tests/pcm/test_pcm.c src/pcm.c src/pcm.h
 $(B)/test_stsearch: tests/stsearch/test_stsearch.c src/stsearch.c src/stsearch.h common/src/charset.c common/src/bidi.c
 	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/stsearch/test_stsearch.c \
 		src/stsearch.c common/src/charset.c common/src/bidi.c
+$(B)/test_lib: tests/lib/test_lib.c src/lib.c src/libjf.c src/json.c src/lib.h src/libtext.h src/json.h \
+		common/src/charset.c common/src/bidi.c
+	$(HOSTCC) $(HCFLAGS) -fsanitize=address,undefined -Isrc -Icommon/src -o $@ tests/lib/test_lib.c src/lib.c \
+		src/libjf.c src/json.c common/src/charset.c common/src/bidi.c
 $(B)/test_vgm: tests/vgm/test_vgm.c src/vgm.c src/vgm.h src/vgmfile.c src/vgmfile.h src/tags.c src/rgain.c \
 		src/vgmcpu.c src/vgmcpu.h src/sncmd.c src/sncpu.c src/opnd.c src/egmath.c src/opnfast.c src/opncpu.c \
 		src/opld.c src/oplcpu.c src/oplcpu.h src/aycpu.c src/aycpu.h $(B)/opltab.h \
@@ -371,12 +375,13 @@ $(B)/hmad_%.o: third_party/libmad/%.c $(wildcard third_party/libmad/*.h third_pa
 $(B)/test_mp3int: tests/mp3/test_mp3int.c mp3ovl/madhead.c $(HMADO)
 	$(HOSTCC) $(HMADF) -Wall -Wextra -Wno-unused-function -o $@ tests/mp3/test_mp3int.c $(HMADO) -lm
 test: $(B)/test_mp3 $(B)/mp3files/.made $(B)/test_mp3int $(B)/test_pcm $(B)/test_info $(B)/test_inf $(B)/test_tags $(B)/test_gain \
-		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_vgm $(B)/fuzz_replay $(B)/test_smf \
+		$(B)/test_probe $(B)/test_m3u $(B)/test_order $(B)/test_stream $(B)/test_stsearch $(B)/test_lib $(B)/test_vgm $(B)/fuzz_replay $(B)/test_smf \
 		$(B)/test_gmset $(B)/gm8.dat $(B)/gm16.dat $(B)/test_gmsynth $(B)/test_gmsdsp
 	./$(B)/test_inf
 	mkdir -p $(B)/vgmfiles && ./$(B)/test_vgm $(B)/vgmfiles
 	./$(B)/test_stream
 	./$(B)/test_stsearch
+	./$(B)/test_lib
 	./$(B)/fuzz_replay tests/fuzz/seeds/* tests/fuzz/found/*
 	./$(B)/test_gain
 	./$(B)/test_m3u

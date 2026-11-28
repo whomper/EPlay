@@ -3472,3 +3472,46 @@ measures again). In Hatari: Falcon:16 with TT RAM 12 % (kept), Falcon-4:16 23 % 
 DSP then reports late blocks, its DSP run between the 68030's instructions, which a real Falcon's
 isn't); EPLAY_RIG_INF=GSDBUSY=0 (the rigs' limit) moves it to the port 2 s in, play_test.py midsyn
 checks that and GSDSLOW. A real stock Falcon with a dense piece is the open measurement.
+
+## The library: Jellyfin first, any platform after (decided 28 Nov 2026)
+
+Erez's decisions: EPlay's window stays as it is. The library is a window
+of its own beside it (not modal), and drives EPlay: a double click on an
+album or a playlist replaces EPlay's list and plays it; a single song is
+added to the list. The library is one interface with a choice of platform
+in Settings (Jellyfin first; others can be added). It lives in its own
+overlay, LIBRARY.OVL, so a user who wants no library never loads it: a
+Settings option turns it on, and File > Library... loads it the first time
+it is chosen. Podcasts are a tab in the same window.
+
+The parts:
+
+- `src/lib.h`: the interface. A platform only makes requests (sign in,
+  list artists, albums, playlists, songs, what is in one of them, with a
+  find text and paging) and reads the answers into `LIB_ITEM`s; it gives a
+  song's stream URL and an item's picture URL. The window, the network and
+  EPlay's list are the library's own, the same for every platform.
+- `src/libjf.c`: Jellyfin. Every call carries the `Authorization:
+  MediaBrowser Client=..., Token=...` header Jellyfin's own clients send.
+  The stream's URL carries the key as `ApiKey`, the form the server still
+  takes with its old forms (`api_key`, `X-Emby-Token`) turned off. Songs
+  come as MP3 at the bit rate in Settings (128, 192 or 320 kbit/s; 192 the
+  default), so the DSP plays any file the server holds; a seek asks for the
+  song from that point (`StartTimeTicks`). Lists ask for the few fields
+  shown and no user data, so the answers stay small. Checked against the
+  12.4 server's own API description; not yet against a running server.
+- `src/json.c`: a JSON reader that walks an answer in place (no copy, no
+  tree), passing over what it doesn't need, never past the end, 64 deep at
+  most. It is Find station's reader made general; Find station keeps its
+  own for now, as it is in the program and this one is in the overlay.
+- No `printf` in the overlay: requests are built with `libtext.h`'s two
+  calls.
+
+A song in EPlay's list is the line `jellyfin:<id>`. The server, the user
+and the key come from Settings when it plays, so a saved playlist never
+carries them; only the key the sign-in gave is kept (in EPLAY.INF), never
+the password.
+
+Tests: `tests/lib/test_lib.c` (in `make test`): the requests, answers made
+up in Jellyfin's shape, song lines, then every answer cut short at every
+length and changed at random, under AddressSanitizer.
