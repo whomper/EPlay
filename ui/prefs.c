@@ -285,12 +285,6 @@ long settings_gsdbusy(long dflt)
 	return gsdbusy >= 0 ? gsdbusy : dflt;
 }
 
-{
-}
-
-{
-}
-
 long settings_stallat(void)
 {
 	return stallat;
