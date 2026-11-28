@@ -3493,7 +3493,7 @@ choice, never by itself; each track's album art, title and artist shown while it
   Gateway in Settings, spotgate with the stand-in player: both tracks shown as heard, no gap, the
   line's end, no connection again).
 - **Its name** (the owner, 28 Nov 2026): the **Spotify Streamer**, in EPlay's words and as the device Spotify's apps list (go-librespot's device_name).
-- **The Gateway**: AERA-Gateway 1.61 carries spotgate (`sudo aera-gateway install spotify --allow ATARI_IP`, not part of `install all`), go-librespot v0.10.7 pinned and checked, `log_level: warn` (at info it logs every track); EPlay's Spotify release names Gateway 1.61 as the one it needs.
+- **The Gateway**: AERA-Gateway 1.61 carries spotgate (1.62: the player named "Spotify Streamer") (`sudo aera-gateway install spotify --allow ATARI_IP`, not part of `install all`), go-librespot v0.10.7 pinned and checked, `log_level: warn` (at info it logs every track); EPlay's Spotify release names Gateway 1.62 as the one it needs.
 - **The rig** also: `spotnext` (Next inside a line: the track after, from spotgate) and
   `spotexpand` (Edit > Expand: the line into its tracks), by EPLAY.INF's RIGNEXT= and RIGEXPAND=.
   Next with a Spotify line alone in the list was greyed; it isn't now. The help's **Spotify** page.

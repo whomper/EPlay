@@ -218,7 +218,7 @@ DSP: on a TT or an STE a station's row shows dim and is passed over.
 ## Spotify
 
 A Spotify track, album or playlist plays in EPlay through the AERA Gateway's **Spotify Streamer**
-(AERA-Gateway 1.61 or later: `sudo aera-gateway install spotify`). Spotify itself plays on the
+(AERA-Gateway 1.62 or later: `sudo aera-gateway install spotify`). Spotify itself plays on the
 Gateway and comes to the Falcon as a stream, and EPlay controls it: no phone or other device is
 needed. It needs a Spotify Premium account, and the Gateway's address in **Settings** (it is used
 on a Direct connection too).
