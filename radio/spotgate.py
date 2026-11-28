@@ -31,7 +31,9 @@ phone or other device controls it: EPlay does.
   the track, its length and where it starts in it, so the bar shows the
   track's place. No sound within 15 s of the start, or for 30 s once
   begun: the stream ends (502 before its first byte), the player paused,
-  so no stuck player holds the one stream. The stream ends where the item ends (EPlay goes on to the
+  so no stuck player holds the one stream. Two tracks passed over with no
+  sound (Spotify giving the player no key for them): 502 "Spotify refused
+  to play it", the player paused, before it runs through the rest. The stream ends where the item ends (EPlay goes on to the
   next line); one stream at a time (the Gateway has one Spotify player):
   a request waits up to 3 s for the last one to end (EPlay's Next asks as
   it closes it), else 503 while another Atari listens.
@@ -396,8 +398,26 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
 
+        def refused():
+            # (two tracks passed over with no sound between: Spotify gave
+            # the player no key for them, go-librespot's "aes key code 1",
+            # on some Premium accounts, 28 Nov 2026; it would go on through
+            # 50 more in seconds, which Spotify answers with 429s: the item
+            # stopped here, the player paused)
+            fault.append("Spotify refused to play it (no key for its tracks)")
+            stop.set()
+            try:
+                api("POST", "/player/pause", timeout=5)
+            except Refused:
+                pass
+            try:
+                p.kill()
+            except OSError:
+                pass
+
         def watch():
             began, quiet = time.time(), None
+            silent = []                 # (the tracks begun since the last sound)
             while not stop.is_set():
                 try:
                     code, js = api("GET", "/status", timeout=5)
@@ -412,6 +432,14 @@ class Handler(BaseHTTPRequestHandler):
                                       cover=t.get("album_cover_url") or "", len=int(t.get("duration") or 0),
                                       pos=int(t.get("position") or 0))
                             st["key"] = (st["uri"], time.time())
+                        if not last[1] or time.time() - last[0] > 1.0:   # (no sound yet, or none for 1 s)
+                            if t["uri"] not in silent:
+                                silent.append(t["uri"])
+                        else:
+                            silent[:] = [t["uri"]]
+                        if len(silent) >= 3:
+                            refused()
+                            return
                     stopped = bool(js.get("stopped"))
                 else:
                     stopped = code == 204
@@ -428,7 +456,9 @@ class Handler(BaseHTTPRequestHandler):
                         return
                 else:
                     quiet = None
-                stop.wait(Config.poll)
+                # (quickly while no sound comes: a refused track passes in
+                # a quarter of a second)
+                stop.wait(Config.poll if time.time() - last[0] < 1.0 else min(Config.poll, 0.2))
 
         last = [time.time(), False]     # (the last sound's time; any yet)
 

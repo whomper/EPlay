@@ -46,6 +46,7 @@ class Player:
             os.mkfifo(self.fifo)
         self.code = None            # /auth/code's answer when waiting for one
         self.mute = False           # answers play, but no sound comes (a stuck player)
+        self.refuse = False         # every track refused its key: passed over, a quarter second each
         self.gen = 0                # (one player: a new play ends the last one's writing)
         self.plays = []
         self.state = {"stopped": True, "paused": False, "track": None}
@@ -84,7 +85,9 @@ class Player:
                     me.plays.append(body)
                     me.gen += 1
                     me.paused.clear()
-                    if not me.mute:
+                    if me.refuse:
+                        threading.Thread(target=me.pass_over, daemon=True).start()
+                    elif not me.mute:
                         threading.Thread(target=me.play, args=(body,), daemon=True).start()
                     else:
                         me.state.update(stopped=False, paused=False, track=me.obj(T1, 0))
@@ -98,6 +101,18 @@ class Player:
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
         self.port = self.srv.server_address[1]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+
+    def pass_over(self):
+        """go-librespot with no key for any track: each passed over, the next loaded"""
+        gen = self.gen
+        self.state.update(stopped=False, paused=False)
+        self.passed = 0
+        for k in range(50):
+            if self.paused.is_set() or gen != self.gen:
+                return
+            self.state["track"] = dict(self.obj(T1, 0), uri="spotify:track:%022d" % (100 + k))
+            self.passed += 1
+            time.sleep(0.25)
 
     def obj(self, t, pos):
         name, who, cover = self.tracks[t]
@@ -267,6 +282,19 @@ class Tests(unittest.TestCase):
             spotgate.Config.first_s = 15
         st, _, body = self.g.ask("/stream?uri=" + PL)
         self.assertIn("200", st)
+
+    def test_refused_tracks(self):
+        # (Spotify giving no key for its tracks, 28 Nov 2026: 502 in its
+        # words after two or three, the player paused; not 50 in a row)
+        self.p.refuse = True
+        try:
+            st, _, body = self.g.ask("/stream?uri=" + PL)
+            self.assertIn("502", st)
+            self.assertIn(b"Spotify refused to play it", body)
+            self.assertTrue(self.p.paused.is_set())
+            self.assertLessEqual(self.p.passed, 4)
+        finally:
+            self.p.refuse = False
 
     def test_no_proxy(self):
         # (HTTP_PROXY set, as on a Pi behind a proxy: the player still asked directly)

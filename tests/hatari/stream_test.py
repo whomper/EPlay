@@ -81,6 +81,10 @@ Cases:
             5 s here, the rig's serial network at about 12 KB/s)
   spotexpand  as spotify, Edit > Expand 3 s in (RIGEXPAND=): spotgate's
             /tracks asked, the line made into its two tracks
+  spotrefused  as spotify, Spotify giving no key for any track (the
+            stand-in passes each over, as go-librespot did on the owner's Pi,
+            28 Nov 2026): the Streamer stops after two or three, and EPlay's
+            alert gives its words ("Spotify refused to play it")
   findrefused  File > Find station... through a Gateway whose search refuses
             (400, its words): EPlay's note gives its words, "The Gateway
             refused the search: ...", not "doesn't answer" (a fault
@@ -111,7 +115,7 @@ from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
 CASES = ["live", "drop", "stall", "startfail", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
-         "find", "findrefused", "m3u", "spotify", "spotnext", "spotexpand"]
+         "find", "findrefused", "m3u", "spotify", "spotnext", "spotexpand", "spotrefused"]
 METAINT = 8192
 KBPS = 128
 
@@ -532,7 +536,7 @@ def run(work, case, spec):
         radiogate.Handler.search = (lambda self, q: self.reply(400, "a station's name wanted")) \
             if case == "findrefused" else radiogate.search0
     spot = None
-    if case in ("spotify", "spotnext", "spotexpand"):
+    if case in ("spotify", "spotnext", "spotexpand", "spotrefused"):
         # the Gateway's Spotify service, EPlay's own (radio/), its player a
         # stand-in: two 8 s tracks
         sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
@@ -541,6 +545,7 @@ def run(work, case, spec):
         test_spotgate.TRACK_S = 8.0
         test_spotgate.TONES = (1000, 1500)     # (the rig's tone, analyse's)
         spot = test_spotgate.Player()
+        spot.refuse = case == "spotrefused"
         spotgate.Config.api = "http://127.0.0.1:%d" % spot.port
         spotgate.Config.fifo = spot.fifo
         spotgate.Config.poll = 0.2
@@ -553,7 +558,7 @@ def run(work, case, spec):
                 gate.server_address[1], {"spotnext": "RIGNEXT=3000\r\n", "spotexpand": "RIGEXPAND=3000\r\n"}.get(case, "")))
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
-    if case in ("spotify", "spotnext", "spotexpand"):
+    if case in ("spotify", "spotnext", "spotexpand", "spotrefused"):
         url = test_spotgate.PL
     ngx = None
     if case == "nginx" or (case == "https" and os.environ.get("HTTPS_NGINX")):
@@ -610,6 +615,10 @@ def run(work, case, spec):
     try:
         if not wait_line(log, lambda l: l.startswith("LAUNCH shel_write"), 120):
             return False, m.describe(), "the launcher never ran"
+        if case == "spotrefused":
+            got = wait_line(log, said, 90)
+            return bool(got) and got.startswith("EPLAY refused") and "Spotify refused to play it" in got and \
+                spot.passed <= 6, m.describe(), "%s; the stand-in passed over %d" % (got or "nothing said", spot.passed)
         if case == "aac":
             got = wait_line(log, said, 90)
             return bool(got) and "AAC" in got and "Gateway" in got, m.describe(), got or "nothing said"

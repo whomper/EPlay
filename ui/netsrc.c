@@ -204,7 +204,16 @@ static int ask(char *u, char *err, int n)
 	}
 	if (hd.status != 200) {
 		last_status = hd.status;
-		if (surl_spotify(url_given))
+		if (surl_spotify(url_given) && hd.status != 404 && got - h > 10 &&
+		    !memcmp(head + h, "spotgate: ", 10)) {
+			/* (the Streamer's own words, its first line: "Spotify refused
+			   to play it (no key for its tracks)", Erez's Pi, 28 Nov 2026) */
+			long a = h + 10, b = a;
+			while (b < got && b - a < 90 && head[b] != '\n' && head[b] != '\r')
+				b++;
+			snprintf(err, (size_t)n, "The Spotify Streamer: %.*s.", (int)(b - a), head + a);
+			elog("Spotify: the Streamer answered %d: %.*s", hd.status, (int)(b - a), head + a);
+		} else if (surl_spotify(url_given))
 			/* (spotgate's: 404 no track after or before, 503 busy or no player) */
 			snprintf(err, (size_t)n, hd.status == 404 ? "That was the line's last track." :
 				 hd.status == 503 ? "The Spotify Streamer is busy or not running." :
