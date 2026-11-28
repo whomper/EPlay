@@ -528,15 +528,17 @@ static void page_playing(SETTINGS *s, short x, short y, void *user)
 	(void)y;
 	(void)user;
 	set_text(s, x, set_y(s, 0), "Output:");
-	r = set_radio(s, x, set_y(s, 1), 8, labels, NOUT, &d_out);
+	r = set_radio(s, x, set_y(s, 1), 9, labels, NOUT, &d_out);
 	for (i = 0; i < NOUT; i++)
 		if (r && !has(i))
 			set_radio_enable(s, r, (short)i, 0);
 	set_text(s, x, set_y(s, 3), "ReplayGain:");
-	set_radio(s, x, set_y(s, 4), 8, rg_labels, NRG, &d_rg);
-	/* (its two beside it, on its row: under it they met Cancel and OK) */
+	set_radio(s, x, set_y(s, 4), 9, rg_labels, NRG, &d_rg);
+	/* (its label above its buttons, in line with Output's and ReplayGain's;
+	   the dialog taller, so they keep clear of Cancel and OK: Erez, 28 Nov
+	   2026, the two side by side looked out of line) */
 	set_text(s, x, set_y(s, 6), "MIDI files:");
-	r = set_radio(s, (short)(x + 12), set_y(s, 6), 11, mid_labels, NMIDI, &d_mid);
+	r = set_radio(s, x, set_y(s, 7), 9, mid_labels, NMIDI, &d_mid);
 	for (i = 0; i < NMIDI; i++)
 		if (r && !has_midi(i))
 			set_radio_enable(s, r, (short)i, 0);
@@ -606,7 +608,7 @@ void prefs_dialog(void)
 	d.title = "Settings";
 	d.pages = pages;
 	d.npages = 3;
-	d.height = 16;
+	d.height = 19;
 	d.check = check;
 	if (!settings_dialog(&d))
 		return;

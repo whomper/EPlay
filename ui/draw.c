@@ -146,6 +146,14 @@ void text_at(short x, short y, const char *s, long n, short cols, short flags)
 	    (!(flags & TX_BOLD) || text_fx_fast(1, 1))) {
 		short fx;
 		mode(1);
+		if (cur_h != ch) {
+			/* (the fast way draws at the VDI's height as it is: the
+			   About box's fine print left it small, and rows drawn again
+			   under it came out in it, Erez's Falcon, 28 Nov 2026) */
+			short a, b;
+			vst_height(vdi_h, ch >= 16 ? 13 : 6, &a, &b);
+			cur_h = ch;
+		}
 		if (cur_tcol != 1) {
 			vst_color(vdi_h, 1);
 			cur_tcol = 1;
