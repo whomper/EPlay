@@ -17,6 +17,11 @@ int dspgms_open(const char **why);
 void dspgms_out(long rate, int ext);
 /* the stream started (the DMA's ring opened and written first) */
 void dspgms_play(void);
+/* the tick: the DSP's late count read if it sent one (never waits) */
+void dspgms_poll(void);
+/* the blocks late so far (their segment already playing): the DSP falling
+   behind, as play.c's judge counts it */
+long dspgms_late(void);
 /* the stream stopped, the DSP given back; its counts: the blocks
    rendered, those late, the words passed over finding blocks (-1: not
    answered) */

@@ -89,10 +89,13 @@ static int gsd;			/* a MIDI file on the internal synth on the Falcon's DSP (dsp/
    68030's own work for it decides: over GSD_BUSY % of the time in its
    first GSD_JUDGE_MS, or GSD_UNDER underruns in its first 30 s, and it
    goes on from there on the port, this version remembering it in
-   EPLAY.INF) */
+   EPLAY.INF. The DSP's own pace too: GSD_LATE blocks late in its first
+   30 s (the DSP behind: the sound slow and broken) and the same; the
+   gate's 4 MB Falcon in Hatari, 280 of 604, the owner's none) */
 #define GSD_JUDGE_MS 2000L
 #define GSD_BUSY 50
 #define GSD_UNDER 3
+#define GSD_LATE 8
 #ifndef EPLAY_ST
 static int gsd_too_slow, gsd_judged;
 static unsigned long gsd_busy, gsd_from;	/* (200 Hz ticks: the records' making, and since when) */
@@ -1164,6 +1167,7 @@ static void tick_body(void)
 	}
 #ifndef EPLAY_ST
 	if (gsd) {
+		dspgms_poll();
 		if (!t_failed)
 			tick_gms();
 	} else
@@ -1708,7 +1712,7 @@ int play_open(const char *path, char *err, int n)
 		gsd = 0;
 		if (syn && get_cookie(0x5F435055L) < 40 && !SND_XB && (get_cookie(0x5F534E44L) & 8) &&
 		    (gsd_too_slow || settings_gsd_slow()))
-			elog("the synth on the DSP: this 68030 measured too slow for it%s; the port",
+			elog("the synth on the DSP: measured too slow on this machine%s; the port",
 			     gsd_too_slow ? "" : " (EPLAY.INF's GSDSLOW, this version)");
 		else if (syn && get_cookie(0x5F435055L) < 40 && !SND_XB && (get_cookie(0x5F534E44L) & 8)) {
 			/* (a 68030 with the Falcon's DSP: the synth there, the
@@ -3221,14 +3225,15 @@ int play_step(int ms)
 		   in time) over its first 30 s. Kept, or the port from here */
 		long in = play_ms() - base_ms;
 		unsigned long all = tos_hz200() - gsd_from;
-		long pc = play_tick_share() + (all ? (long)(gsd_busy * 100 / all) : 0);
-		int slow = snd_underruns >= GSD_UNDER || (!gsd_judged && in >= GSD_JUDGE_MS && pc > settings_gsdbusy(GSD_BUSY));
+		long pc = play_tick_share() + (all ? (long)(gsd_busy * 100 / all) : 0), late = dspgms_late();
+		int slow = snd_underruns >= GSD_UNDER || late >= GSD_LATE ||
+			   (!gsd_judged && in >= GSD_JUDGE_MS && pc > settings_gsdbusy(GSD_BUSY));
 		if (slow) {
 			char err[160];
 			long at = play_ms();
-			elog("the synth on the DSP: the 68030 busy %ld%% with it over %ld ms, %ld underruns: too slow; "
-			     "the port from %ld ms (remembered in EPLAY.INF for this version)", pc, in, (long)snd_underruns,
-			     at);
+			elog("the synth on the DSP: the 68030 busy %ld%% with it over %ld ms, %ld underruns, %ld blocks late "
+			     "on the DSP: too slow; the port from %ld ms (remembered in EPLAY.INF for this version)", pc, in,
+			     (long)snd_underruns, late, at);
 			gsd_judged = 2;
 			gsd_too_slow = 1;
 			settings_set_gsd_slow();
@@ -3240,8 +3245,8 @@ int play_step(int ms)
 			elog("%s", err);
 		} else if (!gsd_judged && in >= GSD_JUDGE_MS) {
 			gsd_judged = 1;
-			elog("the synth on the DSP: the 68030 busy %ld%% with it over %ld ms, %ld underruns: kept", pc, in,
-			     (long)snd_underruns);
+			elog("the synth on the DSP: the 68030 busy %ld%% with it over %ld ms, %ld underruns, %ld blocks late "
+			     "on the DSP: kept", pc, in, (long)snd_underruns, late);
 		} else if (gsd_judged == 1 && in >= 30000L)
 			gsd_judged = 2;		/* (no underrun in its first 30 s: kept for good) */
 	}

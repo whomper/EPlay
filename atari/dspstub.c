@@ -126,6 +126,8 @@ void dspopl_term(void) { }
 int dspgms_open(const char **why) { *why = no_dsp; return 0; }
 void dspgms_out(long rate, int ext) { (void)rate; (void)ext; }
 void dspgms_play(void) { }
+void dspgms_poll(void) { }
+long dspgms_late(void) { return 0; }
 void dspgms_close(long *blocks, long *late, long *skipped)
 {
 	if (blocks)

@@ -3472,3 +3472,13 @@ measures again). In Hatari: Falcon:16 with TT RAM 12 % (kept), Falcon-4:16 23 % 
 DSP then reports late blocks, its DSP run between the 68030's instructions, which a real Falcon's
 isn't); EPLAY_RIG_INF=GSDBUSY=0 (the rigs' limit) moves it to the port 2 s in, play_test.py midsyn
 checks that and GSDSLOW. A real stock Falcon with a dense piece is the open measurement.
+
+The DSP's own pace counts too (the 1.62 gate, 28 Nov 2026). Kept on the 68030's share alone,
+Falcon-4:16 played the gate's tone at 932 Hz for 1,052 with gaps: the DSP rendered 604 blocks of
+1,219 and 280 were late (their segment already playing). Whatever slows the DSP, Hatari's coupling
+or a real machine's, music played that way is wrong, so the DSP now sends its late count while it
+plays, marked (bit 23) on the host port each time the 68030 has read the last; the tick reads it
+when one is there (never waiting) and 8 late in the first 30 s is too slow, as the 68030's share
+is: the port from that place, GSDSLOW kept. Falcon-4:16, with and without NVDI: 16 late by 0.2 s,
+the port; Falcon:16 with TT RAM: none late, kept. STOP's counts are read after any marked word
+still in the port.

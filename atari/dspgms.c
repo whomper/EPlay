@@ -82,7 +82,9 @@ static long blocks_, late_, skipped_, rxat_, roe_, tue_, first_[12];
 static long stop(void)
 {
 	put(9);			/* (any word: STOP) */
-	blocks_ = get();
+	do
+		blocks_ = get();	/* (after the late counts still in the port) */
+	while (blocks_ >= 0 && (blocks_ & 0x800000L));
 	late_ = get();
 	skipped_ = get();
 	rxat_ = get();
@@ -96,10 +98,32 @@ static long stop(void)
 	return 0;
 }
 
+/* the late count the DSP sent last while it plays (the tick's, in
+   supervisor mode): never waited for */
+static volatile long late_now;
+
+void dspgms_poll(void)
+{
+	unsigned long w;
+	if (!gms_playing || gms_failed || !(HISR & 1))
+		return;
+	w = (unsigned long)HRXH << 16;
+	w |= (unsigned long)HRXM << 8;
+	w |= HRXL;
+	if (w & 0x800000L)
+		late_now = (long)(w & 0x7fffffL);
+}
+
+long dspgms_late(void)
+{
+	return late_now;
+}
+
 int dspgms_open(const char **why)
 {
 	unsigned long t;
 	gms_failed = gms_playing = 0;
+	late_now = 0;
 	if (!(get_cookie(0x5F534E44L) & 8) || SND_XB) {	/* _SND bit 3: a DSP; the XBIOS's sound alone: no matrix */
 		*why = "needs the Falcon's DSP";
 		return 0;

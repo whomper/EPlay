@@ -26,7 +26,10 @@
 ;				16 bits, as the SSI takes the DMA's): 1, the
 ;				render, 2, then the 2 x 64 samples (left, right)
 ;	8 PLAY			the stream, until the host's next word (any: STOP),
-;				then its counts: the blocks rendered, those late
+;				the late count as it goes, $800000 + n, each time the
+;				host has read the last (the synth judged by it as
+;				it plays: DESIGN.md), then its counts: the blocks
+;				rendered, those late
 ;				(their segment already playing), the words passed
 ;				over finding a block, the receive's place in RXB
 
@@ -458,7 +461,12 @@ pl3	jclr	#6,x:SSISR,pl3		; slot 0 going: the ring's next word is slot 1's
 ; rendered, the host's word (STOP) looked for
 loop	jsr	seg
 	jset	#0,x:HSR,pstop
-	move	x:V_RR,r0
+	jclr	#1,x:HSR,lp0		; the host took the last: the late count now,
+	move	x:V_LATE,a		; marked (bit 23) as no count of STOP's is
+	move	#>$800000,x0
+	or	x0,a
+	movep	a1,x:HRX
+lp0	move	x:V_RR,r0
 	move	r6,a			; the words in: (r6 - rr) modulo 2048
 	move	r0,x0
 	sub	x0,a

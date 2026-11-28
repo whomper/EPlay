@@ -821,10 +821,11 @@ def run(work, case, spec):
             return ok, m.describe(), "%s | %s | EPLAY.INF %s GSDSLOW" % (
                 (moved or "not moved")[4:], (again or "not opened again")[4:], "keeps" if "GSDSLOW=" in inf else "lacks")
         if case == "midsyn":
-            slow = wait_line(log, lambda l: "the synth too slow on this CPU" in l, 3)
+            slow = wait_line(log, lambda l: "the synth too slow on this CPU" in l or "too slow; the port from" in l, 5)
             if slow:
-                # (a 68030 timed too slow for it, a stock Falcon's: the MIDI
-                # port, as EPlay says; the Falcon's synth is the DSP's, later)
+                # (measured too slow for it as it plays, the 68030's share or
+                # the DSP's blocks late: the MIDI port from there, as EPlay
+                # says. Hatari's 4 MB Falcon: the DSP behind, 28 Nov 2026)
                 SKIPS.append("midsyn on %s: %s" % (spec, slow))
                 return True, m.describe(), "the synth too slow here, the MIDI port (skipped): " + slow
         time.sleep(1.5)
