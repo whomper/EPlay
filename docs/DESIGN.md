@@ -3503,3 +3503,19 @@ choice, never by itself; each track's album art, title and artist shown while it
   12 KB/s, takes about 7 s to gather the queue again);
   go-librespot on the Gateway (the hub and the Gateway's session, its package the owner's call,
   which he made with this plan).
+
+## The synth on the DSP: measured as it plays, not guessed (28 Nov 2026)
+
+1.61 chose the synth on the DSP only where art_cpu_turns reached 2,000: a loop reading TOS's 200 Hz
+count, which lives in ST RAM. On a real Falcon that loop measures the ST RAM bus more than the
+68030, and Hatari doesn't slow ST RAM as a Falcon does: the owner's DFB1 (50 MHz) gave 519 where
+Hatari's 16 MHz Falcon gives 1,171, and his MIDI files went to the port (reported 28 Nov 2026).
+Now the synth on the DSP starts on any 68030 with the DSP when Settings says Synth, and its own
+work decides: the tick writing its blocks (play_tick_share) and the turns making its records,
+over its first 2 s, above 50 % of the 68030, or 3 underruns in its first 30 s, and it goes on from
+that place the slower way (the 68030's synth where 1.60's timing keeps it, else the port), the log
+saying so and EPLAY.INF keeping GSDSLOW=version, so the next file decides at once (a new version
+measures again). In Hatari: Falcon:16 with TT RAM 12 % (kept), Falcon-4:16 23 % (kept; Hatari's
+DSP then reports late blocks, its DSP run between the 68030's instructions, which a real Falcon's
+isn't); EPLAY_RIG_INF=GSDBUSY=0 (the rigs' limit) moves it to the port 2 s in, play_test.py midsyn
+checks that and GSDSLOW. A real stock Falcon with a dense piece is the open measurement.

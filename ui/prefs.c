@@ -36,7 +36,9 @@ static int mini, mini_saved;		/* the mini player (View > Mini player), saved at 
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
 static short mwin[3], mwin_saved[3];	/* the mini player's own (MINIWINDOW=x,y; Erez, 21 Nov 2026): [2] 1 when kept */
 static int log_on;			/* LOG=: Options > Write a log (guidelines 6.5): off until ticked */
-static long rignext, rigexpand;		/* RIGNEXT=, RIGEXPAND=: the rigs' (read, never written).
+static char gsdslow[12];		/* GSDSLOW=: the version whose synth on the DSP this 68030 couldn't keep up with */
+static long rignext, rigexpand;
+static long gsdbusy = -1;		/* GSDBUSY=: the rigs' (read, never written): the synth on the DSP's limit, % */		/* RIGNEXT=, RIGEXPAND=: the rigs' (read, never written).
 					   ms: Next, or Edit > Expand of the first row, once, played that far */
 static long stallat;			/* STALLAT=: the rigs' (read, never written). ms: an MP3 on the DSP taken as stalled there, once */
 static long crashat;			/* CRASHAT=: the rigs' (read, never written). ms: EPlay ends there by an illegal instruction, playing, to try term.c; -ms: at interrupt time (a VBL routine of its), as TOS ends it */
@@ -216,6 +218,9 @@ void settings_load(void)
 		mp3cpu = v[0] == '1';
 	if (inf_get(inf, inf_n, "LOG", v, sizeof(v)))
 		log_on = v[0] == '1';
+	inf_get(inf, inf_n, "GSDSLOW", gsdslow, sizeof(gsdslow));
+	if (inf_get(inf, inf_n, "GSDBUSY", v, sizeof(v)))
+		gsdbusy = atol(v);
 	if (inf_get(inf, inf_n, "RIGNEXT", v, sizeof(v)))
 		rignext = atol(v);
 	if (inf_get(inf, inf_n, "RIGEXPAND", v, sizeof(v)))
@@ -268,6 +273,25 @@ int settings_mp3cpu(void)
 int settings_vgmcpu(void)
 {
 	return vgmcpu;
+}
+
+extern const char app_version[];
+static void save(void);
+
+int settings_gsd_slow(void)
+{
+	return gsdslow[0] && !strcmp(gsdslow, app_version);
+}
+
+void settings_set_gsd_slow(void)
+{
+	snprintf(gsdslow, sizeof(gsdslow), "%s", app_version);
+	save();
+}
+
+long settings_gsdbusy(long dflt)
+{
+	return gsdbusy >= 0 ? gsdbusy : dflt;
 }
 
 long settings_rignext(void)
@@ -413,9 +437,17 @@ static void save_in(void)
 			return;
 		{
 			static const char mnote[] = "; MIDI files: SYNTH for EPlay's own synth, PORT for the MIDI port (Settings)\r\n";
+			static const char snote[] =
+			    "; The synth on the DSP measured too slow on this 68030 by this version (EPlay's own: the MIDI port then)\r\n";
 			n = inf_set(inf2, n, "MIDI", mid_names[midi_out], mnote, inf3, INF_MAX);
 			if (n < 0)
 				return;
+			if (gsdslow[0]) {
+				n = inf_set(inf3, n, "GSDSLOW", gsdslow, snote, inf2, INF_MAX);
+				if (n < 0)
+					return;
+				memcpy(inf3, inf2, (size_t)n);	/* (the keys' turns end in inf3, as before) */
+			}
 		}
 	}
 	{

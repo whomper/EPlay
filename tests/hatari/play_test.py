@@ -807,6 +807,19 @@ def run(work, case, spec):
             return "needs the Falcon's DSP" in played, m.describe(), "refused without a DSP: " + played
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
+        if case == "midsyn" and "GSDBUSY=0" in os.environ.get("EPLAY_RIG_INF", ""):
+            # (EPLAY_RIG_INF=GSDBUSY=0, the rigs' limit for the synth on the
+            # DSP at nothing: measured too slow 2 s in, it goes on from there
+            # the slower way, EPLAY.INF keeping it for this version: Erez's
+            # Falcon sent to the port by 1.61's guess, 28 Nov 2026)
+            moved = wait_line(log, lambda l: "too slow; the port from" in l, 30)
+            again = wait_line(log, lambda l: "(from a place in it)" in l, 30)
+            time.sleep(2)
+            inf = open(os.path.join(hd, "eplay.inf"), errors="replace").read() if os.path.exists(
+                os.path.join(hd, "eplay.inf")) else ""
+            ok = bool(moved) and bool(again) and "GSDSLOW=" in inf
+            return ok, m.describe(), "%s | %s | EPLAY.INF %s GSDSLOW" % (
+                (moved or "not moved")[4:], (again or "not opened again")[4:], "keeps" if "GSDSLOW=" in inf else "lacks")
         if case == "midsyn":
             slow = wait_line(log, lambda l: "the synth too slow on this CPU" in l, 3)
             if slow:
