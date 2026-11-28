@@ -36,6 +36,8 @@ static int mini, mini_saved;		/* the mini player (View > Mini player), saved at 
 static short win[4], win_saved[4];	/* the window's place (WINDOW=x,y,w,h; D43): 0 wide, none */
 static short mwin[3], mwin_saved[3];	/* the mini player's own (MINIWINDOW=x,y; Erez, 21 Nov 2026): [2] 1 when kept */
 static int log_on;			/* LOG=: Options > Write a log (guidelines 6.5): off until ticked */
+static long rignext, rigexpand;		/* RIGNEXT=, RIGEXPAND=: the rigs' (read, never written).
+					   ms: Next, or Edit > Expand of the first row, once, played that far */
 static long stallat;			/* STALLAT=: the rigs' (read, never written). ms: an MP3 on the DSP taken as stalled there, once */
 static long crashat;			/* CRASHAT=: the rigs' (read, never written). ms: EPlay ends there by an illegal instruction, playing, to try term.c; -ms: at interrupt time (a VBL routine of its), as TOS ends it */
 static int vgmcpu;			/* VGMCPU=: the rigs' (read, never written). 1: on a 68060, a VGM's chips made on the CPU though the DSP is there (phase 11) */
@@ -214,6 +216,10 @@ void settings_load(void)
 		mp3cpu = v[0] == '1';
 	if (inf_get(inf, inf_n, "LOG", v, sizeof(v)))
 		log_on = v[0] == '1';
+	if (inf_get(inf, inf_n, "RIGNEXT", v, sizeof(v)))
+		rignext = atol(v);
+	if (inf_get(inf, inf_n, "RIGEXPAND", v, sizeof(v)))
+		rigexpand = atol(v);
 	if (inf_get(inf, inf_n, "STALLAT", v, sizeof(v)) && ((v[0] >= '0' && v[0] <= '9') || v[0] == '-'))
 		stallat = atol(v);	/* (less than 0: the DSP failing as its stream starts, once) */
 	if (inf_get(inf, inf_n, "CRASHAT", v, sizeof(v)) && ((v[0] >= '0' && v[0] <= '9') || v[0] == '-'))
@@ -262,6 +268,16 @@ int settings_mp3cpu(void)
 int settings_vgmcpu(void)
 {
 	return vgmcpu;
+}
+
+long settings_rignext(void)
+{
+	return rignext;
+}
+
+long settings_rigexpand(void)
+{
+	return rigexpand;
 }
 
 long settings_stallat(void)

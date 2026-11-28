@@ -74,6 +74,13 @@ Cases:
             is heard (EPLAY track), then the second's, the tone with no gap,
             and the line's end at the second's end, no connection again
             (decided 27 Nov 2026)
+  spotnext  as spotify, Next pressed 3 s in (EPLAY.INF's RIGNEXT=, the
+            rigs'): spotgate asked for the track after the first, which
+            plays and is shown, then the line's end; the tone with no gap
+            before Next, and back after it (the queue gathered again: some
+            5 s here, the rig's serial network at about 12 KB/s)
+  spotexpand  as spotify, Edit > Expand 3 s in (RIGEXPAND=): spotgate's
+            /tracks asked, the line made into its two tracks
   findrefused  File > Find station... through a Gateway whose search refuses
             (400, its words): EPlay's note gives its words, "The Gateway
             refused the search: ...", not "doesn't answer" (a fault
@@ -104,7 +111,7 @@ from natfeats import natfeats  # noqa: E402
 from play_test import cmd, wait_line, tone, REC_RATE  # noqa: E402
 
 CASES = ["live", "drop", "stall", "startfail", "pls", "rough", "chunked", "cover", "gwcover", "logo", "aac", "gateway", "https", "nginx", "url", "urledit",
-         "find", "findrefused", "m3u", "spotify"]
+         "find", "findrefused", "m3u", "spotify", "spotnext", "spotexpand"]
 METAINT = 8192
 KBPS = 128
 
@@ -525,7 +532,7 @@ def run(work, case, spec):
         radiogate.Handler.search = (lambda self, q: self.reply(400, "a station's name wanted")) \
             if case == "findrefused" else radiogate.search0
     spot = None
-    if case == "spotify":
+    if case in ("spotify", "spotnext", "spotexpand"):
         # the Gateway's Spotify service, EPlay's own (radio/), its player a
         # stand-in: two 8 s tracks
         sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
@@ -542,10 +549,11 @@ def run(work, case, spec):
         gate.daemon_threads = True
         threading.Thread(target=gate.serve_forever, daemon=True).start()
         with open(os.path.join(hd, "eplay.inf"), "w", newline="") as fh:
-            fh.write("FALCON=1\r\nGATE=127.0.0.1\r\nSPOTPORT=%d\r\n\r\n" % gate.server_address[1])
+            fh.write("FALCON=1\r\nGATE=127.0.0.1\r\nSPOTPORT=%d\r\n%s\r\n" % (
+                gate.server_address[1], {"spotnext": "RIGNEXT=3000\r\n", "spotexpand": "RIGEXPAND=3000\r\n"}.get(case, "")))
     st.start()
     url = "http://127.0.0.1:%d/%s" % (st.port, "go" if case == "pls" else "live")
-    if case == "spotify":
+    if case in ("spotify", "spotnext", "spotexpand"):
         url = test_spotgate.PL
     ngx = None
     if case == "nginx" or (case == "https" and os.environ.get("HTTPS_NGINX")):
@@ -692,7 +700,8 @@ def run(work, case, spec):
         if not played or not played.startswith("EPLAY playing"):
             return False, m.describe(), played or "nothing played"
         # (stall: 3 s more, the music's return after the restart recorded too)
-        time.sleep(17 if case == "stall" else 14 if case in ("drop", "startfail") else 18 if case == "rough" else 10)
+        time.sleep(17 if case == "stall" else 14 if case in ("drop", "startfail") else 18 if case == "rough" else
+                   20 if case == "spotnext" else 10)     # (spotnext: the second track's sound recorded too)
         if case == "logo":
             wait_line(log, lambda l: "album art:" in l or ("logo" in l and "after" in l), 120)
             time.sleep(1)
@@ -707,7 +716,9 @@ def run(work, case, spec):
         # (stall: the tone 2 s in, before the stall at 4 s; until 1.52 it was
         # measured 4 s in, where the stall begins, and failed in about one
         # run of three, as the 100 ms window caught the stall's first ms)
-        ok, what, gaps = analyse(rec, 0, 16 if case == "rough" else 8, 2.0 if case == "stall" else None)
+        # (spotnext: the sound before Next, 3 s in; its return after it apart)
+        ok, what, gaps = analyse(rec, 0, 16 if case == "rough" else 2.5 if case == "spotnext" else 8,
+                                 2.0 if case in ("stall", "spotnext") else None)
         note = "%s; titles %s; %d connections" % (what, titles, st.conns)
         if case == "live":
             ok = ok and gaps == 0 and len(titles) >= 2
@@ -777,6 +788,23 @@ def run(work, case, spec):
                 tracks[0] == "%s 8000 0 A Band - One" % test_spotgate.T1 and \
                 tracks[1].startswith(test_spotgate.T2 + " 8000 0 A Band, A Guest - Two") and \
                 spot.plays == [{"uri": test_spotgate.PL}] and "connecting again" not in text
+        elif case == "spotnext":
+            got = wait_line(log, lambda l: l.startswith("EPLAY track: " + test_spotgate.T2), 60)
+            end = wait_line(log, lambda l: "the line's end" in l, 60)
+            text = open(log, errors="replace").read()
+            tracks = [l[len("EPLAY track: "):] for l in text.split("\n") if l.startswith("EPLAY track: ")]
+            note += "; tracks %s; the player asked %s; %s" % (tracks, spot.plays, end[4:] if end else "no end")
+            back = resumed(rec)
+            note += "; " + (back[1] if back else "no sound after Next")
+            ok = ok and gaps == 0 and bool(back) and back[0] and bool(got) and bool(end) and "EPLAY rig: Next" in text and \
+                spot.plays == [{"uri": test_spotgate.PL}, {"uri": test_spotgate.PL, "skip_to_uri": test_spotgate.T2}] and \
+                tracks[-1].startswith(test_spotgate.T2 + " 8000 0 ")
+        elif case == "spotexpand":
+            got = wait_line(log, lambda l: l.startswith("EPLAY expanded"), 60)
+            text = open(log, errors="replace").read()
+            exp = [l[4:] for l in text.split("\n") if "Expand:" in l]
+            note += "; %s; %s" % (got or "not expanded", " | ".join(exp))
+            ok = ok and got == "EPLAY expanded: 2 tracks" and any("into 2 tracks" in l for l in exp)
         elif case == "m3u":
             ok = ok and gaps == 0 and "playlist C:\\RADIO.M3U: 1 files" in open(log, errors="replace").read()
         elif case in ("url", "urledit"):

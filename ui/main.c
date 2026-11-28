@@ -180,9 +180,11 @@ static int can(int c)
 	case C_STOP:
 		return play_state() == PS_PLAYING || play_paused();
 	case C_PREV:
-		return order_has_prev(&list_order, list_cur);
 	case C_NEXT:
-		return order_has_next(&list_order, list_cur);
+		/* (a Spotify line: its own tracks, whatever the list holds) */
+		if (play_is_spot() && play_spot_track()[0])
+			return 1;
+		return c == C_PREV ? order_has_prev(&list_order, list_cur) : order_has_next(&list_order, list_cur);
 	case C_MINI:
 		return !iconified;	/* (uniconified first: the icon is the full window's) */
 	}
@@ -2478,6 +2480,21 @@ static void turn(int nested)
 	short msg[8];
 	short which;
 	int playing = play_state() == PS_PLAYING;
+	if (playing && !nested) {
+		/* (the rigs' RIGNEXT= and RIGEXPAND=: once each, played that far) */
+		static int next_done, exp_done;
+		if (!next_done && settings_rignext() > 0 && play_ms() >= settings_rignext()) {
+			next_done = 1;
+			nf_debug("EPLAY rig: Next\n");
+			command(C_NEXT);
+		}
+		if (!exp_done && settings_rigexpand() > 0 && play_ms() >= settings_rigexpand()) {
+			exp_done = 1;
+			list_sel = 0;
+			nf_debug("EPLAY rig: Expand\n");
+			command(C_EXPAND);
+		}
+	}
 	/* a dialog held open (Settings, About) goes on feeding the queue while
 	   the music plays, nothing while it doesn't (common's dlg_idle: the
 	   hub, 4 Nov 2026, from 0.22's underruns with Settings open) */
