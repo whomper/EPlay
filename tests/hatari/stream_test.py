@@ -79,8 +79,9 @@ Cases:
             refused the search: ...", not "doesn't answer" (a fault
             reported 27 Nov 2026)
 
-RADIOGATE=DIR takes radiogate.py (and aeragate.py) from DIR in place of
-radio/: the Gateway's own copy, as its release will carry it.
+RADIOGATE=DIR takes radiogate.py, spotgate.py, test_spotgate.py's stand-in
+player (and aeragate.py) from DIR in place of radio/: the Gateway's own
+copy, as its release will carry it.
 """
 import math
 import os
@@ -527,7 +528,7 @@ def run(work, case, spec):
     if case == "spotify":
         # the Gateway's Spotify service, EPlay's own (radio/), its player a
         # stand-in: two 8 s tracks
-        sys.path.insert(0, os.path.join(TOP, "radio"))
+        sys.path.insert(0, os.environ.get("RADIOGATE") or os.path.join(TOP, "radio"))
         import test_spotgate
         import spotgate
         test_spotgate.TRACK_S = 8.0
