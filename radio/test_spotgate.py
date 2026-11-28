@@ -46,6 +46,8 @@ class Player:
         if not os.path.exists(self.fifo):
             os.mkfifo(self.fifo)
         self.code = None            # /auth/code's answer when waiting for one
+        self.mute = False           # answers play, but no sound comes (a stuck player)
+        self.gen = 0                # (one player: a new play ends the last one's writing)
         self.plays = []
         self.state = {"stopped": True, "paused": False, "track": None}
         self.paused = threading.Event()
@@ -81,8 +83,12 @@ class Player:
                 body = json.loads(self.rfile.read(n) or b"{}")
                 if self.path == "/player/play":
                     me.plays.append(body)
+                    me.gen += 1
                     me.paused.clear()
-                    threading.Thread(target=me.play, args=(body,), daemon=True).start()
+                    if not me.mute:
+                        threading.Thread(target=me.play, args=(body,), daemon=True).start()
+                    else:
+                        me.state.update(stopped=False, paused=False, track=me.obj(T1, 0))
                     return self.answer(200)
                 if self.path == "/player/pause":
                     me.paused.set()
@@ -100,6 +106,7 @@ class Player:
                 "duration": int(TRACK_S * 1000), "position": pos}
 
     def play(self, body):
+        gen = self.gen
         order = [T1, T2] if body["uri"] == PL else [body["uri"]]
         start = order.index(body["skip_to_uri"]) if body.get("skip_to_uri") else 0
         pos = body.get("position", 0)
@@ -111,7 +118,7 @@ class Player:
                     hl, hr = TONES or (440 * (i + start + 1),) * 2
                     n = int(44100 * (TRACK_S - pos / 1000))
                     for k in range(0, n, 4410):
-                        if self.paused.is_set():
+                        if self.paused.is_set() or gen != self.gen:
                             return
                         f.write(b"".join(struct.pack("<hh", int(8000 * math.sin(2 * math.pi * hl * j / 44100)),
                                                      int(8000 * math.sin(2 * math.pi * hr * j / 44100)))
@@ -121,7 +128,7 @@ class Player:
         except (BrokenPipeError, OSError):
             return
         finally:
-            if not self.paused.is_set():
+            if not self.paused.is_set() and gen == self.gen:
                 self.state.update(stopped=True, track=None)
 
     def stop(self):
@@ -244,6 +251,31 @@ class Tests(unittest.TestCase):
         first.join()
         self.assertIn("503", st)
         self.assertIn(b"another Atari", body)
+
+    def test_stuck_player(self):
+        # (the player says it plays, and no sound comes: 502, and the one
+        # stream free again for the next)
+        spotgate.Config.first_s = 1.5
+        self.p.mute = True
+        try:
+            t0 = time.time()
+            st, _, body = self.g.ask("/stream?uri=" + PL)
+            self.assertIn("502", st)
+            self.assertIn(b"no sound", body)
+            self.assertLess(time.time() - t0, 6)
+        finally:
+            self.p.mute = False
+            spotgate.Config.first_s = 15
+        st, _, body = self.g.ask("/stream?uri=" + PL)
+        self.assertIn("200", st)
+
+    def test_no_proxy(self):
+        # (HTTP_PROXY set, as on a Pi behind a proxy: the player still asked directly)
+        os.environ["HTTP_PROXY"] = os.environ["http_proxy"] = "http://127.0.0.1:9"
+        try:
+            self.assertEqual(self.g.ask("/login", meta=False)[2], b"ready\tsomeone\n")
+        finally:
+            del os.environ["HTTP_PROXY"], os.environ["http_proxy"]
 
     def test_no_player(self):
         keep = spotgate.Config.api

@@ -29,7 +29,9 @@ phone or other device controls it: EPlay does.
     EPlayTrack='spotify:track:ID';EPlayLen='ms';EPlayPos='ms';
 
   the track, its length and where it starts in it, so the bar shows the
-  track's place. The stream ends where the item ends (EPlay goes on to the
+  track's place. No sound within 15 s of the start, or for 30 s once
+  begun: the stream ends (502 before its first byte), the player paused,
+  so no stuck player holds the one stream. The stream ends where the item ends (EPlay goes on to the
   next line); one stream at a time (the Gateway has one Spotify player):
   a request waits up to 3 s for the last one to end (EPlay's Next asks as
   it closes it), else 503 while another Atari listens.
@@ -76,6 +78,7 @@ import json
 import os
 import re
 import resource
+import select
 import shutil
 import subprocess
 import threading
@@ -110,8 +113,10 @@ class Config:
     memory = 256 << 20
     poll = 1.0                      # the player's state asked every second
     ready_s = 20                    # /tracks: how long the player may take to list an item
-    start_s = 15                    # /stream: how long its first sound may take
+    start_s = 15                    # /stream: the player's "stopped" not taken as the end before this
     busy_s = 3.0                    # /stream: how long it waits for the last stream to end
+    first_s = 15                    # /stream: how long its first sound may take
+    idle_s = 30                     # /stream: how long the sound may stop once begun
     verbose = False
 
 
@@ -122,6 +127,9 @@ class Refused(Exception):
 
 
 ONE = threading.Lock()              # one stream at a time: one Spotify player
+# (the player is on this computer: never through HTTP_PROXY or HTTPS_PROXY,
+# which urllib's own opener follows, 127.0.0.1 included: the Gateway's review)
+NOPROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def api(method, path, body=None, timeout=10):
@@ -131,7 +139,7 @@ def api(method, path, body=None, timeout=10):
     req = urllib.request.Request(Config.api + path, data=data, method=method,
                                  headers={"Content-Type": "application/json"} if data else {})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with NOPROXY.open(req, timeout=timeout) as r:
             raw = r.read(4 << 20)
             status = r.status
     except urllib.error.HTTPError as e:
@@ -355,18 +363,34 @@ class Handler(BaseHTTPRequestHandler):
         fault = []
 
         def feed():
+            # (the FIFO opened without waiting for the player, and read only
+            # while this stream lasts: a reader left blocked in open() or
+            # read() after its stream ended took the next stream's sound)
+            fd, got = -1, False
             try:
-                with open(Config.fifo, "rb", buffering=0) as f:
-                    while not stop.is_set():
-                        d = f.read(16384)
-                        if not d:
-                            break
-                        p.stdin.write(d)
-                        p.stdin.flush()
+                fd = os.open(Config.fifo, os.O_RDONLY | os.O_NONBLOCK)
+                while not stop.is_set():
+                    r, _, _ = select.select([fd], [], [], 0.25)
+                    if not r or stop.is_set():
+                        continue
+                    try:
+                        d = os.read(fd, 16384)
+                    except BlockingIOError:
+                        continue
+                    if not d:
+                        if got:
+                            break           # (the player closed it: the item's end)
+                        time.sleep(0.05)    # (no writer yet)
+                        continue
+                    got = True
+                    p.stdin.write(d)
+                    p.stdin.flush()
             except (OSError, ValueError):
                 if not stop.is_set():
                     fault.append("the player's sound failed")
             finally:
+                if fd >= 0:
+                    os.close(fd)
                 try:
                     p.stdin.close()
                 except OSError:
@@ -406,11 +430,31 @@ class Handler(BaseHTTPRequestHandler):
                     quiet = None
                 stop.wait(Config.poll)
 
+        last = [time.time(), False]     # (the last sound's time; any yet)
+
+        def dog():
+            # (no sound within start_s of the start, or for idle_s once
+            # begun: ffmpeg killed, so the read ends and ONE is free again,
+            # whatever the player's status says: the Gateway's review)
+            while not stop.is_set():
+                limit = Config.idle_s if last[1] else Config.first_s
+                if time.time() - last[0] > limit:
+                    fault.append("the Spotify player sent no sound for %d s" % limit)
+                    stop.set()
+                    try:
+                        p.kill()
+                    except OSError:
+                        pass
+                    return
+                stop.wait(0.25)
+
         threading.Thread(target=feed, daemon=True).start()
+        threading.Thread(target=dog, daemon=True).start()
         threading.Thread(target=watch, daemon=True).start()
         icy = IcyOut() if meta else None
         try:
             first = p.stdout.read1(16384)
+            last[:] = [time.time(), True]
             if not first:
                 raise Refused(502, fault[0] if fault else "the Spotify player sent no sound")
             # (the track's details before its sound: its block then comes
@@ -434,6 +478,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 sent[0] += len(out)
                 data = p.stdout.read1(16384)
+                last[0] = time.time()
             return "the item's end" if st["ended"] else (fault[0] if fault else "ended")
         finally:
             stop.set()
